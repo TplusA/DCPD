@@ -4,6 +4,9 @@
 #define DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH ((uint8_t)(1 << 0))
 #define DCP_REGISTER_FLAG_IS_CACHEABLE       ((uint8_t)(1 << 1))
 
+/*!
+ * Register description and handlers.
+ */
 struct register_t
 {
     uint8_t address;         /*!< Register number. */
@@ -11,14 +14,19 @@ struct register_t
     uint16_t max_data_size;  /*!< Maximum size for variable size, 0 if fixed. */
 
     /*!
-     * How to handle incoming requests.
+     * How to handle incoming read requests.
      */
-    ssize_t (*request_handler)(uint8_t *response, size_t length);
+    ssize_t (*read_handler)(uint8_t *response, size_t length);
 
     /*!
-     * How to process incoming responses.
+     * How to handle incoming write requests.
      */
-    int (*response_handler)(void);
+    int (*write_handler)(void);
 };
+
+/*!
+ * Find register structure by register number (address).
+ */
+const struct register_t *register_lookup(uint8_t register_number);
 
 #endif /* !REGISTERS_H */
