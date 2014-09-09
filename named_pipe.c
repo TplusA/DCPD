@@ -21,7 +21,12 @@ int fifo_create_and_open(const char *devname, bool write_not_read)
         }
     }
 
-    ret = open(devname, (write_not_read ? O_WRONLY : O_RDONLY | O_NONBLOCK));
+    return fifo_open(devname, write_not_read);
+}
+
+int fifo_open(const char *devname, bool write_not_read)
+{
+    int ret = open(devname, write_not_read ? O_WRONLY : (O_RDONLY | O_NONBLOCK));
 
     if(ret < 0)
         msg_error(errno, LOG_EMERG,
@@ -32,7 +37,7 @@ int fifo_create_and_open(const char *devname, bool write_not_read)
     return ret;
 }
 
-void fifo_close_and_delete(int fd, const char *devname)
+void fifo_close(int fd)
 {
     int ret;
 
@@ -41,10 +46,13 @@ void fifo_close_and_delete(int fd, const char *devname)
 
     if(ret < 0)
         msg_error(errno, LOG_ERR, "Failed closing named pipe fd %d", fd);
+}
 
-    ret = unlink(devname);
+void fifo_close_and_delete(int fd, const char *devname)
+{
+    fifo_close(fd);
 
-    if(ret < 0)
+    if(unlink(devname) < 0)
         msg_error(errno, LOG_ERR,
                   "Failed deleting named pipe \"%s\"", devname);
 }

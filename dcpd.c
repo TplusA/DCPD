@@ -22,7 +22,8 @@ static volatile bool keep_running = true;
 /*!
  * Process DCP.
  */
-static void main_loop(const int fifo_in_fd, const int fifo_out_fd)
+static void main_loop(const int drcp_fifo_in_fd, const int drcp_fifo_out_fd,
+                      const int dcp_fifo_in_fd, const int dcp_fifo_out_fd)
 {
     msg_info("Ready for accepting traffic");
 
@@ -33,8 +34,10 @@ static void main_loop(const int fifo_in_fd, const int fifo_out_fd)
 
 struct parameters
 {
-    const char *fifo_in_name;
-    const char *fifo_out_name;
+    const char *dcp_fifo_in_name;
+    const char *dcp_fifo_out_name;
+    const char *drcp_fifo_in_name;
+    const char *drcp_fifo_out_name;
     bool run_in_foreground;
 };
 
@@ -42,34 +45,55 @@ struct parameters
  * Open devices, daemonize.
  */
 static int setup(const struct parameters *parameters,
-                 int *fifo_in_fd, int *fifo_out_fd)
+                 int *drcp_fifo_in_fd, int *drcp_fifo_out_fd,
+                 int *dcp_fifo_in_fd, int *dcp_fifo_out_fd)
 {
     msg_enable_syslog(!parameters->run_in_foreground);
 
     if(!parameters->run_in_foreground)
         openlog("dcpd", LOG_PID, LOG_DAEMON);
 
-    *fifo_in_fd = fifo_create_and_open(parameters->fifo_in_name, false);
-    if(*fifo_in_fd < 0)
-        return -1;
+    *dcp_fifo_in_fd = fifo_open(parameters->dcp_fifo_in_name, false);
+    if(*dcp_fifo_in_fd < 0)
+        goto error_dcp_fifo_in;
 
-    *fifo_out_fd = fifo_create_and_open(parameters->fifo_out_name, true);
-    if(*fifo_out_fd < 0)
-    {
-        fifo_close_and_delete(*fifo_in_fd, parameters->fifo_in_name);
-        return -1;
-    }
+    *dcp_fifo_out_fd = fifo_open(parameters->dcp_fifo_out_name, true);
+    if(*dcp_fifo_out_fd < 0)
+        goto error_dcp_fifo_out;
+
+    *drcp_fifo_in_fd = fifo_create_and_open(parameters->drcp_fifo_in_name, false);
+    if(*drcp_fifo_in_fd < 0)
+        goto error_drcp_fifo_in;
+
+    *drcp_fifo_out_fd = fifo_create_and_open(parameters->drcp_fifo_out_name, true);
+    if(*drcp_fifo_out_fd < 0)
+        goto error_drcp_fifo_out;
 
     if(!parameters->run_in_foreground)
     {
         if(daemon(0, 0) < 0)
         {
             msg_error(errno, LOG_EMERG, "Failed to run as daemon");
-            return -1;
+            goto error_daemon;
         }
     }
 
     return 0;
+
+error_daemon:
+    fifo_close_and_delete(*drcp_fifo_out_fd, parameters->drcp_fifo_out_name);
+
+error_drcp_fifo_out:
+    fifo_close_and_delete(*drcp_fifo_in_fd, parameters->drcp_fifo_in_name);
+
+error_drcp_fifo_in:
+    fifo_close(*dcp_fifo_out_fd);
+
+error_dcp_fifo_out:
+    fifo_close(*dcp_fifo_in_fd);
+
+error_dcp_fifo_in:
+    return -1;
 }
 
 static void usage(const char *program_name)
@@ -77,16 +101,20 @@ static void usage(const char *program_name)
     printf("Usage: %s --ififo name --ofifo name\n"
            "\n"
            "Options:\n"
-           "  --ififo name   Name of the named pipe the DRC daemon writes to.\n"
-           "  --ofifo name   Name of the named pipe the DRC daemon reads from.\n",
+           "  --ififo name   Name of the named pipe the DRCP daemon writes to.\n"
+           "  --ofifo name   Name of the named pipe the DRCP daemon reads from.\n"
+           "  --idcp  name   Name of the named pipe the DCP daemon reads from.\n"
+           "  --odcp  name   Name of the named pipe the DCP daemon writes to.\n",
            program_name);
 }
 
 static int process_command_line(int argc, char *argv[],
                                 struct parameters *parameters)
 {
-    parameters->fifo_in_name = "/tmp/dcpd_to_drcpd";
-    parameters->fifo_out_name = "/tmp/drcpd_to_dcpd";
+    parameters->drcp_fifo_in_name = "/tmp/drcpd_to_dcpd";
+    parameters->drcp_fifo_out_name = "/tmp/dcpd_to_drcpd";
+    parameters->dcp_fifo_in_name = "/tmp/spi_to_dcp";
+    parameters->dcp_fifo_out_name = "/tmp/dcp_to_spi";
     parameters->run_in_foreground = true;
 
     return 0;
@@ -111,9 +139,11 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
-    int fifo_in_fd, fifo_out_fd;
+    int drcp_fifo_in_fd, drcp_fifo_out_fd;
+    int dcp_fifo_in_fd, dcp_fifo_out_fd;
 
-    if(setup(&parameters, &fifo_in_fd, &fifo_out_fd) < 0)
+    if(setup(&parameters, &drcp_fifo_in_fd, &drcp_fifo_out_fd,
+             &dcp_fifo_in_fd, &dcp_fifo_out_fd) < 0)
         return EXIT_FAILURE;
 
     static struct sigaction action =
@@ -126,12 +156,15 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTERM, &action, NULL);
 
-    main_loop(fifo_in_fd, fifo_out_fd);
+    main_loop(drcp_fifo_in_fd, drcp_fifo_out_fd,
+              dcp_fifo_in_fd, dcp_fifo_out_fd);
 
     msg_info("Terminated, shutting down");
 
-    fifo_close_and_delete(fifo_in_fd, parameters.fifo_in_name);
-    fifo_close_and_delete(fifo_out_fd, parameters.fifo_out_name);
+    fifo_close_and_delete(drcp_fifo_in_fd, parameters.drcp_fifo_in_name);
+    fifo_close_and_delete(drcp_fifo_out_fd, parameters.drcp_fifo_out_name);
+    fifo_close(dcp_fifo_in_fd);
+    fifo_close(dcp_fifo_out_fd);
 
     return EXIT_SUCCESS;
 }
