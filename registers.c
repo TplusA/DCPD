@@ -110,7 +110,7 @@ static int write_55_dhcp_enabled(const uint8_t *data, size_t length)
  *
  * \note The entries must be sorted by address for the binary search.
  */
-static const struct register_t register_map[] =
+static const struct dcp_register_t register_map[] =
 {
     {
         /* Device status register */
@@ -144,13 +144,13 @@ static const struct register_t register_map[] =
 static int compare_register_address(const void *a, const void *b)
 {
     return
-        (int)((const struct register_t *)a)->address -
-        (int)((const struct register_t *)b)->address;
+        (int)((const struct dcp_register_t *)a)->address -
+        (int)((const struct dcp_register_t *)b)->address;
 }
 
-const struct register_t *register_lookup(uint8_t register_number)
+const struct dcp_register_t *register_lookup(uint8_t register_number)
 {
-    static struct register_t key;
+    static struct dcp_register_t key;
 
     key.address = register_number;
 

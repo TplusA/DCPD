@@ -7,7 +7,7 @@
 /*!
  * Register description and handlers.
  */
-struct register_t
+struct dcp_register_t
 {
     uint8_t address;         /*!< Register number. */
     uint8_t flags;           /*!< See DCP_REGISTER_FLAG_ defines. */
@@ -27,6 +27,6 @@ struct register_t
 /*!
  * Find register structure by register number (address).
  */
-const struct register_t *register_lookup(uint8_t register_number);
+const struct dcp_register_t *register_lookup(uint8_t register_number);
 
 #endif /* !REGISTERS_H */

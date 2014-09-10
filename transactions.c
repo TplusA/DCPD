@@ -33,7 +33,7 @@ struct transaction
     uint8_t request_header[DCP_HEADER_SIZE];
     uint8_t command;
 
-    const struct register_t *reg;
+    const struct dcp_register_t *reg;
 
     struct transaction_payload payload;
 };
@@ -125,7 +125,7 @@ void transaction_reset_for_slave(struct transaction *t)
  * attempting to process them.
  */
 static void transaction_set_register(struct transaction *t,
-                                     const struct register_t *reg)
+                                     const struct dcp_register_t *reg)
 {
     assert(t != NULL);
     assert(reg != NULL);
@@ -141,7 +141,7 @@ static bool transaction_set_address(struct transaction *t,
                                     uint8_t register_address,
                                     bool master_not_slave)
 {
-    const struct register_t *reg = register_lookup(register_address);
+    const struct dcp_register_t *reg = register_lookup(register_address);
 
     if(reg == NULL)
     {
@@ -211,7 +211,7 @@ struct transaction *transaction_queue_remove(struct transaction **head)
 
 static bool
 request_command_matches_register_definition(uint8_t command,
-                                            const struct register_t *reg)
+                                            const struct dcp_register_t *reg)
 {
     switch(command)
     {
