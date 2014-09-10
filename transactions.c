@@ -94,7 +94,9 @@ void transaction_free(struct transaction **t)
     assert(t != NULL);
     assert(*t != NULL);
 
+#ifndef NDEBUG
     ptrdiff_t idx = *t - transactions_container;
+#endif /* !NDEBUG */
 
     assert(idx >= 0);
     assert((size_t)idx < MAX_NUMBER_OF_TRANSACTIONS);
