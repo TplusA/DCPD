@@ -21,7 +21,7 @@ struct register_t
     /*!
      * How to handle incoming write requests.
      */
-    int (*write_handler)(void);
+    int (*write_handler)(const uint8_t *data, size_t length);
 };
 
 /*!

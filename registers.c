@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <assert.h>
 
 #include "registers.h"
@@ -39,6 +40,71 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     return length;
 }
 
+static ssize_t read_51_mac_address(uint8_t *response, size_t length)
+{
+    msg_info("read 51 handler %p %zu", response, length);
+
+    /*
+     * FIXME: Hard-coded, wrong MAC address string for testing purposes.
+     */
+    static const char mac_address[] = "12:34:56:78:9A:BC";
+
+    assert(length == sizeof(mac_address));
+
+    memcpy(response, mac_address, sizeof(mac_address));
+    return sizeof(mac_address);
+}
+
+static int write_51_mac_address(const uint8_t *data, size_t length)
+{
+    msg_info("write 51 handler %p %zu", data, length);
+
+    if(length != 18)
+    {
+        msg_error(EINVAL, LOG_ERR, "Unexpected data length %zu", length);
+        return -1;
+    }
+
+    if(data[17] != '\0')
+    {
+        msg_error(EINVAL, LOG_ERR,
+                  "Received MAC address not zero-terminated");
+        return -1;
+    }
+
+    msg_info("Received MAC address \"%s\", should validate address and "
+             "configure adapter", (const char *)data);
+
+    return 0;
+}
+
+static ssize_t read_55_dhcp_enabled(uint8_t *response, size_t length)
+{
+    msg_info("read 55 handler %p %zu", response, length);
+    assert(length == 2);
+
+    response[0] = 0;
+    return length;
+}
+
+static int write_55_dhcp_enabled(const uint8_t *data, size_t length)
+{
+    msg_info("write 55 handler %p %zu", data, length);
+    assert(length == 2);
+
+    if(data[0] > 1)
+    {
+        msg_error(EINVAL, LOG_ERR,
+                  "Received invalid DHCP configuration parameter 0x%02x",
+                  data[0]);
+        return -1;
+    }
+
+    msg_info("Should %sable DHCP", data[0] == 0 ? "dis" : "en");
+
+    return 0;
+}
+
 /*!
  * List of implemented DCP registers.
  *
@@ -60,6 +126,23 @@ static const struct register_t register_map[] =
         .max_data_size = 20,
         .read_handler = read_37_image_version,
     },
+    {
+        /* MAC address */
+        .address = 51,
+        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH |
+                 DCP_REGISTER_FLAG_IS_CACHEABLE,
+        .max_data_size = 18,
+        .read_handler = read_51_mac_address,
+        .write_handler = write_51_mac_address,
+    },
+    {
+        /* Enable or disable DHCP */
+        .address = 55,
+        .flags = DCP_REGISTER_FLAG_IS_CACHEABLE,
+        .read_handler = read_55_dhcp_enabled,
+        .write_handler = write_55_dhcp_enabled,
+    },
+
 };
 
 static int compare_register_address(const void *a, const void *b)

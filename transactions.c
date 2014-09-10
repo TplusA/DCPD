@@ -14,10 +14,10 @@
 enum transaction_state
 {
     TRANSACTION_STATE_ERROR,                /*!< Error state, cannot process */
-    TRANSACTION_STATE_SLAVE_READ_COMMAND,   /*!< Reading command from slave */
-    TRANSACTION_STATE_SLAVE_READ_DATA,      /*!< Reading data from slave */
-    TRANSACTION_STATE_SLAVE_PREPARE_ANSWER, /*!< Filling answer buffer */
-    TRANSACTION_STATE_SLAVE_SEND_ANSWER,    /*!< Sending answer to slave */
+    TRANSACTION_STATE_SLAVE_READ_COMMAND,   /*!< Read command + data from slave */
+    TRANSACTION_STATE_SLAVE_PREPARE_ANSWER, /*!< Fill answer buffer */
+    TRANSACTION_STATE_SLAVE_SEND_ANSWER,    /*!< Send answer to slave */
+    TRANSACTION_STATE_SLAVE_PROCESS_WRITE,  /*!< Process data written by slave */
     TRANSACTION_STATE_MASTER_PREPARE,       /*!< Filling command buffer */
     TRANSACTION_STATE_MASTER_SEND_COMMAND,  /*!< Sending command to slave */
     TRANSACTION_STATE_MASTER_READ_ANSWER,   /*!< Reading answer from slave */
@@ -310,11 +310,38 @@ error_invalid_header:
     return false;
 }
 
+static bool fill_payload_buffer(struct transaction *t, const int fd)
+{
+    uint16_t size =
+        dcp_read_header_data(t->request_header + DCP_HEADER_DATA_OFFSET);
+
+    assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
+    assert(t->payload.pos == 0);
+
+    if(size == 0)
+        return true;
+
+    if(t->payload.data == NULL)
+        return false;
+
+    assert(t->payload.buffer_size == size);
+
+    if(read_to_buffer(t->payload.data, size, fd) < 0)
+        return false;
+
+    t->payload.pos = size;
+
+    return true;
+}
+
 static bool allocate_payload_buffer(struct transaction *t)
 {
     if(t->command != DCP_COMMAND_MULTI_READ_REGISTER &&
        t->command != DCP_COMMAND_MULTI_WRITE_REGISTER)
+    {
+        assert(t->payload.data == NULL);
         return true;
+    }
 
     const uint16_t size =
         (t->command == DCP_COMMAND_MULTI_READ_REGISTER
@@ -350,8 +377,15 @@ enum transaction_process_status transaction_process(struct transaction *t,
         if(!allocate_payload_buffer(t))
             break;
 
-        if(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER)
-            t->state = TRANSACTION_STATE_SLAVE_READ_DATA;
+        if(t->command == DCP_COMMAND_WRITE_REGISTER ||
+           t->command == DCP_COMMAND_MULTI_WRITE_REGISTER)
+        {
+            if(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER &&
+               !fill_payload_buffer(t, from_slave_fd))
+                break;
+
+            t->state = TRANSACTION_STATE_SLAVE_PROCESS_WRITE;
+        }
         else
             t->state = TRANSACTION_STATE_SLAVE_PREPARE_ANSWER;
 
@@ -360,22 +394,23 @@ enum transaction_process_status transaction_process(struct transaction *t,
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
         if(t->reg->read_handler == NULL)
         {
-            msg_error(0, LOG_ERR, "No read handler defined for register %u",
+            msg_error(ENOSYS, LOG_ERR,
+                      "No read handler defined for register %u",
                       t->reg->address);
             break;
         }
 
-        const ssize_t result =
+        const ssize_t read_result =
             (t->command == DCP_COMMAND_READ_REGISTER
              ? t->reg->read_handler(t->request_header + DCP_HEADER_DATA_OFFSET, 2)
              : t->reg->read_handler(t->payload.data, t->payload.buffer_size));
 
-        if(result < 0)
+        if(read_result < 0)
             break;
 
         if(t->command == DCP_COMMAND_MULTI_READ_REGISTER)
         {
-            t->payload.pos = result;
+            t->payload.pos = read_result;
             dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
                                 t->payload.pos);
         }
@@ -393,7 +428,25 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
         return TRANSACTION_FINISHED;
 
-      case TRANSACTION_STATE_SLAVE_READ_DATA:
+      case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
+        if(t->reg->write_handler == NULL)
+        {
+            msg_error(ENOSYS, LOG_ERR,
+                      "No write handler defined for register %u",
+                      t->reg->address);
+            break;
+        }
+
+        const int write_result =
+            (t->command == DCP_COMMAND_WRITE_REGISTER
+             ? t->reg->write_handler(t->request_header + DCP_HEADER_DATA_OFFSET, 2)
+             : t->reg->write_handler(t->payload.data, t->payload.pos));
+
+        if(write_result < 0)
+            break;
+
+        return TRANSACTION_FINISHED;
+
       case TRANSACTION_STATE_MASTER_PREPARE:
       case TRANSACTION_STATE_MASTER_SEND_COMMAND:
       case TRANSACTION_STATE_MASTER_READ_ANSWER:
@@ -401,7 +454,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         break;
     }
 
-    msg_error(0, LOG_NOTICE, "Transaction %p failed in state %d", t, t->state);
+    msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d", t, t->state);
     t->state = TRANSACTION_STATE_ERROR;
 
     return TRANSACTION_ERROR;
@@ -415,12 +468,12 @@ bool transaction_is_input_required(const struct transaction *t)
     switch(t->state)
     {
       case TRANSACTION_STATE_SLAVE_READ_COMMAND:
-      case TRANSACTION_STATE_SLAVE_READ_DATA:
       case TRANSACTION_STATE_MASTER_READ_ANSWER:
         return true;
 
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
       case TRANSACTION_STATE_SLAVE_SEND_ANSWER:
+      case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
       case TRANSACTION_STATE_MASTER_PREPARE:
       case TRANSACTION_STATE_MASTER_SEND_COMMAND:
       case TRANSACTION_STATE_ERROR:
