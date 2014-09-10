@@ -339,6 +339,8 @@ static void main_loop(const int drcp_fifo_in_fd, const int drcp_fifo_out_fd,
             break;
         }
     }
+
+    transaction_free(&state.preallocated_slave_transaction);
 }
 
 struct parameters
