@@ -115,22 +115,19 @@ static const struct register_t register_map[] =
     {
         /* Device status register */
         .address = 17,
-        .flags = DCP_REGISTER_FLAG_IS_CACHEABLE,
         .read_handler = read_17_device_status,
     },
     {
         /* Image version */
         .address = 37,
-        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH |
-                 DCP_REGISTER_FLAG_IS_CACHEABLE,
+        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH,
         .max_data_size = 20,
         .read_handler = read_37_image_version,
     },
     {
         /* MAC address */
         .address = 51,
-        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH |
-                 DCP_REGISTER_FLAG_IS_CACHEABLE,
+        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH,
         .max_data_size = 18,
         .read_handler = read_51_mac_address,
         .write_handler = write_51_mac_address,
@@ -138,7 +135,6 @@ static const struct register_t register_map[] =
     {
         /* Enable or disable DHCP */
         .address = 55,
-        .flags = DCP_REGISTER_FLAG_IS_CACHEABLE,
         .read_handler = read_55_dhcp_enabled,
         .write_handler = write_55_dhcp_enabled,
     },

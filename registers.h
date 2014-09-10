@@ -2,7 +2,7 @@
 #define REGISTERS_H
 
 #define DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH ((uint8_t)(1 << 0))
-#define DCP_REGISTER_FLAG_IS_CACHEABLE       ((uint8_t)(1 << 1))
+#define DCP_REGISTER_FLAG_IS_NOT_CACHEABLE   ((uint8_t)(1 << 1))
 
 /*!
  * Register description and handlers.
