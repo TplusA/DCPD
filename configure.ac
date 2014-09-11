@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([T+A DCP], [0.1], [r.tiemann@ta-hifi.com])
+AC_INIT([DCPD], [0.1], [r.tiemann@ta-hifi.com])
 AM_INIT_AUTOMAKE([1.11 -Wall -Werror foreign])
 AM_SILENT_RULES([yes])
 AC_CONFIG_SRCDIR([dcpd.c])
