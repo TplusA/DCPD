@@ -10,21 +10,25 @@ AC_USE_SYSTEM_EXTENSIONS()
 # Checks for programs.
 AC_PROG_CC
 AC_CHECK_PROGS([MARKDOWN], [markdown])
+AC_CHECK_PROGS([DOXYGEN], [doxygen])
 
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h syslog.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h stddef.h stdint.h stdlib.h string.h syslog.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
+AC_C_INLINE
 AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 AC_TYPE_UINT16_T
 AC_TYPE_UINT8_T
+AC_CHECK_TYPES([ptrdiff_t])
 
 # Checks for library functions.
-AC_CHECK_FUNCS([mkfifo strerror])
+AC_FUNC_REALLOC
+AC_CHECK_FUNCS([memset mkfifo strerror])
 
 AC_CONFIG_FILES([Makefile Doxyfile])
 AC_OUTPUT
