@@ -26,5 +26,5 @@ AC_TYPE_UINT8_T
 # Checks for library functions.
 AC_CHECK_FUNCS([mkfifo strerror])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile Doxyfile])
 AC_OUTPUT
