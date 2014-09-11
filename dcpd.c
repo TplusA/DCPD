@@ -253,7 +253,7 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
                   "Unexpected poll() events on DRCP fifo_fd %d: %04x",
                   drcp_fifo_in_fd, fds[1].revents);
 
-    return (*can_read_dcpspi || *can_read_drcp) ? 1 : 0;
+    return keep_running ? ((*can_read_dcpspi || *can_read_drcp) ? 1 : 0) : -1;
 }
 
 static bool construct_drcp_transaction(struct state *state, int fd)
