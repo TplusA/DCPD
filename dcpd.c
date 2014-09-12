@@ -13,6 +13,7 @@
 #include "named_pipe.h"
 #include "messages.h"
 #include "transactions.h"
+#include "dynamic_buffer.h"
 
 struct state
 {
@@ -264,12 +265,12 @@ static bool construct_drcp_transaction(struct state *state, int fd)
     if(state->is_drcp_transaction_object_ready)
         return true;
 
-    struct transaction_payload *payload =
+    struct dynamic_buffer *payload =
         transaction_get_payload(state->current_drcp_transaction);
 
     /* FIXME: buffer is not allocated */
     /* FIXME: required buffer size should be taken from command header */
-    if(read_to_buffer(payload->data, payload->buffer_size, fd) < 0)
+    if(read_to_buffer(payload->data, payload->size, fd) < 0)
         return false;
 
     return false;

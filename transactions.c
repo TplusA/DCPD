@@ -9,6 +9,7 @@
 #include <errno.h>
 
 #include "transactions.h"
+#include "dynamic_buffer.h"
 #include "registers.h"
 #include "dcpdefs.h"
 #include "messages.h"
@@ -37,7 +38,7 @@ struct transaction
 
     const struct dcp_register_t *reg;
 
-    struct transaction_payload payload;
+    struct dynamic_buffer payload;
 };
 
 static struct transaction transactions_container[100];
@@ -74,10 +75,7 @@ static void transaction_init(struct transaction *t, bool is_slave_request)
                 : TRANSACTION_STATE_MASTER_PREPARE);
     t->reg = NULL;
     memset(t->request_header, UINT8_MAX, sizeof(t->request_header));
-
-    t->payload.data = NULL;
-    t->payload.buffer_size = 0;
-    t->payload.pos = 0;
+    dynamic_buffer_init(&t->payload);
 }
 
 struct transaction *transaction_alloc(bool is_slave_request)
@@ -103,8 +101,7 @@ void transaction_free(struct transaction **t)
     assert(idx >= 0);
     assert((size_t)idx < MAX_NUMBER_OF_TRANSACTIONS);
 
-    if((*t)->payload.data != NULL)
-        free((*t)->payload.data);
+    dynamic_buffer_free(&(*t)->payload);
 
     transaction_queue_add_one(&free_list, *t);
 
@@ -113,9 +110,7 @@ void transaction_free(struct transaction **t)
 
 void transaction_reset_for_slave(struct transaction *t)
 {
-    if(t->payload.data != NULL)
-        free(t->payload.data);
-
+    dynamic_buffer_free(&t->payload);
     transaction_init(t, true);
 }
 
@@ -320,15 +315,15 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
         dcp_read_header_data(t->request_header + DCP_HEADER_DATA_OFFSET);
 
     assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
-    assert(t->payload.pos == 0);
+    assert(dynamic_buffer_is_empty(&t->payload));
 
     if(size == 0)
         return true;
 
-    if(t->payload.data == NULL)
+    if(!dynamic_buffer_is_allocated(&t->payload))
         return false;
 
-    assert(t->payload.buffer_size == size);
+    assert(t->payload.size == size);
 
     if(read_to_buffer(t->payload.data, size, fd) < 0)
         return false;
@@ -355,7 +350,7 @@ static bool allocate_payload_buffer(struct transaction *t)
     if(size == 0)
         return true;
 
-    return transaction_payload_resize(&t->payload, size);
+    return dynamic_buffer_resize(&t->payload, size);
 }
 
 enum transaction_process_status transaction_process(struct transaction *t,
@@ -367,7 +362,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
     msg_info("Process transaction %p, state %d, reg %p, command %u, "
              "payload %p %zu %zu",
              t, t->state, t->reg, t->command,
-             t->payload.data, t->payload.buffer_size, t->payload.pos);
+             t->payload.data, t->payload.size, t->payload.pos);
 
     switch(t->state)
     {
@@ -407,7 +402,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         const ssize_t read_result =
             (t->command == DCP_COMMAND_READ_REGISTER
              ? t->reg->read_handler(t->request_header + DCP_HEADER_DATA_OFFSET, 2)
-             : t->reg->read_handler(t->payload.data, t->payload.buffer_size));
+             : t->reg->read_handler(t->payload.data, t->payload.size));
 
         if(read_result < 0)
             break;
@@ -487,29 +482,9 @@ bool transaction_is_input_required(const struct transaction *t)
     return false;
 }
 
-struct transaction_payload *transaction_get_payload(struct transaction *t)
+struct dynamic_buffer *transaction_get_payload(struct transaction *t)
 {
     assert(t != NULL);
     return &t->payload;
 }
 
-bool transaction_payload_resize(struct transaction_payload *p, size_t size)
-{
-    assert(p != NULL);
-    assert(size > 0);
-
-    void *temp = realloc(p->data, size);
-
-    if(temp == NULL)
-    {
-        msg_error(errno, LOG_CRIT,
-                  "Failed resizing payload buffer from %zu to %zu bytes",
-                  p->buffer_size, size);
-        return false;
-    }
-
-    p->data = temp;
-    p->buffer_size = size;
-
-    return true;
-}

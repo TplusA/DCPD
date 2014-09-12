@@ -15,13 +15,6 @@ enum transaction_process_status
  */
 struct transaction;
 
-struct transaction_payload
-{
-    uint8_t *data;
-    size_t buffer_size;
-    size_t pos;
-};
-
 /*!
  * Initialize transaction container.
  *
@@ -84,10 +77,6 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
 bool transaction_is_input_required(const struct transaction *t);
 
-struct transaction_payload *transaction_get_payload(struct transaction *t);
-
-bool transaction_payload_resize(struct transaction_payload *p, size_t size);
-
-bool transaction_payload_add_space(struct transaction_payload *p, size_t size);
+struct dynamic_buffer *transaction_get_payload(struct transaction *t);
 
 #endif /* !TRANSACTIONS_H */
