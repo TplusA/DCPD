@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <limits.h>
 #include <unistd.h>
 #include <poll.h>
 #include <signal.h>
@@ -15,6 +17,9 @@
 #include "transactions.h"
 #include "dynamic_buffer.h"
 
+/*!
+ * Global state of the DCP machinery.
+ */
 struct state
 {
     /*!
@@ -39,26 +44,13 @@ struct state
     struct transaction *master_transaction_queue;
 
     /*!
-     * Pointer to a DRCP transaction that is currently constructed.
+     * Dynamically growing buffer for holding XML data from drcpd.
      *
-     * This pointer in usually NULL and only points to a transaction object
-     * while exchanging XML data with drcpd. As soon as the data is complete,
-     * the constructed transaction is moved to the
-     * #state::master_transaction_queue queue.
+     * This buffer is filled while receiving XML data from drcpd. As soon as
+     * drcpd is finished, one or more transactions are constructed and queued
+     * in the #state::master_transaction_queue queue.
      */
-    struct transaction *current_drcp_transaction;
-
-    /*!
-     * Whether or not the DRCP transaction is ready.
-     *
-     * While the #state::current_drcp_transaction is under construction, this
-     * flag is false. When the object is complete and ready for execution, the
-     * flag is set to true.
-     *
-     * This flag is invalid as long as the #state::current_drcp_transaction
-     * pointer is NULL.
-     */
-    bool is_drcp_transaction_object_ready;
+    struct dynamic_buffer drcp_buffer;
 
     /*!
      * Pointer to an immortal slave transaction object.
@@ -77,27 +69,8 @@ struct state
  */
 static volatile bool keep_running = true;
 
-static int read_to_buffer(uint8_t *dest, size_t count, int fd)
-{
-    while(count > 0)
-    {
-        ssize_t len = read(fd, dest, count);
-
-        if(len < 0)
-        {
-            msg_error(errno, LOG_ERR, "Failed reading from fd %d", fd);
-            return -1;
-        }
-
-        dest += len;
-        count -= len;
-    }
-
-    return 0;
-}
-
-static struct transaction *begin_master_transaction(struct transaction **head,
-                                                    uint8_t register_address)
+static struct transaction *mk_master_transaction(struct transaction **head,
+                                                 uint8_t register_address)
 {
     struct transaction *t = transaction_alloc(false);
 
@@ -113,32 +86,6 @@ static struct transaction *begin_master_transaction(struct transaction **head,
         transaction_free(&t);
 
     return t;
-}
-
-/*!
- * \bug Not really implemented.
- */
-static struct transaction *begin_drcp_transaction(int fd, bool *is_ready)
-{
-    *is_ready = false;
-
-    struct transaction *t = NULL;
-
-    /* FIXME: Must read from fd, don't hard-code 71 */
-    if(begin_master_transaction(&t, 71) != NULL)
-        return t;
-    else
-        return NULL;
-}
-
-static void end_active_transaction(struct state *state)
-{
-    transaction_queue_remove(&state->active_transaction);
-
-    if(state->free_active_transaction)
-        transaction_free(&state->active_transaction);
-
-    state->active_transaction = NULL;
 }
 
 static void schedule_transaction(struct state *state, struct transaction *t,
@@ -166,10 +113,11 @@ static void try_dequeue_next_transaction(struct state *state)
 
 static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
                            const int dcpspi_fifo_in_fd, bool do_block,
-                           bool *can_read_drcp, bool *can_read_dcpspi)
+                           bool *can_read_drcp)
 {
+    bool can_read_dcpspi = false;
+
     *can_read_drcp = false;
-    *can_read_dcpspi = false;
 
     struct pollfd fds[2] =
     {
@@ -216,7 +164,7 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
         else
         {
             msg_error(EAGAIN, LOG_NOTICE, "Slave request during transaction");
-            *can_read_dcpspi = true;
+            can_read_dcpspi = true;
         }
     }
 
@@ -234,13 +182,7 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
     if(fds[1].revents & POLLIN)
     {
         msg_info("DRCP input data");
-
-        if(!state->current_drcp_transaction)
-            state->current_drcp_transaction =
-                begin_drcp_transaction(drcp_fifo_in_fd,
-                                       &state->is_drcp_transaction_object_ready);
-        else
-            *can_read_drcp = true;
+        *can_read_drcp = true;
     }
 
     if(fds[1].revents & POLLHUP)
@@ -254,37 +196,245 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
                   "Unexpected poll() events on DRCP fifo_fd %d: %04x",
                   drcp_fifo_in_fd, fds[1].revents);
 
-    return keep_running ? ((*can_read_dcpspi || *can_read_drcp) ? 1 : 0) : -1;
+    return keep_running ? ((can_read_dcpspi || *can_read_drcp) ? 1 : 0) : -1;
 }
 
-static bool construct_drcp_transaction(struct state *state, int fd)
+static int try_read_to_buffer(struct dynamic_buffer *buffer, int fd)
 {
-    if(state->current_drcp_transaction == NULL)
-        return false;
+    uint8_t *dest = buffer->data + buffer->pos;
+    size_t count = buffer->size - buffer->pos;
+    int retval = 0;
 
-    if(state->is_drcp_transaction_object_ready)
+    while(count > 0)
+    {
+        const ssize_t len = read(fd, dest, count);
+
+        if(len == 0)
+            break;
+
+        if(len < 0)
+            return errno == EAGAIN ? 0 : -1;
+
+        dest += len;
+        count -= len;
+        buffer->pos += len;
+        retval = 1;
+    }
+
+    return retval;
+}
+
+static bool read_size_from_fd(struct dynamic_buffer *buffer, int fd,
+                              size_t *expected_size, size_t *payload_offset)
+{
+    if(try_read_to_buffer(buffer, fd) < 0)
+    {
+        msg_error(errno, LOG_CRIT, "Reading XML size failed");
+        return false;
+    }
+
+    static const char size_header[] = "Size: ";
+
+    if(buffer->pos < sizeof(size_header))
+    {
+        msg_error(EINVAL, LOG_CRIT, "Too short input, expected XML size");
+        return false;
+    }
+
+    if(memcmp(buffer->data, size_header, sizeof(size_header) - 1) != 0)
+    {
+        msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
+        return false;
+    }
+
+    uint8_t *const eol = memchr(buffer->data, '\n', buffer->pos);
+    if(!eol)
+    {
+        msg_error(EINVAL, LOG_CRIT, "Incomplete XML size");
+        return false;
+    }
+
+    *eol = '\0';
+
+    char *endptr;
+    const char *number_string =
+        (const char *)buffer->data + sizeof(size_header) - 1;
+    unsigned long temp = strtoul(number_string, &endptr, 10);
+
+    if(*endptr != '\0')
+    {
+        msg_error(EINVAL, LOG_CRIT,
+                  "Malformed XML size \"%s\"", number_string);
+        return false;
+    }
+
+    if(temp > UINT16_MAX || (temp == ULONG_MAX && errno == ERANGE))
+    {
+        msg_error(ERANGE, LOG_CRIT, "Too large XML size %s", number_string);
+        return false;
+    }
+
+    *expected_size = temp;
+    *payload_offset = (eol - buffer->data) + 1;
+
+    return true;
+}
+
+static bool try_preallocate_buffer(struct dynamic_buffer *buffer, int fd)
+{
+    if(dynamic_buffer_is_allocated(buffer))
         return true;
 
-    struct dynamic_buffer *payload =
-        transaction_get_payload(state->current_drcp_transaction);
+    static size_t prealloc_size;
+    if(prealloc_size == 0)
+        prealloc_size = getpagesize();
 
-    /* FIXME: buffer is not allocated */
-    /* FIXME: required buffer size should be taken from command header */
-    if(read_to_buffer(payload->data, payload->size, fd) < 0)
+    if(!dynamic_buffer_resize(buffer, prealloc_size))
         return false;
 
-    return false;
+    size_t expected_size;
+    size_t xml_data_offset;
+
+    buffer->size = 16;
+    if(!read_size_from_fd(buffer, fd, &expected_size, &xml_data_offset))
+    {
+        dynamic_buffer_free(buffer);
+        return false;
+    }
+    buffer->size = prealloc_size;
+
+    assert(buffer->pos >= xml_data_offset);
+
+    if(expected_size > buffer->size)
+    {
+        if(!dynamic_buffer_resize(buffer, expected_size))
+        {
+            dynamic_buffer_free(buffer);
+            return false;
+        }
+    }
+    else
+    {
+        /*
+         * This is kind of a hack, but a safe one. The size field now contains
+         * the expected number of bytes to read from the pipe, and if there is
+         * any error, the buffer will be freed regardless of the size field.
+         * Even in case the size is 0, the buffer will be freed because free()
+         * is going to be called for a non-NULL pointer.
+         */
+        buffer->size = expected_size;
+    }
+
+    buffer->pos -= xml_data_offset;
+    memmove(buffer->data, buffer->data + xml_data_offset, buffer->pos);
+
+    return true;
+}
+
+static bool fill_drcp_buffer(struct dynamic_buffer *buffer, int fd)
+{
+    assert(buffer != NULL);
+
+    while(buffer->pos < buffer->size)
+    {
+        int ret =try_read_to_buffer(buffer, fd);
+
+        if(ret == 0)
+            return true;
+
+        if(ret < 0)
+        {
+            msg_error(errno, LOG_ERR, "Failed reading DRCP data from fd %d", fd);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+struct files
+{
+    int drcp_fifo_in_fd;
+    int drcp_fifo_out_fd;
+    int dcpspi_fifo_in_fd;
+    int dcpspi_fifo_out_fd;
+
+    const char *drcp_fifo_in_name;
+    const char *drcp_fifo_out_name;
+};
+
+static struct transaction *dcp_transactions_from_drcp(const struct dynamic_buffer *buffer)
+{
+    assert(buffer != NULL);
+    assert(buffer->pos > 0);
+
+    struct transaction *head = NULL;
+    size_t i = 0;
+
+    while(i < buffer->pos)
+    {
+        struct transaction *t = mk_master_transaction(&head, 71);
+
+        if(t == NULL)
+            break;
+
+        uint16_t size = transaction_get_max_data_size(t);
+
+        if(i + size >= buffer->pos)
+            size = buffer->pos - i;
+
+        assert(size > 0);
+
+        if(!transaction_set_payload(t, buffer->data + i, size))
+            break;
+
+        i += size;
+    }
+
+    if(i < buffer->pos && head != NULL)
+        transaction_free(&head);
+
+    return head;
+}
+
+static const char *process_drcp_input(struct state *state, struct files *files)
+{
+    static const char ok_result[] = "OK\n";
+    static const char error_result[] = "FF\n";
+
+    const struct dynamic_buffer *buffer = &state->drcp_buffer;
+
+    if(dynamic_buffer_is_empty(buffer))
+    {
+        msg_error(EINVAL, LOG_NOTICE, "Received empty DRCP buffer");
+        return error_result;
+    }
+
+    msg_info("Send DRCP buffer over DCP link, size %zu", buffer->pos);
+
+    struct transaction *head = dcp_transactions_from_drcp(buffer);
+    if(head == NULL)
+        return error_result;
+
+    transaction_queue_add(&state->master_transaction_queue, head);
+
+    return ok_result;
+}
+
+static void drcp_report(const char *two_bytes_plus_eol, int fd)
+{
+    (void)fifo_write_from_buffer((const uint8_t *)two_bytes_plus_eol, 3, fd);
 }
 
 /*!
  * Process DCP.
  */
-static void main_loop(const int drcp_fifo_in_fd, const int drcp_fifo_out_fd,
-                      const int dcpspi_fifo_in_fd, const int dcpspi_fifo_out_fd)
+static void main_loop(struct files *files)
 {
     static struct state state;
 
-    state.preallocated_slave_transaction = transaction_alloc(true),
+    state.preallocated_slave_transaction = transaction_alloc(true);
+    dynamic_buffer_init(&state.drcp_buffer);
 
     msg_info("Ready for accepting traffic");
 
@@ -294,30 +444,37 @@ static void main_loop(const int drcp_fifo_in_fd, const int drcp_fifo_out_fd,
                  state.active_transaction, state.master_transaction_queue);
 
         bool can_read_drcp;
-        bool can_read_dcpspi;
         const int wait_result =
             wait_for_events(&state,
-                            drcp_fifo_in_fd, dcpspi_fifo_in_fd,
+                            files->drcp_fifo_in_fd, files->dcpspi_fifo_in_fd,
                             transaction_is_input_required(state.active_transaction),
-                            &can_read_drcp, &can_read_dcpspi);
+                            &can_read_drcp);
 
         if(wait_result < 0)
             continue;
 
-        if(can_read_drcp && construct_drcp_transaction(&state, drcp_fifo_in_fd))
+        if(can_read_drcp)
         {
-            /* reading XML data complete, now stored in RAM */
-            transaction_queue_add(&state.master_transaction_queue,
-                                  state.current_drcp_transaction);
-            state.current_drcp_transaction = NULL;
+            if(try_preallocate_buffer(&state.drcp_buffer,
+                                      files->drcp_fifo_in_fd) &&
+               fill_drcp_buffer(&state.drcp_buffer, files->drcp_fifo_in_fd))
+            {
+                if(state.drcp_buffer.pos >= state.drcp_buffer.size)
+                {
+                    const char *result = process_drcp_input(&state, files);
+                    dynamic_buffer_free(&state.drcp_buffer);
+                    drcp_report(result, files->drcp_fifo_out_fd);
+                }
+            }
+            else
+            {
+                dynamic_buffer_free(&state.drcp_buffer);
+                drcp_report("FF\n", files->drcp_fifo_out_fd);
+            }
         }
 
         msg_info("w active %p queue %p",
                  state.active_transaction, state.master_transaction_queue);
-
-        assert(state.active_transaction != NULL ||
-               state.master_transaction_queue != NULL ||
-               state.current_drcp_transaction != NULL);
 
         try_dequeue_next_transaction(&state);
 
@@ -328,14 +485,22 @@ static void main_loop(const int drcp_fifo_in_fd, const int drcp_fifo_out_fd,
             continue;
 
         switch(transaction_process(state.active_transaction,
-                                   dcpspi_fifo_in_fd, dcpspi_fifo_out_fd))
+                                   files->dcpspi_fifo_in_fd,
+                                   files->dcpspi_fifo_out_fd))
         {
           case TRANSACTION_IN_PROGRESS:
+            msg_info("Transaction in progress...");
             break;
 
           case TRANSACTION_FINISHED:
           case TRANSACTION_ERROR:
-            end_active_transaction(&state);
+            msg_info("Transaction done");
+
+            if(state.free_active_transaction)
+                transaction_free(&state.active_transaction);
+
+            state.active_transaction = NULL;
+
             try_dequeue_next_transaction(&state);
             break;
         }
@@ -356,29 +521,34 @@ struct parameters
 /*!
  * Open devices, daemonize.
  */
-static int setup(const struct parameters *parameters,
-                 int *drcp_fifo_in_fd, int *drcp_fifo_out_fd,
-                 int *dcpspi_fifo_in_fd, int *dcpspi_fifo_out_fd)
+static int setup(const struct parameters *parameters, struct files *files)
 {
     msg_enable_syslog(!parameters->run_in_foreground);
 
     if(!parameters->run_in_foreground)
         openlog("dcpd", LOG_PID, LOG_DAEMON);
 
-    *dcpspi_fifo_in_fd = fifo_open(parameters->dcpspi_fifo_in_name, false);
-    if(*dcpspi_fifo_in_fd < 0)
+    files->drcp_fifo_in_name = parameters->drcp_fifo_in_name;
+    files->drcp_fifo_out_name = parameters->drcp_fifo_out_name;
+
+    files->dcpspi_fifo_in_fd =
+        fifo_open(parameters->dcpspi_fifo_in_name, false);
+    if(files->dcpspi_fifo_in_fd < 0)
         goto error_dcpspi_fifo_in;
 
-    *drcp_fifo_in_fd = fifo_create_and_open(parameters->drcp_fifo_in_name, false);
-    if(*drcp_fifo_in_fd < 0)
+    files->drcp_fifo_in_fd =
+        fifo_create_and_open(parameters->drcp_fifo_in_name, false);
+    if(files->drcp_fifo_in_fd < 0)
         goto error_drcp_fifo_in;
 
-    *drcp_fifo_out_fd = fifo_create_and_open(parameters->drcp_fifo_out_name, true);
-    if(*drcp_fifo_out_fd < 0)
+    files->drcp_fifo_out_fd =
+        fifo_create_and_open(parameters->drcp_fifo_out_name, true);
+    if(files->drcp_fifo_out_fd < 0)
         goto error_drcp_fifo_out;
 
-    *dcpspi_fifo_out_fd = fifo_open(parameters->dcpspi_fifo_out_name, true);
-    if(*dcpspi_fifo_out_fd < 0)
+    files->dcpspi_fifo_out_fd =
+        fifo_open(parameters->dcpspi_fifo_out_name, true);
+    if(files->dcpspi_fifo_out_fd < 0)
         goto error_dcpspi_fifo_out;
 
     if(!parameters->run_in_foreground)
@@ -393,16 +563,18 @@ static int setup(const struct parameters *parameters,
     return 0;
 
 error_daemon:
-    fifo_close(dcpspi_fifo_out_fd);
+    fifo_close(&files->dcpspi_fifo_out_fd);
 
 error_dcpspi_fifo_out:
-    fifo_close_and_delete(drcp_fifo_out_fd, parameters->drcp_fifo_out_name);
+    fifo_close_and_delete(&files->drcp_fifo_out_fd,
+                          parameters->drcp_fifo_out_name);
 
 error_drcp_fifo_out:
-    fifo_close_and_delete(drcp_fifo_in_fd, parameters->drcp_fifo_in_name);
+    fifo_close_and_delete(&files->drcp_fifo_in_fd,
+                          parameters->drcp_fifo_in_name);
 
 error_drcp_fifo_in:
-    fifo_close(dcpspi_fifo_in_fd);
+    fifo_close(&files->dcpspi_fifo_in_fd);
 
 error_dcpspi_fifo_in:
     return -1;
@@ -451,11 +623,9 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
-    int drcp_fifo_in_fd, drcp_fifo_out_fd;
-    int dcpspi_fifo_in_fd, dcpspi_fifo_out_fd;
+    struct files files;
 
-    if(setup(&parameters, &drcp_fifo_in_fd, &drcp_fifo_out_fd,
-             &dcpspi_fifo_in_fd, &dcpspi_fifo_out_fd) < 0)
+    if(setup(&parameters, &files) < 0)
         return EXIT_FAILURE;
 
     static struct sigaction action =
@@ -470,15 +640,14 @@ int main(int argc, char *argv[])
 
     transaction_init_allocator();
 
-    main_loop(drcp_fifo_in_fd, drcp_fifo_out_fd,
-              dcpspi_fifo_in_fd, dcpspi_fifo_out_fd);
+    main_loop(&files);
 
     msg_info("Terminated, shutting down");
 
-    fifo_close_and_delete(&drcp_fifo_in_fd, parameters.drcp_fifo_in_name);
-    fifo_close_and_delete(&drcp_fifo_out_fd, parameters.drcp_fifo_out_name);
-    fifo_close(&dcpspi_fifo_in_fd);
-    fifo_close(&dcpspi_fifo_out_fd);
+    fifo_close_and_delete(&files.drcp_fifo_in_fd, parameters.drcp_fifo_in_name);
+    fifo_close_and_delete(&files.drcp_fifo_out_fd, parameters.drcp_fifo_out_name);
+    fifo_close(&files.dcpspi_fifo_in_fd);
+    fifo_close(&files.dcpspi_fifo_out_fd);
 
     return EXIT_SUCCESS;
 }

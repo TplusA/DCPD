@@ -138,6 +138,12 @@ static const struct dcp_register_t register_map[] =
         .read_handler = read_55_dhcp_enabled,
         .write_handler = write_55_dhcp_enabled,
     },
+    {
+        /* DRC protocol */
+        .address = 71,
+        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH,
+        .max_data_size = 256,
+    },
 
 };
 

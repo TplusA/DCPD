@@ -20,11 +20,9 @@ enum transaction_state
     TRANSACTION_STATE_ERROR,                /*!< Error state, cannot process */
     TRANSACTION_STATE_SLAVE_READ_COMMAND,   /*!< Read command + data from slave */
     TRANSACTION_STATE_SLAVE_PREPARE_ANSWER, /*!< Fill answer buffer */
-    TRANSACTION_STATE_SLAVE_SEND_ANSWER,    /*!< Send answer to slave */
     TRANSACTION_STATE_SLAVE_PROCESS_WRITE,  /*!< Process data written by slave */
     TRANSACTION_STATE_MASTER_PREPARE,       /*!< Filling command buffer */
-    TRANSACTION_STATE_MASTER_SEND_COMMAND,  /*!< Sending command to slave */
-    TRANSACTION_STATE_MASTER_READ_ANSWER,   /*!< Reading answer from slave */
+    TRANSACTION_STATE_SEND_TO_SLAVE,        /*!< Send (any) data to slave */
 };
 
 struct transaction
@@ -123,28 +121,14 @@ void transaction_reset_for_slave(struct transaction *t)
 }
 
 /*!
- * Put register data into transaction.
+ * Look up register by address, associate transaction with it.
  *
- * This function inspects the register definition and sets up the buffering
- * accordingly. This function must be called for each transaction before
- * attempting to process them.
+ * This function must be called for each transaction before attempting to
+ * process them.
  */
-static void transaction_set_register(struct transaction *t,
-                                     const struct dcp_register_t *reg)
-{
-    assert(t != NULL);
-    assert(reg != NULL);
-
-    t->reg = reg;
-
-    if((reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH) == 0)
-    {
-    }
-}
-
-static bool transaction_set_address(struct transaction *t,
-                                    uint8_t register_address,
-                                    bool master_not_slave)
+static bool transaction_set_register_struct(struct transaction *t,
+                                            uint8_t register_address,
+                                            bool master_not_slave)
 {
     const struct dcp_register_t *reg = register_lookup(register_address);
 
@@ -157,20 +141,33 @@ static bool transaction_set_address(struct transaction *t,
     }
 
     assert(reg->address == register_address);
-    transaction_set_register(t, reg);
+
+    t->reg = reg;
 
     return true;
 }
 
 /*!
- * FIXME: Need to generate header from register description.
+ * Prepare transaction header according to address.
  *
- * \bug Not properly implemented
+ * The size, if any, is inserted later.
  */
 bool transaction_set_address_for_master(struct transaction *t,
                                         uint8_t register_address)
 {
-    return transaction_set_address(t, register_address, true);
+    if(!transaction_set_register_struct(t, register_address, true))
+        return false;
+
+    if((t->reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH) != 0)
+        t->command = DCP_COMMAND_MULTI_READ_REGISTER;
+    else
+        t->command = DCP_COMMAND_READ_REGISTER;
+
+    t->request_header[0] = t->command;
+    t->request_header[1] = register_address;
+    dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET, 0);
+
+    return true;
 }
 
 void transaction_queue_add(struct transaction **head, struct transaction *t)
@@ -266,7 +263,7 @@ static bool fill_request_header(struct transaction *t, const int fd)
 
     t->command = t->request_header[0] & 0x0f;
 
-    if(!transaction_set_address(t, t->request_header[1], false))
+    if(!transaction_set_register_struct(t, t->request_header[1], false))
         return false;
 
     switch(t->command)
@@ -408,19 +405,9 @@ enum transaction_process_status transaction_process(struct transaction *t,
                                 t->payload.pos);
         }
 
-        t->state = TRANSACTION_STATE_SLAVE_SEND_ANSWER;
+        t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
 
         return TRANSACTION_IN_PROGRESS;
-
-      case TRANSACTION_STATE_SLAVE_SEND_ANSWER:
-        msg_info("Sending %u bytes to slave", DCP_HEADER_SIZE + t->payload.pos);
-        if(fifo_write_from_buffer(t->request_header, sizeof(t->request_header),
-                                  to_slave_fd) < 0 ||
-           fifo_write_from_buffer(t->payload.data, t->payload.pos,
-                                  to_slave_fd) < 0)
-            break;
-
-        return TRANSACTION_FINISHED;
 
       case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
         if(t->reg->write_handler == NULL)
@@ -442,10 +429,28 @@ enum transaction_process_status transaction_process(struct transaction *t,
         return TRANSACTION_FINISHED;
 
       case TRANSACTION_STATE_MASTER_PREPARE:
-      case TRANSACTION_STATE_MASTER_SEND_COMMAND:
-      case TRANSACTION_STATE_MASTER_READ_ANSWER:
-        msg_error(0, LOG_EMERG, "state %d not implemented yet", t->state);
-        break;
+        if(t->command == DCP_COMMAND_MULTI_READ_REGISTER)
+            dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
+                                t->payload.pos);
+        else
+        {
+            assert(t->command == DCP_COMMAND_READ_REGISTER);
+            assert(t->payload.data == NULL);
+        }
+
+        t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
+
+        return TRANSACTION_IN_PROGRESS;
+
+      case TRANSACTION_STATE_SEND_TO_SLAVE:
+        msg_info("Sending %u bytes to slave", DCP_HEADER_SIZE + t->payload.pos);
+        if(fifo_write_from_buffer(t->request_header, sizeof(t->request_header),
+                                  to_slave_fd) < 0 ||
+           fifo_write_from_buffer(t->payload.data, t->payload.pos,
+                                  to_slave_fd) < 0)
+            break;
+
+        return TRANSACTION_FINISHED;
     }
 
     msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d", t, t->state);
@@ -462,14 +467,12 @@ bool transaction_is_input_required(const struct transaction *t)
     switch(t->state)
     {
       case TRANSACTION_STATE_SLAVE_READ_COMMAND:
-      case TRANSACTION_STATE_MASTER_READ_ANSWER:
         return true;
 
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
-      case TRANSACTION_STATE_SLAVE_SEND_ANSWER:
       case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
       case TRANSACTION_STATE_MASTER_PREPARE:
-      case TRANSACTION_STATE_MASTER_SEND_COMMAND:
+      case TRANSACTION_STATE_SEND_TO_SLAVE:
       case TRANSACTION_STATE_ERROR:
         break;
     }
@@ -477,9 +480,28 @@ bool transaction_is_input_required(const struct transaction *t)
     return false;
 }
 
-struct dynamic_buffer *transaction_get_payload(struct transaction *t)
+uint16_t transaction_get_max_data_size(const struct transaction *t)
 {
     assert(t != NULL);
-    return &t->payload;
+    assert(t->reg);
+
+    return ((t->reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH)
+            ? t->reg->max_data_size
+            : 2);
 }
 
+bool transaction_set_payload(struct transaction *t,
+                             const uint8_t *src, size_t length)
+{
+    assert(t != NULL);
+    assert(t->payload.data == NULL);
+    assert(src != NULL);
+
+    if(!dynamic_buffer_resize(&t->payload, length))
+        return false;
+
+    memcpy(t->payload.data, src, length);
+    t->payload.pos = length;
+
+    return true;
+}

@@ -38,6 +38,9 @@ struct transaction *transaction_alloc(bool is_slave_request);
  */
 void transaction_free(struct transaction **head);
 
+/*!
+ * Free payload and reinitialize structure.
+ */
 void transaction_reset_for_slave(struct transaction *t);
 
 /*!
@@ -76,6 +79,8 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
 bool transaction_is_input_required(const struct transaction *t);
 
-struct dynamic_buffer *transaction_get_payload(struct transaction *t);
+uint16_t transaction_get_max_data_size(const struct transaction *t);
 
+bool transaction_set_payload(struct transaction *t,
+                             const uint8_t *src, size_t length);
 #endif /* !TRANSACTIONS_H */
