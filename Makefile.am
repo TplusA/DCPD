@@ -12,5 +12,9 @@ dcpd_SOURCES = \
     dynamic_buffer.c dynamic_buffer.h drcp.c drcp.h drcp_command_codes.h \
     dcpregs_drcp.c dcpregs_drcp.h
 
+AM_CPPFLAGS = $(DCPD_DEPENDENCIES_CFLAGS)
+
+dcpd_LDADD = $(DCPD_DEPENDENCIES_LIBS)
+
 .md.html:
 	$(MARKDOWN) $< >$@

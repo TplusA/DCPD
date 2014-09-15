@@ -9,10 +9,12 @@ AC_USE_SYSTEM_EXTENSIONS()
 
 # Checks for programs.
 AC_PROG_CC
+PKG_PROG_PKG_CONFIG([0.26])
 AC_CHECK_PROGS([MARKDOWN], [markdown])
 AC_CHECK_PROGS([DOXYGEN], [doxygen])
 
 # Checks for libraries.
+PKG_CHECK_MODULES([DCPD_DEPENDENCIES], [gmodule-2.0 gio-2.0 gio-unix-2.0 gthread-2.0])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h limits.h stddef.h stdint.h stdlib.h string.h syslog.h unistd.h])

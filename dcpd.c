@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <assert.h>
 
+#include <gio/gio.h>
+
 #include "named_pipe.h"
 #include "messages.h"
 #include "transactions.h"
@@ -568,6 +570,10 @@ static void signal_handler(int signum, siginfo_t *info, void *ucontext)
 
 int main(int argc, char *argv[])
 {
+#if !GLIB_CHECK_VERSION(2, 36, 0)
+    g_type_init();
+#endif
+
     static struct parameters parameters;
     static struct files files;
 
