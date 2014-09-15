@@ -11,6 +11,7 @@
 #include "transactions.h"
 #include "dynamic_buffer.h"
 #include "registers.h"
+#include "named_pipe.h"
 #include "dcpdefs.h"
 #include "messages.h"
 
@@ -255,25 +256,6 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd)
     return 0;
 }
 
-static int write_from_buffer(const uint8_t *src, size_t count, int fd)
-{
-    while(count > 0)
-    {
-        ssize_t len = write(fd, src, count);
-
-        if(len < 0)
-        {
-            msg_error(errno, LOG_ERR, "Failed writing to fd %d", fd);
-            return -1;
-        }
-
-        src += len;
-        count -= len;
-    }
-
-    return 0;
-}
-
 static bool fill_request_header(struct transaction *t, const int fd)
 {
     if(read_to_buffer(t->request_header, sizeof(t->request_header), fd) < 0)
@@ -432,9 +414,10 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
       case TRANSACTION_STATE_SLAVE_SEND_ANSWER:
         msg_info("Sending %u bytes to slave", DCP_HEADER_SIZE + t->payload.pos);
-        if(write_from_buffer(t->request_header, sizeof(t->request_header),
-                             to_slave_fd) < 0 ||
-           write_from_buffer(t->payload.data, t->payload.pos, to_slave_fd) < 0)
+        if(fifo_write_from_buffer(t->request_header, sizeof(t->request_header),
+                                  to_slave_fd) < 0 ||
+           fifo_write_from_buffer(t->payload.data, t->payload.pos,
+                                  to_slave_fd) < 0)
             break;
 
         return TRANSACTION_FINISHED;

@@ -60,3 +60,22 @@ void fifo_close_and_delete(int *fd, const char *devname)
         msg_error(errno, LOG_ERR,
                   "Failed deleting named pipe \"%s\"", devname);
 }
+
+int fifo_write_from_buffer(const uint8_t *src, size_t count, int fd)
+{
+    while(count > 0)
+    {
+        ssize_t len = write(fd, src, count);
+
+        if(len < 0)
+        {
+            msg_error(errno, LOG_ERR, "Failed writing to fd %d", fd);
+            return -1;
+        }
+
+        src += len;
+        count -= len;
+    }
+
+    return 0;
+}
