@@ -537,10 +537,6 @@ static void main_loop(struct files *files)
 
 struct parameters
 {
-    const char *dcpspi_fifo_in_name;
-    const char *dcpspi_fifo_out_name;
-    const char *drcp_fifo_in_name;
-    const char *drcp_fifo_out_name;
     bool run_in_foreground;
 };
 
@@ -554,31 +550,6 @@ static int setup(const struct parameters *parameters, struct files *files)
     if(!parameters->run_in_foreground)
         openlog("dcpd", LOG_PID, LOG_DAEMON);
 
-    files->drcp_fifo_in_name = parameters->drcp_fifo_in_name;
-    files->drcp_fifo_out_name = parameters->drcp_fifo_out_name;
-    files->dcpspi_fifo_in_name = parameters->dcpspi_fifo_in_name;
-    files->dcpspi_fifo_out_name = parameters->dcpspi_fifo_out_name;
-
-    files->dcpspi_fifo_in_fd =
-        fifo_open(parameters->dcpspi_fifo_in_name, false);
-    if(files->dcpspi_fifo_in_fd < 0)
-        goto error_dcpspi_fifo_in;
-
-    files->drcp_fifo_in_fd =
-        fifo_create_and_open(parameters->drcp_fifo_in_name, false);
-    if(files->drcp_fifo_in_fd < 0)
-        goto error_drcp_fifo_in;
-
-    files->drcp_fifo_out_fd =
-        fifo_create_and_open(parameters->drcp_fifo_out_name, true);
-    if(files->drcp_fifo_out_fd < 0)
-        goto error_drcp_fifo_out;
-
-    files->dcpspi_fifo_out_fd =
-        fifo_open(parameters->dcpspi_fifo_out_name, true);
-    if(files->dcpspi_fifo_out_fd < 0)
-        goto error_dcpspi_fifo_out;
-
     if(!parameters->run_in_foreground)
     {
         if(daemon(0, 0) < 0)
@@ -588,18 +559,38 @@ static int setup(const struct parameters *parameters, struct files *files)
         }
     }
 
+    msg_info("Attempting to open named pipes");
+
+    files->dcpspi_fifo_in_fd =
+        fifo_open(files->dcpspi_fifo_in_name, false);
+    if(files->dcpspi_fifo_in_fd < 0)
+        goto error_dcpspi_fifo_in;
+
+    files->drcp_fifo_in_fd =
+        fifo_create_and_open(files->drcp_fifo_in_name, false);
+    if(files->drcp_fifo_in_fd < 0)
+        goto error_drcp_fifo_in;
+
+    files->drcp_fifo_out_fd =
+        fifo_create_and_open(files->drcp_fifo_out_name, true);
+    if(files->drcp_fifo_out_fd < 0)
+        goto error_drcp_fifo_out;
+
+    files->dcpspi_fifo_out_fd =
+        fifo_open(files->dcpspi_fifo_out_name, true);
+    if(files->dcpspi_fifo_out_fd < 0)
+        goto error_dcpspi_fifo_out;
+
     return 0;
 
 error_daemon:
     fifo_close(&files->dcpspi_fifo_out_fd);
 
 error_dcpspi_fifo_out:
-    fifo_close_and_delete(&files->drcp_fifo_out_fd,
-                          parameters->drcp_fifo_out_name);
+    fifo_close_and_delete(&files->drcp_fifo_out_fd, files->drcp_fifo_out_name);
 
 error_drcp_fifo_out:
-    fifo_close_and_delete(&files->drcp_fifo_in_fd,
-                          parameters->drcp_fifo_in_name);
+    fifo_close_and_delete(&files->drcp_fifo_in_fd, files->drcp_fifo_in_name);
 
 error_drcp_fifo_in:
     fifo_close(&files->dcpspi_fifo_in_fd);
@@ -610,24 +601,75 @@ error_dcpspi_fifo_in:
 
 static void usage(const char *program_name)
 {
-    printf("Usage: %s --ififo name --ofifo name\n"
+    printf("Usage: %s [options]\n"
            "\n"
            "Options:\n"
-           "  --ififo name   Name of the named pipe the DRCP daemon writes to.\n"
-           "  --ofifo name   Name of the named pipe the DRCP daemon reads from.\n"
-           "  --idcp  name   Name of the named pipe the DCP daemon reads from.\n"
-           "  --odcp  name   Name of the named pipe the DCP daemon writes to.\n",
+           "  --help         Show this help.\n"
+           "  --fg           Run in foreground, don't run as daemon.\n"
+           "  --ispi  name   Name of the named pipe the DCPSPI daemon writes to.\n"
+           "  --ospi  name   Name of the named pipe the DCPSPI daemon reads from.\n"
+           "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
+           "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n",
            program_name);
 }
 
 static int process_command_line(int argc, char *argv[],
-                                struct parameters *parameters)
+                                struct parameters *parameters,
+                                struct files *files)
 {
-    parameters->drcp_fifo_in_name = "/tmp/drcpd_to_dcpd";
-    parameters->drcp_fifo_out_name = "/tmp/dcpd_to_drcpd";
-    parameters->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
-    parameters->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
-    parameters->run_in_foreground = true;
+    parameters->run_in_foreground = false;
+
+    files->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
+    files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
+    files->drcp_fifo_in_name = "/tmp/drcpd_to_dcpd";
+    files->drcp_fifo_out_name = "/tmp/dcpd_to_drcpd";
+
+#define CHECK_ARGUMENT() \
+    do \
+    { \
+        if(i + 1 >= argc) \
+        { \
+            fprintf(stderr, "Option %s requires an argument.\n", argv[i]); \
+            return -1; \
+        } \
+        ++i; \
+    } \
+    while(0)
+
+    for(int i = 1; i < argc; ++i)
+    {
+        if(strcmp(argv[i], "--help") == 0)
+            return 1;
+        else if(strcmp(argv[i], "--fg") == 0)
+            parameters->run_in_foreground = true;
+        else if(strcmp(argv[i], "--ispi") == 0)
+        {
+            CHECK_ARGUMENT();
+            files->dcpspi_fifo_in_name = argv[i];
+        }
+        else if(strcmp(argv[i], "--ospi") == 0)
+        {
+            CHECK_ARGUMENT();
+            files->dcpspi_fifo_out_name = argv[i];
+        }
+        else if(strcmp(argv[i], "--idrcp") == 0)
+        {
+            CHECK_ARGUMENT();
+            files->drcp_fifo_in_name = argv[i];
+        }
+        else if(strcmp(argv[i], "--odrcp") == 0)
+        {
+            CHECK_ARGUMENT();
+            files->drcp_fifo_out_name = argv[i];
+        }
+        else
+        {
+            fprintf(stderr, "Unknown option \"%s\". Please try --help.\n", argv[i]);
+            return -1;
+        }
+    }
+
+#undef CHECK_ARGUMENT
 
     return 0;
 }
@@ -640,8 +682,9 @@ static void signal_handler(int signum, siginfo_t *info, void *ucontext)
 int main(int argc, char *argv[])
 {
     static struct parameters parameters;
+    static struct files files;
 
-    int ret = process_command_line(argc, argv, &parameters);
+    int ret = process_command_line(argc, argv, &parameters, &files);
 
     if(ret == -1)
         return EXIT_FAILURE;
@@ -650,8 +693,6 @@ int main(int argc, char *argv[])
         usage(argv[0]);
         return EXIT_SUCCESS;
     }
-
-    struct files files;
 
     if(setup(&parameters, &files) < 0)
         return EXIT_FAILURE;
@@ -672,8 +713,8 @@ int main(int argc, char *argv[])
 
     msg_info("Shutting down");
 
-    fifo_close_and_delete(&files.drcp_fifo_in_fd, parameters.drcp_fifo_in_name);
-    fifo_close_and_delete(&files.drcp_fifo_out_fd, parameters.drcp_fifo_out_name);
+    fifo_close_and_delete(&files.drcp_fifo_in_fd, files.drcp_fifo_in_name);
+    fifo_close_and_delete(&files.drcp_fifo_out_fd, files.drcp_fifo_out_name);
     fifo_close(&files.dcpspi_fifo_in_fd);
     fifo_close(&files.dcpspi_fifo_out_fd);
 
