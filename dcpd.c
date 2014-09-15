@@ -2,13 +2,9 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <limits.h>
-#include <unistd.h>
 #include <poll.h>
 #include <signal.h>
 #include <errno.h>
@@ -18,6 +14,7 @@
 #include "messages.h"
 #include "transactions.h"
 #include "dynamic_buffer.h"
+#include "drcp.h"
 
 #define WAITEVENT_POLL_ERROR            (1U << 0)
 #define WAITEVENT_POLL_TIMEOUT          (1U << 1)
@@ -196,88 +193,8 @@ static unsigned int wait_for_events(struct state *state,
     return return_value;
 }
 
-static int try_read_to_buffer(struct dynamic_buffer *buffer, int fd)
-{
-    uint8_t *dest = buffer->data + buffer->pos;
-    size_t count = buffer->size - buffer->pos;
-    int retval = 0;
-
-    while(count > 0)
-    {
-        const ssize_t len = read(fd, dest, count);
-
-        if(len == 0)
-            break;
-
-        if(len < 0)
-            return errno == EAGAIN ? 0 : -1;
-
-        dest += len;
-        count -= len;
-        buffer->pos += len;
-        retval = 1;
-    }
-
-    return retval;
-}
-
-static bool read_size_from_fd(struct dynamic_buffer *buffer, int fd,
-                              size_t *expected_size, size_t *payload_offset)
-{
-    if(try_read_to_buffer(buffer, fd) < 0)
-    {
-        msg_error(errno, LOG_CRIT, "Reading XML size failed");
-        return false;
-    }
-
-    static const char size_header[] = "Size: ";
-
-    if(buffer->pos < sizeof(size_header))
-    {
-        msg_error(EINVAL, LOG_CRIT, "Too short input, expected XML size");
-        return false;
-    }
-
-    if(memcmp(buffer->data, size_header, sizeof(size_header) - 1) != 0)
-    {
-        msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
-        return false;
-    }
-
-    uint8_t *const eol = memchr(buffer->data, '\n', buffer->pos);
-    if(!eol)
-    {
-        msg_error(EINVAL, LOG_CRIT, "Incomplete XML size");
-        return false;
-    }
-
-    *eol = '\0';
-
-    char *endptr;
-    const char *number_string =
-        (const char *)buffer->data + sizeof(size_header) - 1;
-    unsigned long temp = strtoul(number_string, &endptr, 10);
-
-    if(*endptr != '\0')
-    {
-        msg_error(EINVAL, LOG_CRIT,
-                  "Malformed XML size \"%s\"", number_string);
-        return false;
-    }
-
-    if(temp > UINT16_MAX || (temp == ULONG_MAX && errno == ERANGE))
-    {
-        msg_error(ERANGE, LOG_CRIT, "Too large XML size %s", number_string);
-        return false;
-    }
-
-    *expected_size = temp;
-    *payload_offset = (eol - buffer->data) + 1;
-
-    return true;
-}
-
-static bool try_preallocate_buffer(struct dynamic_buffer *buffer, int fd)
+static bool try_preallocate_buffer(struct dynamic_buffer *buffer,
+                                   const struct fifo_pair *fds)
 {
     if(dynamic_buffer_is_allocated(buffer))
         return true;
@@ -293,7 +210,7 @@ static bool try_preallocate_buffer(struct dynamic_buffer *buffer, int fd)
     size_t xml_data_offset;
 
     buffer->size = 16;
-    if(!read_size_from_fd(buffer, fd, &expected_size, &xml_data_offset))
+    if(!drcp_read_size_from_fd(buffer, fds, &expected_size, &xml_data_offset))
     {
         dynamic_buffer_free(buffer);
         return false;
@@ -324,27 +241,6 @@ static bool try_preallocate_buffer(struct dynamic_buffer *buffer, int fd)
 
     buffer->pos -= xml_data_offset;
     memmove(buffer->data, buffer->data + xml_data_offset, buffer->pos);
-
-    return true;
-}
-
-static bool fill_drcp_buffer(struct dynamic_buffer *buffer, int fd)
-{
-    assert(buffer != NULL);
-
-    while(buffer->pos < buffer->size)
-    {
-        int ret =try_read_to_buffer(buffer, fd);
-
-        if(ret == 0)
-            return true;
-
-        if(ret < 0)
-        {
-            msg_error(errno, LOG_ERR, "Failed reading DRCP data from fd %d", fd);
-            return false;
-        }
-    }
 
     return true;
 }
@@ -394,31 +290,23 @@ static struct transaction *dcp_transactions_from_drcp(const struct dynamic_buffe
     return head;
 }
 
-static const char *process_drcp_input(struct state *state, struct files *files)
+static bool process_drcp_input(struct state *state)
 {
-    static const char ok_result[] = "OK\n";
-    static const char error_result[] = "FF\n";
-
     const struct dynamic_buffer *buffer = &state->drcp_buffer;
 
     if(dynamic_buffer_is_empty(buffer))
     {
         msg_error(EINVAL, LOG_NOTICE, "Received empty DRCP buffer");
-        return error_result;
+        return false;
     }
 
     struct transaction *head = dcp_transactions_from_drcp(buffer);
     if(head == NULL)
-        return error_result;
+        return false;
 
     transaction_queue_add(&state->master_transaction_queue, head);
 
-    return ok_result;
-}
-
-static void drcp_report(const char *two_bytes_plus_eol, int fd)
-{
-    (void)fifo_write_from_buffer((const uint8_t *)two_bytes_plus_eol, 3, fd);
+    return true;
 }
 
 static bool try_reopen(int *fd, const char *devname, const char *errorname)
@@ -488,21 +376,20 @@ static void main_loop(struct files *files)
 
         if((wait_result & WAITEVENT_CAN_READ_DRCP) != 0)
         {
-            if(try_preallocate_buffer(&state.drcp_buffer,
-                                      files->drcp_fifo.in_fd) &&
-               fill_drcp_buffer(&state.drcp_buffer, files->drcp_fifo.in_fd))
+            if(try_preallocate_buffer(&state.drcp_buffer, &files->drcp_fifo) &&
+               drcp_fill_buffer(&state.drcp_buffer, &files->drcp_fifo))
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
                 {
-                    const char *result = process_drcp_input(&state, files);
+                    drcp_finish_request(process_drcp_input(&state),
+                                        &files->drcp_fifo);
                     dynamic_buffer_free(&state.drcp_buffer);
-                    drcp_report(result, files->drcp_fifo.out_fd);
                 }
             }
             else
             {
                 dynamic_buffer_free(&state.drcp_buffer);
-                drcp_report("FF\n", files->drcp_fifo.out_fd);
+                drcp_finish_request(false, &files->drcp_fifo);
             }
         }
 
