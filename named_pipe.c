@@ -61,6 +61,13 @@ void fifo_close_and_delete(int *fd, const char *devname)
                   "Failed deleting named pipe \"%s\"", devname);
 }
 
+bool fifo_reopen(int *fd, const char *devname, bool write_not_read)
+{
+    fifo_close(fd);
+    *fd = fifo_open(devname, write_not_read);
+    return *fd >= 0;
+}
+
 int fifo_write_from_buffer(const uint8_t *src, size_t count, int fd)
 {
     while(count > 0)

@@ -17,6 +17,13 @@
 #include "transactions.h"
 #include "dynamic_buffer.h"
 
+#define WAITEVENT_POLL_ERROR            (1U << 0)
+#define WAITEVENT_POLL_TIMEOUT          (1U << 1)
+#define WAITEVENT_CAN_READ_DCP          (1U << 2)
+#define WAITEVENT_CAN_READ_DRCP         (1U << 3)
+#define WAITEVENT_DCP_CONNECTION_DIED   (1U << 4)
+#define WAITEVENT_DRCP_CONNECTION_DIED  (1U << 5)
+
 /*!
  * Global state of the DCP machinery.
  */
@@ -111,14 +118,11 @@ static void try_dequeue_next_transaction(struct state *state)
                              true);
 }
 
-static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
-                           const int dcpspi_fifo_in_fd, bool do_block,
-                           bool *can_read_drcp)
+static unsigned int wait_for_events(struct state *state,
+                                    const int drcp_fifo_in_fd,
+                                    const int dcpspi_fifo_in_fd,
+                                    bool do_block)
 {
-    bool can_read_dcpspi = false;
-
-    *can_read_drcp = false;
-
     struct pollfd fds[2] =
     {
         {
@@ -140,15 +144,16 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
 
     if(ret <= 0)
     {
-        /* timeout? */
         if(ret == 0)
-            return 2;
+            return WAITEVENT_POLL_TIMEOUT;
 
         if(errno != EINTR)
             msg_error(errno, LOG_CRIT, "poll() failed");
 
-        return -1;
+        return WAITEVENT_POLL_ERROR;
     }
+
+    unsigned int return_value = 0;
 
     if(fds[0].revents & POLLIN)
     {
@@ -164,14 +169,14 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
         else
         {
             msg_error(EAGAIN, LOG_NOTICE, "Slave request during transaction");
-            can_read_dcpspi = true;
+            return_value |= WAITEVENT_CAN_READ_DCP;
         }
     }
 
     if(fds[0].revents & POLLHUP)
     {
-        msg_error(0, LOG_ERR, "DCP daemon died, terminating");
-        keep_running = false;
+        msg_error(EPIPE, LOG_ERR, "DCP daemon died, need to reopen");
+        return_value |= WAITEVENT_DCP_CONNECTION_DIED;
     }
 
     if(fds[0].revents & ~(POLLIN | POLLHUP))
@@ -182,13 +187,13 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
     if(fds[1].revents & POLLIN)
     {
         msg_info("DRCP input data");
-        *can_read_drcp = true;
+        return_value |= WAITEVENT_CAN_READ_DRCP;
     }
 
     if(fds[1].revents & POLLHUP)
     {
-        msg_error(0, LOG_ERR, "DRCP daemon died, terminating");
-        keep_running = false;
+        msg_error(EPIPE, LOG_ERR, "DRCP daemon died, need to reopen");
+        return_value |= WAITEVENT_DRCP_CONNECTION_DIED;
     }
 
     if(fds[1].revents & ~(POLLIN | POLLHUP))
@@ -196,7 +201,7 @@ static int wait_for_events(struct state *state, const int drcp_fifo_in_fd,
                   "Unexpected poll() events on DRCP fifo_fd %d: %04x",
                   drcp_fifo_in_fd, fds[1].revents);
 
-    return keep_running ? ((can_read_dcpspi || *can_read_drcp) ? 1 : 0) : -1;
+    return return_value;
 }
 
 static int try_read_to_buffer(struct dynamic_buffer *buffer, int fd)
@@ -361,6 +366,8 @@ struct files
 
     const char *drcp_fifo_in_name;
     const char *drcp_fifo_out_name;
+    const char *dcpspi_fifo_in_name;
+    const char *dcpspi_fifo_out_name;
 };
 
 static struct transaction *dcp_transactions_from_drcp(const struct dynamic_buffer *buffer)
@@ -426,6 +433,49 @@ static void drcp_report(const char *two_bytes_plus_eol, int fd)
     (void)fifo_write_from_buffer((const uint8_t *)two_bytes_plus_eol, 3, fd);
 }
 
+static bool try_reopen(int *fd, const char *devname, const char *errorname)
+{
+    if(fifo_reopen(fd, devname, false))
+        return true;
+
+    msg_error(EPIPE, LOG_EMERG,
+              "Failed reopening %s connection, unable to recover. "
+              "Terminating", errorname);
+
+    return false;
+}
+
+static void terminate_active_transaction(struct state *state)
+{
+    if(state->free_active_transaction)
+        transaction_free(&state->active_transaction);
+
+    state->active_transaction = NULL;
+}
+
+static bool handle_reopen_connections(unsigned int wait_result,
+                                      struct files *files, struct state *state)
+{
+    if((wait_result & (WAITEVENT_DRCP_CONNECTION_DIED |
+                       WAITEVENT_DCP_CONNECTION_DIED)) == 0)
+        return true;
+
+    if(state->active_transaction != NULL)
+        terminate_active_transaction(state);
+
+    if((wait_result & WAITEVENT_DRCP_CONNECTION_DIED) != 0 &&
+       !try_reopen(&files->drcp_fifo_in_fd, files->drcp_fifo_in_name,
+                   "DRCP"))
+        return false;
+
+    if((wait_result & WAITEVENT_DCP_CONNECTION_DIED) != 0 &&
+       !try_reopen(&files->dcpspi_fifo_in_fd, files->dcpspi_fifo_in_name,
+                   "DCPSPI"))
+        return false;
+
+    return true;
+}
+
 /*!
  * Process DCP.
  */
@@ -443,17 +493,15 @@ static void main_loop(struct files *files)
         msg_info("W active %p queue %p",
                  state.active_transaction, state.master_transaction_queue);
 
-        bool can_read_drcp;
-        const int wait_result =
+        const unsigned int wait_result =
             wait_for_events(&state,
                             files->drcp_fifo_in_fd, files->dcpspi_fifo_in_fd,
-                            transaction_is_input_required(state.active_transaction),
-                            &can_read_drcp);
+                            transaction_is_input_required(state.active_transaction));
 
-        if(wait_result < 0)
+        if((wait_result & WAITEVENT_POLL_ERROR) != 0)
             continue;
 
-        if(can_read_drcp)
+        if((wait_result & WAITEVENT_CAN_READ_DRCP) != 0)
         {
             if(try_preallocate_buffer(&state.drcp_buffer,
                                       files->drcp_fifo_in_fd) &&
@@ -471,6 +519,12 @@ static void main_loop(struct files *files)
                 dynamic_buffer_free(&state.drcp_buffer);
                 drcp_report("FF\n", files->drcp_fifo_out_fd);
             }
+        }
+
+        if(!handle_reopen_connections(wait_result, files, &state))
+        {
+            keep_running = false;
+            continue;
         }
 
         msg_info("w active %p queue %p",
@@ -495,12 +549,7 @@ static void main_loop(struct files *files)
           case TRANSACTION_FINISHED:
           case TRANSACTION_ERROR:
             msg_info("Transaction done");
-
-            if(state.free_active_transaction)
-                transaction_free(&state.active_transaction);
-
-            state.active_transaction = NULL;
-
+            terminate_active_transaction(&state);
             try_dequeue_next_transaction(&state);
             break;
         }
@@ -530,6 +579,8 @@ static int setup(const struct parameters *parameters, struct files *files)
 
     files->drcp_fifo_in_name = parameters->drcp_fifo_in_name;
     files->drcp_fifo_out_name = parameters->drcp_fifo_out_name;
+    files->dcpspi_fifo_in_name = parameters->dcpspi_fifo_in_name;
+    files->dcpspi_fifo_out_name = parameters->dcpspi_fifo_out_name;
 
     files->dcpspi_fifo_in_fd =
         fifo_open(parameters->dcpspi_fifo_in_name, false);
