@@ -135,11 +135,6 @@ static unsigned int wait_for_events(struct state *state,
         },
     };
 
-    if(do_block)
-        msg_info("Waiting for activities.");
-    else
-        msg_info("Checking for activities.");
-
     int ret = poll(fds, sizeof(fds) / sizeof(fds[0]), do_block ? -1 : 0);
 
     if(ret <= 0)
@@ -157,8 +152,6 @@ static unsigned int wait_for_events(struct state *state,
 
     if(fds[0].revents & POLLIN)
     {
-        msg_info("DCP input data");
-
         if(state->active_transaction == NULL)
         {
             transaction_reset_for_slave(state->preallocated_slave_transaction);
@@ -185,10 +178,7 @@ static unsigned int wait_for_events(struct state *state,
                   dcpspi_fifo_in_fd, fds[0].revents);
 
     if(fds[1].revents & POLLIN)
-    {
-        msg_info("DRCP input data");
         return_value |= WAITEVENT_CAN_READ_DRCP;
-    }
 
     if(fds[1].revents & POLLHUP)
     {
@@ -417,8 +407,6 @@ static const char *process_drcp_input(struct state *state, struct files *files)
         return error_result;
     }
 
-    msg_info("Send DRCP buffer over DCP link, size %zu", buffer->pos);
-
     struct transaction *head = dcp_transactions_from_drcp(buffer);
     if(head == NULL)
         return error_result;
@@ -490,9 +478,6 @@ static void main_loop(struct files *files)
 
     while(keep_running)
     {
-        msg_info("W active %p queue %p",
-                 state.active_transaction, state.master_transaction_queue);
-
         const unsigned int wait_result =
             wait_for_events(&state,
                             files->drcp_fifo_in_fd, files->dcpspi_fifo_in_fd,
@@ -527,13 +512,7 @@ static void main_loop(struct files *files)
             continue;
         }
 
-        msg_info("w active %p queue %p",
-                 state.active_transaction, state.master_transaction_queue);
-
         try_dequeue_next_transaction(&state);
-
-        msg_info("D active %p queue %p",
-                 state.active_transaction, state.master_transaction_queue);
 
         if(state.active_transaction == NULL)
             continue;
@@ -543,12 +522,10 @@ static void main_loop(struct files *files)
                                    files->dcpspi_fifo_out_fd))
         {
           case TRANSACTION_IN_PROGRESS:
-            msg_info("Transaction in progress...");
             break;
 
           case TRANSACTION_FINISHED:
           case TRANSACTION_ERROR:
-            msg_info("Transaction done");
             terminate_active_transaction(&state);
             try_dequeue_next_transaction(&state);
             break;
@@ -693,7 +670,7 @@ int main(int argc, char *argv[])
 
     main_loop(&files);
 
-    msg_info("Terminated, shutting down");
+    msg_info("Shutting down");
 
     fifo_close_and_delete(&files.drcp_fifo_in_fd, parameters.drcp_fifo_in_name);
     fifo_close_and_delete(&files.drcp_fifo_out_fd, parameters.drcp_fifo_out_name);

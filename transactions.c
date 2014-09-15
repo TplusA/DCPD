@@ -286,9 +286,6 @@ static bool fill_request_header(struct transaction *t, const int fd)
             break;
         }
 
-        msg_info("Slave access register 0x%02x, command 0x%02x",
-                 t->reg->address, t->command);
-
         return true;
     }
 
@@ -349,11 +346,6 @@ enum transaction_process_status transaction_process(struct transaction *t,
                                                     int to_slave_fd)
 {
     assert(t != NULL);
-
-    msg_info("Process transaction %p, state %d, reg %p, command %u, "
-             "payload %p %zu %zu",
-             t, t->state, t->reg, t->command,
-             t->payload.data, t->payload.size, t->payload.pos);
 
     switch(t->state)
     {
@@ -443,7 +435,6 @@ enum transaction_process_status transaction_process(struct transaction *t,
         return TRANSACTION_IN_PROGRESS;
 
       case TRANSACTION_STATE_SEND_TO_SLAVE:
-        msg_info("Sending %u bytes to slave", DCP_HEADER_SIZE + t->payload.pos);
         if(fifo_write_from_buffer(t->request_header, sizeof(t->request_header),
                                   to_slave_fd) < 0 ||
            fifo_write_from_buffer(t->payload.data, t->payload.pos,

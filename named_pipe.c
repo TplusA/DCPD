@@ -34,7 +34,8 @@ int fifo_open(const char *devname, bool write_not_read)
         msg_error(errno, LOG_EMERG,
                   "Failed opening named pipe \"%s\"", devname);
     else
-        msg_info("Pipe \"%s\" fd %d", devname, ret);
+        msg_info("Opened %sable pipe \"%s\", fd %d",
+                 write_not_read ? "writ" : "read", devname, ret);
 
     return ret;
 }
