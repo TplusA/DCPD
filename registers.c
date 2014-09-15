@@ -13,6 +13,8 @@
 #include "registers.h"
 #include "messages.h"
 
+#include "dcpregs_drcp.h"
+
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
 {
     msg_info("read 17 handler %p %zu", response, length);
@@ -146,7 +148,11 @@ static const struct dcp_register_t register_map[] =
         .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH,
         .max_data_size = 256,
     },
-
+    {
+        /* DRC command */
+        .address = 72,
+        .write_handler = dcpregs_write_drcp_command,
+    },
 };
 
 static int compare_register_address(const void *a, const void *b)
