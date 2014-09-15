@@ -15,7 +15,7 @@ AC_CHECK_PROGS([DOXYGEN], [doxygen])
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h stddef.h stdint.h stdlib.h string.h syslog.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h limits.h stddef.h stdint.h stdlib.h string.h syslog.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
@@ -28,7 +28,7 @@ AC_CHECK_TYPES([ptrdiff_t])
 
 # Checks for library functions.
 AC_FUNC_REALLOC
-AC_CHECK_FUNCS([memset mkfifo strerror])
+AC_CHECK_FUNCS([getpagesize memchr memmove memset mkfifo strerror strtoul])
 
 AC_CONFIG_FILES([Makefile Doxyfile])
 AC_OUTPUT
