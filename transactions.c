@@ -89,23 +89,30 @@ struct transaction *transaction_alloc(bool is_slave_request)
     return t;
 }
 
-void transaction_free(struct transaction **t)
+void transaction_free(struct transaction **head)
 {
-    assert(t != NULL);
-    assert(*t != NULL);
+    assert(head != NULL);
+    assert(*head != NULL);
 
+    struct transaction *t = *head;
+
+    do
+    {
 #ifndef NDEBUG
-    ptrdiff_t idx = *t - transactions_container;
+        ptrdiff_t idx = t - transactions_container;
 #endif /* !NDEBUG */
 
-    assert(idx >= 0);
-    assert((size_t)idx < MAX_NUMBER_OF_TRANSACTIONS);
+        assert(idx >= 0);
+        assert((size_t)idx < MAX_NUMBER_OF_TRANSACTIONS);
 
-    dynamic_buffer_free(&(*t)->payload);
+        dynamic_buffer_free(&t->payload);
 
-    transaction_queue_add_one(&free_list, *t);
+        t = t->next;
+    }
+    while(t != *head);
 
-    *t = NULL;
+    transaction_queue_add(&free_list, *head);
+    *head = NULL;
 }
 
 void transaction_reset_for_slave(struct transaction *t)
@@ -165,23 +172,28 @@ bool transaction_set_address_for_master(struct transaction *t,
     return transaction_set_address(t, register_address, true);
 }
 
-void transaction_queue_add_one(struct transaction **head, struct transaction *t)
+void transaction_queue_add(struct transaction **head, struct transaction *t)
 {
     assert(head != NULL);
     assert(t != NULL);
-    assert(t->next == t);
-    assert(t->prev == t);
 
     if(*head != NULL)
     {
-        t->next = *head;
+        struct transaction *t_last = t->prev;
+
+        t_last->next = *head;
         t->prev = (*head)->prev;
 
         (*head)->prev->next = t;
-        (*head)->prev = t;
+        (*head)->prev = t_last;
     }
     else
         *head = t;
+
+    assert((*head)->next->prev == *head);
+    assert((*head)->prev->next == *head);
+    assert(t->next->prev == t);
+    assert(t->prev->next == t);
 }
 
 struct transaction *transaction_queue_remove(struct transaction **head)

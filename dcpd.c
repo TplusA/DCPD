@@ -108,7 +108,7 @@ static struct transaction *begin_master_transaction(struct transaction **head,
     }
 
     if(transaction_set_address_for_master(t, register_address))
-        transaction_queue_add_one(head, t);
+        transaction_queue_add(head, t);
     else
         transaction_free(&t);
 
@@ -307,8 +307,8 @@ static void main_loop(const int drcp_fifo_in_fd, const int drcp_fifo_out_fd,
         if(can_read_drcp && construct_drcp_transaction(&state, drcp_fifo_in_fd))
         {
             /* reading XML data complete, now stored in RAM */
-            transaction_queue_add_one(&state.master_transaction_queue,
-                                      state.current_drcp_transaction);
+            transaction_queue_add(&state.master_transaction_queue,
+                                  state.current_drcp_transaction);
             state.current_drcp_transaction = NULL;
         }
 

@@ -31,13 +31,12 @@ void transaction_init_allocator(void);
 struct transaction *transaction_alloc(bool is_slave_request);
 
 /*!
- * Free a transaction.
+ * Free a transaction queue.
  *
- * \param t Pointer to pointer of transaction structure to free. Note that the
- *     transaction must not be in any queue. The pointer that is pointed to
- *     will be set to NULL.
+ * \param head Pointer to pointer of transaction queue to free. The pointer
+ *     that is pointed to will be set to NULL.
  */
-void transaction_free(struct transaction **t);
+void transaction_free(struct transaction **head);
 
 void transaction_reset_for_slave(struct transaction *t);
 
@@ -48,14 +47,14 @@ bool transaction_set_address_for_master(struct transaction *t,
                                         uint8_t register_address);
 
 /*!
- * Add single element to end of given queue.
+ * Add queue \p t to end of given queue.
  *
  * \param head Pointer to a pointer of the first element of a queue. If it
  *     points to a NULL pointer, it will be changed to point to \p t, otherwise
  *     it will remain untouched.
- * \param t The element to add to the queue.
+ * \param t The queue to add to the queue.
  */
-void transaction_queue_add_one(struct transaction **head, struct transaction *t);
+void transaction_queue_add(struct transaction **head, struct transaction *t);
 
 /*!
  * Remove first element from queue.
