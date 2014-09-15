@@ -351,10 +351,8 @@ static bool fill_drcp_buffer(struct dynamic_buffer *buffer, int fd)
 
 struct files
 {
-    int drcp_fifo_in_fd;
-    int drcp_fifo_out_fd;
-    int dcpspi_fifo_in_fd;
-    int dcpspi_fifo_out_fd;
+    struct fifo_pair drcp_fifo;
+    struct fifo_pair dcpspi_fifo;
 
     const char *drcp_fifo_in_name;
     const char *drcp_fifo_out_name;
@@ -454,12 +452,12 @@ static bool handle_reopen_connections(unsigned int wait_result,
         terminate_active_transaction(state);
 
     if((wait_result & WAITEVENT_DRCP_CONNECTION_DIED) != 0 &&
-       !try_reopen(&files->drcp_fifo_in_fd, files->drcp_fifo_in_name,
+       !try_reopen(&files->drcp_fifo.in_fd, files->drcp_fifo_in_name,
                    "DRCP"))
         return false;
 
     if((wait_result & WAITEVENT_DCP_CONNECTION_DIED) != 0 &&
-       !try_reopen(&files->dcpspi_fifo_in_fd, files->dcpspi_fifo_in_name,
+       !try_reopen(&files->dcpspi_fifo.in_fd, files->dcpspi_fifo_in_name,
                    "DCPSPI"))
         return false;
 
@@ -482,7 +480,7 @@ static void main_loop(struct files *files)
     {
         const unsigned int wait_result =
             wait_for_events(&state,
-                            files->drcp_fifo_in_fd, files->dcpspi_fifo_in_fd,
+                            files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             transaction_is_input_required(state.active_transaction));
 
         if((wait_result & WAITEVENT_POLL_ERROR) != 0)
@@ -491,20 +489,20 @@ static void main_loop(struct files *files)
         if((wait_result & WAITEVENT_CAN_READ_DRCP) != 0)
         {
             if(try_preallocate_buffer(&state.drcp_buffer,
-                                      files->drcp_fifo_in_fd) &&
-               fill_drcp_buffer(&state.drcp_buffer, files->drcp_fifo_in_fd))
+                                      files->drcp_fifo.in_fd) &&
+               fill_drcp_buffer(&state.drcp_buffer, files->drcp_fifo.in_fd))
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
                 {
                     const char *result = process_drcp_input(&state, files);
                     dynamic_buffer_free(&state.drcp_buffer);
-                    drcp_report(result, files->drcp_fifo_out_fd);
+                    drcp_report(result, files->drcp_fifo.out_fd);
                 }
             }
             else
             {
                 dynamic_buffer_free(&state.drcp_buffer);
-                drcp_report("FF\n", files->drcp_fifo_out_fd);
+                drcp_report("FF\n", files->drcp_fifo.out_fd);
             }
         }
 
@@ -520,8 +518,8 @@ static void main_loop(struct files *files)
             continue;
 
         switch(transaction_process(state.active_transaction,
-                                   files->dcpspi_fifo_in_fd,
-                                   files->dcpspi_fifo_out_fd))
+                                   files->dcpspi_fifo.in_fd,
+                                   files->dcpspi_fifo.out_fd))
         {
           case TRANSACTION_IN_PROGRESS:
             break;
@@ -563,39 +561,39 @@ static int setup(const struct parameters *parameters, struct files *files)
 
     msg_info("Attempting to open named pipes");
 
-    files->dcpspi_fifo_in_fd =
+    files->dcpspi_fifo.in_fd =
         fifo_open(files->dcpspi_fifo_in_name, false);
-    if(files->dcpspi_fifo_in_fd < 0)
+    if(files->dcpspi_fifo.in_fd < 0)
         goto error_dcpspi_fifo_in;
 
-    files->drcp_fifo_in_fd =
+    files->drcp_fifo.in_fd =
         fifo_create_and_open(files->drcp_fifo_in_name, false);
-    if(files->drcp_fifo_in_fd < 0)
+    if(files->drcp_fifo.in_fd < 0)
         goto error_drcp_fifo_in;
 
-    files->drcp_fifo_out_fd =
+    files->drcp_fifo.out_fd =
         fifo_create_and_open(files->drcp_fifo_out_name, true);
-    if(files->drcp_fifo_out_fd < 0)
+    if(files->drcp_fifo.out_fd < 0)
         goto error_drcp_fifo_out;
 
-    files->dcpspi_fifo_out_fd =
+    files->dcpspi_fifo.out_fd =
         fifo_open(files->dcpspi_fifo_out_name, true);
-    if(files->dcpspi_fifo_out_fd < 0)
+    if(files->dcpspi_fifo.out_fd < 0)
         goto error_dcpspi_fifo_out;
 
     return 0;
 
 error_daemon:
-    fifo_close(&files->dcpspi_fifo_out_fd);
+    fifo_close(&files->dcpspi_fifo.out_fd);
 
 error_dcpspi_fifo_out:
-    fifo_close_and_delete(&files->drcp_fifo_out_fd, files->drcp_fifo_out_name);
+    fifo_close_and_delete(&files->drcp_fifo.out_fd, files->drcp_fifo_out_name);
 
 error_drcp_fifo_out:
-    fifo_close_and_delete(&files->drcp_fifo_in_fd, files->drcp_fifo_in_name);
+    fifo_close_and_delete(&files->drcp_fifo.in_fd, files->drcp_fifo_in_name);
 
 error_drcp_fifo_in:
-    fifo_close(&files->dcpspi_fifo_in_fd);
+    fifo_close(&files->dcpspi_fifo.in_fd);
 
 error_dcpspi_fifo_in:
     return -1;
@@ -715,10 +713,10 @@ int main(int argc, char *argv[])
 
     msg_info("Shutting down");
 
-    fifo_close_and_delete(&files.drcp_fifo_in_fd, files.drcp_fifo_in_name);
-    fifo_close_and_delete(&files.drcp_fifo_out_fd, files.drcp_fifo_out_name);
-    fifo_close(&files.dcpspi_fifo_in_fd);
-    fifo_close(&files.dcpspi_fifo_out_fd);
+    fifo_close_and_delete(&files.drcp_fifo.in_fd, files.drcp_fifo_in_name);
+    fifo_close_and_delete(&files.drcp_fifo.out_fd, files.drcp_fifo_out_name);
+    fifo_close(&files.dcpspi_fifo.in_fd);
+    fifo_close(&files.dcpspi_fifo.out_fd);
 
     return EXIT_SUCCESS;
 }

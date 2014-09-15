@@ -4,6 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+struct fifo_pair
+{
+    int in_fd;
+    int out_fd;
+};
+
 int fifo_create_and_open(const char *devname, bool write_not_read);
 int fifo_open(const char *devname, bool write_not_read);
 void fifo_close_and_delete(int *fd, const char *devname);
