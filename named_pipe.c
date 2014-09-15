@@ -39,18 +39,20 @@ int fifo_open(const char *devname, bool write_not_read)
     return ret;
 }
 
-void fifo_close(int fd)
+void fifo_close(int *fd)
 {
     int ret;
 
-    while((ret = close(fd)) < 0 && errno == EINTR)
+    while((ret = close(*fd)) < 0 && errno == EINTR)
         ;
 
     if(ret < 0)
-        msg_error(errno, LOG_ERR, "Failed closing named pipe fd %d", fd);
+        msg_error(errno, LOG_ERR, "Failed closing named pipe fd %d", *fd);
+
+    *fd = -1;
 }
 
-void fifo_close_and_delete(int fd, const char *devname)
+void fifo_close_and_delete(int *fd, const char *devname)
 {
     fifo_close(fd);
 

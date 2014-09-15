@@ -5,7 +5,7 @@
 
 int fifo_create_and_open(const char *devname, bool write_not_read);
 int fifo_open(const char *devname, bool write_not_read);
-void fifo_close_and_delete(int fd, const char *devname);
-void fifo_close(int fd);
+void fifo_close_and_delete(int *fd, const char *devname);
+void fifo_close(int *fd);
 
 #endif /* !NAMED_PIPE_H */

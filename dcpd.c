@@ -393,16 +393,16 @@ static int setup(const struct parameters *parameters,
     return 0;
 
 error_daemon:
-    fifo_close(*dcpspi_fifo_out_fd);
+    fifo_close(dcpspi_fifo_out_fd);
 
 error_dcpspi_fifo_out:
-    fifo_close_and_delete(*drcp_fifo_out_fd, parameters->drcp_fifo_out_name);
+    fifo_close_and_delete(drcp_fifo_out_fd, parameters->drcp_fifo_out_name);
 
 error_drcp_fifo_out:
-    fifo_close_and_delete(*drcp_fifo_in_fd, parameters->drcp_fifo_in_name);
+    fifo_close_and_delete(drcp_fifo_in_fd, parameters->drcp_fifo_in_name);
 
 error_drcp_fifo_in:
-    fifo_close(*dcpspi_fifo_in_fd);
+    fifo_close(dcpspi_fifo_in_fd);
 
 error_dcpspi_fifo_in:
     return -1;
@@ -475,10 +475,10 @@ int main(int argc, char *argv[])
 
     msg_info("Terminated, shutting down");
 
-    fifo_close_and_delete(drcp_fifo_in_fd, parameters.drcp_fifo_in_name);
-    fifo_close_and_delete(drcp_fifo_out_fd, parameters.drcp_fifo_out_name);
-    fifo_close(dcpspi_fifo_in_fd);
-    fifo_close(dcpspi_fifo_out_fd);
+    fifo_close_and_delete(&drcp_fifo_in_fd, parameters.drcp_fifo_in_name);
+    fifo_close_and_delete(&drcp_fifo_out_fd, parameters.drcp_fifo_out_name);
+    fifo_close(&dcpspi_fifo_in_fd);
+    fifo_close(&dcpspi_fifo_out_fd);
 
     return EXIT_SUCCESS;
 }
