@@ -8,17 +8,25 @@
 
 #include "dcpregs_drcp.h"
 #include "drcp_command_codes.h"
+#include "dbus_iface.h"
+#include "dbus_iface_deep.h"
 #include "messages.h"
 
 struct drc_command_t
 {
     uint8_t code;
+    void (*const dbus_signal)(tdbusdcpdPlayback *iface);
 };
 
 static const struct drc_command_t drc_commands[] =
 {
     {
+        .code = DRCP_PLAYBACK_STOP,
+        .dbus_signal = tdbus_dcpd_playback_emit_stop,
+    },
+    {
         .code = DRCP_PLAYBACK_START,
+        .dbus_signal = tdbus_dcpd_playback_emit_start,
     },
 };
 
@@ -56,6 +64,8 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
     }
 
     msg_info("DRC: command code 0x%02x, data 0x%02x", data[0], data[1]);
+
+    command->dbus_signal(dbus_get_playback_iface());
 
     return 0;
 }

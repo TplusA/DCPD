@@ -10,7 +10,8 @@ dcpd_SOURCES = \
     dcpd.c registers.c registers.h named_pipe.c named_pipe.h \
     transactions.c transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.c dynamic_buffer.h drcp.c drcp.h drcp_command_codes.h \
-    dcpregs_drcp.c dcpregs_drcp.h
+    dcpregs_drcp.c dcpregs_drcp.h \
+    dbus_iface.c dbus_iface.h dbus_iface_deep.h
 
 AM_CFLAGS = $(CWARNINGS)
 

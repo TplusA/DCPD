@@ -10,13 +10,12 @@
 #include <errno.h>
 #include <assert.h>
 
-#include <gio/gio.h>
-
 #include "named_pipe.h"
 #include "messages.h"
 #include "transactions.h"
 #include "dynamic_buffer.h"
 #include "drcp.h"
+#include "dbus_iface.h"
 
 #define WAITEVENT_POLL_ERROR            (1U << 0)
 #define WAITEVENT_POLL_TIMEOUT          (1U << 1)
@@ -488,6 +487,14 @@ error_dcpspi_fifo_in:
     return -1;
 }
 
+static void shutdown(struct files *files)
+{
+    fifo_close_and_delete(&files->drcp_fifo.in_fd, files->drcp_fifo_in_name);
+    fifo_close_and_delete(&files->drcp_fifo.out_fd, files->drcp_fifo_out_name);
+    fifo_close(&files->dcpspi_fifo.in_fd);
+    fifo_close(&files->dcpspi_fifo.out_fd);
+}
+
 static void usage(const char *program_name)
 {
     printf("Usage: %s [options]\n"
@@ -570,10 +577,6 @@ static void signal_handler(int signum, siginfo_t *info, void *ucontext)
 
 int main(int argc, char *argv[])
 {
-#if !GLIB_CHECK_VERSION(2, 36, 0)
-    g_type_init();
-#endif
-
     static struct parameters parameters;
     static struct files files;
 
@@ -589,6 +592,12 @@ int main(int argc, char *argv[])
 
     if(setup(&parameters, &files) < 0)
         return EXIT_FAILURE;
+
+    if(dbus_setup(true) <0)
+    {
+        shutdown(&files);
+        return EXIT_FAILURE;
+    }
 
     static struct sigaction action =
     {
@@ -606,10 +615,8 @@ int main(int argc, char *argv[])
 
     msg_info("Shutting down");
 
-    fifo_close_and_delete(&files.drcp_fifo.in_fd, files.drcp_fifo_in_name);
-    fifo_close_and_delete(&files.drcp_fifo.out_fd, files.drcp_fifo_out_name);
-    fifo_close(&files.dcpspi_fifo.in_fd);
-    fifo_close(&files.dcpspi_fifo.out_fd);
+    shutdown(&files);
+    dbus_shutdown();
 
     return EXIT_SUCCESS;
 }
