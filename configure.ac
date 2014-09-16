@@ -7,6 +7,9 @@ AC_CONFIG_HEADERS([config.h])
 
 AC_USE_SYSTEM_EXTENSIONS()
 
+AC_ARG_VAR([CWARNINGS], [strict set of C compiler warnings])
+AC_ARG_VAR([CRELAXEDWARNINGS], [options for relaxing some compiler warnings for various files])
+
 # Checks for programs.
 AC_PROG_CC
 PKG_PROG_PKG_CONFIG([0.26])
