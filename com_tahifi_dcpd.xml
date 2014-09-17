@@ -4,5 +4,8 @@
     <interface name="com.tahifi.dcpd.playback">
         <signal name="start"/>
         <signal name="stop"/>
+        <signal name="fast_wind_set_factor">
+            <arg name="speed" type="y"/>
+        </signal>
     </interface>
 </node>

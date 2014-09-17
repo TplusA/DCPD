@@ -21,6 +21,49 @@ enum handle_complex_return_value
     CPLXCMD_END_WITH_ERROR,
 };
 
+static enum handle_complex_return_value
+handle_fast_wind_set_factor(struct dynamic_buffer *buffer,
+                            bool is_start_of_command, bool failed,
+                            uint8_t code_1, uint8_t code_2)
+{
+    static const uint8_t expected_payload_size = 1;
+
+    assert(!is_start_of_command || code_1 == DRCP_FAST_WIND_SET_SPEED);
+
+    if(is_start_of_command)
+        return CPLXCMD_CONTINUE;
+
+    if(failed)
+        return (code_1 == DRCP_ACCEPT) ? CPLXCMD_END : CPLXCMD_CONTINUE;
+
+    if(code_1 == DRCP_ACCEPT)
+    {
+        if(buffer->pos != expected_payload_size)
+            return CPLXCMD_END_WITH_ERROR;
+
+        const uint8_t factor_code = buffer->data[0];
+
+        if(factor_code < DRCP_KEY_DIGIT_0 || factor_code > DRCP_KEY_DIGIT_9)
+            return CPLXCMD_END_WITH_ERROR;
+
+        const uint8_t speed_factor = (factor_code - DRCP_KEY_DIGIT_0 + 1) * 3;
+
+        tdbus_dcpd_playback_emit_fast_wind_set_factor(dbus_get_playback_iface(),
+                                                      speed_factor);
+        return CPLXCMD_END;
+    }
+
+    if(buffer->pos > expected_payload_size - 1U)
+        return CPLXCMD_CONTINUE_WITH_ERROR;
+
+    if(!dynamic_buffer_check_space(buffer))
+        return CPLXCMD_CONTINUE_WITH_ERROR;
+
+    buffer->data[buffer->pos++] = code_1;
+
+    return CPLXCMD_CONTINUE;
+}
+
 typedef enum handle_complex_return_value
     (*custom_handler_t)(struct dynamic_buffer *buffer,
                         bool is_start_of_command, bool failed,
@@ -65,6 +108,11 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_PLAYBACK_START,
         .iface_id = DBUSIFACE_PLAYBACK,
         .dbus_signal.playback = tdbus_dcpd_playback_emit_start,
+    },
+    {
+        .code = DRCP_FAST_WIND_SET_SPEED,
+        .iface_id = DBUSIFACE_CUSTOM,
+        .dbus_signal.custom_handler = handle_fast_wind_set_factor,
     },
 };
 
