@@ -46,6 +46,24 @@ bool dynamic_buffer_resize(struct dynamic_buffer *buffer, size_t size)
     return true;
 }
 
+void dynamic_buffer_clear(struct dynamic_buffer *buffer)
+{
+    buffer->pos = 0;
+}
+
+bool dynamic_buffer_check_space(struct dynamic_buffer *buffer)
+{
+    if(buffer->pos < buffer->size)
+        return true;
+
+    static size_t add_space;
+
+    if(add_space == 0)
+        add_space = getpagesize();
+
+    return dynamic_buffer_resize(buffer, buffer->size + add_space);
+}
+
 bool dynamic_buffer_is_allocated(const struct dynamic_buffer *buffer)
 {
     return buffer->size > 0;
