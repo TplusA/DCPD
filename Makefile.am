@@ -25,14 +25,14 @@ nodist_libdcpd_dbus_a_SOURCES = dcpd_dbus.c dcpd_dbus.h
 
 libdcpd_dbus_a_CFLAGS = $(CRELAXEDWARNINGS)
 
-EXTRA_DIST += com_tahifi_dcpd.xml
+EXTRA_DIST += de_tahifi_dcpd.xml
 
 CLEANFILES += $(nodist_libdcpd_dbus_a_SOURCES) dcpd_dbus.stamp
 
 dcpd_dbus.c: dcpd_dbus.stamp
 dcpd_dbus.h: dcpd_dbus.stamp
-dcpd_dbus.stamp: com_tahifi_dcpd.xml
-	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix com.tahifi.dcpd. $<
+dcpd_dbus.stamp: de_tahifi_dcpd.xml
+	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix de.tahifi.dcpd. $<
 	touch $@
 
 .md.html:

@@ -90,7 +90,7 @@ int dbus_setup(bool connect_to_sesion_bus)
     GBusType bus_type =
         connect_to_sesion_bus ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM;
 
-    static const char bus_name[] = "com.tahifi.dcpd";
+    static const char bus_name[] = "de.tahifi.dcpd";
 
     dbus_data.owner_id =
         g_bus_own_name(bus_type, bus_name, G_BUS_NAME_OWNER_FLAGS_NONE,

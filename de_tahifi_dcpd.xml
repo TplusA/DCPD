@@ -1,7 +1,7 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
-<node name="/com/tahifi/dcpd">
-    <interface name="com.tahifi.dcpd.playback">
+<node name="/de/tahifi/dcpd">
+    <interface name="de.tahifi.dcpd.playback">
         <signal name="start"/>
         <signal name="stop"/>
         <signal name="fast_wind_set_factor">
