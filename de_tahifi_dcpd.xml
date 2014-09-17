@@ -39,4 +39,15 @@
             <arg name="count" type="i"/>
         </signal>
     </interface>
+
+    <interface name="de.tahifi.dcpd.list_item">
+        <signal name="add_to_list">
+            <arg name="category" type="s"/>
+            <arg name="index" type="q"/>
+        </signal>
+        <signal name="remove_from_list">
+            <arg name="category" type="s"/>
+            <arg name="index" type="q"/>
+        </signal>
+    </interface>
 </node>

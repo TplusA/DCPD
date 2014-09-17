@@ -104,6 +104,16 @@ static void handle_scroll_one_page_down(tdbusdcpdList_navigation *iface)
     tdbus_dcpd_list_navigation_emit_move_pages(iface, 1);
 }
 
+static void handle_add_to_favorites(tdbusdcpdList_item *iface)
+{
+    tdbus_dcpd_list_item_emit_add_to_list(iface, "Favorites", 0);
+}
+
+static void handle_remove_from_favorites(tdbusdcpdList_item *iface)
+{
+    tdbus_dcpd_list_item_emit_remove_from_list(iface, "Favorites", 0);
+}
+
 typedef enum handle_complex_return_value
     (*custom_handler_t)(struct dynamic_buffer *buffer,
                         bool is_start_of_command, bool failed,
@@ -123,6 +133,7 @@ enum dbus_interface_id
     DBUSIFACE_PLAYBACK,
     DBUSIFACE_VIEWS,
     DBUSIFACE_LIST_NAVIGATION,
+    DBUSIFACE_LIST_ITEM,
 };
 
 struct drc_command_t
@@ -137,6 +148,7 @@ struct drc_command_t
         void (*const playback)(tdbusdcpdPlayback *iface);
         void (*const views)(tdbusdcpdViews *iface);
         void (*const list_navigation)(tdbusdcpdList_navigation *iface);
+        void (*const list_item)(tdbusdcpdList_item *iface);
     }
     dbus_signal;
 };
@@ -172,6 +184,16 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_SCROLL_DOWN_ONE,
         .iface_id = DBUSIFACE_LIST_NAVIGATION,
         .dbus_signal.list_navigation = handle_scroll_one_line_down,
+    },
+    {
+        .code = DRCP_FAVORITES_ADD_ITEM,
+        .iface_id = DBUSIFACE_LIST_ITEM,
+        .dbus_signal.list_item = handle_add_to_favorites,
+    },
+    {
+        .code = DRCP_FAVORITES_REMOVE_ITEM,
+        .iface_id = DBUSIFACE_LIST_ITEM,
+        .dbus_signal.list_item = handle_remove_from_favorites,
     },
     {
         .code = DRCP_SCROLL_PAGE_UP,
@@ -353,6 +375,10 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
 
       case DBUSIFACE_LIST_NAVIGATION:
         command->dbus_signal.list_navigation(dbus_get_list_navigation_iface());
+        break;
+
+      case DBUSIFACE_LIST_ITEM:
+        command->dbus_signal.list_item(dbus_get_list_item_iface());
         break;
     }
 

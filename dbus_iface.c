@@ -20,6 +20,7 @@ struct dbus_data
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
     tdbusdcpdList_navigation *list_navigation_iface;
+    tdbusdcpdList_item *list_item_iface;
 };
 
 static gpointer process_dbus(gpointer user_data)
@@ -54,10 +55,12 @@ static void bus_acquired(GDBusConnection *connection,
     data->playback_iface = tdbus_dcpd_playback_skeleton_new();
     data->views_iface = tdbus_dcpd_views_skeleton_new();
     data->list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
+    data->list_item_iface = tdbus_dcpd_list_item_skeleton_new();
 
     try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->playback_iface));
     try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->views_iface));
     try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->list_navigation_iface));
+    try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->list_item_iface));
 }
 
 static void name_acquired(GDBusConnection *connection,
@@ -164,4 +167,9 @@ tdbusdcpdViews *dbus_get_views_iface(void)
 tdbusdcpdList_navigation *dbus_get_list_navigation_iface(void)
 {
     return dbus_data.list_navigation_iface;
+}
+
+tdbusdcpdList_item *dbus_get_list_item_iface(void)
+{
+    return dbus_data.list_item_iface;
 }
