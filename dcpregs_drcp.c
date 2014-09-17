@@ -97,8 +97,28 @@ struct drc_command_t
     dbus_signal;
 };
 
+/*!
+ * List of implemented DRCP commands.
+ *
+ * \note The entries must be sorted by code for the binary search.
+ */
 static const struct drc_command_t drc_commands[] =
 {
+    {
+        .code = DRCP_PLAYBACK_PAUSE,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_pause,
+    },
+    {
+        .code = DRCP_PLAYBACK_NEXT,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_next,
+    },
+    {
+        .code = DRCP_PLAYBACK_PREVIOUS,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_previous,
+    },
     {
         .code = DRCP_PLAYBACK_STOP,
         .iface_id = DBUSIFACE_PLAYBACK,
@@ -110,9 +130,34 @@ static const struct drc_command_t drc_commands[] =
         .dbus_signal.playback = tdbus_dcpd_playback_emit_start,
     },
     {
+        .code = DRCP_REPEAT_MODE_TOGGLE,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_repeat_mode_toggle,
+    },
+    {
+        .code = DRCP_FAST_WIND_FORWARD,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_fast_forward,
+    },
+    {
+        .code = DRCP_FAST_WIND_REVERSE,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_fast_rewind,
+    },
+    {
+        .code = DRCP_FAST_WIND_STOP,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_fast_wind_stop,
+    },
+    {
         .code = DRCP_FAST_WIND_SET_SPEED,
         .iface_id = DBUSIFACE_CUSTOM,
         .dbus_signal.custom_handler = handle_fast_wind_set_factor,
+    },
+    {
+        .code = DRCP_SHUFFLE_MODE_TOGGLE,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_shuffle_mode_toggle,
     },
 };
 

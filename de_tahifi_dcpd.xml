@@ -4,8 +4,18 @@
     <interface name="de.tahifi.dcpd.playback">
         <signal name="start"/>
         <signal name="stop"/>
+        <signal name="pause"/>
+        <signal name="next"/>
+        <signal name="previous"/>
+
+        <signal name="fast_forward"/>
+        <signal name="fast_rewind"/>
+        <signal name="fast_wind_stop"/>
         <signal name="fast_wind_set_factor">
             <arg name="speed" type="y"/>
         </signal>
+
+        <signal name="repeat_mode_toggle"/>
+        <signal name="shuffle_mode_toggle"/>
     </interface>
 </node>
