@@ -160,10 +160,7 @@ static unsigned int wait_for_events(struct state *state,
             schedule_transaction(state, state->preallocated_slave_transaction, false);
         }
         else
-        {
-            msg_error(EAGAIN, LOG_NOTICE, "Slave request during transaction");
             return_value |= WAITEVENT_CAN_READ_DCP;
-        }
     }
 
     if(fds[0].revents & POLLHUP)
