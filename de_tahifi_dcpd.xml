@@ -28,4 +28,15 @@
             <arg name="view_name_forth" type="s"/>
         </signal>
     </interface>
+
+    <interface name="de.tahifi.dcpd.list_navigation">
+        <signal name="level_up"/>
+        <signal name="level_down"/>
+        <signal name="move_lines">
+            <arg name="count" type="i"/>
+        </signal>
+        <signal name="move_pages">
+            <arg name="count" type="i"/>
+        </signal>
+    </interface>
 </node>

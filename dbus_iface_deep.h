@@ -5,5 +5,6 @@
 
 tdbusdcpdPlayback *dbus_get_playback_iface(void);
 tdbusdcpdViews *dbus_get_views_iface(void);
+tdbusdcpdList_navigation *dbus_get_list_navigation_iface(void);
 
 #endif /* !DBUS_IFACE_DEEP_H */

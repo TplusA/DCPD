@@ -84,6 +84,26 @@ static void handle_toggle_views_browse_play(tdbusdcpdViews *iface)
     tdbus_dcpd_views_emit_toggle(iface, "Browse", "Play");
 }
 
+static void handle_scroll_one_line_up(tdbusdcpdList_navigation *iface)
+{
+    tdbus_dcpd_list_navigation_emit_move_lines(iface, -1);
+}
+
+static void handle_scroll_one_line_down(tdbusdcpdList_navigation *iface)
+{
+    tdbus_dcpd_list_navigation_emit_move_lines(iface, 1);
+}
+
+static void handle_scroll_one_page_up(tdbusdcpdList_navigation *iface)
+{
+    tdbus_dcpd_list_navigation_emit_move_pages(iface, -1);
+}
+
+static void handle_scroll_one_page_down(tdbusdcpdList_navigation *iface)
+{
+    tdbus_dcpd_list_navigation_emit_move_pages(iface, 1);
+}
+
 typedef enum handle_complex_return_value
     (*custom_handler_t)(struct dynamic_buffer *buffer,
                         bool is_start_of_command, bool failed,
@@ -102,6 +122,7 @@ enum dbus_interface_id
     DBUSIFACE_CUSTOM = 1,
     DBUSIFACE_PLAYBACK,
     DBUSIFACE_VIEWS,
+    DBUSIFACE_LIST_NAVIGATION,
 };
 
 struct drc_command_t
@@ -115,6 +136,7 @@ struct drc_command_t
         const custom_handler_t custom_handler;
         void (*const playback)(tdbusdcpdPlayback *iface);
         void (*const views)(tdbusdcpdViews *iface);
+        void (*const list_navigation)(tdbusdcpdList_navigation *iface);
     }
     dbus_signal;
 };
@@ -130,6 +152,36 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_PLAYBACK_PAUSE,
         .iface_id = DBUSIFACE_PLAYBACK,
         .dbus_signal.playback = tdbus_dcpd_playback_emit_pause,
+    },
+    {
+        .code = DRCP_GO_BACK_ONE_LEVEL,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION,
+        .dbus_signal.list_navigation = tdbus_dcpd_list_navigation_emit_level_up,
+    },
+    {
+        .code = DRCP_SCROLL_UP_ONE,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION,
+        .dbus_signal.list_navigation = handle_scroll_one_line_up,
+    },
+    {
+        .code = DRCP_SELECT_ITEM,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION,
+        .dbus_signal.list_navigation = tdbus_dcpd_list_navigation_emit_level_down,
+    },
+    {
+        .code = DRCP_SCROLL_DOWN_ONE,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION,
+        .dbus_signal.list_navigation = handle_scroll_one_line_down,
+    },
+    {
+        .code = DRCP_SCROLL_PAGE_UP,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION,
+        .dbus_signal.list_navigation = handle_scroll_one_page_up,
+    },
+    {
+        .code = DRCP_SCROLL_PAGE_DOWN,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION,
+        .dbus_signal.list_navigation = handle_scroll_one_page_down,
     },
     {
         .code = DRCP_GOTO_INTERNET_RADIO,
@@ -297,6 +349,10 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
 
       case DBUSIFACE_VIEWS:
         command->dbus_signal.views(dbus_get_views_iface());
+        break;
+
+      case DBUSIFACE_LIST_NAVIGATION:
+        command->dbus_signal.list_navigation(dbus_get_list_navigation_iface());
         break;
     }
 
