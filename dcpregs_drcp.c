@@ -64,6 +64,26 @@ handle_fast_wind_set_factor(struct dynamic_buffer *buffer,
     return CPLXCMD_CONTINUE;
 }
 
+static void handle_goto_internet_radio(tdbusdcpdViews *iface)
+{
+    tdbus_dcpd_views_emit_open(iface, "Internet Radio");
+}
+
+static void handle_goto_favorites(tdbusdcpdViews *iface)
+{
+    tdbus_dcpd_views_emit_open(iface, "Favorites");
+}
+
+static void handle_goto_home(tdbusdcpdViews *iface)
+{
+    tdbus_dcpd_views_emit_open(iface, "Home");
+}
+
+static void handle_toggle_views_browse_play(tdbusdcpdViews *iface)
+{
+    tdbus_dcpd_views_emit_toggle(iface, "Browse", "Play");
+}
+
 typedef enum handle_complex_return_value
     (*custom_handler_t)(struct dynamic_buffer *buffer,
                         bool is_start_of_command, bool failed,
@@ -81,6 +101,7 @@ enum dbus_interface_id
 {
     DBUSIFACE_CUSTOM = 1,
     DBUSIFACE_PLAYBACK,
+    DBUSIFACE_VIEWS,
 };
 
 struct drc_command_t
@@ -93,6 +114,7 @@ struct drc_command_t
     {
         const custom_handler_t custom_handler;
         void (*const playback)(tdbusdcpdPlayback *iface);
+        void (*const views)(tdbusdcpdViews *iface);
     }
     dbus_signal;
 };
@@ -108,6 +130,21 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_PLAYBACK_PAUSE,
         .iface_id = DBUSIFACE_PLAYBACK,
         .dbus_signal.playback = tdbus_dcpd_playback_emit_pause,
+    },
+    {
+        .code = DRCP_GOTO_INTERNET_RADIO,
+        .iface_id = DBUSIFACE_VIEWS,
+        .dbus_signal.views = handle_goto_internet_radio,
+    },
+    {
+        .code = DRCP_GOTO_FAVORITES,
+        .iface_id = DBUSIFACE_VIEWS,
+        .dbus_signal.views = handle_goto_favorites,
+    },
+    {
+        .code = DRCP_GOTO_HOME,
+        .iface_id = DBUSIFACE_VIEWS,
+        .dbus_signal.views = handle_goto_home,
     },
     {
         .code = DRCP_PLAYBACK_NEXT,
@@ -128,6 +165,11 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_PLAYBACK_START,
         .iface_id = DBUSIFACE_PLAYBACK,
         .dbus_signal.playback = tdbus_dcpd_playback_emit_start,
+    },
+    {
+        .code = DRCP_BROWSE_PLAY_VIEW_TOGGLE,
+        .iface_id = DBUSIFACE_VIEWS,
+        .dbus_signal.views = handle_toggle_views_browse_play,
     },
     {
         .code = DRCP_REPEAT_MODE_TOGGLE,
@@ -251,6 +293,10 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
 
       case DBUSIFACE_PLAYBACK:
         command->dbus_signal.playback(dbus_get_playback_iface());
+        break;
+
+      case DBUSIFACE_VIEWS:
+        command->dbus_signal.views(dbus_get_views_iface());
         break;
     }
 

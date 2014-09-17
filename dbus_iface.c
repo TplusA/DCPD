@@ -18,6 +18,7 @@ struct dbus_data
     guint owner_id;
     int acquired;
     tdbusdcpdPlayback *playback_iface;
+    tdbusdcpdViews *views_iface;
 };
 
 static gpointer process_dbus(gpointer user_data)
@@ -30,21 +31,30 @@ static gpointer process_dbus(gpointer user_data)
     return NULL;
 }
 
+static void try_export_iface(GDBusConnection *connection,
+                             GDBusInterfaceSkeleton *iface)
+{
+    GError *error = NULL;
+
+    g_dbus_interface_skeleton_export(iface, connection, "/", &error);
+
+    if(error)
+    {
+        msg_error(0, LOG_EMERG, "%s", error->message);
+        g_error_free(error);
+    }
+}
+
 static void bus_acquired(GDBusConnection *connection,
                          const gchar *name, gpointer user_data)
 {
     struct dbus_data *data = user_data;
 
     data->playback_iface = tdbus_dcpd_playback_skeleton_new();
+    data->views_iface = tdbus_dcpd_views_skeleton_new();
 
-    GError *error = NULL;
-    g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON(data->playback_iface),
-                                     connection, "/", &error);
-    if(error)
-    {
-        msg_error(0, LOG_EMERG, "%s", error->message);
-        g_error_free(error);
-    }
+    try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->playback_iface));
+    try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->views_iface));
 }
 
 static void name_acquired(GDBusConnection *connection,
@@ -141,4 +151,9 @@ void dbus_shutdown(void)
 tdbusdcpdPlayback *dbus_get_playback_iface(void)
 {
     return dbus_data.playback_iface;
+}
+
+tdbusdcpdViews *dbus_get_views_iface(void)
+{
+    return dbus_data.views_iface;
 }
