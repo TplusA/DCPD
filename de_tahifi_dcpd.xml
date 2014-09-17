@@ -12,7 +12,7 @@
         <signal name="fast_rewind"/>
         <signal name="fast_wind_stop"/>
         <signal name="fast_wind_set_factor">
-            <arg name="speed" type="y"/>
+            <arg name="speed" type="d"/>
         </signal>
 
         <signal name="repeat_mode_toggle"/>
