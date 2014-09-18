@@ -35,7 +35,7 @@ CLEANFILES += $(BUILT_SOURCES)
 dcpd_dbus.c: dcpd_dbus.stamp
 dcpd_dbus.h: dcpd_dbus.stamp
 dcpd_dbus.stamp: de_tahifi_dcpd.xml
-	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix de.tahifi.dcpd. $<
+	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix de.tahifi.Dcpd. $<
 	touch $@
 
 .md.html:

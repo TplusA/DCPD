@@ -1,51 +1,51 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="/de/tahifi/dcpd">
-    <interface name="de.tahifi.dcpd.playback">
-        <signal name="start"/>
-        <signal name="stop"/>
-        <signal name="pause"/>
-        <signal name="next"/>
-        <signal name="previous"/>
+    <interface name="de.tahifi.Dcpd.Playback">
+        <signal name="Start"/>
+        <signal name="Stop"/>
+        <signal name="Pause"/>
+        <signal name="Next"/>
+        <signal name="Previous"/>
 
-        <signal name="fast_forward"/>
-        <signal name="fast_rewind"/>
-        <signal name="fast_wind_stop"/>
-        <signal name="fast_wind_set_factor">
+        <signal name="FastForward"/>
+        <signal name="FastRewind"/>
+        <signal name="FastWindStop"/>
+        <signal name="FastWindSetFactor">
             <arg name="speed" type="d"/>
         </signal>
 
-        <signal name="repeat_mode_toggle"/>
-        <signal name="shuffle_mode_toggle"/>
+        <signal name="RepeatModeToggle"/>
+        <signal name="ShuffleModeToggle"/>
     </interface>
 
-    <interface name="de.tahifi.dcpd.views">
-        <signal name="open">
+    <interface name="de.tahifi.Dcpd.Views">
+        <signal name="Open">
             <arg name="view_name" type="s"/>
         </signal>
-        <signal name="toggle">
+        <signal name="Toggle">
             <arg name="view_name_back" type="s"/>
             <arg name="view_name_forth" type="s"/>
         </signal>
     </interface>
 
-    <interface name="de.tahifi.dcpd.list_navigation">
-        <signal name="level_up"/>
-        <signal name="level_down"/>
-        <signal name="move_lines">
+    <interface name="de.tahifi.Dcpd.ListNavigation">
+        <signal name="LevelUp"/>
+        <signal name="LevelDown"/>
+        <signal name="MoveLines">
             <arg name="count" type="i"/>
         </signal>
-        <signal name="move_pages">
+        <signal name="MovePages">
             <arg name="count" type="i"/>
         </signal>
     </interface>
 
-    <interface name="de.tahifi.dcpd.list_item">
-        <signal name="add_to_list">
+    <interface name="de.tahifi.Dcpd.ListItem">
+        <signal name="AddToList">
             <arg name="category" type="s"/>
             <arg name="index" type="q"/>
         </signal>
-        <signal name="remove_from_list">
+        <signal name="RemoveFromList">
             <arg name="category" type="s"/>
             <arg name="index" type="q"/>
         </signal>

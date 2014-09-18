@@ -84,32 +84,32 @@ static void handle_toggle_views_browse_play(tdbusdcpdViews *iface)
     tdbus_dcpd_views_emit_toggle(iface, "Browse", "Play");
 }
 
-static void handle_scroll_one_line_up(tdbusdcpdList_navigation *iface)
+static void handle_scroll_one_line_up(tdbusdcpdListNavigation *iface)
 {
     tdbus_dcpd_list_navigation_emit_move_lines(iface, -1);
 }
 
-static void handle_scroll_one_line_down(tdbusdcpdList_navigation *iface)
+static void handle_scroll_one_line_down(tdbusdcpdListNavigation *iface)
 {
     tdbus_dcpd_list_navigation_emit_move_lines(iface, 1);
 }
 
-static void handle_scroll_one_page_up(tdbusdcpdList_navigation *iface)
+static void handle_scroll_one_page_up(tdbusdcpdListNavigation *iface)
 {
     tdbus_dcpd_list_navigation_emit_move_pages(iface, -1);
 }
 
-static void handle_scroll_one_page_down(tdbusdcpdList_navigation *iface)
+static void handle_scroll_one_page_down(tdbusdcpdListNavigation *iface)
 {
     tdbus_dcpd_list_navigation_emit_move_pages(iface, 1);
 }
 
-static void handle_add_to_favorites(tdbusdcpdList_item *iface)
+static void handle_add_to_favorites(tdbusdcpdListItem *iface)
 {
     tdbus_dcpd_list_item_emit_add_to_list(iface, "Favorites", 0);
 }
 
-static void handle_remove_from_favorites(tdbusdcpdList_item *iface)
+static void handle_remove_from_favorites(tdbusdcpdListItem *iface)
 {
     tdbus_dcpd_list_item_emit_remove_from_list(iface, "Favorites", 0);
 }
@@ -147,8 +147,8 @@ struct drc_command_t
         const custom_handler_t custom_handler;
         void (*const playback)(tdbusdcpdPlayback *iface);
         void (*const views)(tdbusdcpdViews *iface);
-        void (*const list_navigation)(tdbusdcpdList_navigation *iface);
-        void (*const list_item)(tdbusdcpdList_item *iface);
+        void (*const list_navigation)(tdbusdcpdListNavigation *iface);
+        void (*const list_item)(tdbusdcpdListItem *iface);
     }
     dbus_signal;
 };

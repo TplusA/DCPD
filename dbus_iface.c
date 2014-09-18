@@ -19,8 +19,8 @@ struct dbus_data
     int acquired;
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
-    tdbusdcpdList_navigation *list_navigation_iface;
-    tdbusdcpdList_item *list_item_iface;
+    tdbusdcpdListNavigation *list_navigation_iface;
+    tdbusdcpdListItem *list_item_iface;
 };
 
 static gpointer process_dbus(gpointer user_data)
@@ -106,7 +106,7 @@ int dbus_setup(bool connect_to_sesion_bus)
     GBusType bus_type =
         connect_to_sesion_bus ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM;
 
-    static const char bus_name[] = "de.tahifi.dcpd";
+    static const char bus_name[] = "de.tahifi.Dcpd";
 
     dbus_data.owner_id =
         g_bus_own_name(bus_type, bus_name, G_BUS_NAME_OWNER_FLAGS_NONE,
@@ -164,12 +164,12 @@ tdbusdcpdViews *dbus_get_views_iface(void)
     return dbus_data.views_iface;
 }
 
-tdbusdcpdList_navigation *dbus_get_list_navigation_iface(void)
+tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void)
 {
     return dbus_data.list_navigation_iface;
 }
 
-tdbusdcpdList_item *dbus_get_list_item_iface(void)
+tdbusdcpdListItem *dbus_get_list_item_iface(void)
 {
     return dbus_data.list_item_iface;
 }
