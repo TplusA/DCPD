@@ -27,7 +27,10 @@ libdcpd_dbus_a_CFLAGS = $(CRELAXEDWARNINGS)
 
 EXTRA_DIST += de_tahifi_dcpd.xml
 
-CLEANFILES += $(nodist_libdcpd_dbus_a_SOURCES) dcpd_dbus.stamp
+BUILT_SOURCES = $(nodist_libdcpd_dbus_a_SOURCES) dcpd_dbus.stamp
+
+CLEANFILES += $(BUILT_SOURCES)
+
 
 dcpd_dbus.c: dcpd_dbus.stamp
 dcpd_dbus.h: dcpd_dbus.stamp
