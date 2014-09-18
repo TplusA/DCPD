@@ -6,24 +6,44 @@ about the high-level structure of DCP.
 
 The program is written in C11.
 
+## Communication with other system process
+
+Any register read and write command is forwarded to some responsible system
+daemon using _D-Bus_ signals. Software components that are interested in
+certain information need to subscribe to these _D-Bus_ signals so that they can
+see them.
+
+The reason why _dcpd_ uses _D-Bus_ signals instead of direct messages is that
+_dcpd_, being one of the most low-level components, should not know how the
+rest of the system is structured. For instance, it should not know who exactly
+is going to handle the DRC "Play" command---possibly there is more than one
+process that needs to see the information. Keeping such detailed knowledge
+about the system inside _dcpd_ would mean a big maintainance burden while the
+system evolves.
+
 ## Communication with _dcpspi_
 
-**Note:** This is a temporary construction that avoids creating of a kernel
-    module early in the project.
+> **Note:** This is a temporary construction that avoids creating a kernel
+>     module early in the project.
 
 The _dcpd_ daemon connects to _dcpspi_ using two named pipes, one for sending
 and one for receiving DCP data.
 
+All register accesses are range checked by _dcpd_ (_dcpspi_ does not know
+enough about registers).
+
 ## Communication with _drcpd_
 
-Any DRC protocol data is directly handed over the _drcpd_ using a named pipe.
-Also, _drcpd_ may send DRC protocol data to _dcpd_, which is encapsulated into
-the corresponding DCP packet.
+The _drcpd_ daemon connects to _dcpd_ using two named pipes created by _dcpd_.
 
-## Communication with any other system process
+Any XML DRC protocol data that _drcpd_ needs to send are handed over the named
+pipe to _dcpd_ (the pipe going back into _drcpd_ is used for synchronization
+purposes). This data is encapsulated into DCP packets as is by _dcpd_, which
+sends it further on to _dcpspi_.
 
-Any register read and write command is forwarded to some responsible system
-daemon using _D-Bus_ messages.
+DRC command codes written to the remote control register are translated to
+_D-Bus_ signals just like most of the other register write accesses. Many of
+them will end up being handled by _drcpd_.
 
 
 # Protocol handling
