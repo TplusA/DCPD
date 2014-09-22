@@ -25,17 +25,20 @@ nodist_libdcpd_dbus_a_SOURCES = dcpd_dbus.c dcpd_dbus.h
 
 libdcpd_dbus_a_CFLAGS = $(CRELAXEDWARNINGS)
 
-EXTRA_DIST += de_tahifi_dcpd.xml
+EXTRA_DIST += dbus_interfaces/extract_documentation.py dbus_interfaces/de_tahifi_dcpd.xml
 
-BUILT_SOURCES = $(nodist_libdcpd_dbus_a_SOURCES) dcpd_dbus.stamp
+BUILT_SOURCES = $(nodist_libdcpd_dbus_a_SOURCES) de_tahifi_dcpd.h de_tahifi_dcpd.md dcpd_dbus.stamp
 
 CLEANFILES += $(BUILT_SOURCES)
 
 
+de_tahifi_dcpd.h: dcpd_dbus.stamp
+de_tahifi_dcpd.md: dcpd_dbus.stamp
 dcpd_dbus.c: dcpd_dbus.stamp
 dcpd_dbus.h: dcpd_dbus.stamp
-dcpd_dbus.stamp: de_tahifi_dcpd.xml
+dcpd_dbus.stamp: dbus_interfaces/de_tahifi_dcpd.xml
 	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix de.tahifi.Dcpd. $<
+	$(abs_srcdir)/dbus_interfaces/extract_documentation.py -i $< -o de_tahifi_dcpd.md -H de_tahifi_dcpd.h -c tdbus_dcpd -s de.tahifi.Dcpd. -n "$(PACKAGE_NAME)"
 	touch $@
 
 .md.html:
