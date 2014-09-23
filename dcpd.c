@@ -590,7 +590,7 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files) < 0)
         return EXIT_FAILURE;
 
-    if(dbus_setup(true) <0)
+    if(dbus_setup(true) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
