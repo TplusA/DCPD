@@ -88,7 +88,7 @@ static void destroy_notification(gpointer data)
 
 static struct dbus_data dbus_data;
 
-int dbus_setup(bool connect_to_sesion_bus)
+int dbus_setup(bool connect_to_session_bus)
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();
@@ -104,7 +104,7 @@ int dbus_setup(bool connect_to_sesion_bus)
     }
 
     GBusType bus_type =
-        connect_to_sesion_bus ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM;
+        connect_to_session_bus ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 

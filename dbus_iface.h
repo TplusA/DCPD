@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-int dbus_setup(bool connect_to_sesion_bus);
+int dbus_setup(bool connect_to_session_bus);
 void dbus_shutdown(void);
 
 #endif /* !DBUS_IFACE_H */
