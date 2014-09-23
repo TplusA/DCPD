@@ -38,7 +38,7 @@ static void try_export_iface(GDBusConnection *connection,
 {
     GError *error = NULL;
 
-    g_dbus_interface_skeleton_export(iface, connection, "/", &error);
+    g_dbus_interface_skeleton_export(iface, connection, "/de/tahifi/Dcpd", &error);
 
     if(error)
     {
