@@ -17,9 +17,9 @@ AM_CFLAGS = $(CWARNINGS)
 
 AM_CPPFLAGS = $(DCPD_DEPENDENCIES_CFLAGS)
 
-dcpd_LDADD = $(DCPD_DEPENDENCIES_LIBS) libdcpd_dbus.a
-
 noinst_LIBRARIES = libdcpd_dbus.a
+
+dcpd_LDADD = $(DCPD_DEPENDENCIES_LIBS) $(noinst_LIBRARIES)
 
 nodist_libdcpd_dbus_a_SOURCES = dcpd_dbus.c dcpd_dbus.h
 
