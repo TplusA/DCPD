@@ -9,7 +9,7 @@ Homepage: http://www.ta-hifi.de/
 Package: dcpd
 Architecture: @DEBIAN_ARCHITECTURE_NAME@
 Recommends: dcpspi, drcpd, streamplayer
-Depends: dbus, libc6, gmodule-2.0, gio-2.0, gio-unix-2.0, gthread-2.0
+Depends: dbus, libc6, libglib2.0-0
 Description: DC protocol daemon (device control protocol)
  A daemon that implements DCP. It communicates with a slave device connected
  via SPI and distributes the register accesses over D-Bus.
