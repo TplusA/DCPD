@@ -40385,3 +40385,20 @@
    fun:g_type_register_static
    fun:g_type_register_static_simple
 }
+{
+   Cutter internal allocation
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   fun:vasprintf
+   fun:asprintf
+   fun:dlerror
+   fun:g_module_symbol
+   fun:cut_loader_load_test_cases
+   fun:cut_repository_create_test_suite
+   fun:cut_run_context_create_test_suite
+   fun:cut_run_context_get_test_suite
+   obj:/usr/lib/libcutter.so.0.1.0
+   fun:cut_runner_run
+   fun:cut_run_context_start
+}
