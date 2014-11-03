@@ -1,0 +1,6 @@
+variableHidingTypedef:/usr/lib/gcc/x86_64-linux-gnu/4.8/include/stdarg.h:78
+variableHidingTypedef:/usr/include/stdio.h:79
+cstyleCast:/usr/include/libio.h:445
+cstyleCast:/usr/include/libio.h:446
+cstyleCast:/usr/include/libio.h:447
+cstyleCast:/usr/include/libio.h:474
