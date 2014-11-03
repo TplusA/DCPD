@@ -1,3 +1,7 @@
+SUBDIRS = . tests
+
+ACLOCAL_AMFLAGS = -I m4
+
 bin_PROGRAMS = dcpd
 
 html_DATA = README.html
@@ -9,7 +13,7 @@ CLEANFILES = README.html
 dcpd_SOURCES = \
     dcpd.c registers.c registers.h named_pipe.c named_pipe.h \
     transactions.c transactions.h dcpdefs.h messages.c messages.h \
-    dynamic_buffer.c dynamic_buffer.h drcp.c drcp.h drcp_command_codes.h \
+    dynamic_buffer.h drcp.c drcp.h drcp_command_codes.h \
     dcpregs_drcp.c dcpregs_drcp.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h
 
@@ -17,17 +21,21 @@ AM_CFLAGS = $(CWARNINGS)
 
 AM_CPPFLAGS = $(DCPD_DEPENDENCIES_CFLAGS)
 
-noinst_LIBRARIES = libdcpd_dbus.a
+noinst_LTLIBRARIES = libdynamic_buffer.la libdcpd_dbus.la
 
-dcpd_LDADD = $(DCPD_DEPENDENCIES_LIBS) $(noinst_LIBRARIES)
+dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
-nodist_libdcpd_dbus_a_SOURCES = dcpd_dbus.c dcpd_dbus.h
+dcpd_LDFLAGS = $(LTLIBINTL)
 
-libdcpd_dbus_a_CFLAGS = $(CRELAXEDWARNINGS)
+libdynamic_buffer_la_SOURCES = dynamic_buffer.c dynamic_buffer.h
+libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
+
+nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
+libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 EXTRA_DIST += dbus_interfaces/extract_documentation.py dbus_interfaces/de_tahifi_dcpd.xml
 
-BUILT_SOURCES = $(nodist_libdcpd_dbus_a_SOURCES) de_tahifi_dcpd.h de_tahifi_dcpd.md dcpd_dbus.stamp
+BUILT_SOURCES = $(nodist_libdcpd_dbus_la_SOURCES) de_tahifi_dcpd.h de_tahifi_dcpd.md dcpd_dbus.stamp
 
 CLEANFILES += $(BUILT_SOURCES)
 
