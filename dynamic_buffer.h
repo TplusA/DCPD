@@ -5,6 +5,11 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+/*!
+ * \addtogroup dynbuffer Dynamically sized buffer
+ */
+/*!@{*/
+
 struct dynamic_buffer
 {
     uint8_t *data;
@@ -19,5 +24,7 @@ void dynamic_buffer_clear(struct dynamic_buffer *buffer);
 bool dynamic_buffer_check_space(struct dynamic_buffer *buffer);
 bool dynamic_buffer_is_allocated(const struct dynamic_buffer *buffer);
 bool dynamic_buffer_is_empty(const struct dynamic_buffer *buffer);
+
+/*!@}*/
 
 #endif /* !DYNAMIC_BUFFER_H */
