@@ -11,31 +11,6 @@
 #include "drcp.h"
 #include "messages.h"
 
-static int try_read_to_buffer(struct dynamic_buffer *buffer, int fd)
-{
-    uint8_t *dest = buffer->data + buffer->pos;
-    size_t count = buffer->size - buffer->pos;
-    int retval = 0;
-
-    while(count > 0)
-    {
-        const ssize_t len = read(fd, dest, count);
-
-        if(len == 0)
-            break;
-
-        if(len < 0)
-            return errno == EAGAIN ? 0 : -1;
-
-        dest += len;
-        count -= len;
-        buffer->pos += len;
-        retval = 1;
-    }
-
-    return retval;
-}
-
 bool drcp_fill_buffer(struct dynamic_buffer *buffer,
                       const struct fifo_pair *fds)
 {
@@ -43,7 +18,8 @@ bool drcp_fill_buffer(struct dynamic_buffer *buffer,
 
     while(buffer->pos < buffer->size)
     {
-        int ret =try_read_to_buffer(buffer, fds->in_fd);
+        int ret =fifo_try_read_to_buffer(buffer->data, buffer->size,
+                                         &buffer->pos, fds->in_fd);
 
         if(ret == 0)
             return true;
@@ -62,7 +38,8 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer,
                             const struct fifo_pair *fds,
                             size_t *expected_size, size_t *payload_offset)
 {
-    if(try_read_to_buffer(buffer, fds->in_fd) < 0)
+    if(fifo_try_read_to_buffer(buffer->data, buffer->size,
+                               &buffer->pos, fds->in_fd) < 0)
     {
         msg_error(errno, LOG_CRIT, "Reading XML size failed");
         return false;

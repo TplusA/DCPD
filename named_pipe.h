@@ -21,6 +21,8 @@ void fifo_close_and_delete(int *fd, const char *devname);
 void fifo_close(int *fd);
 bool fifo_reopen(int *fd, const char *devname, bool write_not_read);
 int fifo_write_from_buffer(const uint8_t *src, size_t count, int fd);
+int fifo_try_read_to_buffer(uint8_t *dest, size_t count,
+                            size_t *add_bytes_read, int fd);
 
 #ifdef __cplusplus
 }
