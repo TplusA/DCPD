@@ -157,6 +157,9 @@ void cut_teardown(void)
     mock_dbus_iface = nullptr;
 }
 
+/*!\test
+ * Slave sends some unsupported DRC command over DCP.
+ */
 void test_slave_drc_invalid_command(void)
 {
     static const uint8_t buffer[2] = { 0xbe, 0xef };
@@ -166,6 +169,9 @@ void test_slave_drc_invalid_command(void)
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, 2));
 }
 
+/*!\test
+ * Slave sends DRC command for starting playback.
+ */
 void test_slave_drc_playback_start(void)
 {
     static const uint8_t buffer[2] = { DRCP_PLAYBACK_START, 0x00 };
@@ -176,6 +182,9 @@ void test_slave_drc_playback_start(void)
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
 }
 
+/*!\test
+ * Slave sends complex DRC command for setting the fast wind speed factor.
+ */
 void test_slave_drc_playback_fast_find_set_speed(void)
 {
     static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
@@ -196,6 +205,10 @@ void test_slave_drc_playback_fast_find_set_speed(void)
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_eoc, 2));
 }
 
+/*!\test
+ * Slave sends complex DRC command for setting the fast wind speed factor, but
+ * with an invalid out-of-range parameter.
+ */
 void test_slave_drc_playback_fast_find_set_speed_invalid_parameter(void)
 {
     static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
@@ -215,6 +228,9 @@ void test_slave_drc_playback_fast_find_set_speed_invalid_parameter(void)
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_eoc, 2));
 }
 
+/*!\test
+ * Slave sends DRC command for opening the internet radio view.
+ */
 void test_slave_drc_views_goto_internet_radio(void)
 {
     static const uint8_t buffer[2] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
@@ -225,6 +241,9 @@ void test_slave_drc_views_goto_internet_radio(void)
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
 }
 
+/*!\test
+ * Slave sends DRC command for toggling between browsing and playing views.
+ */
 void test_slave_drc_views_toggle_browse_and_play(void)
 {
     static const uint8_t buffer[2] = { DRCP_BROWSE_PLAY_VIEW_TOGGLE, 0x00 };
@@ -235,6 +254,9 @@ void test_slave_drc_views_toggle_browse_and_play(void)
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
 }
 
+/*!\test
+ * Slave sends DRC command for moving the cursor one line up.
+ */
 void test_slave_drc_list_navigation_scroll_one_line_up(void)
 {
     static const uint8_t buffer[2] = { DRCP_SCROLL_UP_ONE, 0x00 };
@@ -245,6 +267,9 @@ void test_slave_drc_list_navigation_scroll_one_line_up(void)
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
 }
 
+/*!\test
+ * Slave sends DRC command for moving the cursor one page down.
+ */
 void test_slave_drc_list_navigation_scroll_one_page_down(void)
 {
     static const uint8_t buffer[2] = { DRCP_SCROLL_PAGE_DOWN, 0x00 };
@@ -255,6 +280,10 @@ void test_slave_drc_list_navigation_scroll_one_page_down(void)
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
 }
 
+/*!\test
+ * Slave sends DRC command for adding the currently selected item to the
+ * favorites list.
+ */
 void test_slave_drc_list_item_add_to_favorites(void)
 {
     static const uint8_t buffer[2] = { DRCP_FAVORITES_ADD_ITEM, 0x00 };
