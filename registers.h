@@ -24,9 +24,17 @@ struct dcp_register_t
     int (*write_handler)(const uint8_t *data, size_t length);
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*!
  * Find register structure by register number (address).
  */
 const struct dcp_register_t *register_lookup(uint8_t register_number);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !REGISTERS_H */

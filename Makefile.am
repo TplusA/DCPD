@@ -11,17 +11,16 @@ EXTRA_DIST = README.md cppcheck_suppressed.txt
 CLEANFILES = README.html
 
 dcpd_SOURCES = \
-    dcpd.c registers.c registers.h named_pipe.c named_pipe.h \
+    dcpd.c registers.h named_pipe.c named_pipe.h \
     transactions.c transactions.h dcpdefs.h messages.c messages.h \
-    dynamic_buffer.h drcp.c drcp.h drcp_command_codes.h \
-    dcpregs_drcp.c dcpregs_drcp.h \
+    dynamic_buffer.h drcp.c drcp.h drcp_command_codes.h dcpregs_drcp.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h
 
 AM_CFLAGS = $(CWARNINGS)
 
 AM_CPPFLAGS = $(DCPD_DEPENDENCIES_CFLAGS)
 
-noinst_LTLIBRARIES = libdynamic_buffer.la libdcpd_dbus.la
+noinst_LTLIBRARIES = libdynamic_buffer.la libregisters.la libdcpd_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
@@ -29,6 +28,11 @@ dcpd_LDFLAGS = $(LTLIBINTL)
 
 libdynamic_buffer_la_SOURCES = dynamic_buffer.c dynamic_buffer.h
 libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
+
+libregisters_la_SOURCES = \
+    registers.c registers.h \
+    dcpregs_drcp.c dcpregs_drcp.h drcp_command_codes.h messages.h
+libregisters_la_CFLAGS = $(AM_CFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)

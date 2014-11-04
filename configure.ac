@@ -10,7 +10,9 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_USE_SYSTEM_EXTENSIONS()
 
 AC_ARG_VAR([CWARNINGS], [strict set of C compiler warnings])
+AC_ARG_VAR([CXXWARNINGS], [strict set of C++ compiler warnings])
 AC_ARG_VAR([CRELAXEDWARNINGS], [options for relaxing some compiler warnings for various files])
+AC_ARG_VAR([CXXRELAXEDWARNINGS], [options for relaxing some C++ compiler warnings for various files])
 AC_ARG_VAR([DEBIAN_SYSROOT_DIR], [path to Debian system root to use when cross-building a Debian package])
 AC_ARG_VAR([DEBIAN_SYSROOT_LIBPATH], [colon-separated list of paths to search for libraries when cross-building a Debian package])
 
@@ -21,6 +23,7 @@ AC_ARG_ENABLE([valgrind],
               [enable_valgrind=yes])
 
 # Checks for programs.
+AC_PROG_CXX
 AC_PROG_AWK
 AC_PROG_CC
 AC_PROG_CPP
@@ -38,6 +41,7 @@ AC_CHECK_PROGS([DPKG_ARCHITECTURE], [dpkg-architecture])
 AC_CHECK_PROGS([XSLTPROC], [xsltproc])
 AC_CHECK_PROGS([VALGRIND], [valgrind])
 AC_CHECK_CUTTER
+AC_CHECK_CPPCUTTER
 AC_CHECK_GCUTTER
 AC_CHECK_COVERAGE
 
@@ -51,6 +55,13 @@ save_CPPFLAGS="$CPPFLAGS"
 CPPFLAGS="$pkg_cv_CUTTER_CFLAGS"
 AC_CHECK_HEADER([cutter.h], [], [ac_cv_use_cutter=no])
 CPPFLAGS="$save_CPPFLAGS"
+
+AC_LANG_PUSH([C++])
+save_CPPFLAGS="$CPPFLAGS"
+CPPFLAGS="$pkg_cv_CPPCUTTER_CFLAGS"
+AC_CHECK_HEADER([cppcutter.h], [], [ac_cv_use_cutter=no])
+CPPFLAGS="$save_CPPFLAGS"
+AC_LANG_POP([C++])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL

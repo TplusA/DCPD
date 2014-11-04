@@ -15,6 +15,10 @@ enum transaction_process_status
  */
 struct transaction;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*!
  * Initialize transaction container.
  *
@@ -83,4 +87,9 @@ uint16_t transaction_get_max_data_size(const struct transaction *t);
 
 bool transaction_set_payload(struct transaction *t,
                              const uint8_t *src, size_t length);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* !TRANSACTIONS_H */
