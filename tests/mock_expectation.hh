@@ -26,7 +26,8 @@ class MockExpectationsTemplate
     void check() const
     {
         cppcut_assert_equal(next_checked_expectation_, expectations_.size(),
-                            cut_message("Have %zu expectation%s, but only %zu %s checked",
+                            cut_message("In %s:\nHave %zu expectation%s, but only %zu %s checked",
+                                        __PRETTY_FUNCTION__,
                                         expectations_.size(),
                                         (expectations_.size() == 1) ? "" : "s",
                                         next_checked_expectation_,
