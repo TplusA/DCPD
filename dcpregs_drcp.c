@@ -3,6 +3,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -325,6 +326,22 @@ static int handle_complex_command(struct complex_command_data *command_data,
     return (is_end_of_command && have_errors) ? -1 : 0;
 }
 
+static struct complex_command_data global_command_data;
+
+/*!
+ * Only useful for unit tests, not to be used in production code.
+ */
+void dcpregs_UT_init(void)
+{
+    memset(&global_command_data, 0, sizeof(global_command_data));
+}
+
+void dcpregs_UT_deinit(void)
+{
+    dynamic_buffer_free(&global_command_data.arguments);
+    dcpregs_UT_init();
+}
+
 /*!
  * Write handler for DCP register 72.
  *
@@ -336,12 +353,12 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
 
     msg_info("DRC: command code 0x%02x, data 0x%02x", data[0], data[1]);
 
-    static struct complex_command_data command_data;
-
-    int ret = handle_complex_command(&command_data, NULL, data[0], data[1]);
+    int ret = handle_complex_command(&global_command_data, NULL, data[0], data[1]);
     if(ret <= 0)
         return ret;
 
+    /* static because we want static initialization; only the code field is
+     * ever changed */
     static struct drc_command_t key;
 
     key.code = data[0];
@@ -361,7 +378,7 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
     switch(command->iface_id)
     {
       case DBUSIFACE_CUSTOM:
-        ret = handle_complex_command(&command_data,
+        ret = handle_complex_command(&global_command_data,
                                      command->dbus_signal.custom_handler,
                                      data[0], data[1]);
         if(ret <= 0)
