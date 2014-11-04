@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+/*!
+ * \addtogroup registers
+ */
+/*!@{*/
+
 #define DCP_HEADER_SIZE        4
 #define DCP_HEADER_DATA_OFFSET 2
 
@@ -21,5 +26,7 @@ static inline void dcp_put_header_data(uint8_t *dest, uint16_t value)
     dest[0] = value & 0xff;
     dest[1] = value >> 8;
 }
+
+/*!@}*/
 
 #endif /* !DCPDEFS_H */

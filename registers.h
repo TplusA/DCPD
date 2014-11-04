@@ -1,6 +1,13 @@
 #ifndef REGISTERS_H
 #define REGISTERS_H
 
+/*!
+ * \addtogroup registers SPI registers definitions
+ *
+ * How to read from and write to SPI registers.
+ */
+/*!@{*/
+
 #define DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH ((uint8_t)(1 << 0))
 #define DCP_REGISTER_FLAG_IS_NOT_CACHEABLE   ((uint8_t)(1 << 1))
 
@@ -36,5 +43,7 @@ const struct dcp_register_t *register_lookup(uint8_t register_number);
 #ifdef __cplusplus
 }
 #endif
+
+/*!@}*/
 
 #endif /* !REGISTERS_H */
