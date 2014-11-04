@@ -107,6 +107,15 @@ static MockDBusIface *mock_dbus_iface;
 static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
     reinterpret_cast<tdbusdcpdPlayback *>(0x12345678);
 
+static tdbusdcpdViews *const dbus_dcpd_views_iface_dummy =
+    reinterpret_cast<tdbusdcpdViews *>(0x87654321);
+
+static tdbusdcpdListNavigation *const dbus_dcpd_list_navigation_iface_dummy =
+    reinterpret_cast<tdbusdcpdListNavigation *>(0x24681357);
+
+static tdbusdcpdListItem *const dbus_dcpd_list_item_iface_dummy =
+    reinterpret_cast<tdbusdcpdListItem *>(0x75318642);
+
 void cut_setup(void)
 {
     mock_messages = new MockMessages;
@@ -160,6 +169,56 @@ void test_slave_drc_playback_start(void)
     mock_messages->expect_msg_info_formatted("DRC: command code 0xb3, data 0x00");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_start(dbus_dcpd_playback_iface_dummy);
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+}
+
+void test_slave_drc_views_goto_internet_radio(void)
+{
+    static const uint8_t buffer[2] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xaa, data 0x00");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Internet Radio");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+}
+
+void test_slave_drc_views_toggle_browse_and_play(void)
+{
+    static const uint8_t buffer[2] = { DRCP_BROWSE_PLAY_VIEW_TOGGLE, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xba, data 0x00");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_toggle(dbus_dcpd_views_iface_dummy, "Browse", "Play");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+}
+
+void test_slave_drc_list_navigation_scroll_one_line_up(void)
+{
+    static const uint8_t buffer[2] = { DRCP_SCROLL_UP_ONE, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x26, data 0x00");
+    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, -1);
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+}
+
+void test_slave_drc_list_navigation_scroll_one_page_down(void)
+{
+    static const uint8_t buffer[2] = { DRCP_SCROLL_PAGE_DOWN, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x98, data 0x00");
+    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_pages(dbus_dcpd_list_navigation_iface_dummy, 1);
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+}
+
+void test_slave_drc_list_item_add_to_favorites(void)
+{
+    static const uint8_t buffer[2] = { DRCP_FAVORITES_ADD_ITEM, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x2d, data 0x00");
+    mock_dbus_iface->expect_dbus_get_list_item_iface(dbus_dcpd_list_item_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_list_item_emit_add_to_list(dbus_dcpd_list_item_iface_dummy, "Favorites", 0);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
 }
 
