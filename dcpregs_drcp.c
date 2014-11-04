@@ -35,7 +35,9 @@ handle_fast_wind_set_factor(struct dynamic_buffer *buffer,
         return CPLXCMD_CONTINUE;
 
     if(failed)
-        return (code_1 == DRCP_ACCEPT) ? CPLXCMD_END : CPLXCMD_CONTINUE;
+        return ((code_1 == DRCP_ACCEPT)
+                ? CPLXCMD_END_WITH_ERROR
+                : CPLXCMD_CONTINUE_WITH_ERROR);
 
     if(code_1 == DRCP_ACCEPT)
     {
