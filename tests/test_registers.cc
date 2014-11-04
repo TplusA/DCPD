@@ -158,6 +158,21 @@ void cut_teardown(void)
 }
 
 /*!\test
+ * Check that writes to register 72 (DRC command) are indeed wired to calls of
+ * dcpregs_write_drcp_command(), and that reading from register 72 is not
+ * possible.
+ */
+void test_dcp_register_72_calls_correct_write_handler(void)
+{
+    const struct dcp_register_t *reg = register_lookup(72);
+
+    cppcut_assert_not_null(reg);
+    cppcut_assert_equal(72U, unsigned(reg->address));
+    cut_assert(reg->write_handler == dcpregs_write_drcp_command);
+    cut_assert(reg->read_handler == NULL);
+}
+
+/*!\test
  * Slave sends some unsupported DRC command over DCP.
  */
 void test_slave_drc_invalid_command(void)
