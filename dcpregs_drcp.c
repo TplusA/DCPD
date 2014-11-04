@@ -290,6 +290,7 @@ static int handle_complex_command(struct complex_command_data *command_data,
 {
     if(handler != NULL)
     {
+        command_data->code = code_1;
         command_data->current_handler = handler;
         command_data->failed = false;
         dynamic_buffer_clear(&command_data->arguments);
@@ -316,7 +317,10 @@ static int handle_complex_command(struct complex_command_data *command_data,
     }
 
     if(is_end_of_command)
+    {
+        command_data->code = 0;
         command_data->current_handler = NULL;
+    }
 
     return (is_end_of_command && have_errors) ? -1 : 0;
 }

@@ -172,6 +172,45 @@ void test_slave_drc_playback_start(void)
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
 }
 
+void test_slave_drc_playback_fast_find_set_speed(void)
+{
+    static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4, data 0x00");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_command, 2));
+
+    static const uint8_t buffer_data[2] = { DRCP_KEY_DIGIT_4, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
+
+    static const uint8_t buffer_eoc[2] = { DRCP_ACCEPT, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x1e, data 0x00");
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(dbus_dcpd_playback_iface_dummy, 15.0);
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_eoc, 2));
+}
+
+void test_slave_drc_playback_fast_find_set_speed_invalid_parameter(void)
+{
+    static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4, data 0x00");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_command, 2));
+
+    static const uint8_t buffer_data[2] = { DRCP_BROWSE_PLAY_VIEW_SET, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xbb, data 0x00");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
+
+    static const uint8_t buffer_eoc[2] = { DRCP_ACCEPT, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x1e, data 0x00");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Handling complex command 0xc4 failed");
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_eoc, 2));
+}
+
 void test_slave_drc_views_goto_internet_radio(void)
 {
     static const uint8_t buffer[2] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };

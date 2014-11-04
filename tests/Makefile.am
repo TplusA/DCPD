@@ -30,7 +30,7 @@ test_registers_la_SOURCES = \
     mock_dbus_iface.hh mock_dbus_iface.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
-test_registers_la_LIBADD = ../libregisters.la
+test_registers_la_LIBADD = ../libregisters.la ../libdynamic_buffer.la
 test_registers_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 test_registers_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
