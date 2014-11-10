@@ -3,6 +3,11 @@
 
 #include <stdbool.h>
 
+/*!
+ * \addtogroup dcp_transaction DCP transactions
+ */
+/*!@{*/
+
 enum transaction_process_status
 {
     TRANSACTION_IN_PROGRESS,
@@ -91,5 +96,7 @@ bool transaction_set_payload(struct transaction *t,
 #ifdef __cplusplus
 }
 #endif
+
+/*!@}*/
 
 #endif /* !TRANSACTIONS_H */
