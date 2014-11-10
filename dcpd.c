@@ -16,6 +16,7 @@
 #include "dynamic_buffer.h"
 #include "drcp.h"
 #include "dbus_iface.h"
+#include "os.h"
 
 #define WAITEVENT_POLL_ERROR            (1U << 0)
 #define WAITEVENT_POLL_TIMEOUT          (1U << 1)
@@ -68,6 +69,9 @@ struct state
      */
     struct transaction *preallocated_slave_transaction;
 };
+
+ssize_t (*os_read)(int fd, void *dest, size_t count) = read;
+ssize_t (*os_write)(int fd, const void *buf, size_t count) = write;
 
 /*!
  * Global flag that gets cleared in the SIGTERM signal handler.

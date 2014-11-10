@@ -16,6 +16,7 @@
 #include "named_pipe.h"
 #include "dcpdefs.h"
 #include "messages.h"
+#include "os.h"
 
 enum transaction_state
 {
@@ -240,7 +241,7 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd)
 {
     while(count > 0)
     {
-        ssize_t len = read(fd, dest, count);
+        ssize_t len = os_read(fd, dest, count);
 
         if(len < 0)
         {

@@ -11,6 +11,7 @@
 
 #include "named_pipe.h"
 #include "messages.h"
+#include "os.h"
 
 int fifo_create_and_open(const char *devname, bool write_not_read)
 {
@@ -76,7 +77,7 @@ int fifo_write_from_buffer(const uint8_t *src, size_t count, int fd)
 {
     while(count > 0)
     {
-        ssize_t len = write(fd, src, count);
+        ssize_t len = os_write(fd, src, count);
 
         if(len < 0)
         {
@@ -103,7 +104,7 @@ int fifo_try_read_to_buffer(uint8_t *dest, size_t count, size_t *dest_pos,
 
     while(count > 0)
     {
-        const ssize_t len = read(fd, dest, count);
+        const ssize_t len = os_read(fd, dest, count);
 
         if(len == 0)
             break;

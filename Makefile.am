@@ -11,7 +11,7 @@ EXTRA_DIST = README.md cppcheck_suppressed.txt
 CLEANFILES = README.html
 
 dcpd_SOURCES = \
-    dcpd.c registers.h named_pipe.c named_pipe.h \
+    dcpd.c os.h registers.h named_pipe.c named_pipe.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h dcpregs_drcp.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h
@@ -41,7 +41,7 @@ libdrcpdcomm_la_SOURCES = drcp.c drcp.h named_pipe.h dynamic_buffer.h messages.h
 libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 
 libtransactions_la_SOURCES = \
-    transactions.c transactions.h\
+    transactions.c transactions.h os.h \
     dynamic_buffer.h registers.h named_pipe.h dcpdefs.h messages.h
 libtransactions_la_CFLAGS = $(AM_CFLAGS)
 
