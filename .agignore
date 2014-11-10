@@ -1,6 +1,11 @@
 Doxyfile.in
 aclocal.m4
-autom4te.cache
+autom4te.cache/
 config.h.in
 config.h.in~
 configure
+config.site/
+config/
+m4/
+*.md
+*.xml
