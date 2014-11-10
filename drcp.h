@@ -4,6 +4,11 @@
 #include "named_pipe.h"
 #include "dynamic_buffer.h"
 
+/*!
+ * \addtogroup drcp Communication with DRCPD
+ */
+/*!@{*/
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,5 +23,7 @@ void drcp_finish_request(bool is_ok, const struct fifo_pair *fds);
 #ifdef __cplusplus
 }
 #endif
+
+/*!@}*/
 
 #endif /* !DRCP_H */
