@@ -26,7 +26,7 @@ bool drcp_fill_buffer(struct dynamic_buffer *buffer,
 
         if(ret < 0)
         {
-            msg_error(errno, LOG_ERR, "Failed reading DRCP data from fd %d", fds->in_fd);
+            msg_error(errno, LOG_CRIT, "Failed reading DRCP data from fd %d", fds->in_fd);
             return false;
         }
     }

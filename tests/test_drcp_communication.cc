@@ -287,6 +287,93 @@ void test_read_faulty_drcp_size_header(void)
     cppcut_assert_equal(size_t(600), offset);
 }
 
+/*!\test
+ * Attempting to read size header fails hard at system level.
+ *
+ * The only reasonable situation in which this may happen is when the FIFO file
+ * descriptor somehow got invalid. Maybe it was closed, maybe the kernel stops
+ * playing nicely, maybe some other unpredictable error. Unlikely, but handled.
+ */
+void test_read_drcp_size_header_from_broken_file_descriptor(void)
+{
+    dynamic_buffer_check_space(&buffer);
+    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+
+    fill_buffer_data.set("", EBADF, -1);
+
+    mock_messages->expect_msg_error(EBADF, LOG_CRIT, "Reading XML size failed");
+
+    size_t size = 500;
+    size_t offset = 600;
+    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cppcut_assert_equal(size_t(0), buffer.pos);
+    cppcut_assert_equal(size_t(500), size);
+    cppcut_assert_equal(size_t(600), offset);
+}
+
+/*!\test
+ * Attempting to read some data from the named pipe filled by DRCPD.
+ */
+void test_read_drcp_data(void)
+{
+    dynamic_buffer_check_space(&buffer);
+    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+
+    static const char input_string[] =
+        "Here is some test data\nread straight from the guts of\na MOCK!";
+    fill_buffer_data.set(input_string, 0, 0);
+
+    cut_assert_true(drcp_fill_buffer(&buffer, &fds));
+    cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
+                            buffer.data, buffer.pos);
+}
+
+/*!\test
+ * Attempting to read lots of data from the named pipe filled by DRCPD.
+ *
+ * \note This test relies on the fact that the dynamic buffers are allocated by
+ *       pages, which are usually powers of 2 bytes, thus also multiples of 8.
+ *       The test writes 8 bytes per read to the consumer's buffer. We expect
+ *       the reader to stop reading when its buffer is full.
+ */
+void test_read_drcp_data_from_infinite_size_input(void)
+{
+    dynamic_buffer_check_space(&buffer);
+
+    static const char input_string[] = "testdata";
+    fill_buffer_data.set(input_string, 0, 1);
+
+    for(size_t i = 0; i < buffer.size / (sizeof(input_string) - 1); ++i)
+        mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+
+    cut_assert_true(drcp_fill_buffer(&buffer, &fds));
+
+    cppcut_assert_equal(buffer.size, buffer.pos);
+    for(size_t i = 0; i < buffer.pos; i += sizeof(input_string) - 1)
+        cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
+                                buffer.data + i, sizeof(input_string) - 1);
+}
+
+/*!\test
+ * Attempting to read some data fails hard at system level.
+ *
+ * The only reasonable situation in which this may happen is when the FIFO file
+ * descriptor somehow got invalid. Maybe it was closed, maybe the kernel stops
+ * playing nicely, maybe some other unpredictable error. Unlikely, but handled.
+ */
+void test_read_drcp_data_from_broken_file_descriptor(void)
+{
+    dynamic_buffer_check_space(&buffer);
+    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+
+    fill_buffer_data.set("", EBADF, -1);
+
+    mock_messages->expect_msg_error_formatted(EBADF, LOG_CRIT, "Failed reading DRCP data from fd 10 (Bad file descriptor)");
+
+    cut_assert_false(drcp_fill_buffer(&buffer, &fds));
+    cppcut_assert_equal(size_t(0), buffer.pos);
+}
+
 };
 
 /*!@}*/
