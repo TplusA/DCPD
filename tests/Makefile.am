@@ -44,10 +44,13 @@ test_drcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 test_drcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 test_transactions_la_SOURCES = \
-    test_transactions.cc
-test_transactions_la_LIBADD = ../libtransactions.la ../libdynamic_buffer.la
-test_transactions_la_CFLAGS = $(AM_CFLAGS)
-test_transactions_la_CXXFLAGS = $(AM_CXXFLAGS)
+    test_transactions.cc \
+    mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
+    mock_named_pipe.hh mock_named_pipe.cc \
+    mock_messages.hh mock_messages.cc
+test_transactions_la_LIBADD = ../libtransactions.la ../libregisters.la ../libdynamic_buffer.la
+test_transactions_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_transactions_la_CXXFLAGS = $(AM_CXXFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
 CLEANFILES = test_report.xml test_report_junit.xml valgrind.xml
 

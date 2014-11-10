@@ -1,7 +1,12 @@
 #include <cppcutter.h>
 #include <array>
+#include <algorithm>
 
 #include "transactions.h"
+
+#include "mock_dcpd_dbus.hh"
+#include "mock_messages.hh"
+#include "mock_named_pipe.hh"
 
 /*!
  * \addtogroup dcp_transaction_tests Unit tests
@@ -189,5 +194,277 @@ void test_dequeue_from_list_of_length_one(void)
 }
 
 };
+
+namespace dcp_transaction_tests
+{
+
+static constexpr int expected_from_slave_fd = 23;
+static constexpr int expected_to_slave_fd = 42;
+
+class read_data_partial_t
+{
+  public:
+    read_data_partial_t(const read_data_partial_t &) = delete;
+    read_data_partial_t &operator=(const read_data_partial_t &) = delete;
+
+    read_data_partial_t(read_data_partial_t &&) = default;
+
+    const std::vector<uint8_t> data_;
+    const int errno_value_;
+    const ssize_t return_value_;
+
+    explicit read_data_partial_t(const std::vector<uint8_t> data,
+                                 int err, ssize_t ret):
+        data_(data),
+        errno_value_(err),
+        return_value_(ret)
+    {}
+};
+
+class read_data_t
+{
+  public:
+    read_data_t(const read_data_t &) = delete;
+    read_data_t &operator=(const read_data_t &) = delete;
+
+    size_t fragment_;
+    std::vector<read_data_partial_t> partial_;
+
+    explicit read_data_t(): fragment_(0) {}
+
+    template <size_t N>
+    void set(const uint8_t (&data)[N])
+    {
+        set(data, N, 0, N);
+    }
+
+    void set(const uint8_t *data, size_t data_size, int err = 0)
+    {
+        set(data, data_size, err, data_size);
+    }
+
+    void set(const uint8_t *data, size_t data_size, int err, ssize_t ret)
+    {
+        partial_.push_back(read_data_partial_t(std::vector<uint8_t>(data, data + data_size), err, ret));
+    }
+};
+
+static read_data_t *read_data;
+
+static ssize_t test_os_read(int fd, void *dest, size_t count)
+{
+    cppcut_assert_equal(expected_from_slave_fd, fd);
+    cppcut_assert_operator(read_data->fragment_, <, read_data->partial_.size());
+
+    const read_data_partial_t &partial(read_data->partial_[read_data->fragment_++]);
+
+    std::copy_n(partial.data_.begin(), partial.data_.size(),
+                static_cast<uint8_t *>(dest));
+    errno = partial.errno_value_;
+    return partial.return_value_;
+}
+
+static ssize_t test_os_write(int fd, const void *buf, size_t count)
+{
+    cppcut_assert_equal(expected_to_slave_fd, fd);
+    cut_fail("write");
+    return -1;
+}
+
+static MockMessages *mock_messages;
+static MockNamedPipe *mock_named_pipe;
+static MockDcpdDBus *mock_dcpd_dbus;
+
+static std::vector<uint8_t> *answer_written_to_fifo;
+
+void cut_setup(void)
+{
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_named_pipe = new MockNamedPipe;
+    cppcut_assert_not_null(mock_named_pipe);
+    mock_named_pipe->init();
+    mock_named_pipe_singleton = mock_named_pipe;
+
+    mock_dcpd_dbus = new MockDcpdDBus();
+    cppcut_assert_not_null(mock_dcpd_dbus);
+    mock_dcpd_dbus->init();
+    mock_dcpd_dbus_singleton = mock_dcpd_dbus;
+
+    read_data = new read_data_t;
+    cppcut_assert_not_null(read_data);
+
+    answer_written_to_fifo = new std::vector<uint8_t>;
+
+    transaction_init_allocator();
+}
+
+void cut_teardown(void)
+{
+    mock_messages->check();
+    mock_named_pipe->check();
+    mock_dcpd_dbus->check();
+
+    mock_messages_singleton = nullptr;
+    mock_named_pipe_singleton = nullptr;
+    mock_dcpd_dbus_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_named_pipe;;
+    delete mock_dcpd_dbus;
+
+    mock_messages = nullptr;
+    mock_named_pipe = nullptr;
+    mock_dcpd_dbus = nullptr;
+
+    delete read_data;
+    read_data = nullptr;
+
+    delete answer_written_to_fifo;
+    answer_written_to_fifo = nullptr;
+}
+
+/*!\test
+ * A whole simple register write transaction initiated by the slave device.
+ */
+void test_register_write_request_transaction(void)
+{
+    struct transaction *t = transaction_alloc(true);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t write_reg_55_enable_dhcp[] = { 0x00, 0x37, 0x01, 0x00 };
+    read_data->set(write_reg_55_enable_dhcp);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Should enable DHCP");
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
+ * A whole multi-step register write transaction initiated by the slave device.
+ */
+void test_register_multi_step_write_request_transaction(void)
+{
+    struct transaction *t = transaction_alloc(true);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t write_reg_51_set_mac_address[] =
+    {
+        /* command header, want to write 18 bytes */
+        0x02, 0x33, 0x12, 0x00,
+
+        /* MAC address 83:9F:0D:13:68:E1 */
+        0x38, 0x33, 0x3a, 0x39, 0x46, 0x3a, 0x30, 0x44,
+        0x3a, 0x31, 0x33, 0x3a, 0x36, 0x38, 0x3a, 0x45,
+        0x31, 0x00
+    };
+
+    read_data->set(write_reg_51_set_mac_address, 4);
+    read_data->set(write_reg_51_set_mac_address + 4, sizeof(write_reg_51_set_mac_address) - 4);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_messages->expect_msg_info("write 51 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Received MAC address \"83:9F:0D:13:68:E1\", should validate address and configure adapter");
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+static int read_answer(const uint8_t *src, size_t count, int fd)
+{
+    std::copy_n(src, count, std::back_inserter(*answer_written_to_fifo));
+    return 0;
+}
+
+/*!\test
+ * A whole simple register read transaction initiated by the slave device.
+ */
+void test_register_read_request_transaction(void)
+{
+    struct transaction *t = transaction_alloc(true);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t read_reg_55_read_dhcp_mode[] = { 0x01, 0x37, 0x00, 0x00 };
+    read_data->set(read_reg_55_read_dhcp_mode);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_messages->expect_msg_info("read 55 handler %p %zu");
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    cut_assert_equal_memory(read_reg_55_read_dhcp_mode, sizeof(read_reg_55_read_dhcp_mode),
+                            answer_written_to_fifo->data(), answer_written_to_fifo->size());
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
+ * A whole multi-step register read transaction initiated by the slave device.
+ */
+void test_register_multi_step_read_request_transaction(void)
+{
+    struct transaction *t = transaction_alloc(true);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t read_reg_51_mac_address[] = { 0x03, 0x33, 0x00, 0x00 };
+    read_data->set(read_reg_51_mac_address);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_messages->expect_msg_info("read 51 handler %p %zu");
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    static const uint8_t expected_answer[] =
+    {
+        /* command header, payload size is 18 bytes */
+        0x03, 0x33, 0x12, 0x00,
+
+        /* MAC address 12:34:56:78:9A:BC */
+        0x31, 0x32, 0x3a, 0x33, 0x34, 0x3a, 0x35, 0x36,
+        0x3a, 0x37, 0x38, 0x3a, 0x39, 0x41, 0x3a, 0x42,
+        0x43, 0x00
+    };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            answer_written_to_fifo->data(), answer_written_to_fifo->size());
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+};
+
+ssize_t (*os_read)(int fd, void *dest, size_t count) = dcp_transaction_tests::test_os_read;
+ssize_t (*os_write)(int fd, const void *buf, size_t count) = dcp_transaction_tests::test_os_write;
 
 /*!@}*/
