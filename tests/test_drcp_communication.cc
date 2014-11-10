@@ -374,6 +374,42 @@ void test_read_drcp_data_from_broken_file_descriptor(void)
     cppcut_assert_equal(size_t(0), buffer.pos);
 }
 
+/*!
+ * Local mock implementation of #fifo_write_from_buffer().
+ */
+static int receive_buffer(const uint8_t *src, size_t count, int fd)
+{
+    cppcut_assert_equal(fds.out_fd, fd);
+
+    cut_assert_true(dynamic_buffer_resize(&buffer, count));
+    std::copy_n(src, count, buffer.data);
+    buffer.pos += count;
+
+    return 0;
+}
+
+/*!\test
+ * Tell DRCPD that everything went fine.
+ */
+void test_write_drcp_result_successful(void)
+{
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(receive_buffer);
+
+    drcp_finish_request(true, &fds);
+    cut_assert_equal_memory("OK\n", 3, buffer.data, buffer.pos);
+}
+
+/*!\test
+ * Tell DRCPD that we got an error.
+ */
+void test_write_drcp_result_failed(void)
+{
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(receive_buffer);
+
+    drcp_finish_request(false, &fds);
+    cut_assert_equal_memory("FF\n", 3, buffer.data, buffer.pos);
+}
+
 };
 
 /*!@}*/

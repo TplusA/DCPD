@@ -81,6 +81,7 @@ class MockNamedPipe::Expectation
     uint8_t *const arg_dest_pointer_;
     const size_t arg_count_;
     size_t *const arg_add_bytes_read_pointer_;
+    fifo_write_from_buffer_callback_t fifo_write_from_buffer_callback_;
     fifo_try_read_to_buffer_callback_t fifo_try_read_to_buffer_callback_;
 
     Expectation(const Expectation &) = delete;
@@ -99,6 +100,7 @@ class MockNamedPipe::Expectation
         arg_dest_pointer_(nullptr),
         arg_count_(0),
         arg_add_bytes_read_pointer_(nullptr),
+        fifo_write_from_buffer_callback_(nullptr),
         fifo_try_read_to_buffer_callback_(nullptr)
     {}
 
@@ -115,6 +117,7 @@ class MockNamedPipe::Expectation
         arg_dest_pointer_(nullptr),
         arg_count_(0),
         arg_add_bytes_read_pointer_(nullptr),
+        fifo_write_from_buffer_callback_(nullptr),
         fifo_try_read_to_buffer_callback_(nullptr)
     {}
 
@@ -129,6 +132,7 @@ class MockNamedPipe::Expectation
         arg_dest_pointer_(nullptr),
         arg_count_(count),
         arg_add_bytes_read_pointer_(nullptr),
+        fifo_write_from_buffer_callback_(nullptr),
         fifo_try_read_to_buffer_callback_(nullptr)
     {}
 
@@ -144,6 +148,22 @@ class MockNamedPipe::Expectation
         arg_dest_pointer_(dest),
         arg_count_(count),
         arg_add_bytes_read_pointer_(add_bytes_read),
+        fifo_write_from_buffer_callback_(nullptr),
+        fifo_try_read_to_buffer_callback_(nullptr)
+    {}
+
+    explicit Expectation(fifo_write_from_buffer_callback_t fn):
+        function_id_(FifoFn::write_from_buffer),
+        ret_code_(-5),
+        ret_bool_(false),
+        arg_write_not_read_(false),
+        arg_fd_pointer_(nullptr),
+        arg_fd_(-5),
+        arg_src_pointer_(nullptr),
+        arg_dest_pointer_(nullptr),
+        arg_count_(0),
+        arg_add_bytes_read_pointer_(nullptr),
+        fifo_write_from_buffer_callback_(fn),
         fifo_try_read_to_buffer_callback_(nullptr)
     {}
 
@@ -158,6 +178,7 @@ class MockNamedPipe::Expectation
         arg_dest_pointer_(nullptr),
         arg_count_(0),
         arg_add_bytes_read_pointer_(nullptr),
+        fifo_write_from_buffer_callback_(nullptr),
         fifo_try_read_to_buffer_callback_(fn)
     {}
 
@@ -215,6 +236,11 @@ void MockNamedPipe::expect_fifo_reopen(bool ret, int *fd, const char *devname, b
 void MockNamedPipe::expect_fifo_write_from_buffer(int ret, const uint8_t *src, size_t count, int fd)
 {
     expectations_->add(Expectation(ret, src, count, fd));
+}
+
+void MockNamedPipe::expect_fifo_write_from_buffer_callback(MockNamedPipe::fifo_write_from_buffer_callback_t fn)
+{
+    expectations_->add(Expectation(fn));
 }
 
 void MockNamedPipe::expect_fifo_try_read_to_buffer(int ret, uint8_t *dest, size_t count, size_t *add_bytes_read, int fd)
@@ -283,6 +309,10 @@ int fifo_write_from_buffer(const uint8_t *src, size_t count, int fd)
     const auto &expect(mock_named_pipe_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.function_id_, FifoFn::write_from_buffer);
+
+    if(expect.fifo_write_from_buffer_callback_ != nullptr)
+        return expect.fifo_write_from_buffer_callback_(src, count, fd);
+
     cppcut_assert_equal(expect.arg_src_pointer_, src);
     cppcut_assert_equal(expect.arg_count_, count);
     cppcut_assert_equal(expect.arg_fd_, fd);
