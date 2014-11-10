@@ -18,8 +18,8 @@ bool drcp_fill_buffer(struct dynamic_buffer *buffer,
 
     while(buffer->pos < buffer->size)
     {
-        int ret =fifo_try_read_to_buffer(buffer->data, buffer->size,
-                                         &buffer->pos, fds->in_fd);
+        int ret = fifo_try_read_to_buffer(buffer->data, buffer->size,
+                                          &buffer->pos, fds->in_fd);
 
         if(ret == 0)
             return true;
