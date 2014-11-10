@@ -499,3 +499,58 @@ bool transaction_set_payload(struct transaction *t,
 
     return true;
 }
+
+static struct transaction *mk_master_transaction(struct transaction **head,
+                                                 uint8_t register_address)
+{
+    struct transaction *t = transaction_alloc(false);
+
+    if(t == NULL)
+    {
+        msg_error(ENOMEM, LOG_CRIT, "DCP congestion: no free transaction slot");
+        return NULL;
+    }
+
+    if(transaction_set_address_for_master(t, register_address))
+        transaction_queue_add(head, t);
+    else
+        transaction_free(&t);
+
+    return t;
+}
+
+struct transaction *
+transaction_fragments_from_data(const uint8_t *const data, const size_t length,
+                                uint8_t register_address)
+{
+    assert(data != NULL);
+    assert(length > 0);
+
+    struct transaction *head = NULL;
+    size_t i = 0;
+
+    while(i < length)
+    {
+        struct transaction *t = mk_master_transaction(&head, 71);
+
+        if(t == NULL)
+            break;
+
+        uint16_t size = transaction_get_max_data_size(t);
+
+        if(i + size >= length)
+            size = length - i;
+
+        assert(size > 0);
+
+        if(!transaction_set_payload(t, data + i, size))
+            break;
+
+        i += size;
+    }
+
+    if(i < length && head != NULL)
+        transaction_free(&head);
+
+    return head;
+}

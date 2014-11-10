@@ -80,25 +80,6 @@ ssize_t (*os_write)(int fd, const void *buf, size_t count) = write;
  */
 static volatile bool keep_running = true;
 
-static struct transaction *mk_master_transaction(struct transaction **head,
-                                                 uint8_t register_address)
-{
-    struct transaction *t = transaction_alloc(false);
-
-    if(t == NULL)
-    {
-        msg_error(ENOMEM, LOG_CRIT, "DCP congestion: no free transaction slot");
-        return NULL;
-    }
-
-    if(transaction_set_address_for_master(t, register_address))
-        transaction_queue_add(head, t);
-    else
-        transaction_free(&t);
-
-    return t;
-}
-
 static void schedule_transaction(struct state *state, struct transaction *t,
                                  bool free_after_use)
 {
@@ -258,40 +239,6 @@ struct files
     const char *dcpspi_fifo_out_name;
 };
 
-static struct transaction *dcp_transactions_from_drcp(const struct dynamic_buffer *buffer)
-{
-    assert(buffer != NULL);
-    assert(buffer->pos > 0);
-
-    struct transaction *head = NULL;
-    size_t i = 0;
-
-    while(i < buffer->pos)
-    {
-        struct transaction *t = mk_master_transaction(&head, 71);
-
-        if(t == NULL)
-            break;
-
-        uint16_t size = transaction_get_max_data_size(t);
-
-        if(i + size >= buffer->pos)
-            size = buffer->pos - i;
-
-        assert(size > 0);
-
-        if(!transaction_set_payload(t, buffer->data + i, size))
-            break;
-
-        i += size;
-    }
-
-    if(i < buffer->pos && head != NULL)
-        transaction_free(&head);
-
-    return head;
-}
-
 static bool process_drcp_input(struct state *state)
 {
     const struct dynamic_buffer *buffer = &state->drcp_buffer;
@@ -302,7 +249,8 @@ static bool process_drcp_input(struct state *state)
         return false;
     }
 
-    struct transaction *head = dcp_transactions_from_drcp(buffer);
+    struct transaction *head =
+        transaction_fragments_from_data(buffer->data, buffer->pos, 71);
     if(head == NULL)
         return false;
 
