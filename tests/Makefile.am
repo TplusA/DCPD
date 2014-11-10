@@ -18,7 +18,7 @@ AM_CXXFLAGS = $(CXXWARNINGS)
 
 LIBS += $(CPPCUTTER_LIBS)
 
-check_LTLIBRARIES = test_dynamic_buffer.la test_registers.la test_drcpdcomm.la
+check_LTLIBRARIES = test_dynamic_buffer.la test_registers.la test_drcpdcomm.la test_transactions.la
 
 test_dynamic_buffer_la_SOURCES = test_dynamic_buffer.c
 test_dynamic_buffer_la_LIBADD = ../libdynamic_buffer.la
@@ -42,6 +42,12 @@ test_drcpdcomm_la_SOURCES = \
 test_drcpdcomm_la_LIBADD = ../libdrcpdcomm.la ../libdynamic_buffer.la
 test_drcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 test_drcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_transactions_la_SOURCES = \
+    test_transactions.cc
+test_transactions_la_LIBADD = ../libtransactions.la ../libdynamic_buffer.la
+test_transactions_la_CFLAGS = $(AM_CFLAGS)
+test_transactions_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 CLEANFILES = test_report.xml test_report_junit.xml valgrind.xml
 
