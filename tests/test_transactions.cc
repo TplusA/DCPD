@@ -462,6 +462,141 @@ void test_register_multi_step_read_request_transaction(void)
     cppcut_assert_null(t);
 }
 
+/*!\test
+ * A small, atomic write transaction initiated by the master device.
+ *
+ * This is a special case (albeit frequent) scenario where the payload entirely
+ * fits into a DCP packet. For bigger data, the transaction has to be split
+ * into multiple transactions as demonstrated in the more generic test
+ * #test_big_master_transaction().
+ */
+void test_small_master_transaction(void)
+{
+    struct transaction *t = transaction_alloc(false);
+    cppcut_assert_not_null(t);
+
+    /* register 71 is DRCP, variable length */
+    cut_assert_true(transaction_set_address_for_master(t, 71));
+
+    static const uint8_t xml_data[] =
+        "<view name=\"welcome\"><icon id=\"welcome\" text=\"Profile 1\">welcome</icon></view>";
+
+    const size_t max_size = transaction_get_max_data_size(t);
+    cppcut_assert_operator(sizeof(xml_data) - 1U, <, max_size);
+    cut_assert_true(transaction_set_payload(t, xml_data, sizeof(xml_data) - 1U));
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    static const uint8_t expected_header[] = { 0x03, 71, sizeof(xml_data) - 1U, 0x00 };
+    cppcut_assert_equal(sizeof(expected_header) + sizeof(xml_data) - 1U,
+                        answer_written_to_fifo->size());
+    cut_assert_equal_memory(expected_header, sizeof(expected_header),
+                            answer_written_to_fifo->data(), sizeof(expected_header));
+    cut_assert_equal_memory(xml_data, sizeof(xml_data) - 1U,
+                            answer_written_to_fifo->data() + sizeof(expected_header),
+                            sizeof(xml_data) - 1U);
+
+    struct transaction *temp = t;
+    t = transaction_queue_remove(&temp);
+    cppcut_assert_null(temp);
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
+ * A big, fragmented write transaction initiated by the master device.
+ */
+void test_big_master_transaction(void)
+{
+    static const uint8_t xml_data[] =
+        "<view name=\"play\">\n"
+        "    <text id=\"albart\">yes</text>\n"
+        "    <text id=\"scrid\">109</text>\n"
+        "    <text id=\"artist\">U2</text>\n"
+        "    <text id=\"track\">One</text>\n"
+        "    <text id=\"album\">Achtung baby</text>\n"
+        "    <text id=\"mimtype\">Wma</text>\n"
+        "    <text id=\"drm\">no</text>\n"
+        "    <text id=\"livstrm\">no</text>\n"
+        "    <text id=\"bitrate\">64</text>\n"
+        "    <icon id=\"wicon\">infra</icon>\n"
+        "    <value id=\"timep\" min=\"0\" max=\"65535\">43</value>\n"
+        "    <value id=\"timet\" min=\"0\" max=\"65535\">327</value>\n"
+        "    <value id=\"timec\" min=\"0\" max=\"99999\">65400</value>\n"
+        "    <value id=\"date\" min=\"0\" max=\"99999999\">20040907</value>\n"
+        "    <value id=\"buflvl\" min=\"0\" max=\"100\">70</value>\n"
+        "    <value id=\"wilvl\" min=\"0\" max=\"100\">100</value>\n"
+        "</view>\n";
+
+    struct transaction *head =
+        transaction_fragments_from_data(xml_data, sizeof(xml_data) - 1U, 71);
+    cppcut_assert_not_null(head);
+
+    const size_t max_data_size = transaction_get_max_data_size(head);
+    const unsigned int expected_number_of_transactions =
+        (sizeof(xml_data) - 1U) / max_data_size + 1U;
+    cppcut_assert_operator(1U, <, expected_number_of_transactions);
+
+    const uint8_t *xml_data_ptr = xml_data;
+    size_t bytes_left = sizeof(xml_data) - 1U;
+    unsigned int number_of_transactions = 0;
+
+    do
+    {
+        /* take next transaction of fragmented DRCP packet */
+        struct transaction *t = transaction_queue_remove(&head);
+        cppcut_assert_not_null(t);
+
+        cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+        mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+        mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+
+        answer_written_to_fifo->clear();
+
+        cppcut_assert_equal(TRANSACTION_FINISHED,
+                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+        /* check emitted DCP data */
+        const size_t expected_data_size = std::min(bytes_left, max_data_size);
+        const uint8_t expected_header[] =
+        {
+            0x03, 71,
+            static_cast<uint8_t>(expected_data_size & 0xff),
+            static_cast<uint8_t>(expected_data_size >> 8)
+        };
+
+        cppcut_assert_equal(sizeof(expected_header) + expected_data_size,
+                            answer_written_to_fifo->size());
+
+        cut_assert_equal_memory(expected_header, sizeof(expected_header),
+                                answer_written_to_fifo->data(), sizeof(expected_header));
+        cut_assert_equal_memory(xml_data_ptr, expected_data_size,
+                                answer_written_to_fifo->data() + sizeof(expected_header),
+                                expected_data_size);
+
+        transaction_free(&t);
+        cppcut_assert_null(t);
+
+        bytes_left -= expected_data_size;
+        xml_data_ptr += expected_data_size;
+        ++number_of_transactions;
+    }
+    while(head != NULL && number_of_transactions < expected_number_of_transactions);
+
+    cppcut_assert_null(head);
+    cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
+}
+
 };
 
 ssize_t (*os_read)(int fd, void *dest, size_t count) = dcp_transaction_tests::test_os_read;
