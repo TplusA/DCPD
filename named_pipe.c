@@ -126,4 +126,3 @@ int fifo_try_read_to_buffer(uint8_t *dest, size_t count, size_t *dest_pos,
 
     return retval;
 }
-
