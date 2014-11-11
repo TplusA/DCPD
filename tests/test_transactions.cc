@@ -597,6 +597,29 @@ void test_big_master_transaction(void)
     cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
 }
 
+void test_bad_register_addresses_are_handled_in_master_transactions(void)
+{
+    struct transaction *t = transaction_alloc(false);
+    cppcut_assert_not_null(t);
+
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+                                              "Master requested unsupported register 0x2a");
+
+    cut_assert_false(transaction_set_address_for_master(t, 42));
+}
+
+void test_bad_register_addresses_are_handled_in_fragmented_transactions(void)
+{
+    struct transaction *t = transaction_alloc(false);
+    cppcut_assert_not_null(t);
+
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+                                              "Master requested unsupported register 0x2a");
+
+    static const uint8_t dummy = 23U;
+    cppcut_assert_null(transaction_fragments_from_data(&dummy, sizeof(dummy), 42));
+}
+
 };
 
 ssize_t (*os_read)(int fd, void *dest, size_t count) = dcp_transaction_tests::test_os_read;

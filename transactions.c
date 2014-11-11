@@ -531,7 +531,7 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
 
     while(i < length)
     {
-        struct transaction *t = mk_master_transaction(&head, 71);
+        struct transaction *t = mk_master_transaction(&head, register_address);
 
         if(t == NULL)
             break;
