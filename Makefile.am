@@ -11,7 +11,7 @@ EXTRA_DIST = README.md cppcheck_suppressed.txt
 CLEANFILES = README.html
 
 dcpd_SOURCES = \
-    dcpd.c os.h registers.h named_pipe.c named_pipe.h \
+    dcpd.c os.c os.h registers.h named_pipe.c named_pipe.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h dcpregs_drcp.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h

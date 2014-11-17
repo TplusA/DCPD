@@ -6,7 +6,7 @@
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_messages.hh"
-#include "mock_named_pipe.hh"
+#include "mock_os.hh"
 
 /*!
  * \addtogroup dcp_transaction_tests Unit tests
@@ -272,7 +272,7 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 }
 
 static MockMessages *mock_messages;
-static MockNamedPipe *mock_named_pipe;
+static MockOs *mock_os;
 static MockDcpdDBus *mock_dcpd_dbus;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
@@ -284,10 +284,10 @@ void cut_setup(void)
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
-    mock_named_pipe = new MockNamedPipe;
-    cppcut_assert_not_null(mock_named_pipe);
-    mock_named_pipe->init();
-    mock_named_pipe_singleton = mock_named_pipe;
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
 
     mock_dcpd_dbus = new MockDcpdDBus();
     cppcut_assert_not_null(mock_dcpd_dbus);
@@ -305,19 +305,19 @@ void cut_setup(void)
 void cut_teardown(void)
 {
     mock_messages->check();
-    mock_named_pipe->check();
+    mock_os->check();
     mock_dcpd_dbus->check();
 
     mock_messages_singleton = nullptr;
-    mock_named_pipe_singleton = nullptr;
+    mock_os_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
 
     delete mock_messages;
-    delete mock_named_pipe;;
+    delete mock_os;
     delete mock_dcpd_dbus;
 
     mock_messages = nullptr;
-    mock_named_pipe = nullptr;
+    mock_os = nullptr;
     mock_dcpd_dbus = nullptr;
 
     delete read_data;
@@ -384,9 +384,10 @@ void test_register_multi_step_write_request_transaction(void)
     cppcut_assert_null(t);
 }
 
-static int read_answer(const uint8_t *src, size_t count, int fd)
+static int read_answer(const void *src, size_t count, int fd)
 {
-    std::copy_n(src, count, std::back_inserter(*answer_written_to_fifo));
+    std::copy_n(static_cast<const uint8_t *>(src), count,
+                std::back_inserter(*answer_written_to_fifo));
     return 0;
 }
 
@@ -408,8 +409,8 @@ void test_register_read_request_transaction(void)
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
@@ -439,8 +440,8 @@ void test_register_multi_step_read_request_transaction(void)
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
@@ -488,8 +489,8 @@ void test_small_master_transaction(void)
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
@@ -558,8 +559,8 @@ void test_big_master_transaction(void)
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                             transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-        mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
-        mock_named_pipe->expect_fifo_write_from_buffer_callback(read_answer);
+        mock_os->expect_os_write_from_buffer_callback(read_answer);
+        mock_os->expect_os_write_from_buffer_callback(read_answer);
 
         answer_written_to_fifo->clear();
 

@@ -36,7 +36,7 @@ test_registers_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
 test_drcpdcomm_la_SOURCES = \
     test_drcp_communication.cc \
-    mock_named_pipe.hh mock_named_pipe.cc \
+    mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
 test_drcpdcomm_la_LIBADD = ../libdrcpdcomm.la ../libdynamic_buffer.la
@@ -46,7 +46,7 @@ test_drcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 test_transactions_la_SOURCES = \
     test_transactions.cc \
     mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
-    mock_named_pipe.hh mock_named_pipe.cc \
+    mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc
 test_transactions_la_LIBADD = ../libtransactions.la ../libregisters.la ../libdynamic_buffer.la
 test_transactions_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)

@@ -4,7 +4,7 @@
 #include "drcp.h"
 
 #include "mock_messages.hh"
-#include "mock_named_pipe.hh"
+#include "mock_os.hh"
 
 /*!
  * \addtogroup drcp_tests Unit tests
@@ -32,7 +32,7 @@ struct fill_buffer_data_t
 };
 
 static MockMessages *mock_messages;
-static MockNamedPipe *mock_named_pipe;
+static MockOs *mock_os;
 static struct dynamic_buffer buffer;
 static const struct fifo_pair fds = { 10, 20 };
 
@@ -45,10 +45,10 @@ void cut_setup(void)
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
-    mock_named_pipe = new MockNamedPipe;
-    cppcut_assert_not_null(mock_named_pipe);
-    mock_named_pipe->init();
-    mock_named_pipe_singleton = mock_named_pipe;
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
 
     dynamic_buffer_init(&buffer);
 }
@@ -56,34 +56,36 @@ void cut_setup(void)
 void cut_teardown(void)
 {
     mock_messages->check();
-    mock_named_pipe->check();
+    mock_os->check();
 
     dynamic_buffer_free(&buffer);
 
     mock_messages_singleton = nullptr;
-    mock_named_pipe_singleton = nullptr;
+    mock_os_singleton = nullptr;
 
     delete mock_messages;
-    delete mock_named_pipe;;
+    delete mock_os;
 
     mock_messages = nullptr;
-    mock_named_pipe = nullptr;
+    mock_os = nullptr;
 }
 
 
 /*!
- * Local mock implementation of #fifo_try_read_to_buffer().
+ * Local mock implementation of #os_try_read_to_buffer().
  */
-static int fill_buffer(uint8_t *dest, size_t count, size_t *add_bytes_read,
+static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
                        int fd)
 {
-    cppcut_assert_equal(buffer.data, dest);
+    uint8_t *dest_ptr = static_cast<uint8_t *>(dest);
+
+    cppcut_assert_equal(buffer.data, dest_ptr);
     cppcut_assert_equal(buffer.size, count);
     cppcut_assert_not_null(add_bytes_read);
     cppcut_assert_equal(fds.in_fd, fd);
 
     const size_t n = std::min(count, fill_buffer_data.data_.length());
-    std::copy_n(fill_buffer_data.data_.begin(), n, dest + *add_bytes_read);
+    std::copy_n(fill_buffer_data.data_.begin(), n, dest_ptr + *add_bytes_read);
     *add_bytes_read += n;
 
     errno = fill_buffer_data.errno_value_;
@@ -97,7 +99,7 @@ static int fill_buffer(uint8_t *dest, size_t count, size_t *add_bytes_read,
 void test_read_drcp_size_header(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 731\n";
     fill_buffer_data.set(input_string, 0, 1);
@@ -115,7 +117,7 @@ void test_read_drcp_size_header(void)
 void test_read_drcp_size_header_from_empty_input(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     fill_buffer_data.set("", 0, 0);
 
@@ -140,7 +142,7 @@ void test_read_drcp_size_header_from_empty_input(void)
 void test_read_drcp_size_header_from_nearly_empty_input(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size";
     fill_buffer_data.set(input_string, 0, 0);
@@ -169,7 +171,7 @@ void test_read_drcp_size_header_from_nearly_empty_input(void)
 void test_read_drcp_size_header_from_incomplete_input(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 5";
     fill_buffer_data.set(input_string, 0, 0);
@@ -189,7 +191,7 @@ void test_read_drcp_size_header_from_incomplete_input(void)
 void test_read_drcp_size_header_with_trailing_byte(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 123F\n";
     fill_buffer_data.set(input_string, 0, 0);
@@ -209,7 +211,7 @@ void test_read_drcp_size_header_with_trailing_byte(void)
 void test_read_drcp_size_header_with_negative_size(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: -5\n";
     fill_buffer_data.set(input_string, 0, 0);
@@ -229,7 +231,7 @@ void test_read_drcp_size_header_with_negative_size(void)
 void test_read_drcp_size_header_with_huge_size(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 65536\n";
     fill_buffer_data.set(input_string, 0, 0);
@@ -249,7 +251,7 @@ void test_read_drcp_size_header_with_huge_size(void)
 void test_read_drcp_size_header_with_overflow_size(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 18446744073709551616\n";
     fill_buffer_data.set(input_string, 0, 0);
@@ -273,7 +275,7 @@ void test_read_drcp_size_header_with_overflow_size(void)
 void test_read_faulty_drcp_size_header(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     fill_buffer_data.set(input_string, 0, 1);
@@ -297,7 +299,7 @@ void test_read_faulty_drcp_size_header(void)
 void test_read_drcp_size_header_from_broken_file_descriptor(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     fill_buffer_data.set("", EBADF, -1);
 
@@ -317,7 +319,7 @@ void test_read_drcp_size_header_from_broken_file_descriptor(void)
 void test_read_drcp_data(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] =
         "Here is some test data\nread straight from the guts of\na MOCK!";
@@ -344,7 +346,7 @@ void test_read_drcp_data_from_infinite_size_input(void)
     fill_buffer_data.set(input_string, 0, 1);
 
     for(size_t i = 0; i < buffer.size / (sizeof(input_string) - 1); ++i)
-        mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+        mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     cut_assert_true(drcp_fill_buffer(&buffer, &fds));
 
@@ -364,7 +366,7 @@ void test_read_drcp_data_from_infinite_size_input(void)
 void test_read_drcp_data_from_broken_file_descriptor(void)
 {
     dynamic_buffer_check_space(&buffer);
-    mock_named_pipe->expect_fifo_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     fill_buffer_data.set("", EBADF, -1);
 
@@ -375,14 +377,14 @@ void test_read_drcp_data_from_broken_file_descriptor(void)
 }
 
 /*!
- * Local mock implementation of #fifo_write_from_buffer().
+ * Local mock implementation of #os_write_from_buffer().
  */
-static int receive_buffer(const uint8_t *src, size_t count, int fd)
+static int receive_buffer(const void *src, size_t count, int fd)
 {
     cppcut_assert_equal(fds.out_fd, fd);
 
     cut_assert_true(dynamic_buffer_resize(&buffer, count));
-    std::copy_n(src, count, buffer.data);
+    std::copy_n(static_cast<const uint8_t *>(src), count, buffer.data);
     buffer.pos += count;
 
     return 0;
@@ -393,7 +395,7 @@ static int receive_buffer(const uint8_t *src, size_t count, int fd)
  */
 void test_write_drcp_result_successful(void)
 {
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(receive_buffer);
+    mock_os->expect_os_write_from_buffer_callback(receive_buffer);
 
     drcp_finish_request(true, &fds);
     cut_assert_equal_memory("OK\n", 3, buffer.data, buffer.pos);
@@ -404,7 +406,7 @@ void test_write_drcp_result_successful(void)
  */
 void test_write_drcp_result_failed(void)
 {
-    mock_named_pipe->expect_fifo_write_from_buffer_callback(receive_buffer);
+    mock_os->expect_os_write_from_buffer_callback(receive_buffer);
 
     drcp_finish_request(false, &fds);
     cut_assert_equal_memory("FF\n", 3, buffer.data, buffer.pos);

@@ -438,10 +438,10 @@ enum transaction_process_status transaction_process(struct transaction *t,
         return TRANSACTION_IN_PROGRESS;
 
       case TRANSACTION_STATE_SEND_TO_SLAVE:
-        if(fifo_write_from_buffer(t->request_header, sizeof(t->request_header),
-                                  to_slave_fd) < 0 ||
-           fifo_write_from_buffer(t->payload.data, t->payload.pos,
-                                  to_slave_fd) < 0)
+        if(os_write_from_buffer(t->request_header, sizeof(t->request_header),
+                                to_slave_fd) < 0 ||
+           os_write_from_buffer(t->payload.data, t->payload.pos,
+                                to_slave_fd) < 0)
             break;
 
         return TRANSACTION_FINISHED;
