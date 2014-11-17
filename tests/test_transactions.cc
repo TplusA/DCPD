@@ -33,12 +33,23 @@ void cut_teardown(void)
  */
 void test_allocation_and_deallocation_of_single_transaction_object_spi(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
     cppcut_assert_equal(TRANSACTION_CHANNEL_SPI, transaction_get_channel(t));
+    cut_assert_false(transaction_is_pinned(t));
 
     transaction_free(&t);
     cppcut_assert_null(t);
+}
+
+/*!\test
+ * Transactions can be pinned in memory.
+ */
+void test_pinned_transaction_object(void)
+{
+    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, true);
+    cppcut_assert_not_null(t);
+    cut_assert_true(transaction_is_pinned(t));
 }
 
 /*!\test
@@ -50,7 +61,7 @@ void test_allocation_and_deallocation_of_single_transaction_object_spi(void)
  */
 void test_deallocation_frees_payload_buffer(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     static const uint8_t payload_data[] = "test payload data";
@@ -74,7 +85,7 @@ static size_t allocate_all_transactions(std::array<struct transaction *, max_all
 
     for(size_t i = 0; i < dest.size(); ++i)
     {
-        dest[i] = transaction_alloc(false, TRANSACTION_CHANNEL_SPI);
+        dest[i] = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
 
         if(dest[i] == NULL)
             break;
@@ -139,8 +150,8 @@ void test_allocation_of_all_transaction_objects_reallocate_one(void)
     cppcut_assert_not_null(reused);
     transaction_free(&objects[reused_index]);
 
-    cppcut_assert_equal(reused, transaction_alloc(false, TRANSACTION_CHANNEL_SPI));
-    cppcut_assert_null(transaction_alloc(false, TRANSACTION_CHANNEL_SPI));
+    cppcut_assert_equal(reused, transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false));
+    cppcut_assert_null(transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false));
 }
 
 /*!\test
@@ -186,7 +197,7 @@ void test_dequeue_from_middle_of_linked_list(void)
  */
 void test_dequeue_from_list_of_length_one(void)
 {
-    struct transaction *const head = transaction_alloc(false, TRANSACTION_CHANNEL_SPI);
+    struct transaction *const head = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(head);
 
     struct transaction *head_ptr = head;
@@ -333,7 +344,7 @@ void cut_teardown(void)
  */
 void test_register_write_request_transaction(void)
 {
-    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     static const uint8_t write_reg_55_enable_dhcp[] = { 0x00, 0x37, 0x01, 0x00 };
@@ -356,7 +367,7 @@ void test_register_write_request_transaction(void)
  */
 void test_register_multi_step_write_request_transaction(void)
 {
-    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     static const uint8_t write_reg_51_set_mac_address[] =
@@ -397,7 +408,7 @@ static int read_answer(const void *src, size_t count, int fd)
  */
 void test_register_read_request_transaction(void)
 {
-    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     static const uint8_t read_reg_55_read_dhcp_mode[] = { 0x01, 0x37, 0x00, 0x00 };
@@ -428,7 +439,7 @@ void test_register_read_request_transaction(void)
  */
 void test_register_multi_step_read_request_transaction(void)
 {
-    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     static const uint8_t read_reg_51_mac_address[] = { 0x03, 0x33, 0x00, 0x00 };
@@ -474,7 +485,7 @@ void test_register_multi_step_read_request_transaction(void)
  */
 void test_small_master_transaction(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     /* register 71 is DRCP, variable length */
@@ -602,7 +613,7 @@ void test_big_master_transaction(void)
 
 void test_bad_register_addresses_are_handled_in_master_transactions(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
@@ -613,7 +624,7 @@ void test_bad_register_addresses_are_handled_in_master_transactions(void)
 
 void test_bad_register_addresses_are_handled_in_fragmented_transactions(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI);
+    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,

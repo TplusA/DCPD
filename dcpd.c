@@ -42,14 +42,6 @@ struct state
     struct transaction *active_transaction;
 
     /*!
-     * Whether or not to free the active transaction after processing.
-     *
-     * This flag is invalid as long as the #state::active_transaction pointer
-     * is NULL.
-     */
-    bool free_active_transaction;
-
-    /*!
      * A queue of transactions initiated by the master.
      */
     struct transaction *master_transaction_queue;
@@ -83,16 +75,12 @@ ssize_t (*os_write)(int fd, const void *buf, size_t count) = write;
  */
 static volatile bool keep_running = true;
 
-static void schedule_transaction(struct state *state, struct transaction *t,
-                                 bool free_after_use)
+static void schedule_transaction(struct state *state, struct transaction *t)
 {
     assert(state->active_transaction == NULL);
 
-    if(t == NULL)
-        return;
-
-    state->active_transaction = t;
-    state->free_active_transaction = free_after_use;
+    if(t != NULL)
+        state->active_transaction = t;
 }
 
 static void try_dequeue_next_transaction(struct state *state)
@@ -102,8 +90,7 @@ static void try_dequeue_next_transaction(struct state *state)
 
     if(state->master_transaction_queue != NULL)
         schedule_transaction(state,
-                             transaction_queue_remove(&state->master_transaction_queue),
-                             true);
+                             transaction_queue_remove(&state->master_transaction_queue));
 }
 
 static unsigned int
@@ -116,7 +103,7 @@ schedule_slave_transaction_or_defer(struct state *state, struct transaction *t,
     transaction_reset_for_slave(t);
 
     /* bypass queue because slave requests always have priority */
-    schedule_transaction(state, t, false);
+    schedule_transaction(state, t);
 
     return retcode_if_scheduled;
 }
@@ -303,7 +290,7 @@ static bool try_reopen(int *fd, const char *devname, const char *errorname)
 
 static void terminate_active_transaction(struct state *state)
 {
-    if(state->free_active_transaction)
+    if(!transaction_is_pinned(state->active_transaction))
         transaction_free(&state->active_transaction);
 
     state->active_transaction = NULL;
@@ -340,7 +327,7 @@ static void main_loop(struct files *files)
     static struct state state;
 
     state.preallocated_spi_slave_transaction =
-        transaction_alloc(true, TRANSACTION_CHANNEL_SPI);
+        transaction_alloc(true, TRANSACTION_CHANNEL_SPI, true);
     dynamic_buffer_init(&state.drcp_buffer);
 
     msg_info("Ready for accepting traffic");

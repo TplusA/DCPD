@@ -43,7 +43,8 @@ void transaction_init_allocator(void);
  * \returns A pointer to a transaction, or NULL on error.
  */
 struct transaction *transaction_alloc(bool is_slave_request,
-                                      enum transaction_channel channel);
+                                      enum transaction_channel channel,
+                                      bool is_pinned);
 
 /*!
  * Free a transaction queue.
@@ -86,6 +87,15 @@ void transaction_queue_add(struct transaction **head, struct transaction *t);
 struct transaction *transaction_queue_remove(struct transaction **head);
 
 enum transaction_channel transaction_get_channel(const struct transaction *t);
+
+/*!
+ * Whether or not to free the transaction object.
+ *
+ * This flag is only advisory and used by client code. Calling
+ * #transaction_free() for a pinned transaction still frees the object and
+ * returns it to the pool of unused transaction objects.
+ */
+bool transaction_is_pinned(const struct transaction *t);
 
 /*!
  * Process the transaction.

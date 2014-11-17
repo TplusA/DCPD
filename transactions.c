@@ -34,6 +34,7 @@ struct transaction
     struct transaction *prev;
 
     enum transaction_state state;
+    bool is_pinned;
 
     uint8_t request_header[DCP_HEADER_SIZE];
     uint8_t command;
@@ -72,11 +73,12 @@ void transaction_init_allocator(void)
 }
 
 static void transaction_init(struct transaction *t, bool is_slave_request,
-                             enum transaction_channel channel)
+                             enum transaction_channel channel, bool is_pinned)
 {
     t->state = (is_slave_request
                 ? TRANSACTION_STATE_SLAVE_READ_COMMAND
                 : TRANSACTION_STATE_MASTER_PREPARE);
+    t->is_pinned = is_pinned;
     t->reg = NULL;
     t->channel = channel;
     memset(t->request_header, UINT8_MAX, sizeof(t->request_header));
@@ -84,14 +86,15 @@ static void transaction_init(struct transaction *t, bool is_slave_request,
 }
 
 struct transaction *transaction_alloc(bool is_slave_request,
-                                      enum transaction_channel channel)
+                                      enum transaction_channel channel,
+                                      bool is_pinned)
 {
     if(free_list == NULL)
         return NULL;
 
     struct transaction *t = transaction_queue_remove(&free_list);
 
-    transaction_init(t, is_slave_request, channel);
+    transaction_init(t, is_slave_request, channel, is_pinned);
     return t;
 }
 
@@ -124,7 +127,7 @@ void transaction_free(struct transaction **head)
 void transaction_reset_for_slave(struct transaction *t)
 {
     dynamic_buffer_free(&t->payload);
-    transaction_init(t, true, t->channel);
+    transaction_init(t, true, t->channel, t->is_pinned);
 }
 
 /*!
@@ -199,6 +202,11 @@ void transaction_queue_add(struct transaction **head, struct transaction *t)
     assert((*head)->prev->next == *head);
     assert(t->next->prev == t);
     assert(t->prev->next == t);
+}
+
+bool transaction_is_pinned(const struct transaction *t)
+{
+    return t->is_pinned;
 }
 
 enum transaction_channel transaction_get_channel(const struct transaction *t)
@@ -513,7 +521,7 @@ static struct transaction *mk_master_transaction(struct transaction **head,
                                                  uint8_t register_address,
                                                  enum transaction_channel channel)
 {
-    struct transaction *t = transaction_alloc(false, channel);
+    struct transaction *t = transaction_alloc(false, channel, false);
 
     if(t == NULL)
     {
