@@ -7,6 +7,7 @@ bin_PROGRAMS = dcpd
 html_DATA = README.html
 
 EXTRA_DIST = README.md cppcheck_suppressed.txt
+EXTRA_DIST += send_drcp_command.sh
 
 CLEANFILES = README.html
 
