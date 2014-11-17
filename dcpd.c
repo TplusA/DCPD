@@ -18,12 +18,15 @@
 #include "dbus_iface.h"
 #include "os.h"
 
-#define WAITEVENT_POLL_ERROR            (1U << 0)
-#define WAITEVENT_POLL_TIMEOUT          (1U << 1)
-#define WAITEVENT_CAN_READ_DCP          (1U << 2)
-#define WAITEVENT_CAN_READ_DRCP         (1U << 3)
-#define WAITEVENT_DCP_CONNECTION_DIED   (1U << 4)
-#define WAITEVENT_DRCP_CONNECTION_DIED  (1U << 5)
+/* generic events */
+#define WAITEVENT_POLL_ERROR                            (1U << 0)
+#define WAITEVENT_POLL_TIMEOUT                          (1U << 1)
+
+/* FIFO events */
+#define WAITEVENT_CAN_READ_DCP                          (1U << 2)
+#define WAITEVENT_CAN_READ_DRCP                         (1U << 3)
+#define WAITEVENT_DCP_CONNECTION_DIED                   (1U << 4)
+#define WAITEVENT_DRCP_CONNECTION_DIED                  (1U << 5)
 
 /*!
  * Global state of the DCP machinery.
@@ -103,6 +106,67 @@ static void try_dequeue_next_transaction(struct state *state)
                              true);
 }
 
+static unsigned int
+schedule_slave_transaction_or_defer(struct state *state, struct transaction *t,
+                                    unsigned int retcode_if_scheduled)
+{
+    if(state->active_transaction != NULL)
+        return 0;
+
+    transaction_reset_for_slave(t);
+
+    /* bypass queue because slave requests always have priority */
+    schedule_transaction(state, t, false);
+
+    return retcode_if_scheduled;
+}
+
+static unsigned int handle_dcp_fifo_in_events(int fd, short revents,
+                                              struct state *state)
+{
+    unsigned int result = 0;
+
+    if(revents & POLLIN)
+        result |=
+            schedule_slave_transaction_or_defer(state,
+                                                state->preallocated_slave_transaction,
+                                                WAITEVENT_CAN_READ_DCP);
+
+    if(revents & POLLHUP)
+    {
+        msg_error(EPIPE, LOG_ERR, "DCP daemon died, need to reopen");
+        result |= WAITEVENT_DCP_CONNECTION_DIED;
+    }
+
+    if(revents & ~(POLLIN | POLLHUP))
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on DCP fifo %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
+static unsigned int handle_dcp_fifo_out_events(int fd, short revents)
+{
+    unsigned int result = 0;
+
+    if(revents & POLLIN)
+        result |= WAITEVENT_CAN_READ_DRCP;
+
+    if(revents & POLLHUP)
+    {
+        msg_error(EPIPE, LOG_ERR, "DRCP daemon died, need to reopen");
+        result |= WAITEVENT_DRCP_CONNECTION_DIED;
+    }
+
+    if(revents & ~(POLLIN | POLLHUP))
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on DRCP fifo_fd %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
 static unsigned int wait_for_events(struct state *state,
                                     const int drcp_fifo_in_fd,
                                     const int dcpspi_fifo_in_fd,
@@ -135,43 +199,8 @@ static unsigned int wait_for_events(struct state *state,
 
     unsigned int return_value = 0;
 
-    if(fds[0].revents & POLLIN)
-    {
-        if(state->active_transaction == NULL)
-        {
-            transaction_reset_for_slave(state->preallocated_slave_transaction);
-
-            /* bypass queue because slave requests always have priority */
-            schedule_transaction(state, state->preallocated_slave_transaction, false);
-        }
-        else
-            return_value |= WAITEVENT_CAN_READ_DCP;
-    }
-
-    if(fds[0].revents & POLLHUP)
-    {
-        msg_error(EPIPE, LOG_ERR, "DCP daemon died, need to reopen");
-        return_value |= WAITEVENT_DCP_CONNECTION_DIED;
-    }
-
-    if(fds[0].revents & ~(POLLIN | POLLHUP))
-        msg_error(EINVAL, LOG_WARNING,
-                  "Unexpected poll() events on DCP fifo %d: %04x",
-                  dcpspi_fifo_in_fd, fds[0].revents);
-
-    if(fds[1].revents & POLLIN)
-        return_value |= WAITEVENT_CAN_READ_DRCP;
-
-    if(fds[1].revents & POLLHUP)
-    {
-        msg_error(EPIPE, LOG_ERR, "DRCP daemon died, need to reopen");
-        return_value |= WAITEVENT_DRCP_CONNECTION_DIED;
-    }
-
-    if(fds[1].revents & ~(POLLIN | POLLHUP))
-        msg_error(EINVAL, LOG_WARNING,
-                  "Unexpected poll() events on DRCP fifo_fd %d: %04x",
-                  drcp_fifo_in_fd, fds[1].revents);
+    return_value |= handle_dcp_fifo_in_events(dcpspi_fifo_in_fd,   fds[0].revents, state);
+    return_value |= handle_dcp_fifo_out_events(drcp_fifo_in_fd,    fds[1].revents);
 
     return return_value;
 }
