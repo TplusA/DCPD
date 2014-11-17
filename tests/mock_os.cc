@@ -149,6 +149,8 @@ void MockOs::expect_os_try_read_to_buffer_callback(MockOs::os_try_read_to_buffer
 }
 
 
+MockOs *mock_os_singleton = nullptr;
+
 int os_write_from_buffer(const void *src, size_t count, int fd)
 {
     const auto &expect(mock_os_singleton->expectations_->get_next_expectation(__func__));
