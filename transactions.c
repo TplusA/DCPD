@@ -40,6 +40,7 @@ struct transaction
 
     const struct dcp_register_t *reg;
 
+    enum transaction_channel channel;
     struct dynamic_buffer payload;
 };
 
@@ -70,24 +71,27 @@ void transaction_init_allocator(void)
     free_list = &transactions_container[0];
 }
 
-static void transaction_init(struct transaction *t, bool is_slave_request)
+static void transaction_init(struct transaction *t, bool is_slave_request,
+                             enum transaction_channel channel)
 {
     t->state = (is_slave_request
                 ? TRANSACTION_STATE_SLAVE_READ_COMMAND
                 : TRANSACTION_STATE_MASTER_PREPARE);
     t->reg = NULL;
+    t->channel = channel;
     memset(t->request_header, UINT8_MAX, sizeof(t->request_header));
     dynamic_buffer_init(&t->payload);
 }
 
-struct transaction *transaction_alloc(bool is_slave_request)
+struct transaction *transaction_alloc(bool is_slave_request,
+                                      enum transaction_channel channel)
 {
     if(free_list == NULL)
         return NULL;
 
     struct transaction *t = transaction_queue_remove(&free_list);
 
-    transaction_init(t, is_slave_request);
+    transaction_init(t, is_slave_request, channel);
     return t;
 }
 
@@ -120,7 +124,7 @@ void transaction_free(struct transaction **head)
 void transaction_reset_for_slave(struct transaction *t)
 {
     dynamic_buffer_free(&t->payload);
-    transaction_init(t, true);
+    transaction_init(t, true, t->channel);
 }
 
 /*!
@@ -195,6 +199,11 @@ void transaction_queue_add(struct transaction **head, struct transaction *t)
     assert((*head)->prev->next == *head);
     assert(t->next->prev == t);
     assert(t->prev->next == t);
+}
+
+enum transaction_channel transaction_get_channel(const struct transaction *t)
+{
+    return t->channel;
 }
 
 struct transaction *transaction_queue_remove(struct transaction **head)
@@ -501,9 +510,10 @@ bool transaction_set_payload(struct transaction *t,
 }
 
 static struct transaction *mk_master_transaction(struct transaction **head,
-                                                 uint8_t register_address)
+                                                 uint8_t register_address,
+                                                 enum transaction_channel channel)
 {
-    struct transaction *t = transaction_alloc(false);
+    struct transaction *t = transaction_alloc(false, channel);
 
     if(t == NULL)
     {
@@ -521,7 +531,8 @@ static struct transaction *mk_master_transaction(struct transaction **head,
 
 struct transaction *
 transaction_fragments_from_data(const uint8_t *const data, const size_t length,
-                                uint8_t register_address)
+                                uint8_t register_address,
+                                enum transaction_channel channel)
 {
     assert(data != NULL);
     assert(length > 0);
@@ -531,7 +542,8 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
 
     while(i < length)
     {
-        struct transaction *t = mk_master_transaction(&head, register_address);
+        struct transaction *t =
+            mk_master_transaction(&head, register_address, channel);
 
         if(t == NULL)
             break;

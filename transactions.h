@@ -15,6 +15,11 @@ enum transaction_process_status
     TRANSACTION_ERROR,
 };
 
+enum transaction_channel
+{
+    TRANSACTION_CHANNEL_SPI,
+};
+
 /*!
  * Opaque transaction structure.
  */
@@ -37,7 +42,8 @@ void transaction_init_allocator(void);
  *
  * \returns A pointer to a transaction, or NULL on error.
  */
-struct transaction *transaction_alloc(bool is_slave_request);
+struct transaction *transaction_alloc(bool is_slave_request,
+                                      enum transaction_channel channel);
 
 /*!
  * Free a transaction queue.
@@ -79,6 +85,8 @@ void transaction_queue_add(struct transaction **head, struct transaction *t);
  */
 struct transaction *transaction_queue_remove(struct transaction **head);
 
+enum transaction_channel transaction_get_channel(const struct transaction *t);
+
 /*!
  * Process the transaction.
  */
@@ -95,7 +103,8 @@ bool transaction_set_payload(struct transaction *t,
 
 struct transaction *
 transaction_fragments_from_data(const uint8_t *data, size_t length,
-                                uint8_t register_address);
+                                uint8_t register_address,
+                                enum transaction_channel channel);
 
 #ifdef __cplusplus
 }

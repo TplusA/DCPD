@@ -64,13 +64,13 @@ struct state
     struct dynamic_buffer drcp_buffer;
 
     /*!
-     * Pointer to an immortal slave transaction object.
+     * Pointer to an immortal SPI slave transaction object.
      *
      * This is allocated on startup and never freed. We just want to make sure
      * that there is always space for the single slave transaction that may be
      * active at a time.
      */
-    struct transaction *preallocated_slave_transaction;
+    struct transaction *preallocated_spi_slave_transaction;
 };
 
 ssize_t (*os_read)(int fd, void *dest, size_t count) = read;
@@ -129,7 +129,7 @@ static unsigned int handle_dcp_fifo_in_events(int fd, short revents,
     if(revents & POLLIN)
         result |=
             schedule_slave_transaction_or_defer(state,
-                                                state->preallocated_slave_transaction,
+                                                state->preallocated_spi_slave_transaction,
                                                 WAITEVENT_CAN_READ_DCP);
 
     if(revents & POLLHUP)
@@ -268,7 +268,8 @@ struct files
     const char *dcpspi_fifo_out_name;
 };
 
-static bool process_drcp_input(struct state *state)
+static bool process_drcp_input(struct state *state,
+                               enum transaction_channel channel)
 {
     const struct dynamic_buffer *buffer = &state->drcp_buffer;
 
@@ -279,7 +280,7 @@ static bool process_drcp_input(struct state *state)
     }
 
     struct transaction *head =
-        transaction_fragments_from_data(buffer->data, buffer->pos, 71);
+        transaction_fragments_from_data(buffer->data, buffer->pos, 71, channel);
     if(head == NULL)
         return false;
 
@@ -338,7 +339,8 @@ static void main_loop(struct files *files)
 {
     static struct state state;
 
-    state.preallocated_slave_transaction = transaction_alloc(true);
+    state.preallocated_spi_slave_transaction =
+        transaction_alloc(true, TRANSACTION_CHANNEL_SPI);
     dynamic_buffer_init(&state.drcp_buffer);
 
     msg_info("Ready for accepting traffic");
@@ -360,7 +362,8 @@ static void main_loop(struct files *files)
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
                 {
-                    drcp_finish_request(process_drcp_input(&state),
+                    drcp_finish_request(process_drcp_input(&state,
+                                                           TRANSACTION_CHANNEL_SPI),
                                         files->drcp_fifo.out_fd);
                     dynamic_buffer_free(&state.drcp_buffer);
                 }
@@ -383,9 +386,18 @@ static void main_loop(struct files *files)
         if(state.active_transaction == NULL)
             continue;
 
-        switch(transaction_process(state.active_transaction,
-                                   files->dcpspi_fifo.in_fd,
-                                   files->dcpspi_fifo.out_fd))
+        int in_fd = -1;
+        int out_fd = -1;
+
+        switch(transaction_get_channel(state.active_transaction))
+        {
+          case TRANSACTION_CHANNEL_SPI:
+            in_fd = files->dcpspi_fifo.in_fd;
+            out_fd = files->dcpspi_fifo.out_fd;
+            break;
+        }
+
+        switch(transaction_process(state.active_transaction, in_fd, out_fd))
         {
           case TRANSACTION_IN_PROGRESS:
             break;
@@ -398,7 +410,7 @@ static void main_loop(struct files *files)
         }
     }
 
-    transaction_free(&state.preallocated_slave_transaction);
+    transaction_free(&state.preallocated_spi_slave_transaction);
 }
 
 struct parameters
