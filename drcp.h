@@ -1,7 +1,6 @@
 #ifndef DRCP_H
 #define DRCP_H
 
-#include "named_pipe.h"
 #include "dynamic_buffer.h"
 
 /*!
@@ -13,12 +12,10 @@
 extern "C" {
 #endif
 
-bool drcp_fill_buffer(struct dynamic_buffer *buffer,
-                      const struct fifo_pair *fds);
-bool drcp_read_size_from_fd(struct dynamic_buffer *buffer,
-                            const struct fifo_pair *fds,
+bool drcp_fill_buffer(struct dynamic_buffer *buffer, int in_fd);
+bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
                             size_t *expected_size, size_t *payload_offset);
-void drcp_finish_request(bool is_ok, const struct fifo_pair *fds);
+void drcp_finish_request(bool is_ok, int out_fd);
 
 #ifdef __cplusplus
 }

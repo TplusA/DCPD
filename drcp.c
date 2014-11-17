@@ -12,22 +12,21 @@
 #include "messages.h"
 #include "os.h"
 
-bool drcp_fill_buffer(struct dynamic_buffer *buffer,
-                      const struct fifo_pair *fds)
+bool drcp_fill_buffer(struct dynamic_buffer *buffer, int in_fd)
 {
     assert(buffer != NULL);
 
     while(buffer->pos < buffer->size)
     {
         int ret = os_try_read_to_buffer(buffer->data, buffer->size,
-                                        &buffer->pos, fds->in_fd);
+                                        &buffer->pos, in_fd);
 
         if(ret == 0)
             return true;
 
         if(ret < 0)
         {
-            msg_error(errno, LOG_CRIT, "Failed reading DRCP data from fd %d", fds->in_fd);
+            msg_error(errno, LOG_CRIT, "Failed reading DRCP data from fd %d", in_fd);
             return false;
         }
     }
@@ -35,12 +34,11 @@ bool drcp_fill_buffer(struct dynamic_buffer *buffer,
     return true;
 }
 
-bool drcp_read_size_from_fd(struct dynamic_buffer *buffer,
-                            const struct fifo_pair *fds,
+bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
                             size_t *expected_size, size_t *payload_offset)
 {
     if(os_try_read_to_buffer(buffer->data, buffer->size,
-                             &buffer->pos, fds->in_fd) < 0)
+                             &buffer->pos, in_fd) < 0)
     {
         msg_error(errno, LOG_CRIT, "Reading XML size failed");
         return false;
@@ -93,7 +91,7 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer,
     return true;
 }
 
-void drcp_finish_request(bool is_ok, const struct fifo_pair *fds)
+void drcp_finish_request(bool is_ok, int out_fd)
 {
     static const char ok_result[] = "OK\n";
     static const char error_result[] = "FF\n";
@@ -101,5 +99,5 @@ void drcp_finish_request(bool is_ok, const struct fifo_pair *fds)
     const uint8_t *result =
         (const uint8_t *)(is_ok ? ok_result : error_result);
 
-    (void)os_write_from_buffer(result, 3, fds->out_fd);
+    (void)os_write_from_buffer(result, 3, out_fd);
 }

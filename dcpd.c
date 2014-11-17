@@ -193,7 +193,7 @@ static bool try_preallocate_buffer(struct dynamic_buffer *buffer,
     size_t xml_data_offset;
 
     buffer->size = 16;
-    if(!drcp_read_size_from_fd(buffer, fds, &expected_size, &xml_data_offset))
+    if(!drcp_read_size_from_fd(buffer, fds->in_fd, &expected_size, &xml_data_offset))
     {
         dynamic_buffer_free(buffer);
         return false;
@@ -327,19 +327,19 @@ static void main_loop(struct files *files)
         if((wait_result & WAITEVENT_CAN_READ_DRCP) != 0)
         {
             if(try_preallocate_buffer(&state.drcp_buffer, &files->drcp_fifo) &&
-               drcp_fill_buffer(&state.drcp_buffer, &files->drcp_fifo))
+               drcp_fill_buffer(&state.drcp_buffer, files->drcp_fifo.in_fd))
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
                 {
                     drcp_finish_request(process_drcp_input(&state),
-                                        &files->drcp_fifo);
+                                        files->drcp_fifo.out_fd);
                     dynamic_buffer_free(&state.drcp_buffer);
                 }
             }
             else
             {
                 dynamic_buffer_free(&state.drcp_buffer);
-                drcp_finish_request(false, &files->drcp_fifo);
+                drcp_finish_request(false, files->drcp_fifo.out_fd);
             }
         }
 

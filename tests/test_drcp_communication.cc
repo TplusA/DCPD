@@ -1,6 +1,7 @@
 #include <cppcutter.h>
 #include <algorithm>
 
+#include "named_pipe.h"
 #include "drcp.h"
 
 #include "mock_messages.hh"
@@ -106,7 +107,7 @@ void test_read_drcp_size_header(void)
 
     size_t size;
     size_t offset;
-    cut_assert_true(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(731), size);
     cppcut_assert_equal(sizeof(input_string) - 1, offset);
 }
@@ -125,7 +126,7 @@ void test_read_drcp_size_header_from_empty_input(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -151,7 +152,7 @@ void test_read_drcp_size_header_from_nearly_empty_input(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -180,7 +181,7 @@ void test_read_drcp_size_header_from_incomplete_input(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -200,7 +201,7 @@ void test_read_drcp_size_header_with_trailing_byte(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -220,7 +221,7 @@ void test_read_drcp_size_header_with_negative_size(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -240,7 +241,7 @@ void test_read_drcp_size_header_with_huge_size(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -260,7 +261,7 @@ void test_read_drcp_size_header_with_overflow_size(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -284,7 +285,7 @@ void test_read_faulty_drcp_size_header(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
 }
@@ -307,7 +308,7 @@ void test_read_drcp_size_header_from_broken_file_descriptor(void)
 
     size_t size = 500;
     size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, &fds, &size, &offset));
+    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
     cppcut_assert_equal(size_t(0), buffer.pos);
     cppcut_assert_equal(size_t(500), size);
     cppcut_assert_equal(size_t(600), offset);
@@ -325,7 +326,7 @@ void test_read_drcp_data(void)
         "Here is some test data\nread straight from the guts of\na MOCK!";
     fill_buffer_data.set(input_string, 0, 0);
 
-    cut_assert_true(drcp_fill_buffer(&buffer, &fds));
+    cut_assert_true(drcp_fill_buffer(&buffer, fds.in_fd));
     cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
                             buffer.data, buffer.pos);
 }
@@ -348,7 +349,7 @@ void test_read_drcp_data_from_infinite_size_input(void)
     for(size_t i = 0; i < buffer.size / (sizeof(input_string) - 1); ++i)
         mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
-    cut_assert_true(drcp_fill_buffer(&buffer, &fds));
+    cut_assert_true(drcp_fill_buffer(&buffer, fds.in_fd));
 
     cppcut_assert_equal(buffer.size, buffer.pos);
     for(size_t i = 0; i < buffer.pos; i += sizeof(input_string) - 1)
@@ -372,7 +373,7 @@ void test_read_drcp_data_from_broken_file_descriptor(void)
 
     mock_messages->expect_msg_error_formatted(EBADF, LOG_CRIT, "Failed reading DRCP data from fd 10 (Bad file descriptor)");
 
-    cut_assert_false(drcp_fill_buffer(&buffer, &fds));
+    cut_assert_false(drcp_fill_buffer(&buffer, fds.in_fd));
     cppcut_assert_equal(size_t(0), buffer.pos);
 }
 
@@ -397,7 +398,7 @@ void test_write_drcp_result_successful(void)
 {
     mock_os->expect_os_write_from_buffer_callback(receive_buffer);
 
-    drcp_finish_request(true, &fds);
+    drcp_finish_request(true, fds.out_fd);
     cut_assert_equal_memory("OK\n", 3, buffer.data, buffer.pos);
 }
 
@@ -408,7 +409,7 @@ void test_write_drcp_result_failed(void)
 {
     mock_os->expect_os_write_from_buffer_callback(receive_buffer);
 
-    drcp_finish_request(false, &fds);
+    drcp_finish_request(false, fds.out_fd);
     cut_assert_equal_memory("FF\n", 3, buffer.data, buffer.pos);
 }
 
