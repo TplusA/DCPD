@@ -18,6 +18,7 @@ enum transaction_process_status
 enum transaction_channel
 {
     TRANSACTION_CHANNEL_SPI,
+    TRANSACTION_CHANNEL_INET,
 };
 
 /*!

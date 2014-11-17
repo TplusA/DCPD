@@ -53,6 +53,19 @@ void test_pinned_transaction_object(void)
 }
 
 /*!\test
+ * Single transactions can be allocated and deallocated for IP channel.
+ */
+void test_allocation_and_deallocation_of_single_transaction_object_inet(void)
+{
+    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_INET, false);
+    cppcut_assert_not_null(t);
+    cppcut_assert_equal(TRANSACTION_CHANNEL_INET, transaction_get_channel(t));
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
  * Deallocation of transaction frees the internal payload buffer.
  *
  * This test relies on Valgrind's memcheck. We actually should mock away

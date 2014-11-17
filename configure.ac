@@ -49,7 +49,7 @@ AC_CHECK_COVERAGE
 PKG_CHECK_MODULES([DCPD_DEPENDENCIES], [gmodule-2.0 gio-2.0 gio-unix-2.0 gthread-2.0])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h limits.h stddef.h stdint.h stdlib.h string.h syslog.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h limits.h stddef.h stdint.h stdlib.h string.h sys/socket.h syslog.h unistd.h])
 
 save_CPPFLAGS="$CPPFLAGS"
 CPPFLAGS="$pkg_cv_CUTTER_CFLAGS"
@@ -75,6 +75,11 @@ AC_CHECK_TYPES([ptrdiff_t])
 # Checks for library functions.
 AC_FUNC_REALLOC
 AC_CHECK_FUNCS([getpagesize memchr memmove memset mkfifo strerror strtoul])
+AC_SEARCH_LIBS([socket], [socket], [],
+               [AC_CHECK_LIB([socket], [socket],
+                             [LIBS="-lsocket -lnsl $LIBS"],
+                             [],
+                             [-lnsl])])
 
 # Debian architecture name for debian/control.in
 AS_IF([test "x$ac_cv_prog_DPKG_ARCHITECTURE" != x],

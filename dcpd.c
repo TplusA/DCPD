@@ -11,6 +11,7 @@
 #include <assert.h>
 
 #include "named_pipe.h"
+#include "network.h"
 #include "messages.h"
 #include "transactions.h"
 #include "dynamic_buffer.h"
@@ -27,6 +28,11 @@
 #define WAITEVENT_CAN_READ_DRCP                         (1U << 3)
 #define WAITEVENT_DCP_CONNECTION_DIED                   (1U << 4)
 #define WAITEVENT_DRCP_CONNECTION_DIED                  (1U << 5)
+
+/* socket events */
+#define WAITEVENT_CAN_READ_FROM_SERVER_SOCKET           (1U << 6)
+#define WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET         (1U << 7)
+#define WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED       (1U << 8)
 
 /*!
  * Global state of the DCP machinery.
@@ -63,6 +69,11 @@ struct state
      * active at a time.
      */
     struct transaction *preallocated_spi_slave_transaction;
+
+    /*!
+     * Pointer to an immortal network slave transaction object.
+     */
+    struct transaction *preallocated_inet_slave_transaction;
 };
 
 ssize_t (*os_read)(int fd, void *dest, size_t count) = read;
@@ -154,12 +165,54 @@ static unsigned int handle_dcp_fifo_out_events(int fd, short revents)
     return result;
 }
 
+static unsigned int handle_network_server_events(int fd, short revents)
+{
+    unsigned int result = 0;
+
+    if(revents & POLLIN)
+        result |= WAITEVENT_CAN_READ_FROM_SERVER_SOCKET;
+
+    if(revents & ~POLLIN)
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on DCP server socket fd %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
+static unsigned int handle_network_peer_events(int fd, short revents,
+                                               struct state *state)
+{
+    unsigned int result = 0;
+
+    if((revents & POLLIN) && network_have_data(fd))
+        result |=
+            schedule_slave_transaction_or_defer(state,
+                                                state->preallocated_inet_slave_transaction,
+                                                WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET);
+
+    if(revents & POLLHUP)
+    {
+        msg_error(EPIPE, LOG_INFO, "DCP peer connection died, need to close");
+        result |= WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED;
+    }
+
+    if(revents & ~(POLLIN | POLLHUP))
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on DCP peer socket fd %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
 static unsigned int wait_for_events(struct state *state,
                                     const int drcp_fifo_in_fd,
                                     const int dcpspi_fifo_in_fd,
+                                    const int server_socket_fd,
+                                    const int peer_socket_fd,
                                     bool do_block)
 {
-    struct pollfd fds[2] =
+    struct pollfd fds[] =
     {
         {
             .fd = dcpspi_fifo_in_fd,
@@ -167,6 +220,14 @@ static unsigned int wait_for_events(struct state *state,
         },
         {
             .fd = drcp_fifo_in_fd,
+            .events = POLLIN,
+        },
+        {
+            .fd = server_socket_fd,
+            .events = POLLIN,
+        },
+        {
+            .fd = peer_socket_fd,
             .events = POLLIN,
         },
     };
@@ -188,6 +249,8 @@ static unsigned int wait_for_events(struct state *state,
 
     return_value |= handle_dcp_fifo_in_events(dcpspi_fifo_in_fd,   fds[0].revents, state);
     return_value |= handle_dcp_fifo_out_events(drcp_fifo_in_fd,    fds[1].revents);
+    return_value |= handle_network_server_events(server_socket_fd, fds[2].revents);
+    return_value |= handle_network_peer_events(peer_socket_fd,     fds[3].revents, state);
 
     return return_value;
 }
@@ -288,8 +351,19 @@ static bool try_reopen(int *fd, const char *devname, const char *errorname)
     return false;
 }
 
-static void terminate_active_transaction(struct state *state)
+static void terminate_active_transaction(struct state *state,
+                                         int *network_peer_fd)
 {
+    switch(transaction_get_channel(state->active_transaction))
+    {
+      case TRANSACTION_CHANNEL_SPI:
+        break;
+
+      case TRANSACTION_CHANNEL_INET:
+        network_close(network_peer_fd);
+        break;
+    }
+
     if(!transaction_is_pinned(state->active_transaction))
         transaction_free(&state->active_transaction);
 
@@ -297,14 +371,16 @@ static void terminate_active_transaction(struct state *state)
 }
 
 static bool handle_reopen_connections(unsigned int wait_result,
-                                      struct files *files, struct state *state)
+                                      struct files *files,
+                                      struct network_socket_pair *network,
+                                      struct state *state)
 {
     if((wait_result & (WAITEVENT_DRCP_CONNECTION_DIED |
                        WAITEVENT_DCP_CONNECTION_DIED)) == 0)
         return true;
 
     if(state->active_transaction != NULL)
-        terminate_active_transaction(state);
+        terminate_active_transaction(state, &network->peer_fd);
 
     if((wait_result & WAITEVENT_DRCP_CONNECTION_DIED) != 0 &&
        !try_reopen(&files->drcp_fifo.in_fd, files->drcp_fifo_in_name,
@@ -319,6 +395,50 @@ static bool handle_reopen_connections(unsigned int wait_result,
     return true;
 }
 
+static void handle_network_connection(unsigned int wait_result,
+                                      struct network_socket_pair *sockets,
+                                      struct state *state)
+{
+    if((wait_result & (WAITEVENT_CAN_READ_FROM_SERVER_SOCKET |
+                       WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET |
+                       WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED)) == 0)
+        return;
+
+    if((wait_result & WAITEVENT_CAN_READ_FROM_SERVER_SOCKET) != 0)
+    {
+        int peer_fd = network_accept_peer_connection(sockets->server_fd);
+
+        if(peer_fd >= 0)
+        {
+            if(sockets->peer_fd >= 0)
+            {
+                network_close(&peer_fd);
+                msg_info("Rejected peer connection, only single connection supported");
+            }
+            else
+            {
+                sockets->peer_fd = peer_fd;
+                msg_info("Accepted peer connection, fd %d", sockets->peer_fd);
+            }
+        }
+    }
+
+    if((wait_result & WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET) != 0)
+    {
+        assert(sockets->peer_fd >= 0);
+        msg_info("DCP over TCP/IP");
+    }
+
+    if((wait_result & WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED) != 0)
+    {
+        if(sockets->peer_fd >= 0)
+        {
+            msg_info("Peer disconnected");
+            network_close(&sockets->peer_fd);
+        }
+    }
+}
+
 /*!
  * Process DCP.
  */
@@ -328,7 +448,14 @@ static void main_loop(struct files *files)
 
     state.preallocated_spi_slave_transaction =
         transaction_alloc(true, TRANSACTION_CHANNEL_SPI, true);
+    state.preallocated_inet_slave_transaction =
+        transaction_alloc(true, TRANSACTION_CHANNEL_INET, true);
     dynamic_buffer_init(&state.drcp_buffer);
+
+    static struct network_socket_pair network_sockets;
+
+    network_sockets.server_fd = network_create_socket();
+    network_sockets.peer_fd = -1;
 
     msg_info("Ready for accepting traffic");
 
@@ -337,6 +464,7 @@ static void main_loop(struct files *files)
         const unsigned int wait_result =
             wait_for_events(&state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
+                            network_sockets.server_fd, network_sockets.peer_fd,
                             transaction_is_input_required(state.active_transaction));
 
         if((wait_result & WAITEVENT_POLL_ERROR) != 0)
@@ -362,11 +490,13 @@ static void main_loop(struct files *files)
             }
         }
 
-        if(!handle_reopen_connections(wait_result, files, &state))
+        if(!handle_reopen_connections(wait_result, files, &network_sockets, &state))
         {
             keep_running = false;
             continue;
         }
+
+        handle_network_connection(wait_result, &network_sockets, &state);
 
         try_dequeue_next_transaction(&state);
 
@@ -382,6 +512,11 @@ static void main_loop(struct files *files)
             in_fd = files->dcpspi_fifo.in_fd;
             out_fd = files->dcpspi_fifo.out_fd;
             break;
+
+          case TRANSACTION_CHANNEL_INET:
+            in_fd = network_sockets.peer_fd;
+            out_fd = network_sockets.peer_fd;
+            break;
         }
 
         switch(transaction_process(state.active_transaction, in_fd, out_fd))
@@ -391,13 +526,17 @@ static void main_loop(struct files *files)
 
           case TRANSACTION_FINISHED:
           case TRANSACTION_ERROR:
-            terminate_active_transaction(&state);
+            terminate_active_transaction(&state, &network_sockets.peer_fd);
             try_dequeue_next_transaction(&state);
             break;
         }
     }
 
     transaction_free(&state.preallocated_spi_slave_transaction);
+    transaction_free(&state.preallocated_inet_slave_transaction);
+
+    network_close(&network_sockets.server_fd);
+    network_close(&network_sockets.peer_fd);
 }
 
 struct parameters
