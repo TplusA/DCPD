@@ -37,6 +37,20 @@ bool drcp_fill_buffer(struct dynamic_buffer *buffer, int in_fd)
 bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
                             size_t *expected_size, size_t *payload_offset)
 {
+    /*
+     * FIXME: Stupid timing-based hack.
+     *
+     * We get partial data from DRCPD because it is writing to its pipe end
+     * using several system calls. The code below does not handle this
+     * situation very well because it assumes that named pipe read/write
+     * operations are atomic (which is true up to a certain size) and that
+     * DRCPD is using a single operation for sending data (which is not true,
+     * hence the breakage). This hack waits for data to accumulate so that we
+     * can be reasonably sure that our read operation looks like the other side
+     * has written atomically.
+     */
+    usleep(50U * 1000U);
+
     if(os_try_read_to_buffer(buffer->data, buffer->size,
                              &buffer->pos, in_fd) < 0)
     {
