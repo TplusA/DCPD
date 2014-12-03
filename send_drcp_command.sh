@@ -33,7 +33,7 @@ fi
 CODE="$1"
 
 HEXCODE="$(printf %02x $CODE)"
-HEXCOMMAND="00 48 $HEXCODE 00"
+HEXCOMMAND="02 48 02 00 $HEXCODE 00"
 
 echo "Sending '$HEXCOMMAND' to $HOST:$PORT"
 echo "0 $HEXCOMMAND" | xxd -r | nc "$HOST" "$PORT" | hexdump -C
