@@ -457,6 +457,11 @@ static void main_loop(struct files *files)
     network_sockets.server_fd = network_create_socket();
     network_sockets.peer_fd = -1;
 
+    /* send device status register (17) */
+    transaction_push_register_to_slave(&state.master_transaction_queue,
+                                       17, TRANSACTION_CHANNEL_SPI);
+    try_dequeue_next_transaction(&state);
+
     msg_info("Ready for accepting traffic");
 
     while(keep_running)
