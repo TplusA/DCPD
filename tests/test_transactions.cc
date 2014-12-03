@@ -353,15 +353,18 @@ void cut_teardown(void)
 }
 
 /*!\test
- * A whole simple register write transaction initiated by the slave device.
+ * A whole (former) simple register write transaction initiated by the slave
+ * device.
  */
 void test_register_write_request_transaction(void)
 {
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t write_reg_55_enable_dhcp[] = { 0x00, 0x37, 0x01, 0x00 };
-    read_data->set(write_reg_55_enable_dhcp);
+    static const uint8_t write_reg_55_enable_dhcp[] = { 0x02, 0x37, 0x02, 0x00, 0x01, 0x00 };
+    read_data->set(write_reg_55_enable_dhcp, 4);
+    read_data->set(write_reg_55_enable_dhcp + 4, sizeof(write_reg_55_enable_dhcp) - 4);
+
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
@@ -369,6 +372,29 @@ void test_register_write_request_transaction(void)
     mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Should enable DHCP");
     cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
+ * Simple register write transactions are not supported anymore.
+ *
+ * This was done to keep the implementation a bit simpler.
+ */
+void test_register_simple_write_not_supported(void)
+{
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t oldstyle_write_reg_55_enable_dhcp[] = { 0x00, 0x37, 0x01, 0x00 };
+    read_data->set(oldstyle_write_reg_55_enable_dhcp);
+
+    mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Simple write command not supported");
+    mock_messages->expect_msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d");
+
+    cppcut_assert_equal(TRANSACTION_ERROR,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
     transaction_free(&t);
@@ -440,7 +466,15 @@ void test_register_read_request_transaction(void)
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-    cut_assert_equal_memory(read_reg_55_read_dhcp_mode, sizeof(read_reg_55_read_dhcp_mode),
+    static const uint8_t expected_answer[] =
+    {
+        /* command header, payload size is 2 bytes */
+        0x03, 0x37, 0x02, 0x00,
+
+        /* DHCP is not enabled */
+        0x00, 0x00
+    };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
     transaction_free(&t);
@@ -455,7 +489,7 @@ void test_register_multi_step_read_request_transaction(void)
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t read_reg_51_mac_address[] = { 0x03, 0x33, 0x00, 0x00 };
+    static const uint8_t read_reg_51_mac_address[] = { 0x01, 0x33, 0x00, 0x00 };
     read_data->set(read_reg_51_mac_address);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -483,6 +517,29 @@ void test_register_multi_step_read_request_transaction(void)
     };
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
+ * Multi-step register read commands are not supported anymore.
+ *
+ * This was done to keep the implementation a bit simpler.
+ */
+void test_register_multi_read_not_supported(void)
+{
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t oldstyle_read_reg_51_mac_address[] = { 0x03, 0x33, 0x00, 0x00 };
+    read_data->set(oldstyle_read_reg_51_mac_address);
+
+    mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Multiple read command not supported");
+    mock_messages->expect_msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d");
+
+    cppcut_assert_equal(TRANSACTION_ERROR,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
     transaction_free(&t);
     cppcut_assert_null(t);

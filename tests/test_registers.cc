@@ -74,7 +74,7 @@ void test_lookup_all_existing_registers(void)
 
         cppcut_assert_not_null(reg);
         cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cut_assert(((reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH) != 0) ^ (reg->max_data_size == 0));
+        cppcut_assert_operator(0, <, reg->max_data_size);
     }
 }
 

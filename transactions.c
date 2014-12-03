@@ -169,10 +169,7 @@ bool transaction_set_address_for_master(struct transaction *t,
     if(!transaction_set_register_struct(t, register_address, true))
         return false;
 
-    if((t->reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH) != 0)
-        t->command = DCP_COMMAND_MULTI_READ_REGISTER;
-    else
-        t->command = DCP_COMMAND_READ_REGISTER;
+    t->command = DCP_COMMAND_MULTI_READ_REGISTER;
 
     t->request_header[0] = t->command;
     t->request_header[1] = register_address;
@@ -244,12 +241,12 @@ request_command_matches_register_definition(uint8_t command,
     switch(command)
     {
       case DCP_COMMAND_READ_REGISTER:
-      case DCP_COMMAND_WRITE_REGISTER:
-        return !(reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH);
-
-      case DCP_COMMAND_MULTI_READ_REGISTER:
       case DCP_COMMAND_MULTI_WRITE_REGISTER:
-        return !!(reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH);
+        return true;
+
+      case DCP_COMMAND_WRITE_REGISTER:
+      case DCP_COMMAND_MULTI_READ_REGISTER:
+        return false;
     }
 
     return false;
@@ -296,28 +293,34 @@ static bool fill_request_header(struct transaction *t, const int fd)
     switch(t->command)
     {
       case DCP_COMMAND_READ_REGISTER:
-      case DCP_COMMAND_MULTI_READ_REGISTER:
         if(t->request_header[DCP_HEADER_DATA_OFFSET] != 0 ||
            t->request_header[DCP_HEADER_DATA_OFFSET + 1] != 0)
             break;
 
         /* fall-through */
 
-      case DCP_COMMAND_WRITE_REGISTER:
       case DCP_COMMAND_MULTI_WRITE_REGISTER:
         if(!request_command_matches_register_definition(t->command, t->reg))
         {
-            msg_error(0, LOG_ERR,
+            msg_error(EINVAL, LOG_ERR,
                       "Register 0x%02x requested using wrong command",
                       t->request_header[1]);
             break;
         }
 
         return true;
+
+      case DCP_COMMAND_MULTI_READ_REGISTER:
+        msg_error(EINVAL, LOG_ERR, "Multiple read command not supported");
+        return false;
+
+      case DCP_COMMAND_WRITE_REGISTER:
+        msg_error(EINVAL, LOG_ERR, "Simple write command not supported");
+        return false;
     }
 
 error_invalid_header:
-    msg_error(0, LOG_ERR,
+    msg_error(EINVAL, LOG_ERR,
               "Invalid DCP header 0x%02x 0x%02x 0x%02x 0x%02x",
               t->request_header[0], t->request_header[1],
               t->request_header[2], t->request_header[3]);
@@ -350,22 +353,9 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
 
 static bool allocate_payload_buffer(struct transaction *t)
 {
-    if(t->command != DCP_COMMAND_MULTI_READ_REGISTER &&
-       t->command != DCP_COMMAND_MULTI_WRITE_REGISTER)
-    {
-        assert(t->payload.data == NULL);
-        return true;
-    }
+    assert(t->reg->max_data_size > 0);
 
-    const uint16_t size =
-        (t->command == DCP_COMMAND_MULTI_READ_REGISTER
-         ? t->reg->max_data_size
-         : dcp_read_header_data(t->request_header + DCP_HEADER_DATA_OFFSET));
-
-    if(size == 0)
-        return true;
-
-    return dynamic_buffer_resize(&t->payload, size);
+    return dynamic_buffer_resize(&t->payload, t->reg->max_data_size);
 }
 
 enum transaction_process_status transaction_process(struct transaction *t,
@@ -412,20 +402,18 @@ enum transaction_process_status transaction_process(struct transaction *t,
             break;
         }
 
-        const ssize_t read_result =
-            (t->command == DCP_COMMAND_READ_REGISTER
-             ? t->reg->read_handler(t->request_header + DCP_HEADER_DATA_OFFSET, 2)
-             : t->reg->read_handler(t->payload.data, t->payload.size));
+        const ssize_t read_result = t->reg->read_handler(t->payload.data,
+                                                         t->payload.size);
 
         if(read_result < 0)
             break;
 
-        if(t->command == DCP_COMMAND_MULTI_READ_REGISTER)
-        {
-            t->payload.pos = read_result;
-            dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
-                                t->payload.pos);
-        }
+        if(t->command == DCP_COMMAND_READ_REGISTER)
+            t->request_header[0] = DCP_COMMAND_MULTI_READ_REGISTER;
+
+        t->payload.pos = read_result;
+        dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
+                            t->payload.pos);
 
         t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
 
@@ -506,10 +494,9 @@ uint16_t transaction_get_max_data_size(const struct transaction *t)
 {
     assert(t != NULL);
     assert(t->reg);
+    assert(t->reg->max_data_size > 0);
 
-    return ((t->reg->flags & DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH)
-            ? t->reg->max_data_size
-            : 2);
+    return t->reg->max_data_size;
 }
 
 bool transaction_set_payload(struct transaction *t,

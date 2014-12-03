@@ -120,19 +120,18 @@ static const struct dcp_register_t register_map[] =
     {
         /* Device status register */
         .address = 17,
+        .max_data_size = 2,
         .read_handler = read_17_device_status,
     },
     {
         /* Image version */
         .address = 37,
-        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH,
         .max_data_size = 20,
         .read_handler = read_37_image_version,
     },
     {
         /* MAC address */
         .address = 51,
-        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH,
         .max_data_size = 18,
         .read_handler = read_51_mac_address,
         .write_handler = write_51_mac_address,
@@ -140,18 +139,19 @@ static const struct dcp_register_t register_map[] =
     {
         /* Enable or disable DHCP */
         .address = 55,
+        .max_data_size = 2,
         .read_handler = read_55_dhcp_enabled,
         .write_handler = write_55_dhcp_enabled,
     },
     {
         /* DRC protocol */
         .address = 71,
-        .flags = DCP_REGISTER_FLAG_IS_VARIABLE_LENGTH,
         .max_data_size = 256,
     },
     {
         /* DRC command */
         .address = 72,
+        .max_data_size = 2,
         .write_handler = dcpregs_write_drcp_command,
     },
 };
