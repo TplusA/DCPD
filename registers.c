@@ -88,6 +88,7 @@ static ssize_t read_55_dhcp_enabled(uint8_t *response, size_t length)
     assert(length == 2);
 
     response[0] = 0;
+    response[1] = 0;
     return length;
 }
 
