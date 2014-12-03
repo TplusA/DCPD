@@ -22,6 +22,7 @@ enum transaction_state
 {
     TRANSACTION_STATE_ERROR,                /*!< Error state, cannot process */
     TRANSACTION_STATE_SLAVE_READ_COMMAND,   /*!< Read command + data from slave */
+    TRANSACTION_STATE_PUSH_TO_SLAVE,        /*!< Prepare answer buffer */
     TRANSACTION_STATE_SLAVE_PREPARE_ANSWER, /*!< Fill answer buffer */
     TRANSACTION_STATE_SLAVE_PROCESS_WRITE,  /*!< Process data written by slave */
     TRANSACTION_STATE_MASTER_PREPARE,       /*!< Filling command buffer */
@@ -382,6 +383,9 @@ enum transaction_process_status transaction_process(struct transaction *t,
         if(!fill_request_header(t, from_slave_fd))
             break;
 
+        /* fall-through */
+
+      case TRANSACTION_STATE_PUSH_TO_SLAVE:
         if(!allocate_payload_buffer(t))
             break;
 
@@ -486,6 +490,7 @@ bool transaction_is_input_required(const struct transaction *t)
       case TRANSACTION_STATE_SLAVE_READ_COMMAND:
         return true;
 
+      case TRANSACTION_STATE_PUSH_TO_SLAVE:
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
       case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
       case TRANSACTION_STATE_MASTER_PREPARE:
@@ -523,11 +528,12 @@ bool transaction_set_payload(struct transaction *t,
     return true;
 }
 
-static struct transaction *mk_master_transaction(struct transaction **head,
-                                                 uint8_t register_address,
-                                                 enum transaction_channel channel)
+static struct transaction *mk_push_transaction(struct transaction **head,
+                                               uint8_t register_address,
+                                               bool is_pure_push,
+                                               enum transaction_channel channel)
 {
-    struct transaction *t = transaction_alloc(false, channel, false);
+    struct transaction *t = transaction_alloc(is_pure_push, channel, false);
 
     if(t == NULL)
     {
@@ -535,12 +541,28 @@ static struct transaction *mk_master_transaction(struct transaction **head,
         return NULL;
     }
 
+    /* fill in request header */
     if(transaction_set_address_for_master(t, register_address))
+    {
+        if(is_pure_push)
+        {
+            /* simulate slave request, bypass reading command from slave fd */
+            t->state = TRANSACTION_STATE_PUSH_TO_SLAVE;
+        }
+
         transaction_queue_add(head, t);
+    }
     else
         transaction_free(&t);
 
     return t;
+}
+
+static struct transaction *mk_master_transaction(struct transaction **head,
+                                                 uint8_t register_address,
+                                                 enum transaction_channel channel)
+{
+    return mk_push_transaction(head, register_address, false, channel);
 }
 
 struct transaction *
@@ -579,4 +601,11 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
         transaction_free(&head);
 
     return head;
+}
+
+bool transaction_push_register_to_slave(struct transaction **head,
+                                        uint8_t register_address,
+                                        enum transaction_channel channel)
+{
+    return (mk_push_transaction(head, register_address, true, channel) != NULL);
 }

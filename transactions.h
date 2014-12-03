@@ -117,6 +117,10 @@ transaction_fragments_from_data(const uint8_t *data, size_t length,
                                 uint8_t register_address,
                                 enum transaction_channel channel);
 
+bool transaction_push_register_to_slave(struct transaction **head,
+                                        uint8_t register_address,
+                                        enum transaction_channel channel);
+
 #ifdef __cplusplus
 }
 #endif
