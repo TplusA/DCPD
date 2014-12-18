@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <assert.h>
 
 #include "dcpregs_drcp.h"
 #include "drcp_command_codes.h"
@@ -29,7 +28,7 @@ handle_fast_wind_set_factor(struct dynamic_buffer *buffer,
 {
     static const uint8_t expected_payload_size = 1;
 
-    assert(!is_start_of_command || code_1 == DRCP_FAST_WIND_SET_SPEED);
+    log_assert(!is_start_of_command || code_1 == DRCP_FAST_WIND_SET_SPEED);
 
     if(is_start_of_command)
         return CPLXCMD_CONTINUE;
@@ -351,7 +350,7 @@ void dcpregs_UT_deinit(void)
  */
 int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
 {
-    assert(length == 2);
+    log_assert(length == 2);
 
     msg_info("DRC: command code 0x%02x, data 0x%02x", data[0], data[1]);
 

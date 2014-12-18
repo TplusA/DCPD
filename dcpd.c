@@ -8,7 +8,6 @@
 #include <poll.h>
 #include <signal.h>
 #include <errno.h>
-#include <assert.h>
 
 #include "named_pipe.h"
 #include "network.h"
@@ -88,7 +87,7 @@ static volatile bool keep_running = true;
 
 static void schedule_transaction(struct state *state, struct transaction *t)
 {
-    assert(state->active_transaction == NULL);
+    log_assert(state->active_transaction == NULL);
 
     if(t != NULL)
         state->active_transaction = t;
@@ -279,7 +278,7 @@ static bool try_preallocate_buffer(struct dynamic_buffer *buffer,
     }
     buffer->size = prealloc_size;
 
-    assert(buffer->pos >= xml_data_offset);
+    log_assert(buffer->pos >= xml_data_offset);
 
     if(expected_size > buffer->size)
     {
@@ -425,7 +424,7 @@ static void handle_network_connection(unsigned int wait_result,
 
     if((wait_result & WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET) != 0)
     {
-        assert(sockets->peer_fd >= 0);
+        log_assert(sockets->peer_fd >= 0);
         msg_info("DCP over TCP/IP");
     }
 

@@ -3,7 +3,6 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <stdlib.h>
-#include <assert.h>
 #include <errno.h>
 
 #include "dynamic_buffer.h"
@@ -27,8 +26,8 @@ void dynamic_buffer_free(struct dynamic_buffer *buffer)
 
 bool dynamic_buffer_resize(struct dynamic_buffer *buffer, size_t size)
 {
-    assert(buffer != NULL);
-    assert(size > 0);
+    log_assert(buffer != NULL);
+    log_assert(size > 0);
 
     void *temp = realloc(buffer->data, size);
 

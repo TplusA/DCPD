@@ -7,7 +7,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <assert.h>
 
 #include "named_pipe.h"
 #include "messages.h"

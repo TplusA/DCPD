@@ -4,7 +4,6 @@
 
 #include <string.h>
 #include <errno.h>
-#include <assert.h>
 
 #include "dbus_iface.h"
 #include "dbus_iface_deep.h"
@@ -27,7 +26,7 @@ static gpointer process_dbus(gpointer user_data)
 {
     struct dbus_data *data = user_data;
 
-    assert(data->loop != NULL);
+    log_assert(data->loop != NULL);
 
     g_main_loop_run(data->loop);
     return NULL;
@@ -126,10 +125,10 @@ int dbus_setup(bool connect_to_session_bus)
         return -1;
     }
 
-    assert(dbus_data.playback_iface != NULL);
-    assert(dbus_data.views_iface != NULL);
-    assert(dbus_data.list_navigation_iface != NULL);
-    assert(dbus_data.list_item_iface != NULL);
+    log_assert(dbus_data.playback_iface != NULL);
+    log_assert(dbus_data.views_iface != NULL);
+    log_assert(dbus_data.list_navigation_iface != NULL);
+    log_assert(dbus_data.list_item_iface != NULL);
 
     dbus_data.thread = g_thread_new("D-Bus I/O", process_dbus, &dbus_data);
     if(dbus_data.thread == NULL)

@@ -1,5 +1,4 @@
 #include <inttypes.h>
-#include <assert.h>
 #include <errno.h>
 
 #include "os.h"
@@ -19,7 +18,7 @@ int os_write_from_buffer(const void *src, size_t count, int fd)
             return -1;
         }
 
-        assert((size_t)len <= count);
+        log_assert((size_t)len <= count);
 
         src_ptr += len;
         count -= len;
@@ -51,7 +50,7 @@ int os_try_read_to_buffer(void *dest, size_t count, size_t *dest_pos, int fd)
             break;
         }
 
-        assert((size_t)len <= count);
+        log_assert((size_t)len <= count);
 
         dest_ptr += len;
         count -= len;

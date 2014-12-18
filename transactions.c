@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <assert.h>
 #include <errno.h>
 
 #include "transactions.h"
@@ -101,8 +100,8 @@ struct transaction *transaction_alloc(bool is_slave_request,
 
 void transaction_free(struct transaction **head)
 {
-    assert(head != NULL);
-    assert(*head != NULL);
+    log_assert(head != NULL);
+    log_assert(*head != NULL);
 
     struct transaction *t = *head;
 
@@ -112,8 +111,8 @@ void transaction_free(struct transaction **head)
         ptrdiff_t idx = t - transactions_container;
 #endif /* !NDEBUG */
 
-        assert(idx >= 0);
-        assert((size_t)idx < MAX_NUMBER_OF_TRANSACTIONS);
+        log_assert(idx >= 0);
+        log_assert((size_t)idx < MAX_NUMBER_OF_TRANSACTIONS);
 
         dynamic_buffer_free(&t->payload);
 
@@ -151,7 +150,7 @@ static bool transaction_set_register_struct(struct transaction *t,
         return false;
     }
 
-    assert(reg->address == register_address);
+    log_assert(reg->address == register_address);
 
     t->reg = reg;
 
@@ -180,8 +179,8 @@ bool transaction_set_address_for_master(struct transaction *t,
 
 void transaction_queue_add(struct transaction **head, struct transaction *t)
 {
-    assert(head != NULL);
-    assert(t != NULL);
+    log_assert(head != NULL);
+    log_assert(t != NULL);
 
     if(*head != NULL)
     {
@@ -196,10 +195,10 @@ void transaction_queue_add(struct transaction **head, struct transaction *t)
     else
         *head = t;
 
-    assert((*head)->next->prev == *head);
-    assert((*head)->prev->next == *head);
-    assert(t->next->prev == t);
-    assert(t->prev->next == t);
+    log_assert((*head)->next->prev == *head);
+    log_assert((*head)->prev->next == *head);
+    log_assert(t->next->prev == t);
+    log_assert(t->prev->next == t);
 }
 
 bool transaction_is_pinned(const struct transaction *t)
@@ -214,8 +213,8 @@ enum transaction_channel transaction_get_channel(const struct transaction *t)
 
 struct transaction *transaction_queue_remove(struct transaction **head)
 {
-    assert(head != NULL);
-    assert(*head != NULL);
+    log_assert(head != NULL);
+    log_assert(*head != NULL);
 
     struct transaction *t = *head;
 
@@ -332,8 +331,8 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
     uint16_t size =
         dcp_read_header_data(t->request_header + DCP_HEADER_DATA_OFFSET);
 
-    assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
-    assert(dynamic_buffer_is_empty(&t->payload));
+    log_assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
+    log_assert(dynamic_buffer_is_empty(&t->payload));
 
     if(size == 0)
         return true;
@@ -341,7 +340,7 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
     if(!dynamic_buffer_is_allocated(&t->payload))
         return false;
 
-    assert(t->payload.size == size);
+    log_assert(t->payload.size == size);
 
     if(read_to_buffer(t->payload.data, size, fd) < 0)
         return false;
@@ -353,7 +352,7 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
 
 static bool allocate_payload_buffer(struct transaction *t)
 {
-    assert(t->reg->max_data_size > 0);
+    log_assert(t->reg->max_data_size > 0);
 
     return dynamic_buffer_resize(&t->payload, t->reg->max_data_size);
 }
@@ -362,7 +361,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
                                                     int from_slave_fd,
                                                     int to_slave_fd)
 {
-    assert(t != NULL);
+    log_assert(t != NULL);
 
     switch(t->state)
     {
@@ -444,8 +443,8 @@ enum transaction_process_status transaction_process(struct transaction *t,
                                 t->payload.pos);
         else
         {
-            assert(t->command == DCP_COMMAND_READ_REGISTER);
-            assert(t->payload.data == NULL);
+            log_assert(t->command == DCP_COMMAND_READ_REGISTER);
+            log_assert(t->payload.data == NULL);
         }
 
         t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
@@ -492,9 +491,9 @@ bool transaction_is_input_required(const struct transaction *t)
 
 uint16_t transaction_get_max_data_size(const struct transaction *t)
 {
-    assert(t != NULL);
-    assert(t->reg);
-    assert(t->reg->max_data_size > 0);
+    log_assert(t != NULL);
+    log_assert(t->reg);
+    log_assert(t->reg->max_data_size > 0);
 
     return t->reg->max_data_size;
 }
@@ -502,9 +501,9 @@ uint16_t transaction_get_max_data_size(const struct transaction *t)
 bool transaction_set_payload(struct transaction *t,
                              const uint8_t *src, size_t length)
 {
-    assert(t != NULL);
-    assert(t->payload.data == NULL);
-    assert(src != NULL);
+    log_assert(t != NULL);
+    log_assert(t->payload.data == NULL);
+    log_assert(src != NULL);
 
     if(!dynamic_buffer_resize(&t->payload, length))
         return false;
@@ -557,8 +556,8 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
                                 uint8_t register_address,
                                 enum transaction_channel channel)
 {
-    assert(data != NULL);
-    assert(length > 0);
+    log_assert(data != NULL);
+    log_assert(length > 0);
 
     struct transaction *head = NULL;
     size_t i = 0;
@@ -576,7 +575,7 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
         if(i + size >= length)
             size = length - i;
 
-        assert(size > 0);
+        log_assert(size > 0);
 
         if(!transaction_set_payload(t, data + i, size))
             break;

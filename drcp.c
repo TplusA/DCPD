@@ -6,7 +6,6 @@
 #include <string.h>
 #include <limits.h>
 #include <errno.h>
-#include <assert.h>
 
 #include "drcp.h"
 #include "messages.h"
@@ -14,7 +13,7 @@
 
 bool drcp_fill_buffer(struct dynamic_buffer *buffer, int in_fd)
 {
-    assert(buffer != NULL);
+    log_assert(buffer != NULL);
 
     while(buffer->pos < buffer->size)
     {

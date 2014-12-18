@@ -8,7 +8,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <assert.h>
 
 #include "registers.h"
 #include "messages.h"
@@ -18,7 +17,7 @@
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
 {
     msg_info("read 17 handler %p %zu", response, length);
-    assert(length == 2);
+    log_assert(length == 2);
 
     /*
      * FIXME: Hard-coded, wrong status bits for testing purposes.
@@ -53,7 +52,7 @@ static ssize_t read_51_mac_address(uint8_t *response, size_t length)
      */
     static const char mac_address[] = "12:34:56:78:9A:BC";
 
-    assert(length == sizeof(mac_address));
+    log_assert(length == sizeof(mac_address));
 
     memcpy(response, mac_address, sizeof(mac_address));
     return sizeof(mac_address);
@@ -85,7 +84,7 @@ static int write_51_mac_address(const uint8_t *data, size_t length)
 static ssize_t read_55_dhcp_enabled(uint8_t *response, size_t length)
 {
     msg_info("read 55 handler %p %zu", response, length);
-    assert(length == 2);
+    log_assert(length == 2);
 
     response[0] = 0;
     response[1] = 0;
@@ -95,7 +94,7 @@ static ssize_t read_55_dhcp_enabled(uint8_t *response, size_t length)
 static int write_55_dhcp_enabled(const uint8_t *data, size_t length)
 {
     msg_info("write 55 handler %p %zu", data, length);
-    assert(length == 2);
+    log_assert(length == 2);
 
     if(data[0] > 1)
     {
