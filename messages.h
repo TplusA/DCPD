@@ -1,6 +1,7 @@
 #ifndef MESSAGES_H
 #define MESSAGES_H
 
+#include <stdlib.h>
 #include <stdbool.h>
 #include <syslog.h>
 
@@ -32,5 +33,21 @@ void msg_info(const char *format_string, ...)
 #ifdef __cplusplus
 }
 #endif
+
+#ifdef NDEBUG
+#define log_assert(EXPR) do {} while(0)
+#else /* !NDEBUG */
+#define log_assert(EXPR) \
+    do \
+    { \
+        if(!(EXPR)) \
+        { \
+            msg_error(0, LOG_EMERG, "Assertion failed at %s:%d: " #EXPR, \
+                      __FILE__, __LINE__); \
+            abort(); \
+        } \
+    } \
+    while(0)
+#endif /* NDEBUG */
 
 #endif /* !MESSAGES_H */
