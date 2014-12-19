@@ -60,3 +60,8 @@ int os_try_read_to_buffer(void *dest, size_t count, size_t *dest_pos, int fd)
 
     return retval;
 }
+
+void os_abort(void)
+{
+    abort();
+}

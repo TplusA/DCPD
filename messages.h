@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <syslog.h>
 
+#include "os.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,7 +46,7 @@ void msg_info(const char *format_string, ...)
         { \
             msg_error(0, LOG_EMERG, "Assertion failed at %s:%d: " #EXPR, \
                       __FILE__, __LINE__); \
-            abort(); \
+            os_abort(); \
         } \
     } \
     while(0)

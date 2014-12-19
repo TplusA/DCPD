@@ -28,6 +28,8 @@ class MockOs
     void expect_os_try_read_to_buffer(int ret, void *dest, size_t count,
                                       size_t *add_bytes_read, int fd);
     void expect_os_try_read_to_buffer_callback(os_try_read_to_buffer_callback_t fn);
+
+    void expect_os_abort(void);
 };
 
 extern MockOs *mock_os_singleton;

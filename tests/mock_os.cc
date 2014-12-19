@@ -10,9 +10,10 @@ enum class OsFn
 {
     write_from_buffer,
     try_read_to_buffer,
+    stdlib_abort,
 
     first_valid_os_fn_id = write_from_buffer,
-    last_valid_os_fn_id = try_read_to_buffer,
+    last_valid_os_fn_id = stdlib_abort,
 };
 
 
@@ -33,6 +34,10 @@ static std::ostream &operator<<(std::ostream &os, const OsFn id)
 
       case OsFn::try_read_to_buffer:
         os << "try_read_to_buffer";
+        break;
+
+      case OsFn::stdlib_abort:
+        os << "abort";
         break;
     }
 
@@ -103,6 +108,18 @@ class MockOs::Expectation
         os_try_read_to_buffer_callback_(fn)
     {}
 
+    explicit Expectation(OsFn fn_):
+        function_id_(fn_),
+        ret_code_(-5),
+        arg_fd_(-5),
+        arg_src_pointer_(nullptr),
+        arg_dest_pointer_(nullptr),
+        arg_count_(0),
+        arg_add_bytes_read_pointer_(nullptr),
+        os_write_from_buffer_callback_(nullptr),
+        os_try_read_to_buffer_callback_(nullptr)
+    {}
+
     Expectation(Expectation &&) = default;
 };
 
@@ -148,6 +165,11 @@ void MockOs::expect_os_try_read_to_buffer_callback(MockOs::os_try_read_to_buffer
     expectations_->add(Expectation(fn));
 }
 
+void MockOs::expect_os_abort(void)
+{
+    expectations_->add(Expectation(OsFn::stdlib_abort));
+}
+
 
 MockOs *mock_os_singleton = nullptr;
 
@@ -180,4 +202,11 @@ int os_try_read_to_buffer(void *dest, size_t count, size_t *add_bytes_read, int 
     cppcut_assert_equal(expect.arg_add_bytes_read_pointer_, add_bytes_read);
     cppcut_assert_equal(expect.arg_fd_, fd);
     return expect.ret_code_;
+}
+
+void os_abort(void)
+{
+    const auto &expect(mock_os_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.function_id_, OsFn::stdlib_abort);
 }

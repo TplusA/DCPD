@@ -9,6 +9,7 @@
 #include "mock_dcpd_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_messages.hh"
+#include "mock_os.hh"
 
 /*!
  * \addtogroup registers_tests Unit tests
@@ -101,6 +102,7 @@ namespace spi_registers_tests_drc
 {
 
 static MockMessages *mock_messages;
+static MockOs *mock_os;
 static MockDcpdDBus *mock_dcpd_dbus;
 static MockDBusIface *mock_dbus_iface;
 
@@ -123,6 +125,11 @@ void cut_setup(void)
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
+
     mock_dcpd_dbus = new MockDcpdDBus();
     cppcut_assert_not_null(mock_dcpd_dbus);
     mock_dcpd_dbus->init();
@@ -141,18 +148,22 @@ void cut_teardown(void)
     dcpregs_UT_deinit();
 
     mock_messages->check();
+    mock_os->check();
     mock_dcpd_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
+    mock_os_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_os;
     delete mock_dcpd_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
+    mock_os = nullptr;
     mock_dcpd_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
