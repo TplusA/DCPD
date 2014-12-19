@@ -188,11 +188,11 @@ void test_dcp_register_72_calls_correct_write_handler(void)
  */
 void test_slave_drc_invalid_command(void)
 {
-    static const uint8_t buffer[2] = { 0xbe, 0xef };
+    static const uint8_t buffer[] = { 0xbe };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xbe, data 0xef");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xbe");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Received unsupported DRC command 0xbe (Invalid argument)");
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, 2));
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -200,12 +200,12 @@ void test_slave_drc_invalid_command(void)
  */
 void test_slave_drc_playback_start(void)
 {
-    static const uint8_t buffer[2] = { DRCP_PLAYBACK_START, 0x00 };
+    static const uint8_t buffer[] = { DRCP_PLAYBACK_START };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xb3, data 0x00");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xb3");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_start(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -213,22 +213,12 @@ void test_slave_drc_playback_start(void)
  */
 void test_slave_drc_playback_fast_find_set_speed(void)
 {
-    static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
+    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_command, 2));
-
-    static const uint8_t buffer_data[2] = { DRCP_KEY_DIGIT_4, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    static const uint8_t buffer_eoc[2] = { DRCP_ACCEPT, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x1e, data 0x00");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(dbus_dcpd_playback_iface_dummy, 15.0);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_eoc, 2));
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -237,21 +227,12 @@ void test_slave_drc_playback_fast_find_set_speed(void)
  */
 void test_slave_drc_playback_fast_find_set_speed_invalid_parameter(void)
 {
-    static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
+    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_BROWSE_PLAY_VIEW_SET };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_command, 2));
-
-    static const uint8_t buffer_data[2] = { DRCP_BROWSE_PLAY_VIEW_SET, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xbb, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    static const uint8_t buffer_eoc[2] = { DRCP_ACCEPT, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x1e, data 0x00");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Handling complex command 0xc4 failed");
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_eoc, 2));
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -260,16 +241,14 @@ void test_slave_drc_playback_fast_find_set_speed_invalid_parameter(void)
  */
 void test_slave_drc_playback_fast_find_set_speed_without_parameter(void)
 {
-    static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
+    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_command, 2));
-
-    static const uint8_t buffer_eoc[2] = { DRCP_ACCEPT, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x1e, data 0x00");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Handling complex command 0xc4 failed");
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_eoc, 2));
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
+    mock_messages->expect_msg_error_formatted(0, LOG_EMERG, "Assertion failed at ", "length == 1");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
+    mock_os->expect_os_abort();
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -278,56 +257,14 @@ void test_slave_drc_playback_fast_find_set_speed_without_parameter(void)
  */
 void test_slave_drc_playback_fast_find_set_speed_with_two_parameters(void)
 {
-    static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
+    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4, DRCP_KEY_DIGIT_4 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_command, 2));
-
-    static const uint8_t buffer_data[2] = { DRCP_KEY_DIGIT_4, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Handling complex command 0xc4 failed");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    static const uint8_t buffer_eoc[2] = { DRCP_ACCEPT, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x1e, data 0x00");
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_eoc, 2));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor, but
- * with more than two parameters instead of one.
- */
-void test_slave_drc_playback_fast_find_set_speed_with_more_than_two_parameters(void)
-{
-    static const uint8_t buffer_command[2] = { DRCP_FAST_WIND_SET_SPEED, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_command, 2));
-
-    static const uint8_t buffer_data[2] = { DRCP_KEY_DIGIT_4, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Handling complex command 0xc4 failed");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x34, data 0x00");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer_data, 2));
-
-    static const uint8_t buffer_eoc[2] = { DRCP_ACCEPT, 0x00 };
-
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x1e, data 0x00");
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_eoc, 2));
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
+    mock_messages->expect_msg_error_formatted(0, LOG_EMERG, "Assertion failed at ", "length == 1");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
+    mock_os->expect_os_abort();
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -335,12 +272,12 @@ void test_slave_drc_playback_fast_find_set_speed_with_more_than_two_parameters(v
  */
 void test_slave_drc_views_goto_internet_radio(void)
 {
-    static const uint8_t buffer[2] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
+    static const uint8_t buffer[] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xaa, data 0x00");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xaa");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Internet Radio");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -348,12 +285,12 @@ void test_slave_drc_views_goto_internet_radio(void)
  */
 void test_slave_drc_views_toggle_browse_and_play(void)
 {
-    static const uint8_t buffer[2] = { DRCP_BROWSE_PLAY_VIEW_TOGGLE, 0x00 };
+    static const uint8_t buffer[] = { DRCP_BROWSE_PLAY_VIEW_TOGGLE, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xba, data 0x00");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0xba");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_toggle(dbus_dcpd_views_iface_dummy, "Browse", "Play");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -361,12 +298,12 @@ void test_slave_drc_views_toggle_browse_and_play(void)
  */
 void test_slave_drc_list_navigation_scroll_one_line_up(void)
 {
-    static const uint8_t buffer[2] = { DRCP_SCROLL_UP_ONE, 0x00 };
+    static const uint8_t buffer[] = { DRCP_SCROLL_UP_ONE, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x26, data 0x00");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x26");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, -1);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -374,12 +311,12 @@ void test_slave_drc_list_navigation_scroll_one_line_up(void)
  */
 void test_slave_drc_list_navigation_scroll_one_page_down(void)
 {
-    static const uint8_t buffer[2] = { DRCP_SCROLL_PAGE_DOWN, 0x00 };
+    static const uint8_t buffer[] = { DRCP_SCROLL_PAGE_DOWN, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x98, data 0x00");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x98");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_pages(dbus_dcpd_list_navigation_iface_dummy, 1);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -388,12 +325,12 @@ void test_slave_drc_list_navigation_scroll_one_page_down(void)
  */
 void test_slave_drc_list_item_add_to_favorites(void)
 {
-    static const uint8_t buffer[2] = { DRCP_FAVORITES_ADD_ITEM, 0x00 };
+    static const uint8_t buffer[] = { DRCP_FAVORITES_ADD_ITEM, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x2d, data 0x00");
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x2d");
     mock_dbus_iface->expect_dbus_get_list_item_iface(dbus_dcpd_list_item_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_item_emit_add_to_list(dbus_dcpd_list_item_iface_dummy, "Favorites", 0);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, 2));
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 };

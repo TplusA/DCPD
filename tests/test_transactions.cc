@@ -361,7 +361,7 @@ void test_register_write_request_transaction(void)
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t write_reg_55_enable_dhcp[] = { 0x02, 0x37, 0x02, 0x00, 0x01, 0x00 };
+    static const uint8_t write_reg_55_enable_dhcp[] = { 0x02, 0x37, 0x01, 0x00, 0x01 };
     read_data->set(write_reg_55_enable_dhcp, 4);
     read_data->set(write_reg_55_enable_dhcp + 4, sizeof(write_reg_55_enable_dhcp) - 4);
 
@@ -468,11 +468,11 @@ void test_register_read_request_transaction(void)
 
     static const uint8_t expected_answer[] =
     {
-        /* command header, payload size is 2 bytes */
-        0x03, 0x37, 0x02, 0x00,
+        /* command header, payload size is 1 byte */
+        0x03, 0x37, 0x01, 0x00,
 
         /* DHCP is not enabled */
-        0x00, 0x00
+        0x00
     };
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());

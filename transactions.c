@@ -340,7 +340,14 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
     if(!dynamic_buffer_is_allocated(&t->payload))
         return false;
 
-    log_assert(t->payload.size == size);
+    if(t->payload.size < size)
+    {
+        msg_error(EINVAL, LOG_ERR,
+                  "DCP payload too large for register %u, "
+                  "expecting no more than %zu bytes of data",
+                  t->reg->address, t->payload.size);
+        return false;
+    }
 
     if(read_to_buffer(t->payload.data, size, fd) < 0)
         return false;

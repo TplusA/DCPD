@@ -13,57 +13,22 @@
 #include "dynamic_buffer.h"
 #include "messages.h"
 
-enum handle_complex_return_value
+static int handle_fast_wind_set_factor(tdbusdcpdPlayback *iface,
+                                       const uint8_t *data, size_t length)
 {
-    CPLXCMD_CONTINUE,
-    CPLXCMD_CONTINUE_WITH_ERROR,
-    CPLXCMD_END,
-    CPLXCMD_END_WITH_ERROR,
-};
+    log_assert(length == 1);
 
-static enum handle_complex_return_value
-handle_fast_wind_set_factor(struct dynamic_buffer *buffer,
-                            bool is_start_of_command, bool failed,
-                            uint8_t code_1, uint8_t code_2)
-{
-    static const uint8_t expected_payload_size = 1;
+    if(length != 1)
+        return -1;
 
-    log_assert(!is_start_of_command || code_1 == DRCP_FAST_WIND_SET_SPEED);
+    const uint8_t factor_code = data[0];
+    if(factor_code < DRCP_KEY_DIGIT_0 || factor_code > DRCP_KEY_DIGIT_9)
+        return -1;
 
-    if(is_start_of_command)
-        return CPLXCMD_CONTINUE;
+    const uint8_t speed_factor = (factor_code - DRCP_KEY_DIGIT_0 + 1) * 3;
+    tdbus_dcpd_playback_emit_fast_wind_set_factor(iface, speed_factor);
 
-    if(failed)
-        return ((code_1 == DRCP_ACCEPT)
-                ? CPLXCMD_END_WITH_ERROR
-                : CPLXCMD_CONTINUE_WITH_ERROR);
-
-    if(code_1 == DRCP_ACCEPT)
-    {
-        if(buffer->pos != expected_payload_size)
-            return CPLXCMD_END_WITH_ERROR;
-
-        const uint8_t factor_code = buffer->data[0];
-
-        if(factor_code < DRCP_KEY_DIGIT_0 || factor_code > DRCP_KEY_DIGIT_9)
-            return CPLXCMD_END_WITH_ERROR;
-
-        const uint8_t speed_factor = (factor_code - DRCP_KEY_DIGIT_0 + 1) * 3;
-
-        tdbus_dcpd_playback_emit_fast_wind_set_factor(dbus_get_playback_iface(),
-                                                      speed_factor);
-        return CPLXCMD_END;
-    }
-
-    if(buffer->pos > expected_payload_size - 1U)
-        return CPLXCMD_CONTINUE_WITH_ERROR;
-
-    if(!dynamic_buffer_check_space(buffer))
-        return CPLXCMD_CONTINUE_WITH_ERROR;
-
-    buffer->data[buffer->pos++] = code_1;
-
-    return CPLXCMD_CONTINUE;
+    return 0;
 }
 
 static void handle_goto_internet_radio(tdbusdcpdViews *iface)
@@ -116,26 +81,16 @@ static void handle_remove_from_favorites(tdbusdcpdListItem *iface)
     tdbus_dcpd_list_item_emit_remove_from_list(iface, "Favorites", 0);
 }
 
-typedef enum handle_complex_return_value
-    (*custom_handler_t)(struct dynamic_buffer *buffer,
-                        bool is_start_of_command, bool failed,
-                        uint8_t code_1, uint8_t code_2);
-
-struct complex_command_data
-{
-    uint8_t code;
-    struct dynamic_buffer arguments;
-    bool failed;
-    custom_handler_t current_handler;
-};
-
 enum dbus_interface_id
 {
-    DBUSIFACE_CUSTOM = 1,
-    DBUSIFACE_PLAYBACK,
+    DBUSIFACE_PLAYBACK = 1,
+    DBUSIFACE_PLAYBACK_WITH_DATA,
     DBUSIFACE_VIEWS,
+    DBUSIFACE_VIEWS_WITH_DATA,
     DBUSIFACE_LIST_NAVIGATION,
+    DBUSIFACE_LIST_NAVIGATION_WITH_DATA,
     DBUSIFACE_LIST_ITEM,
+    DBUSIFACE_LIST_ITEM_WITH_DATA,
 };
 
 struct drc_command_t
@@ -146,11 +101,14 @@ struct drc_command_t
 
     union
     {
-        const custom_handler_t custom_handler;
         void (*const playback)(tdbusdcpdPlayback *iface);
+        int (*const playback_d)(tdbusdcpdPlayback *iface, const uint8_t *data, size_t length);
         void (*const views)(tdbusdcpdViews *iface);
+        int (*const views_d)(tdbusdcpdViews *iface, const uint8_t *data, size_t length);
         void (*const list_navigation)(tdbusdcpdListNavigation *iface);
+        int (*const list_navigation_d)(tdbusdcpdListNavigation *iface, const uint8_t *data, size_t length);
         void (*const list_item)(tdbusdcpdListItem *iface);
+        int (*const list_item_d)(tdbusdcpdListItem *iface, const uint8_t *data, size_t length);
     }
     dbus_signal;
 };
@@ -269,8 +227,8 @@ static const struct drc_command_t drc_commands[] =
     },
     {
         .code = DRCP_FAST_WIND_SET_SPEED,
-        .iface_id = DBUSIFACE_CUSTOM,
-        .dbus_signal.custom_handler = handle_fast_wind_set_factor,
+        .iface_id = DBUSIFACE_PLAYBACK_WITH_DATA,
+        .dbus_signal.playback_d = handle_fast_wind_set_factor,
     },
     {
         .code = DRCP_SHUFFLE_MODE_TOGGLE,
@@ -286,60 +244,15 @@ static int compare_command_code(const void *a, const void *b)
         (int)((const struct drc_command_t *)b)->code;
 }
 
-static int handle_complex_command(struct complex_command_data *command_data,
-                                  custom_handler_t handler,
-                                  uint8_t code_1, uint8_t code_2)
-{
-    if(handler != NULL)
-    {
-        command_data->code = code_1;
-        command_data->current_handler = handler;
-        command_data->failed = false;
-        dynamic_buffer_clear(&command_data->arguments);
-    }
-
-    if(command_data->current_handler == NULL)
-        return 1;
-
-    enum handle_complex_return_value ret =
-        command_data->current_handler(&command_data->arguments,
-                                      handler != NULL,
-                                      command_data->failed, code_1, code_2);
-
-    const bool is_end_of_command =
-        (ret == CPLXCMD_END || ret == CPLXCMD_END_WITH_ERROR);
-    const bool have_errors =
-        (ret == CPLXCMD_END_WITH_ERROR || ret == CPLXCMD_CONTINUE_WITH_ERROR);
-
-    if(have_errors && !command_data->failed)
-    {
-        msg_error(0, LOG_ERR, "Handling complex command 0x%02x failed",
-                  command_data->code);
-        command_data->failed = true;
-    }
-
-    if(is_end_of_command)
-    {
-        command_data->code = 0;
-        command_data->current_handler = NULL;
-    }
-
-    return (is_end_of_command && have_errors) ? -1 : 0;
-}
-
-static struct complex_command_data global_command_data;
-
 /*!
  * Only useful for unit tests, not to be used in production code.
  */
 void dcpregs_UT_init(void)
 {
-    memset(&global_command_data, 0, sizeof(global_command_data));
 }
 
 void dcpregs_UT_deinit(void)
 {
-    dynamic_buffer_free(&global_command_data.arguments);
     dcpregs_UT_init();
 }
 
@@ -350,13 +263,9 @@ void dcpregs_UT_deinit(void)
  */
 int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
 {
-    log_assert(length == 2);
+    log_assert(length >= 1);
 
-    msg_info("DRC: command code 0x%02x, data 0x%02x", data[0], data[1]);
-
-    int ret = handle_complex_command(&global_command_data, NULL, data[0], data[1]);
-    if(ret <= 0)
-        return ret;
+    msg_info("DRC: command code 0x%02x", data[0]);
 
     /* static because we want static initialization; only the code field is
      * ever changed */
@@ -376,33 +285,49 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
         return -1;
     }
 
+    int ret = 0;
+
     switch(command->iface_id)
     {
-      case DBUSIFACE_CUSTOM:
-        ret = handle_complex_command(&global_command_data,
-                                     command->dbus_signal.custom_handler,
-                                     data[0], data[1]);
-        if(ret <= 0)
-            return ret;
-
-        break;
-
       case DBUSIFACE_PLAYBACK:
         command->dbus_signal.playback(dbus_get_playback_iface());
+        break;
+
+      case DBUSIFACE_PLAYBACK_WITH_DATA:
+        ret = command->dbus_signal.playback_d(dbus_get_playback_iface(),
+                                              data + 1, length - 1);
         break;
 
       case DBUSIFACE_VIEWS:
         command->dbus_signal.views(dbus_get_views_iface());
         break;
 
+      case DBUSIFACE_VIEWS_WITH_DATA:
+        ret = command->dbus_signal.views_d(dbus_get_views_iface(),
+                                           data + 1, length - 1);
+        break;
+
       case DBUSIFACE_LIST_NAVIGATION:
         command->dbus_signal.list_navigation(dbus_get_list_navigation_iface());
+        break;
+
+      case DBUSIFACE_LIST_NAVIGATION_WITH_DATA:
+        ret = command->dbus_signal.list_navigation_d(dbus_get_list_navigation_iface(),
+                                                     data + 1, length - 1);
         break;
 
       case DBUSIFACE_LIST_ITEM:
         command->dbus_signal.list_item(dbus_get_list_item_iface());
         break;
+
+      case DBUSIFACE_LIST_ITEM_WITH_DATA:
+        ret = command->dbus_signal.list_item_d(dbus_get_list_item_iface(),
+                                               data + 1, length - 1);
+        break;
     }
 
-    return 0;
+    if(ret != 0)
+        msg_error(0, LOG_ERR, "DRC command 0x%02x failed: %d", data[0], ret);
+
+    return ret;
 }

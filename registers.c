@@ -84,17 +84,16 @@ static int write_51_mac_address(const uint8_t *data, size_t length)
 static ssize_t read_55_dhcp_enabled(uint8_t *response, size_t length)
 {
     msg_info("read 55 handler %p %zu", response, length);
-    log_assert(length == 2);
+    log_assert(length == 1);
 
     response[0] = 0;
-    response[1] = 0;
     return length;
 }
 
 static int write_55_dhcp_enabled(const uint8_t *data, size_t length)
 {
     msg_info("write 55 handler %p %zu", data, length);
-    log_assert(length == 2);
+    log_assert(length == 1);
 
     if(data[0] > 1)
     {
@@ -138,7 +137,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* Enable or disable DHCP */
         .address = 55,
-        .max_data_size = 2,
+        .max_data_size = 1,
         .read_handler = read_55_dhcp_enabled,
         .write_handler = write_55_dhcp_enabled,
     },
@@ -150,7 +149,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* DRC command */
         .address = 72,
-        .max_data_size = 2,
+        .max_data_size = 1,
         .write_handler = dcpregs_write_drcp_command,
     },
 };
