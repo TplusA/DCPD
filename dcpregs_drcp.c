@@ -245,18 +245,6 @@ static int compare_command_code(const void *a, const void *b)
 }
 
 /*!
- * Only useful for unit tests, not to be used in production code.
- */
-void dcpregs_UT_init(void)
-{
-}
-
-void dcpregs_UT_deinit(void)
-{
-    dcpregs_UT_init();
-}
-
-/*!
  * Write handler for DCP register 72.
  *
  * This function handles the DRC commands sent by the slave.

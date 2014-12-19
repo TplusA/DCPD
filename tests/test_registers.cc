@@ -139,14 +139,10 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_dbus_iface);
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
-
-    dcpregs_UT_init();
 }
 
 void cut_teardown(void)
 {
-    dcpregs_UT_deinit();
-
     mock_messages->check();
     mock_os->check();
     mock_dcpd_dbus->check();
