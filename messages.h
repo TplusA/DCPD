@@ -1,7 +1,6 @@
 #ifndef MESSAGES_H
 #define MESSAGES_H
 
-#include <stdlib.h>
 #include <stdbool.h>
 #include <syslog.h>
 
