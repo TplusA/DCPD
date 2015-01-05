@@ -34,10 +34,9 @@ struct fill_buffer_data_t
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
+static fill_buffer_data_t *fill_buffer_data;
 static struct dynamic_buffer buffer;
 static const struct fifo_pair fds = { 10, 20 };
-
-static fill_buffer_data_t fill_buffer_data;
 
 void cut_setup(void)
 {
@@ -50,6 +49,8 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_os);
     mock_os->init();
     mock_os_singleton = mock_os;
+
+    fill_buffer_data = new fill_buffer_data_t;
 
     dynamic_buffer_init(&buffer);
 }
@@ -66,9 +67,11 @@ void cut_teardown(void)
 
     delete mock_messages;
     delete mock_os;
+    delete fill_buffer_data;
 
     mock_messages = nullptr;
     mock_os = nullptr;
+    fill_buffer_data = nullptr;
 }
 
 
@@ -85,13 +88,13 @@ static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
     cppcut_assert_not_null(add_bytes_read);
     cppcut_assert_equal(fds.in_fd, fd);
 
-    const size_t n = std::min(count, fill_buffer_data.data_.length());
-    std::copy_n(fill_buffer_data.data_.begin(), n, dest_ptr + *add_bytes_read);
+    const size_t n = std::min(count, fill_buffer_data->data_.length());
+    std::copy_n(fill_buffer_data->data_.begin(), n, dest_ptr + *add_bytes_read);
     *add_bytes_read += n;
 
-    errno = fill_buffer_data.errno_value_;
+    errno = fill_buffer_data->errno_value_;
 
-    return fill_buffer_data.return_value_;
+    return fill_buffer_data->return_value_;
 }
 
 /*!\test
@@ -103,7 +106,7 @@ void test_read_drcp_size_header(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 731\n";
-    fill_buffer_data.set(input_string, 0, 1);
+    fill_buffer_data->set(input_string, 0, 1);
 
     size_t size;
     size_t offset;
@@ -120,7 +123,7 @@ void test_read_drcp_size_header_from_empty_input(void)
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
-    fill_buffer_data.set("", 0, 0);
+    fill_buffer_data->set("", 0, 0);
 
     mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Too short input, expected XML size");
 
@@ -146,7 +149,7 @@ void test_read_drcp_size_header_from_nearly_empty_input(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size";
-    fill_buffer_data.set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0);
 
     mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Too short input, expected XML size");
 
@@ -175,7 +178,7 @@ void test_read_drcp_size_header_from_incomplete_input(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 5";
-    fill_buffer_data.set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0);
 
     mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Incomplete XML size");
 
@@ -195,7 +198,7 @@ void test_read_drcp_size_header_with_trailing_byte(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 123F\n";
-    fill_buffer_data.set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_CRIT, "Malformed XML size \"123F\" (Invalid argument)");
 
@@ -215,7 +218,7 @@ void test_read_drcp_size_header_with_negative_size(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: -5\n";
-    fill_buffer_data.set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0);
 
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size -5 (Numerical result out of range)");
 
@@ -235,7 +238,7 @@ void test_read_drcp_size_header_with_huge_size(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 65536\n";
-    fill_buffer_data.set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0);
 
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size 65536 (Numerical result out of range)");
 
@@ -255,7 +258,7 @@ void test_read_drcp_size_header_with_overflow_size(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 18446744073709551616\n";
-    fill_buffer_data.set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0);
 
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size 18446744073709551616 (Numerical result out of range)");
 
@@ -279,7 +282,7 @@ void test_read_faulty_drcp_size_header(void)
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-    fill_buffer_data.set(input_string, 0, 1);
+    fill_buffer_data->set(input_string, 0, 1);
 
     mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
 
@@ -302,7 +305,7 @@ void test_read_drcp_size_header_from_broken_file_descriptor(void)
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
-    fill_buffer_data.set("", EBADF, -1);
+    fill_buffer_data->set("", EBADF, -1);
 
     mock_messages->expect_msg_error(EBADF, LOG_CRIT, "Reading XML size failed");
 
@@ -324,7 +327,7 @@ void test_read_drcp_data(void)
 
     static const char input_string[] =
         "Here is some test data\nread straight from the guts of\na MOCK!";
-    fill_buffer_data.set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0);
 
     cut_assert_true(drcp_fill_buffer(&buffer, fds.in_fd));
     cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
@@ -344,7 +347,7 @@ void test_read_drcp_data_from_infinite_size_input(void)
     dynamic_buffer_check_space(&buffer);
 
     static const char input_string[] = "testdata";
-    fill_buffer_data.set(input_string, 0, 1);
+    fill_buffer_data->set(input_string, 0, 1);
 
     for(size_t i = 0; i < buffer.size / (sizeof(input_string) - 1); ++i)
         mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -369,7 +372,7 @@ void test_read_drcp_data_from_broken_file_descriptor(void)
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
-    fill_buffer_data.set("", EBADF, -1);
+    fill_buffer_data->set("", EBADF, -1);
 
     mock_messages->expect_msg_error_formatted(EBADF, LOG_CRIT, "Failed reading DRCP data from fd 10 (Bad file descriptor)");
 
