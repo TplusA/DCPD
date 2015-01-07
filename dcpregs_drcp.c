@@ -146,6 +146,11 @@ static const struct drc_command_t drc_commands[] =
         .dbus_signal.list_navigation = handle_scroll_one_line_down,
     },
     {
+        .code = DRCP_KEY_OK_ENTER,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION,
+        .dbus_signal.list_navigation = tdbus_dcpd_list_navigation_emit_level_down,
+    },
+    {
         .code = DRCP_FAVORITES_ADD_ITEM,
         .iface_id = DBUSIFACE_LIST_ITEM,
         .dbus_signal.list_item = handle_add_to_favorites,
