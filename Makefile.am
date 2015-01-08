@@ -9,6 +9,9 @@ html_DATA = README.html
 EXTRA_DIST = README.md cppcheck_suppressed.txt
 EXTRA_DIST += send_drcp_command.sh
 
+dbusservicedir = $(datadir)/dbus-1/services
+dbusservice_DATA = dist/de.tahifi.Dcpd.service
+
 CLEANFILES = README.html
 
 dcpd_SOURCES = \
