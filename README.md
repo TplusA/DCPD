@@ -1,5 +1,19 @@
 # DCP daemon
 
+## Copyright and contact
+
+DCPD is released under the terms of the GNU General Public License version 3
+(GPLv3). See file <tt>COPYING</tt> for licensing terms.
+
+Contact:
+
+    T+A elektroakustik GmbH & Co. KG
+    Planckstrasse 11
+    32052 Herford
+    Germany
+
+## Short description
+
 The _dcpd_ daemon implements a subset of DCP, the Device Control Protocol. This
 daemon does not implement the SPI physical layer communcation, but only knows
 about the high-level structure of DCP.
