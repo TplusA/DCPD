@@ -655,7 +655,7 @@ static int process_command_line(int argc, char *argv[],
                                 struct files *files)
 {
     parameters->run_in_foreground = false;
-    parameters->connect_to_session_dbus = false;
+    parameters->connect_to_session_dbus = true;
 
     files->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
     files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
