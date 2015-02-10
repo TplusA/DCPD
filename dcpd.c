@@ -564,6 +564,7 @@ static void main_loop(struct files *files)
 struct parameters
 {
     bool run_in_foreground;
+    bool connect_to_session_dbus;
 };
 
 /*!
@@ -643,7 +644,9 @@ static void usage(const char *program_name)
            "  --ispi  name   Name of the named pipe the DCPSPI daemon writes to.\n"
            "  --ospi  name   Name of the named pipe the DCPSPI daemon reads from.\n"
            "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
-           "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n",
+           "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n"
+           "  --session-dbus Connect to session D-Bus.\n"
+           "  --system-dbus  Connect to system D-Bus.\n",
            program_name);
 }
 
@@ -652,6 +655,7 @@ static int process_command_line(int argc, char *argv[],
                                 struct files *files)
 {
     parameters->run_in_foreground = false;
+    parameters->connect_to_session_dbus = false;
 
     files->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
     files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
@@ -696,6 +700,10 @@ static int process_command_line(int argc, char *argv[],
             CHECK_ARGUMENT();
             files->drcp_fifo_out_name = argv[i];
         }
+        else if(strcmp(argv[i], "--session-dbus") == 0)
+            parameters->connect_to_session_dbus = true;
+        else if(strcmp(argv[i], "--system-dbus") == 0)
+            parameters->connect_to_session_dbus = false;
         else
         {
             fprintf(stderr, "Unknown option \"%s\". Please try --help.\n", argv[i]);
@@ -731,7 +739,7 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files) < 0)
         return EXIT_FAILURE;
 
-    if(dbus_setup(true) < 0)
+    if(dbus_setup(parameters.connect_to_session_dbus) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
