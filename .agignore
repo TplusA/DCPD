@@ -8,4 +8,5 @@ config.site/
 config/
 m4/
 *.md
+*.taghl
 *.xml
