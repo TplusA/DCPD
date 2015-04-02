@@ -53,6 +53,14 @@ extern "C" {
 #endif
 
 /*!
+ * Initialize register handling code.
+ *
+ * Some registers return static content obtained from the command line or
+ * configuration file. These data are passed here.
+ */
+void register_init(const char *mac_address);
+
+/*!
  * Find register structure by register number (address).
  */
 const struct dcp_register_t *register_lookup(uint8_t register_number);

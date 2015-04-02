@@ -21,6 +21,7 @@
 #include <algorithm>
 
 #include "transactions.h"
+#include "registers.h"
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_messages.hh"
@@ -504,6 +505,8 @@ void test_register_read_request_transaction(void)
  */
 void test_register_multi_step_read_request_transaction(void)
 {
+    register_init("12:34:56:78:9A:BC");
+
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 

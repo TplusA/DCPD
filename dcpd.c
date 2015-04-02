@@ -34,6 +34,7 @@
 #include "dynamic_buffer.h"
 #include "drcp.h"
 #include "dbus_iface.h"
+#include "registers.h"
 #include "os.h"
 
 /* generic events */
@@ -565,6 +566,8 @@ struct parameters
 {
     bool run_in_foreground;
     bool connect_to_session_dbus;
+    const char *primary_network_interface_name;
+    const char *primary_network_interface_mac_address;
 };
 
 /*!
@@ -641,6 +644,8 @@ static void usage(const char *program_name)
            "Options:\n"
            "  --help         Show this help.\n"
            "  --fg           Run in foreground, don't run as daemon.\n"
+           "  --iface        Name of the primary network interface (mandatory)\n"
+           "  --mac          MAC address of the primary network interface (mandatory)\n"
            "  --ispi  name   Name of the named pipe the DCPSPI daemon writes to.\n"
            "  --ospi  name   Name of the named pipe the DCPSPI daemon reads from.\n"
            "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
@@ -704,6 +709,16 @@ static int process_command_line(int argc, char *argv[],
             parameters->connect_to_session_dbus = true;
         else if(strcmp(argv[i], "--system-dbus") == 0)
             parameters->connect_to_session_dbus = false;
+        else if(strcmp(argv[i], "--iface") == 0)
+        {
+            CHECK_ARGUMENT();
+            parameters->primary_network_interface_name = argv[i];
+        }
+        else if(strcmp(argv[i], "--mac") == 0)
+        {
+            CHECK_ARGUMENT();
+            parameters->primary_network_interface_mac_address = argv[i];
+        }
         else
         {
             fprintf(stderr, "Unknown option \"%s\". Please try --help.\n", argv[i]);
@@ -712,6 +727,13 @@ static int process_command_line(int argc, char *argv[],
     }
 
 #undef CHECK_ARGUMENT
+
+    if(parameters->primary_network_interface_name == NULL ||
+       parameters->primary_network_interface_mac_address == NULL)
+    {
+        fprintf(stderr, "Missing options. Please try --help.\n");
+        return -1;
+    }
 
     return 0;
 }
@@ -738,6 +760,8 @@ int main(int argc, char *argv[])
 
     if(setup(&parameters, &files) < 0)
         return EXIT_FAILURE;
+
+    register_init(parameters.primary_network_interface_mac_address);
 
     if(dbus_setup(parameters.connect_to_session_dbus) < 0)
     {

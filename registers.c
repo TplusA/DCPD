@@ -32,6 +32,13 @@
 
 #include "dcpregs_drcp.h"
 
+struct register_configuration_t
+{
+    char mac_address_string[6 * 3];
+};
+
+static struct register_configuration_t config;
+
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
 {
     msg_info("read 17 handler %p %zu", response, length);
@@ -65,28 +72,27 @@ static ssize_t read_51_mac_address(uint8_t *response, size_t length)
 {
     msg_info("read 51 handler %p %zu", response, length);
 
-    /*
-     * FIXME: Hard-coded, wrong MAC address string for testing purposes.
-     */
-    static const char mac_address[] = "12:34:56:78:9A:BC";
+    log_assert(length == sizeof(config.mac_address_string));
 
-    log_assert(length == sizeof(mac_address));
+    if(length <  sizeof(config.mac_address_string))
+        return -1;
 
-    memcpy(response, mac_address, sizeof(mac_address));
-    return sizeof(mac_address);
+    memcpy(response, config.mac_address_string, sizeof(config.mac_address_string));
+
+    return sizeof(config.mac_address_string);
 }
 
 static int write_51_mac_address(const uint8_t *data, size_t length)
 {
     msg_info("write 51 handler %p %zu", data, length);
 
-    if(length != 18)
+    if(length != sizeof(config.mac_address_string))
     {
         msg_error(EINVAL, LOG_ERR, "Unexpected data length %zu", length);
         return -1;
     }
 
-    if(data[17] != '\0')
+    if(data[sizeof(config.mac_address_string) - 1] != '\0')
     {
         msg_error(EINVAL, LOG_ERR,
                   "Received MAC address not zero-terminated");
@@ -177,6 +183,19 @@ static int compare_register_address(const void *a, const void *b)
     return
         (int)((const struct dcp_register_t *)a)->address -
         (int)((const struct dcp_register_t *)b)->address;
+}
+
+void register_init(const char *mac_address)
+{
+    if(mac_address == NULL ||
+       strlen(mac_address) != sizeof(config.mac_address_string) - 1)
+    {
+        /* locally administered address, invalid in the wild */
+        mac_address = "02:00:00:00:00:00";
+    }
+
+    strncpy(config.mac_address_string, mac_address, sizeof(config.mac_address_string));
+    config.mac_address_string[sizeof(config.mac_address_string) - 1] = '\0';
 }
 
 const struct dcp_register_t *register_lookup(uint8_t register_number)
