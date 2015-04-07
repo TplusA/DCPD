@@ -66,8 +66,7 @@ static void handle_goto_home(tdbusdcpdViews *iface)
 
 static void handle_toggle_views_browse_play(tdbusdcpdViews *iface)
 {
-    msg_info("TESTING: Toggle between file system and UPnP browsers");
-    tdbus_dcpd_views_emit_toggle(iface, "Filesystem", "UPnP");
+    tdbus_dcpd_views_emit_toggle(iface, "Browse", "Play");
 }
 
 static void handle_scroll_one_line_up(tdbusdcpdListNavigation *iface)
