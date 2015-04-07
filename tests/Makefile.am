@@ -10,7 +10,7 @@ AM_TESTS_ENVIRONMENT = CUTTER="$(CUTTER)" XSLTPROC="$(XSLTPROC)" VALGRIND="$(VAL
 AM_LDFLAGS = -module -rpath $(libdir) -avoid-version -no-undefined
 
 AM_CPPFLAGS = $(CUTTER_CFLAGS)
-AM_CPPFLAGS += -I$(top_srcdir)
+AM_CPPFLAGS += -I$(top_srcdir)/src -I$(top_builddir)/src
 
 AM_CFLAGS = $(CWARNINGS)
 
@@ -21,7 +21,7 @@ LIBS += $(CPPCUTTER_LIBS)
 check_LTLIBRARIES = test_dynamic_buffer.la test_registers.la test_drcpdcomm.la test_transactions.la
 
 test_dynamic_buffer_la_SOURCES = test_dynamic_buffer.c
-test_dynamic_buffer_la_LIBADD = ../libdynamic_buffer.la
+test_dynamic_buffer_la_LIBADD = $(top_builddir)/src/libdynamic_buffer.la
 test_dynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 
 test_registers_la_SOURCES = \
@@ -31,7 +31,7 @@ test_registers_la_SOURCES = \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
-test_registers_la_LIBADD = ../libregisters.la ../libdynamic_buffer.la
+test_registers_la_LIBADD = $(top_builddir)/src/libregisters.la $(top_builddir)/src/libdynamic_buffer.la
 test_registers_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 test_registers_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
@@ -40,7 +40,7 @@ test_drcpdcomm_la_SOURCES = \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
-test_drcpdcomm_la_LIBADD = ../libdrcpdcomm.la ../libdynamic_buffer.la
+test_drcpdcomm_la_LIBADD = $(top_builddir)/src/libdrcpdcomm.la $(top_builddir)/src/libdynamic_buffer.la
 test_drcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 test_drcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 
@@ -49,7 +49,7 @@ test_transactions_la_SOURCES = \
     mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc
-test_transactions_la_LIBADD = ../libtransactions.la ../libregisters.la ../libdynamic_buffer.la
+test_transactions_la_LIBADD = $(top_builddir)/src/libtransactions.la $(top_builddir)/src/libregisters.la $(top_builddir)/src/libdynamic_buffer.la
 test_transactions_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 test_transactions_la_CXXFLAGS = $(AM_CXXFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
