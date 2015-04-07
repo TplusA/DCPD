@@ -21,10 +21,11 @@ ACLOCAL_AMFLAGS = -I ../m4
 bin_PROGRAMS = dcpd
 
 dcpd_SOURCES = \
-    dcpd.c os.c os.h registers.h named_pipe.c named_pipe.h \
+    dcpd.c os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
     network.c network.h \
     transactions.h dcpdefs.h messages.c messages.h \
-    dynamic_buffer.h drcp.h drcp_command_codes.h dcpregs_drcp.h \
+    dynamic_buffer.h drcp.h drcp_command_codes.h \
+    dcpregs_drcp.h dcpregs_networking.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h
 
 AM_CFLAGS = $(CWARNINGS)
@@ -41,8 +42,10 @@ libdynamic_buffer_la_SOURCES = dynamic_buffer.c dynamic_buffer.h
 libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 
 libregisters_la_SOURCES = \
-    registers.c registers.h \
-    dcpregs_drcp.c dcpregs_drcp.h drcp_command_codes.h messages.h
+    registers.c registers.h registers_priv.h \
+    dcpregs_drcp.c dcpregs_drcp.h \
+    dcpregs_networking.c dcpregs_networking.h \
+    drcp_command_codes.h messages.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h

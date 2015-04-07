@@ -31,13 +31,8 @@
 #include "messages.h"
 
 #include "dcpregs_drcp.h"
-
-struct register_configuration_t
-{
-    char mac_address_string[6 * 3];
-};
-
-static struct register_configuration_t config;
+#include "dcpregs_networking.h"
+#include "registers_priv.h"
 
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
 {
@@ -68,70 +63,6 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     return length;
 }
 
-static ssize_t read_51_mac_address(uint8_t *response, size_t length)
-{
-    msg_info("read 51 handler %p %zu", response, length);
-
-    log_assert(length == sizeof(config.mac_address_string));
-
-    if(length <  sizeof(config.mac_address_string))
-        return -1;
-
-    memcpy(response, config.mac_address_string, sizeof(config.mac_address_string));
-
-    return sizeof(config.mac_address_string);
-}
-
-static int write_51_mac_address(const uint8_t *data, size_t length)
-{
-    msg_info("write 51 handler %p %zu", data, length);
-
-    if(length != sizeof(config.mac_address_string))
-    {
-        msg_error(EINVAL, LOG_ERR, "Unexpected data length %zu", length);
-        return -1;
-    }
-
-    if(data[sizeof(config.mac_address_string) - 1] != '\0')
-    {
-        msg_error(EINVAL, LOG_ERR,
-                  "Received MAC address not zero-terminated");
-        return -1;
-    }
-
-    msg_info("Received MAC address \"%s\", should validate address and "
-             "configure adapter", (const char *)data);
-
-    return 0;
-}
-
-static ssize_t read_55_dhcp_enabled(uint8_t *response, size_t length)
-{
-    msg_info("read 55 handler %p %zu", response, length);
-    log_assert(length == 1);
-
-    response[0] = 0;
-    return length;
-}
-
-static int write_55_dhcp_enabled(const uint8_t *data, size_t length)
-{
-    msg_info("write 55 handler %p %zu", data, length);
-    log_assert(length == 1);
-
-    if(data[0] > 1)
-    {
-        msg_error(EINVAL, LOG_ERR,
-                  "Received invalid DHCP configuration parameter 0x%02x",
-                  data[0]);
-        return -1;
-    }
-
-    msg_info("Should %sable DHCP", data[0] == 0 ? "dis" : "en");
-
-    return 0;
-}
-
 /*!
  * List of implemented DCP registers.
  *
@@ -155,15 +86,15 @@ static const struct dcp_register_t register_map[] =
         /* MAC address */
         .address = 51,
         .max_data_size = 18,
-        .read_handler = read_51_mac_address,
-        .write_handler = write_51_mac_address,
+        .read_handler = dcpregs_read_51_mac_address,
+        .write_handler = dcpregs_write_51_mac_address,
     },
     {
         /* Enable or disable DHCP */
         .address = 55,
         .max_data_size = 1,
-        .read_handler = read_55_dhcp_enabled,
-        .write_handler = write_55_dhcp_enabled,
+        .read_handler = dcpregs_read_55_dhcp_enabled,
+        .write_handler = dcpregs_write_55_dhcp_enabled,
     },
     {
         /* DRC protocol */
@@ -187,15 +118,17 @@ static int compare_register_address(const void *a, const void *b)
 
 void register_init(const char *mac_address)
 {
+    struct register_configuration_t *config = registers_get_nonconst_data();
+
     if(mac_address == NULL ||
-       strlen(mac_address) != sizeof(config.mac_address_string) - 1)
+       strlen(mac_address) != sizeof(config->mac_address_string) - 1)
     {
         /* locally administered address, invalid in the wild */
         mac_address = "02:00:00:00:00:00";
     }
 
-    strncpy(config.mac_address_string, mac_address, sizeof(config.mac_address_string));
-    config.mac_address_string[sizeof(config.mac_address_string) - 1] = '\0';
+    strncpy(config->mac_address_string, mac_address, sizeof(config->mac_address_string));
+    config->mac_address_string[sizeof(config->mac_address_string) - 1] = '\0';
 }
 
 const struct dcp_register_t *register_lookup(uint8_t register_number)
@@ -207,4 +140,16 @@ const struct dcp_register_t *register_lookup(uint8_t register_number)
     return bsearch(&key, register_map,
                    sizeof(register_map) / sizeof(register_map[0]),
                    sizeof(register_map[0]), compare_register_address);
+}
+
+static struct register_configuration_t config;
+
+const struct register_configuration_t *registers_get_data(void)
+{
+    return &config;
+}
+
+struct register_configuration_t *registers_get_nonconst_data(void)
+{
+    return &config;
 }
