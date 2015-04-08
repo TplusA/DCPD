@@ -34,6 +34,7 @@
 struct ini_key_value_pair
 {
     struct ini_key_value_pair *next;
+    size_t key_length;
     char *key;
     char *value;
 };

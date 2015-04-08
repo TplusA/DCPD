@@ -639,6 +639,7 @@ inifile_section_store_value(struct ini_section *section,
         if(kv != NULL)
         {
             kv->next = NULL;
+            kv->key_length = key_length;
             kv->key = key_copy;
             kv->value = value_copy;
 
@@ -675,7 +676,7 @@ inifile_section_lookup_kv_pair(const struct ini_section *section,
 
     for(struct ini_key_value_pair *kv = section->values_head; kv != NULL; kv = kv->next)
     {
-        if(memcmp(kv->key, key, key_length) == 0)
+        if(kv->key_length == key_length && memcmp(kv->key, key, key_length) == 0)
             return kv;
     }
 

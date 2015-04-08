@@ -165,6 +165,101 @@ void test_parse_from_memory()
     inifile_free(&ini);
 }
 
+/*!\test
+ * Attempting to find non-existent keys in a section returns \c NULL pointers.
+ */
+void test_lookup_nonexistent_key_in_section_returns_null()
+{
+    static const char text[] =
+        "[foo]\n"
+        "key 1 = bar"
+        ;
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "foo", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key 2", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "key does not exist", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "", 0);
+    cppcut_assert_null(pair);
+
+    inifile_free(&ini);
+}
+
+/*!\test
+ * Assignments outside sections are ignored.
+ */
+void test_parser_skips_assignments_before_first_section()
+{
+    static const char text[] =
+        "ignore = this \n"
+        "[section]\n"
+        "key 1 = value 1"
+        ;
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 1 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key 1", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value 1", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "ignore", 0);
+    cppcut_assert_null(pair);
+
+    inifile_free(&ini);
+}
+
+/*!\test
+ * Empty sections are OK.
+ */
+void test_parser_accepts_empty_sections()
+{
+    static const char text[] =
+        "[empty section]\n"
+        "[non-empty section]\n"
+        "key = value\n"
+        ;
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "empty section", 0);
+    cppcut_assert_not_null(section);
+    cppcut_assert_null(section->values_head);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    section = inifile_find_section(&ini, "non-empty section", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+}
+
 };
 
 /*!@}*/
