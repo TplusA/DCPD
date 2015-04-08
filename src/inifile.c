@@ -385,7 +385,9 @@ static int parse_assignment(struct parser_data *data)
 
     const size_t start_of_value = data->pos;
 
-    switch(skip_until(data, '\n'))
+    enum skip_result skipped = skip_until(data, '\n');
+
+    switch(skipped)
     {
       case SKIP_RESULT_EOL:
         BUG("Unexpected skip result");
@@ -406,6 +408,9 @@ static int parse_assignment(struct parser_data *data)
                                     length_of_key,
                                     data->content + start_of_value,
                                     length_of_value);
+
+    if(skipped == SKIP_RESULT_OK)
+        ++data->line;
 
     return kv != NULL ? 0 : -1;
 }

@@ -348,6 +348,171 @@ void test_parser_ignores_insignificant_spaces()
     inifile_free(&ini);
 }
 
+/*!
+ * In case the input file ends within a section header, that section is
+ * ignored.
+ */
+void test_end_of_file_within_section_header_ignores_section()
+{
+    static const char text[] =
+        "[section]\n"
+        "key = value\n"
+        "qux = qoo\n"
+        "[foo"
+        ;
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "End of file within section header (line 4 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "qux", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("qoo", static_cast<const char *>(pair->value));
+
+    section = inifile_find_section(&ini, "foo", 0);
+    cppcut_assert_null(section);
+
+    inifile_free(&ini);
+}
+
+/*!
+ * In case there is a line break within a section header, that section is
+ * ignored.
+ */
+void test_end_of_line_within_section_header_ignores_section()
+{
+    static const char text[] =
+        "[section]\n"
+        "key = value\n"
+        "qux = qoo\n"
+        "[foo\n"
+        "]\n"
+        "foo key 1 = foo value 1\n"
+        "foo key 2 = foo value 2\n"
+        "[bar]\n"
+        "bar key 1 = bar value 1\n"
+        "bar key 2 = bar value 2\n"
+        ;
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "End of line within section header (line 4 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 5 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 6 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 7 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "foo key 1", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "foo key 1", 0);
+    cppcut_assert_null(pair);
+
+
+    section = inifile_find_section(&ini, "foo", 0);
+    cppcut_assert_null(section);
+
+
+    section = inifile_find_section(&ini, "bar", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "bar key 1", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("bar value 1", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "bar key 2", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("bar value 2", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "foo key 1", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "foo key 1", 0);
+    cppcut_assert_null(pair);
+
+    inifile_free(&ini);
+}
+
+/*!
+ * Line numbering in error messages is not confused if there are multiple
+ * parser errors.
+ */
+void test_line_numbers_in_error_messages_remain_accurate()
+{
+    static const char text[] =
+        "[section]\n"
+        "key = value\n"
+        "qux = qoo\n"
+        "[foo\n"
+        "]\n"
+        "foo key 1 = foo value 1\n"
+        "[bar]\n"
+        "bar key 1 = bar value 1\n"
+        "[foobar\n"
+        "\n"
+        " \n"
+        "foobar key 1 = foobar value 1\n"
+        "foobar key 2 = foobar value 2\n"
+        "\n"
+        "  [  broken"
+        ;
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "End of line within section header (line 4 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 5 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 6 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "End of line within section header (line 9 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 12 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 13 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "End of file within section header (line 15 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    section = inifile_find_section(&ini, "foo", 0);
+    cppcut_assert_null(section);
+
+    section = inifile_find_section(&ini, "bar", 0);
+    cppcut_assert_not_null(section);
+
+    section = inifile_find_section(&ini, "foobar", 0);
+    cppcut_assert_null(section);
+
+    inifile_free(&ini);
+}
+
 };
 
 /*!@}*/
