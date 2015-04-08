@@ -234,17 +234,12 @@ static int parse_section_name(struct parser_data *data)
 {
     log_assert(data->state == STATE_EXPECT_SECTION_NAME);
 
-    enum skip_result result = skip_spaces(data);
-
     const size_t start_of_name = data->pos;
-
-    if(result == SKIP_RESULT_OK)
-        result = skip_until(data, ']');
 
     /* in case of any error... */
     data->state = STATE_EXPECT_SECTION_BEGIN;
 
-    switch(result)
+    switch(skip_until(data, ']'))
     {
       case SKIP_RESULT_EOF:
         msg_error(EINVAL, LOG_ERR,

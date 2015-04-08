@@ -260,6 +260,94 @@ void test_parser_accepts_empty_sections()
     inifile_free(&ini);
 }
 
+/*!\test
+ * Whitespace is being ignored in various places.
+ */
+void test_parser_ignores_insignificant_spaces()
+{
+    static const char text[] =
+        "\n"
+        "  \n"
+        "     [empty section]   \n"
+        "\n"
+        "\t\t   \t\n"
+        "[ empty section]\n"
+        "key a = value a\n"
+        "[empty section ]\n"
+        "key b = value b\n"
+        "\t\t[non-empty section]\t\t\t\n"
+        "\n"
+        "   \t  key 1 = value 1\n"
+        "key 2 = value 2  \t    \n"
+        "key 3=value 3\n"
+        "\t\t\n"
+        "   \n"
+        " \t\t  \n"
+        "\n"
+        ;
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "empty section", 0);
+    cppcut_assert_not_null(section);
+    cppcut_assert_null(section->values_head);
+
+
+    section = inifile_find_section(&ini, " empty section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key a", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value a", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key b", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "key 1", 0);
+    cppcut_assert_null(pair);
+
+
+    section = inifile_find_section(&ini, "empty section ", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key b", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value b", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key a", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "key 1", 0);
+    cppcut_assert_null(pair);
+
+
+    section = inifile_find_section(&ini, "non-empty section", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key 1", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value 1", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key 2", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value 2", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key 3", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value 3", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key a", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "key b", 0);
+    cppcut_assert_null(pair);
+
+
+    inifile_free(&ini);
+}
+
 };
 
 /*!@}*/
