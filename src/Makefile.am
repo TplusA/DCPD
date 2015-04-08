@@ -32,7 +32,13 @@ AM_CFLAGS = $(CWARNINGS)
 
 AM_CPPFLAGS = $(DCPD_DEPENDENCIES_CFLAGS)
 
-noinst_LTLIBRARIES = libtransactions.la libdynamic_buffer.la libregisters.la libdcpd_dbus.la libdrcpdcomm.la
+noinst_LTLIBRARIES = \
+    libtransactions.la \
+    libdynamic_buffer.la \
+    libregisters.la \
+    libinifile.la \
+    libdcpd_dbus.la \
+    libdrcpdcomm.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
@@ -47,6 +53,9 @@ libregisters_la_SOURCES = \
     dcpregs_networking.c dcpregs_networking.h \
     drcp_command_codes.h messages.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
+
+libinifile_la_SOURCES = inifile.c inifile.h
+libinifile_la_CFLAGS = $(AM_CFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
