@@ -18,6 +18,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <errno.h>
 
 #include "inifile.h"
@@ -95,7 +96,7 @@ static enum skip_result skip_spaces(struct parser_data *data)
     {
         const char ch = peek_character(data);
 
-        if(ch != ' ' && ch != '\t')
+        if(!isblank(ch))
             return ch != '\n' ? SKIP_RESULT_OK : enter_next_line(data);
     }
 
@@ -115,7 +116,7 @@ static enum skip_result skip_spaces_reverse(struct parser_data *data)
     {
         const char ch = peek_character(data);
 
-        if(ch != ' ' && ch != '\t')
+        if(!isblank(ch))
         {
             if(ch != '\n')
                 return SKIP_RESULT_OK;
