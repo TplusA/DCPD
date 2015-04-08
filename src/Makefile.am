@@ -37,8 +37,9 @@ noinst_LTLIBRARIES = \
     libdynamic_buffer.la \
     libregisters.la \
     libinifile.la \
+    libdrcpdcomm.la \
     libdcpd_dbus.la \
-    libdrcpdcomm.la
+    libconnman_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
@@ -60,6 +61,9 @@ libinifile_la_CFLAGS = $(AM_CFLAGS)
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libconnman_dbus_la_SOURCES = connman_dbus.c connman_dbus.h
+libconnman_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 libdrcpdcomm_la_SOURCES = drcp.c drcp.h named_pipe.h dynamic_buffer.h messages.h
 libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 
@@ -68,7 +72,15 @@ libtransactions_la_SOURCES = \
     dynamic_buffer.h registers.h named_pipe.h dcpdefs.h messages.h
 libtransactions_la_CFLAGS = $(AM_CFLAGS)
 
-BUILT_SOURCES = $(nodist_libdcpd_dbus_la_SOURCES) de_tahifi_dcpd.h de_tahifi_dcpd.md dcpd_dbus.stamp
+BUILT_SOURCES = \
+    $(nodist_libdcpd_dbus_la_SOURCES) \
+    de_tahifi_dcpd.h \
+    de_tahifi_dcpd.md \
+    dcpd_dbus.stamp \
+    $(nodist_libconnman_dbus_la_SOURCES) \
+    net_connman.h \
+    net_connman.md \
+    connman_dbus.stamp
 
 CLEANFILES = $(BUILT_SOURCES)
 
@@ -81,4 +93,13 @@ dcpd_dbus.h: dcpd_dbus.stamp
 dcpd_dbus.stamp: $(DBUS_IFACES)/de_tahifi_dcpd.xml
 	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix de.tahifi.Dcpd. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dcpd.md -H de_tahifi_dcpd.h -c tdbus_dcpd -s de.tahifi.Dcpd. -n "$(PACKAGE_NAME)"
+	touch $@
+
+net_connman.h: connman_dbus.stamp
+net_connman.md: connman_dbus.stamp
+connman_dbus.c: connman_dbus.stamp
+connman_dbus.h: connman_dbus.stamp
+connman_dbus.stamp: $(DBUS_IFACES)/net_connman.xml
+	$(GDBUS_CODEGEN) --generate-c-code=connman_dbus --c-namespace tdbus_connman --interface-prefix net.connman. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o net_connman.md -H net_connman.h -c tdbus_connman -s net.connman. -n "$(PACKAGE_NAME)"
 	touch $@

@@ -27,7 +27,10 @@ EXTRA_DIST += send_drcp_command.sh
 
 CLEANFILES = README.html
 
-EXTRA_DIST += dbus_interfaces/extract_documentation.py dbus_interfaces/de_tahifi_dcpd.xml
+EXTRA_DIST += \
+    dbus_interfaces/extract_documentation.py \
+    dbus_interfaces/de_tahifi_dcpd.xml \
+    dbus_interfaces/net_connman.xml
 
 .md.html:
 	$(MARKDOWN) $< >$@
