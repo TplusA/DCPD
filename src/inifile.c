@@ -70,7 +70,6 @@ static inline char peek_character(const struct parser_data *data)
  * Assume current character is newline, so increase position and line number.
  *
  * \retval #SKIP_RESULT_EOL Next character is beyond the line feed.
- * \retval #SKIP_RESULT_EOF End of file reached.
  */
 static enum skip_result enter_next_line(struct parser_data *data)
 {
@@ -79,7 +78,7 @@ static enum skip_result enter_next_line(struct parser_data *data)
     ++data->pos;
     ++data->line;
 
-    return data->pos < data->size ? SKIP_RESULT_EOL : SKIP_RESULT_EOF;
+    return SKIP_RESULT_EOL;
 }
 
 /*!
@@ -355,11 +354,14 @@ static int parse_assignment(struct parser_data *data)
     switch(skip_until(data, '='))
     {
       case SKIP_RESULT_EOF:
+        ++data->line;
+        /* fall-through */
+
       case SKIP_RESULT_EOL:
         msg_error(EINVAL, LOG_ERR,
                   "Expected assignment" ERROR_LOCATION_FMTSTR,
-                  data->line, data->source);
-        return 1;
+                  data->line - 1, data->source);
+        return 0;
 
       case SKIP_RESULT_OK:
         break;
@@ -373,10 +375,13 @@ static int parse_assignment(struct parser_data *data)
     switch(skip_spaces(data))
     {
       case SKIP_RESULT_EOF:
+        ++data->line;
+        /* fall-through */
+
       case SKIP_RESULT_EOL:
         msg_error(EINVAL, LOG_ERR,
                   "Expected value after equals sign" ERROR_LOCATION_FMTSTR,
-                  data->line, data->source);
+                  data->line - 1, data->source);
         return 0;
 
       case SKIP_RESULT_OK:

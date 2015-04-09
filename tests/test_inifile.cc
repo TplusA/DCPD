@@ -513,6 +513,168 @@ void test_line_numbers_in_error_messages_remain_accurate()
     inifile_free(&ini);
 }
 
+/*!\test
+ * Line gets ignored if the assignment character is missing where an assignment
+ * is expected.
+ */
+void test_missing_assignment_character_is_detected()
+{
+    static const char text[] =
+        "[section]\n"
+        "key value\n"
+        "a = b\n"
+        ;
+
+    /* EOL */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected assignment (line 2 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    inifile_free(&ini);
+
+    /* EOF */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected assignment (line 2 in \"test\") (Invalid argument)");
+
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 8));
+    cppcut_assert_not_null(ini.sections_head);
+
+    section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    inifile_free(&ini);
+}
+
+/*!\test
+ * Line gets ignored if there is no value after the assignment character.
+ */
+void test_missing_value_after_assignment_is_detected()
+{
+    static const char text[] =
+        "[section]\n"
+        "key =\n"
+        "a = b\n"
+        ;
+
+    /* EOL */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected value after equals sign (line 2 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "a", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("b", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+
+    /* EOF */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected value after equals sign (line 2 in \"test\") (Invalid argument)");
+
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 8));
+    cppcut_assert_not_null(ini.sections_head);
+
+    section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    inifile_free(&ini);
+}
+
+/*!\test
+ * Line gets ignored if there is no key name in front of the assignment
+ * character.
+ */
+void test_missing_key_name_before_assignment_is_detected()
+{
+    static const char text[] =
+        "[section]\n"
+        "= value\n"
+        "a = b\n"
+        ;
+
+    /* EOL */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected key name (line 2 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    pair = inifile_section_lookup_kv_pair(section, "a", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("b", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+
+    /* EOF */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected key name (line 2 in \"test\") (Invalid argument)");
+
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 8));
+    cppcut_assert_not_null(ini.sections_head);
+
+    section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_null(pair);
+
+    inifile_free(&ini);
+}
+
+/*!\test
+ * Values may contain the assignment character.
+ */
+void test_second_assignment_character_is_part_of_value()
+{
+    static const char text[] =
+        "[section]\n"
+        "key = value = foo\n";
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value = foo", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+}
+
 };
 
 /*!@}*/
