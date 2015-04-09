@@ -19,13 +19,24 @@
 #ifndef REGISTERS_PRIV_H
 #define REGISTERS_PRIV_H
 
+#include <stdbool.h>
+
+struct register_network_interface_t
+{
+    bool is_wired;
+    const char *iface_name;
+    char mac_address_string[6 * 3];
+};
+
 /*!
  * \internal
  * DCP registers configuration data.
  */
 struct register_configuration_t
 {
-    char mac_address_string[6 * 3];
+    struct register_network_interface_t builtin_ethernet_interface;
+    struct register_network_interface_t builtin_wlan_interface;
+    struct register_network_interface_t *active_interface;
 };
 
 #ifdef __cplusplus

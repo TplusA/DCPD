@@ -116,19 +116,53 @@ static int compare_register_address(const void *a, const void *b)
         (int)((const struct dcp_register_t *)b)->address;
 }
 
-void register_init(const char *mac_address)
+static const char *check_mac_address(const char *mac_address,
+                                     size_t required_length, bool is_wired)
 {
-    struct register_configuration_t *config = registers_get_nonconst_data();
-
     if(mac_address == NULL ||
-       strlen(mac_address) != sizeof(config->mac_address_string) - 1)
+       strlen(mac_address) != required_length)
     {
         /* locally administered address, invalid in the wild */
-        mac_address = "02:00:00:00:00:00";
+        return is_wired ? "02:00:00:00:00:00" : "03:00:00:00:00:00";
     }
+    else
+        return mac_address;
+}
 
-    strncpy(config->mac_address_string, mac_address, sizeof(config->mac_address_string));
-    config->mac_address_string[sizeof(config->mac_address_string) - 1] = '\0';
+static void copy_mac_address(char *dest, size_t dest_size, const char *src)
+{
+    strncpy(dest, src, dest_size);
+    dest[dest_size - 1] = '\0';
+}
+
+void register_init(const char *ethernet_interface_name,
+                   const char *ethernet_mac_address,
+                   const char *wlan_interface_name,
+                   const char *wlan_mac_address)
+{
+    struct register_configuration_t *config = registers_get_nonconst_data();
+    struct register_network_interface_t *iface_data;
+    const char *temp;
+
+    iface_data = &config->builtin_ethernet_interface;
+    iface_data->is_wired = true;
+    iface_data->iface_name = ethernet_interface_name;
+    temp = check_mac_address(ethernet_mac_address,
+                             sizeof(iface_data->mac_address_string) - 1,
+                             iface_data->is_wired);
+    copy_mac_address(iface_data->mac_address_string,
+                     sizeof(iface_data->mac_address_string), temp);
+
+    iface_data = &config->builtin_wlan_interface;
+    iface_data->is_wired = false;
+    iface_data->iface_name = wlan_interface_name;
+    temp = check_mac_address(wlan_mac_address,
+                             sizeof(iface_data->mac_address_string) - 1,
+                             iface_data->is_wired);
+    copy_mac_address(iface_data->mac_address_string,
+                     sizeof(iface_data->mac_address_string), temp);
+
+    config->active_interface = NULL;
 }
 
 const struct dcp_register_t *register_lookup(uint8_t register_number)

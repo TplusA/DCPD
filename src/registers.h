@@ -58,7 +58,10 @@ extern "C" {
  * Some registers return static content obtained from the command line or
  * configuration file. These data are passed here.
  */
-void register_init(const char *mac_address);
+void register_init(const char *ethernet_interface_name,
+                   const char *ethernet_mac_address,
+                   const char *wlan_interface_name,
+                   const char *wlan_mac_address);
 
 /*!
  * Find register structure by register number (address).

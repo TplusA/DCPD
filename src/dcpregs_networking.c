@@ -27,35 +27,45 @@
 #include "registers_priv.h"
 #include "messages.h"
 
+static const struct register_network_interface_t *
+get_network_iface_data(const struct register_configuration_t *config)
+{
+    return (config->active_interface != NULL)
+        ? config->active_interface
+        : &config->builtin_ethernet_interface;
+}
+
 ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
 {
     msg_info("read 51 handler %p %zu", response, length);
 
-    const struct register_configuration_t *config = registers_get_data();
+    const struct register_network_interface_t *const iface =
+        get_network_iface_data(registers_get_data());
 
-    log_assert(length == sizeof(config->mac_address_string));
+    log_assert(length == sizeof(iface->mac_address_string));
 
-    if(length <  sizeof(config->mac_address_string))
+    if(length <  sizeof(iface->mac_address_string))
         return -1;
 
-    memcpy(response, config->mac_address_string, sizeof(config->mac_address_string));
+    memcpy(response, iface->mac_address_string, sizeof(iface->mac_address_string));
 
-    return sizeof(config->mac_address_string);
+    return sizeof(iface->mac_address_string);
 }
 
 int dcpregs_write_51_mac_address(const uint8_t *data, size_t length)
 {
     msg_info("write 51 handler %p %zu", data, length);
 
-    const struct register_configuration_t *config = registers_get_data();
+    const struct register_network_interface_t *const iface =
+        get_network_iface_data(registers_get_data());
 
-    if(length != sizeof(config->mac_address_string))
+    if(length != sizeof(iface->mac_address_string))
     {
         msg_error(EINVAL, LOG_ERR, "Unexpected data length %zu", length);
         return -1;
     }
 
-    if(data[sizeof(config->mac_address_string) - 1] != '\0')
+    if(data[sizeof(iface->mac_address_string) - 1] != '\0')
     {
         msg_error(EINVAL, LOG_ERR,
                   "Received MAC address not zero-terminated");

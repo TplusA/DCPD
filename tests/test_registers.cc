@@ -126,12 +126,12 @@ void test_lookup_all_nonexistent_registers(void)
 }
 
 /*!\test
- * Read out MAC address of primary network interface.
+ * Read out MAC address of built-in Ethernet interface.
  */
 void test_read_mac_address(void)
 {
     static const char mac_address[] = "DE:CA:FD:EA:DB:AD";
-    register_init(mac_address);
+    register_init("eth0", mac_address, NULL, NULL);
 
     const struct dcp_register_t *reg = register_lookup(51);
     cppcut_assert_not_null(reg);
@@ -155,11 +155,11 @@ void test_read_mac_address(void)
 }
 
 /*!\test
- * MAC address of primary network interface is an invalid address if not set.
+ * MAC address of built-in Ethernet interface is an invalid address if not set.
  */
 void test_read_mac_address_default(void)
 {
-    register_init(NULL);
+    register_init(NULL, NULL, NULL, NULL);
 
     const struct dcp_register_t *reg = register_lookup(51);
     cppcut_assert_not_null(reg);
