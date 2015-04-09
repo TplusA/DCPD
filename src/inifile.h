@@ -160,6 +160,15 @@ struct ini_section *inifile_find_section(const struct ini_file *inifile,
                                          size_t section_name_length);
 
 /*!
+ * Write INI file to filesystem.
+ *
+ * \returns
+ *     0 on success, -1 on error.
+ */
+int inifile_write_to_file(const struct ini_file *inifile,
+                          const char *filename);
+
+/*!
  * Free an INI file structure.
  *
  * Note that the memory \p inifile is pointing to is \e not freed by this

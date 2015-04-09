@@ -79,6 +79,7 @@ test_transactions_la_CXXFLAGS = $(AM_CXXFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
 test_inifile_la_SOURCES = \
     test_inifile.cc \
+    mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
 test_inifile_la_LIBADD = $(top_builddir)/src/libinifile.la

@@ -18,10 +18,12 @@
 
 #include <cppcutter.h>
 #include <string.h>
+#include <algorithm>
 
 #include "inifile.h"
 
 #include "mock_messages.hh"
+#include "mock_os.hh"
 
 /*!
  * \addtogroup inifile_tests Unit tests
@@ -748,10 +750,39 @@ void test_multiple_assignments_to_a_key_name_keeps_last_assignment()
 namespace inifile_manipulation_tests
 {
 
+static MockMessages *mock_messages;
+static MockOs *mock_os;
 static struct ini_file ini;
+
+static std::vector<char> os_write_buffer;
+static constexpr int expected_os_write_fd = 123;
+
+static int write_from_buffer_callback(const void *src, size_t count, int fd)
+{
+    cppcut_assert_equal(expected_os_write_fd, fd);
+    cppcut_assert_not_null(src);
+    cppcut_assert_operator(size_t(0), <, count);
+
+    std::copy_n(static_cast<const char *>(src), count,
+                std::back_inserter<std::vector<char>>(os_write_buffer));
+
+    return 0;
+}
 
 void cut_setup(void)
 {
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
+
+    os_write_buffer.clear();
+
     /* allow #inifile_free() to work in
      * #inifile_manipulation_tests::cut_teardown() in case of early test
      * failures */
@@ -761,6 +792,20 @@ void cut_setup(void)
 void cut_teardown(void)
 {
     inifile_free(&ini);
+
+    os_write_buffer.clear();
+
+    mock_messages->check();
+    mock_os->check();
+
+    mock_messages_singleton = nullptr;
+    mock_os_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_os;
+
+    mock_messages = nullptr;
+    mock_os = nullptr;
 }
 
 /*!\test
@@ -773,6 +818,143 @@ void test_create_empty_file_structure()
     inifile_new(&ini);
     cppcut_assert_null(ini.sections_head);
     cppcut_assert_null(ini.sections_tail);
+}
+
+/*!\test
+ * Construct an INI file containing two sections with a few assignments and a
+ * third, empty section.
+ */
+void test_new_write_ini_file()
+{
+    auto *section = inifile_new_section(&ini, "First", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 1", 0, "value 1", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 2", 0, "value 2", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 3", 0, "value 3", 0));
+
+    section = inifile_new_section(&ini, "Second", 0);
+    cppcut_assert_not_null(section);
+
+    section = inifile_new_section(&ini, "Third", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "foo", 0, "bar", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "foobar", 0, "barfoo", 0));
+
+    mock_os->expect_os_file_new(expected_os_write_fd, "outfile.config");
+    for(int i = 0; i < 3 * 3 + (3 + 0 + 2) * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    cppcut_assert_equal(0, inifile_write_to_file(&ini, "outfile.config"));
+
+    static const char expected_ini_file[] =
+        "[First]\n"
+        "key 1 = value 1\n"
+        "key 2 = value 2\n"
+        "key 3 = value 3\n"
+        "[Second]\n"
+        "[Third]\n"
+        "foo = bar\n"
+        "foobar = barfoo\n"
+        ;
+
+    cut_assert_equal_memory(expected_ini_file, sizeof(expected_ini_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+/*!\test
+ * Parse an INI file, change a few values, write a new INI file containing the
+ * changes.
+ */
+void test_manipulate_value_in_file()
+{
+    static const char text[] =
+        "[First]\n"
+        "key 1-1 = value 1-1\n"
+        "key 1-2 = value 1-2\n"
+        "[Second]\n"
+        "key 2-1 = value 2-1\n"
+        "key 2-2 = value 2-2\n"
+        "key 2-3 = value 2-3\n"
+        "[Third]\n"
+        "key 3-1 = value 3-1\n"
+        "key 3-2 = value 3-2\n"
+        ;
+
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    auto *section = inifile_find_section(&ini, "Second", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 2-1", 0,
+                                                       "changed value", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 11-13", 0,
+                                                       "new value", 0));
+
+    section = inifile_find_section(&ini, "Third", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 3-2", 0,
+                                                       "also changed", 0));
+
+    mock_os->expect_os_file_new(expected_os_write_fd, "outfile.config");
+    for(int i = 0; i < 3 * 3 + (2 + 4 + 2) * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    cppcut_assert_equal(0, inifile_write_to_file(&ini, "outfile.config"));
+
+    static const char expected_ini_file[] =
+        "[First]\n"
+        "key 1-1 = value 1-1\n"
+        "key 1-2 = value 1-2\n"
+        "[Second]\n"
+        "key 2-1 = changed value\n"
+        "key 2-2 = value 2-2\n"
+        "key 2-3 = value 2-3\n"
+        "key 11-13 = new value\n"
+        "[Third]\n"
+        "key 3-1 = value 3-1\n"
+        "key 3-2 = also changed\n"
+        ;
+
+    cut_assert_equal_memory(expected_ini_file, sizeof(expected_ini_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+/*!\test
+ * In case #os_file_new() fails for whatever reason, function
+ * #inifile_write_to_file() returns an error.
+ */
+void test_write_file_fails_if_file_cannot_be_created()
+{
+    cppcut_assert_not_null(inifile_new_section(&ini, "section", 0));
+    mock_os->expect_os_file_new(-1, "outfile.config");
+    cppcut_assert_equal(-1, inifile_write_to_file(&ini, "outfile.config"));
+    cut_assert_true(os_write_buffer.empty());
+}
+
+/*!\test
+ * In case #os_write_from_buffer() fails for whatever reason, function
+ * #inifile_write_to_file() deletes the output file and returns an error.
+ */
+void test_write_file_fails_if_file_cannot_be_written()
+{
+    cppcut_assert_not_null(inifile_new_section(&ini, "section", 0));
+
+    mock_os->expect_os_file_new(expected_os_write_fd, "outfile.config");
+    mock_os->expect_os_write_from_buffer(-1, false, 1, expected_os_write_fd);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_file_delete("outfile.config");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR,
+        "Failed writing INI file \"outfile.config\", deleting partially written file");
+
+    cppcut_assert_equal(-1, inifile_write_to_file(&ini, "outfile.config"));
+
+    cut_assert_true(os_write_buffer.empty());
 }
 
 };

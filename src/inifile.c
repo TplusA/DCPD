@@ -23,6 +23,7 @@
 
 #include "inifile.h"
 #include "messages.h"
+#include "os.h"
 
 enum parser_state
 {
@@ -586,6 +587,53 @@ struct ini_section *inifile_find_section(const struct ini_file *inifile,
     }
 
     return NULL;
+}
+
+int inifile_write_to_file(const struct ini_file *inifile,
+                          const char *filename)
+{
+    log_assert(inifile != NULL);
+    log_assert(filename != NULL);
+
+    int fd = os_file_new(filename);
+
+    if(fd < 0)
+        return -1;
+
+    for(const struct ini_section *s = inifile->sections_head; s != NULL; s = s->next)
+    {
+        if(os_write_from_buffer("[", 1, fd) < 0 ||
+           os_write_from_buffer(s->name, s->name_length, fd) < 0 ||
+           os_write_from_buffer("]\n", 2, fd) < 0)
+        {
+            goto error_exit;
+        }
+
+        for(const struct ini_key_value_pair *kv = s->values_head; kv != NULL; kv = kv->next)
+        {
+            if(os_write_from_buffer(kv->key, kv->key_length, fd) < 0 ||
+               os_write_from_buffer(" = ", 3, fd) < 0 ||
+               os_write_from_buffer(kv->value, strlen(kv->value), fd) < 0 ||
+               os_write_from_buffer("\n", 1, fd) < 0)
+            {
+                goto error_exit;
+            }
+        }
+    }
+
+    os_file_close(fd);
+
+    return 0;
+
+error_exit:
+    msg_error(0, LOG_ERR,
+              "Failed writing INI file \"%s\", deleting partially written file",
+              filename);
+
+    os_file_close(fd);
+    os_file_delete(filename);
+
+    return -1;
 }
 
 void inifile_free(struct ini_file *inifile)
