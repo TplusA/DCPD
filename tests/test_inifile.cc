@@ -35,6 +35,7 @@ namespace inifile_tests
 {
 
 static MockMessages *mock_messages;
+static struct ini_file ini;
 
 void cut_setup(void)
 {
@@ -42,10 +43,16 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
     mock_messages_singleton = mock_messages;
+
+    /* allow #inifile_free() to work in #inifile_tests::cut_teardown()
+     * in case of early test failures */
+    inifile_new(&ini);
 }
 
 void cut_teardown(void)
 {
+    inifile_free(&ini);
+
     mock_messages->check();
 
     mock_messages_singleton = nullptr;
@@ -60,13 +67,11 @@ void cut_teardown(void)
  */
 void test_create_empty_file_structure()
 {
-    struct ini_file ini;
     memset(&ini, 0xff, sizeof(ini));
 
     inifile_new(&ini);
     cppcut_assert_null(ini.sections_head);
     cppcut_assert_null(ini.sections_tail);
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -74,15 +79,12 @@ void test_create_empty_file_structure()
  */
 void test_parse_empty_file_from_memory()
 {
-    struct ini_file ini;
     memset(&ini, 0xff, sizeof(ini));
 
     static const char dummy = '\0';
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", &dummy, 0));
     cppcut_assert_null(ini.sections_head);
     cppcut_assert_null(ini.sections_tail);
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -92,7 +94,6 @@ void test_parse_one_section_with_one_entry_from_memory()
 {
     static const char text[] = "[global]\nkey = value";
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
     cppcut_assert_not_null(ini.sections_tail);
@@ -103,8 +104,6 @@ void test_parse_one_section_with_one_entry_from_memory()
     const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("value", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -133,7 +132,6 @@ void test_parse_from_memory()
         "section 3 key 4 = value 4 in section 3\n"
         ;
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
     cppcut_assert_not_null(ini.sections_tail);
@@ -161,8 +159,6 @@ void test_parse_from_memory()
     pair = inifile_section_lookup_kv_pair(section, "section 3 key 4", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("value 4 in section 3", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -175,7 +171,6 @@ void test_lookup_nonexistent_key_in_section_returns_null()
         "key 1 = bar"
         ;
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -193,8 +188,6 @@ void test_lookup_nonexistent_key_in_section_returns_null()
 
     pair = inifile_section_lookup_kv_pair(section, "", 0);
     cppcut_assert_null(pair);
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -211,7 +204,6 @@ void test_parser_skips_assignments_before_first_section()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Expected begin of section, got junk (line 1 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -224,8 +216,6 @@ void test_parser_skips_assignments_before_first_section()
 
     pair = inifile_section_lookup_kv_pair(section, "ignore", 0);
     cppcut_assert_null(pair);
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -239,7 +229,6 @@ void test_parser_accepts_empty_sections()
         "key = value\n"
         ;
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -256,8 +245,6 @@ void test_parser_accepts_empty_sections()
     pair = inifile_section_lookup_kv_pair(section, "key", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("value", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -286,7 +273,6 @@ void test_parser_ignores_insignificant_spaces()
         "\n"
         ;
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -343,9 +329,6 @@ void test_parser_ignores_insignificant_spaces()
 
     pair = inifile_section_lookup_kv_pair(section, "key b", 0);
     cppcut_assert_null(pair);
-
-
-    inifile_free(&ini);
 }
 
 /*!
@@ -364,7 +347,6 @@ void test_end_of_file_within_section_header_ignores_section()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "End of file within section header (line 4 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -381,8 +363,6 @@ void test_end_of_file_within_section_header_ignores_section()
 
     section = inifile_find_section(&ini, "foo", 0);
     cppcut_assert_null(section);
-
-    inifile_free(&ini);
 }
 
 /*!
@@ -413,7 +393,6 @@ void test_end_of_line_within_section_header_ignores_section()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Expected begin of section, got junk (line 7 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -451,8 +430,6 @@ void test_end_of_line_within_section_header_ignores_section()
 
     pair = inifile_section_lookup_kv_pair(section, "foo key 1", 0);
     cppcut_assert_null(pair);
-
-    inifile_free(&ini);
 }
 
 /*!
@@ -494,7 +471,6 @@ void test_line_numbers_in_error_messages_remain_accurate()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "End of file within section header (line 15 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -509,8 +485,6 @@ void test_line_numbers_in_error_messages_remain_accurate()
 
     section = inifile_find_section(&ini, "foobar", 0);
     cppcut_assert_null(section);
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -529,7 +503,6 @@ void test_missing_assignment_character_is_detected()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Expected assignment (line 2 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -553,8 +526,6 @@ void test_missing_assignment_character_is_detected()
 
     pair = inifile_section_lookup_kv_pair(section, "key", 0);
     cppcut_assert_null(pair);
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -572,7 +543,6 @@ void test_missing_value_after_assignment_is_detected()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Expected value after equals sign (line 2 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -600,8 +570,6 @@ void test_missing_value_after_assignment_is_detected()
 
     pair = inifile_section_lookup_kv_pair(section, "key", 0);
     cppcut_assert_null(pair);
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -620,7 +588,6 @@ void test_missing_key_name_before_assignment_is_detected()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Expected key name (line 2 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -648,8 +615,6 @@ void test_missing_key_name_before_assignment_is_detected()
 
     pair = inifile_section_lookup_kv_pair(section, "key", 0);
     cppcut_assert_null(pair);
-
-    inifile_free(&ini);
 }
 
 /*!\test
@@ -661,7 +626,6 @@ void test_second_assignment_character_is_part_of_value()
         "[section]\n"
         "key = value = foo\n";
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -671,8 +635,6 @@ void test_second_assignment_character_is_part_of_value()
     const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("value = foo", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 void test_sections_with_empty_section_name_are_skipped()
@@ -691,7 +653,6 @@ void test_sections_with_empty_section_name_are_skipped()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Expected begin of section, got junk (line 4 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -711,8 +672,6 @@ void test_sections_with_empty_section_name_are_skipped()
     pair = inifile_section_lookup_kv_pair(section, "key 2", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("value 2", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 void test_sections_with_whitespace_section_names_are_ok()
@@ -722,7 +681,6 @@ void test_sections_with_whitespace_section_names_are_ok()
         "foo = bar\n"
         ;
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -732,8 +690,6 @@ void test_sections_with_whitespace_section_names_are_ok()
     const auto *pair = inifile_section_lookup_kv_pair(section, "foo", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("bar", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 void test_sections_with_junk_after_section_header_are_skipped()
@@ -752,7 +708,6 @@ void test_sections_with_junk_after_section_header_are_skipped()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Expected begin of section, got junk (line 4 in \"test\") (Invalid argument)");
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -772,8 +727,6 @@ void test_sections_with_junk_after_section_header_are_skipped()
     pair = inifile_section_lookup_kv_pair(section, "key 3", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("value 3", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 void test_multiple_assignments_to_a_key_name_keeps_last_assignment()
@@ -787,7 +740,6 @@ void test_multiple_assignments_to_a_key_name_keeps_last_assignment()
         "key = value 3\n"
         ;
 
-    struct ini_file ini;
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -801,8 +753,6 @@ void test_multiple_assignments_to_a_key_name_keeps_last_assignment()
     pair = inifile_section_lookup_kv_pair(section, "foo", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("foobar", static_cast<const char *>(pair->value));
-
-    inifile_free(&ini);
 }
 
 };
