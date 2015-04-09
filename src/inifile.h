@@ -83,6 +83,20 @@ extern "C" {
 void inifile_new(struct ini_file *inifile);
 
 /*!
+ * Parse an INI file.
+ *
+ * It is not necessary to call #inifile_new() before calling this function.
+ *
+ * \param inifile
+ *     A structure to be filled by this function. The structure must have been
+ *     allocated by the caller.
+ *
+ * \param filename
+ *     Name of an INI file.
+ */
+int inifile_parse_from_file(struct ini_file *inifile, const char *filename);
+
+/*!
  * Parse an INI file from memory.
  *
  * It is not necessary to call #inifile_new() before calling this function.

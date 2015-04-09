@@ -19,6 +19,11 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 #include "os.h"
 #include "messages.h"
@@ -83,4 +88,64 @@ int os_try_read_to_buffer(void *dest, size_t count, size_t *dest_pos, int fd)
 void os_abort(void)
 {
     abort();
+}
+
+int os_map_file_to_memory(struct os_mapped_file_data *mapped,
+                          const char *filename)
+{
+    log_assert(mapped != NULL);
+    log_assert(filename != NULL);
+
+    mapped->fd = open(filename, O_RDONLY);
+
+    if(mapped->fd < 0)
+    {
+        msg_error(errno, LOG_ERR, "Failed to open() file \"%s\"", filename);
+        return -1;
+    }
+
+    struct stat buf;
+    if(fstat(mapped->fd, &buf) < 0)
+    {
+        msg_error(errno, LOG_ERR, "Failed to fstat() file \"%s\"", filename);
+        goto error_exit;
+    }
+
+    mapped->length = buf.st_size;
+
+    if(mapped->length == 0)
+    {
+        msg_error(errno, LOG_ERR, "Refusing to map empty file \"%s\"", filename);
+        goto error_exit;
+    }
+
+    mapped->ptr =
+        mmap(NULL, mapped->length, PROT_READ, MAP_PRIVATE, mapped->fd, 0);
+
+    if(mapped->ptr == MAP_FAILED)
+    {
+        msg_error(errno, LOG_ERR, "Failed to mmap() file \"%s\"", filename);
+        goto error_exit;
+    }
+
+    return 0;
+
+error_exit:
+    (void)close(mapped->fd);
+    mapped->fd = -1;
+
+    return -1;
+}
+
+void os_unmap_file(struct os_mapped_file_data *mapped)
+{
+    log_assert(mapped != NULL);
+
+    if(mapped->fd < 0)
+        return;
+
+    (void)munmap(mapped->ptr, mapped->length);
+
+    (void)close(mapped->fd);
+    mapped->fd = -1;
 }

@@ -451,6 +451,24 @@ static int parse_memory(struct parser_data *data)
     return 0;
 }
 
+int inifile_parse_from_file(struct ini_file *inifile, const char *filename)
+{
+    log_assert(inifile != NULL);
+    log_assert(filename != NULL);
+
+    struct os_mapped_file_data mapped;
+
+    if(os_map_file_to_memory(&mapped, filename) < 0)
+        return -1;
+
+    int ret = inifile_parse_from_memory(inifile, filename,
+                                        mapped.ptr, mapped.length);
+
+    os_unmap_file(&mapped);
+
+    return ret;
+}
+
 int inifile_parse_from_memory(struct ini_file *inifile, const char *source,
                               const char *content, size_t size)
 {
