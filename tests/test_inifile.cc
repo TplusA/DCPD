@@ -31,7 +31,7 @@
  */
 /*!@{*/
 
-namespace inifile_tests
+namespace inifile_parser_tests
 {
 
 static MockMessages *mock_messages;
@@ -44,7 +44,7 @@ void cut_setup(void)
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
-    /* allow #inifile_free() to work in #inifile_tests::cut_teardown()
+    /* allow #inifile_free() to work in #inifile_parser_tests::cut_teardown()
      * in case of early test failures */
     inifile_new(&ini);
 }
@@ -60,18 +60,6 @@ void cut_teardown(void)
     delete mock_messages;
 
     mock_messages = nullptr;
-}
-
-/*!\test
- * Initialize INI file structure in memory.
- */
-void test_create_empty_file_structure()
-{
-    memset(&ini, 0xff, sizeof(ini));
-
-    inifile_new(&ini);
-    cppcut_assert_null(ini.sections_head);
-    cppcut_assert_null(ini.sections_tail);
 }
 
 /*!\test
@@ -753,6 +741,38 @@ void test_multiple_assignments_to_a_key_name_keeps_last_assignment()
     pair = inifile_section_lookup_kv_pair(section, "foo", 0);
     cppcut_assert_not_null(pair);
     cppcut_assert_equal("foobar", static_cast<const char *>(pair->value));
+}
+
+};
+
+namespace inifile_manipulation_tests
+{
+
+static struct ini_file ini;
+
+void cut_setup(void)
+{
+    /* allow #inifile_free() to work in
+     * #inifile_manipulation_tests::cut_teardown() in case of early test
+     * failures */
+    inifile_new(&ini);
+}
+
+void cut_teardown(void)
+{
+    inifile_free(&ini);
+}
+
+/*!\test
+ * Initialize INI file structure in memory.
+ */
+void test_create_empty_file_structure()
+{
+    memset(&ini, 0xff, sizeof(ini));
+
+    inifile_new(&ini);
+    cppcut_assert_null(ini.sections_head);
+    cppcut_assert_null(ini.sections_tail);
 }
 
 };
