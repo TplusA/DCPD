@@ -90,6 +90,46 @@ void os_abort(void)
     abort();
 }
 
+int os_file_new(const char *filename)
+{
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
+                  S_IRWXU | S_IRWXG | S_IRWXO);
+
+    if(fd < 0)
+        msg_error(errno, LOG_ERR, "Failed to create file \"%s\"", filename);
+
+    return fd;
+}
+
+static void safe_close_fd(int fd)
+{
+    (void)fsync(fd);
+
+    int ret;
+    while((ret = close(fd)) == -1 && errno == EINTR)
+        ;
+
+    if(ret == -1 && errno != EINTR)
+        msg_error(errno, LOG_ERR, "Failed to close file descriptor %d", fd);
+}
+
+void os_file_close(int fd)
+{
+    if(fd < 0)
+        msg_error(EINVAL, LOG_ERR,
+                  "Passed invalid file descriptor to %s()", __func__);
+    else
+        safe_close_fd(fd);
+}
+
+void os_file_delete(const char *filename)
+{
+    log_assert(filename != NULL);
+
+    if(unlink(filename) < 0)
+        msg_error(errno, LOG_ERR, "Failed to delete file \"%s\"", filename);
+}
+
 int os_map_file_to_memory(struct os_mapped_file_data *mapped,
                           const char *filename)
 {
@@ -131,7 +171,7 @@ int os_map_file_to_memory(struct os_mapped_file_data *mapped,
     return 0;
 
 error_exit:
-    (void)close(mapped->fd);
+    safe_close_fd(mapped->fd);
     mapped->fd = -1;
 
     return -1;
@@ -146,6 +186,6 @@ void os_unmap_file(struct os_mapped_file_data *mapped)
 
     (void)munmap(mapped->ptr, mapped->length);
 
-    (void)close(mapped->fd);
+    safe_close_fd(mapped->fd);
     mapped->fd = -1;
 }

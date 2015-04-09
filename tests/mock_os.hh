@@ -40,14 +40,21 @@ class MockOs
 
     typedef int (*os_write_from_buffer_callback_t)(const void *src, size_t count, int fd);
     void expect_os_write_from_buffer(int ret, const void *src, size_t count, int fd);
+    void expect_os_write_from_buffer(int ret, bool expect_null_pointer, size_t count, int fd);
     void expect_os_write_from_buffer_callback(os_write_from_buffer_callback_t fn);
 
     typedef int (*os_try_read_to_buffer_callback_t)(void *dest, size_t count, size_t *add_bytes_read, int fd);
     void expect_os_try_read_to_buffer(int ret, void *dest, size_t count,
                                       size_t *add_bytes_read, int fd);
+    void expect_os_try_read_to_buffer(int ret, bool expect_null_pointer, size_t count,
+                                      size_t *add_bytes_read, int fd);
     void expect_os_try_read_to_buffer_callback(os_try_read_to_buffer_callback_t fn);
 
     void expect_os_abort(void);
+
+    void expect_os_file_new(int ret, const char *filename);
+    void expect_os_file_close(int fd);
+    void expect_os_file_delete(const char *filename);
 };
 
 extern MockOs *mock_os_singleton;
