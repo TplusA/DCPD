@@ -53,6 +53,7 @@ struct ini_section
     struct ini_section *next;
     struct ini_key_value_pair *values_head;
     struct ini_key_value_pair *values_tail;
+    size_t name_length;
     char *name;
 };
 

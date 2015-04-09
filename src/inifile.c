@@ -528,6 +528,7 @@ struct ini_section *inifile_new_section(struct ini_file *inifile,
 
     section->next = NULL;
     section->values_head = NULL;
+    section->name_length = length;
     section->name = parser_strdup(name, length);
 
     if(section->name == NULL)
@@ -561,7 +562,8 @@ struct ini_section *inifile_find_section(const struct ini_file *inifile,
 
     for(struct ini_section *s = inifile->sections_head; s != NULL; s = s->next)
     {
-        if(memcmp(s->name, section_name, section_name_length) == 0)
+        if(s->name_length == section_name_length &&
+           memcmp(s->name, section_name, section_name_length) == 0)
             return s;
     }
 

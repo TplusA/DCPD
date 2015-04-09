@@ -675,6 +675,136 @@ void test_second_assignment_character_is_part_of_value()
     inifile_free(&ini);
 }
 
+void test_sections_with_empty_section_name_are_skipped()
+{
+    static const char text[] =
+        "[section]\n"
+        "key = value\n"
+        "[]\n"
+        "foo = bar\n"
+        "[section 2]\n"
+        "key 2 = value 2\n"
+        ;
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Empty section name (line 3 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 4 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value", static_cast<const char *>(pair->value));
+
+    section = inifile_find_section(&ini, "", 0);
+    cppcut_assert_null(section);
+
+    section = inifile_find_section(&ini, "section 2", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key 2", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value 2", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+}
+
+void test_sections_with_whitespace_section_names_are_ok()
+{
+    static const char text[] =
+        "[ ]\n"
+        "foo = bar\n"
+        ;
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, " ", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "foo", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("bar", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+}
+
+void test_sections_with_junk_after_section_header_are_skipped()
+{
+    static const char text[] =
+        "[section]\n"
+        "key = value\n"
+        "[section 2] x\n"
+        "foo = bar\n"
+        "[section 3]\n"
+        "key 3 = value 3\n"
+        ;
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Got junk after section header (line 3 in \"test\") (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Expected begin of section, got junk (line 4 in \"test\") (Invalid argument)");
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value", static_cast<const char *>(pair->value));
+
+    section = inifile_find_section(&ini, "section 2", 0);
+    cppcut_assert_null(section);
+
+    section = inifile_find_section(&ini, "section 3", 0);
+    cppcut_assert_not_null(section);
+
+    pair = inifile_section_lookup_kv_pair(section, "key 3", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value 3", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+}
+
+void test_multiple_assignments_to_a_key_name_keeps_last_assignment()
+{
+    static const char text[] =
+        "[section]\n"
+        "key = value\n"
+        "foo = bar\n"
+        "key = value 2\n"
+        "foo = foobar\n"
+        "key = value 3\n"
+        ;
+
+    struct ini_file ini;
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+
+    const auto *section = inifile_find_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("value 3", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "foo", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("foobar", static_cast<const char *>(pair->value));
+
+    inifile_free(&ini);
+}
+
 };
 
 /*!@}*/
