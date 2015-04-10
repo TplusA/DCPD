@@ -566,9 +566,7 @@ struct parameters
 {
     bool run_in_foreground;
     bool connect_to_session_dbus;
-    const char *ethernet_interface_name;
     const char *ethernet_interface_mac_address;
-    const char *wlan_interface_name;
     const char *wlan_interface_mac_address;
 };
 
@@ -646,9 +644,7 @@ static void usage(const char *program_name)
            "Options:\n"
            "  --help         Show this help.\n"
            "  --fg           Run in foreground, don't run as daemon.\n"
-           "  --ethernet-iface  Name of built-in Ethernet interface (mandatory).\n"
-           "  --ethernet-mac    MAC address of built-in Ethernet interface (mandatory).\n"
-           "  --wlan-iface   Name of built-in W-LAN interface.\n"
+           "  --ethernet-mac MAC address of built-in Ethernet interface (mandatory).\n"
            "  --wlan-mac     MAC address of built-in W-LAN interface.\n"
            "  --ispi  name   Name of the named pipe the DCPSPI daemon writes to.\n"
            "  --ospi  name   Name of the named pipe the DCPSPI daemon reads from.\n"
@@ -713,20 +709,10 @@ static int process_command_line(int argc, char *argv[],
             parameters->connect_to_session_dbus = true;
         else if(strcmp(argv[i], "--system-dbus") == 0)
             parameters->connect_to_session_dbus = false;
-        else if(strcmp(argv[i], "--ethernet-iface") == 0)
-        {
-            CHECK_ARGUMENT();
-            parameters->ethernet_interface_name = argv[i];
-        }
         else if(strcmp(argv[i], "--ethernet-mac") == 0)
         {
             CHECK_ARGUMENT();
             parameters->ethernet_interface_mac_address = argv[i];
-        }
-        else if(strcmp(argv[i], "--wlan-iface") == 0)
-        {
-            CHECK_ARGUMENT();
-            parameters->wlan_interface_name = argv[i];
         }
         else if(strcmp(argv[i], "--wlan-mac") == 0)
         {
@@ -742,8 +728,7 @@ static int process_command_line(int argc, char *argv[],
 
 #undef CHECK_ARGUMENT
 
-    if(parameters->ethernet_interface_name == NULL ||
-       parameters->ethernet_interface_mac_address == NULL)
+    if(parameters->ethernet_interface_mac_address == NULL)
     {
         /* missing W-LAN parameters are OK */
         fprintf(stderr, "Missing options. Please try --help.\n");
@@ -776,9 +761,7 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files) < 0)
         return EXIT_FAILURE;
 
-    register_init(parameters.ethernet_interface_name,
-                  parameters.ethernet_interface_mac_address,
-                  parameters.wlan_interface_name,
+    register_init(parameters.ethernet_interface_mac_address,
                   parameters.wlan_interface_mac_address);
 
     if(dbus_setup(parameters.connect_to_session_dbus) < 0)

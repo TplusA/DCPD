@@ -24,7 +24,6 @@
 struct register_network_interface_t
 {
     bool is_wired;
-    const char *iface_name;
     char mac_address_string[6 * 3];
 };
 
