@@ -35,7 +35,7 @@ struct dcp_register_t
 {
     uint8_t address;         /*!< Register number. */
     uint8_t flags;           /*!< See DCP_REGISTER_FLAG_ defines. */
-    uint16_t max_data_size;  /*!< Maximum size for variable size, 0 if fixed. */
+    uint16_t max_data_size;  /*!< Maximum size for variable size. */
 
     /*!
      * How to handle incoming read requests.

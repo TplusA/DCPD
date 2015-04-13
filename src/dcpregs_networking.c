@@ -437,13 +437,39 @@ get_network_iface_data(const struct register_configuration_t *config)
         : &config->builtin_ethernet_interface;
 }
 
+static bool data_length_is_unexpected(size_t length, size_t expected)
+{
+    if(length == expected)
+        return false;
+
+    msg_error(EINVAL, LOG_ERR,
+              "Unexpected data length %zu (expected %zu)", length, expected);
+
+    return true;
+}
+
+static bool data_length_is_in_unexpected_range(size_t length,
+                                               size_t expected_min,
+                                               size_t expected_max)
+{
+    if(length >= expected_min && length <= expected_max)
+        return false;
+
+    msg_error(EINVAL, LOG_ERR,
+              "Unexpected data length %zu (expected %zu...%zu)",
+              length, expected_min, expected_max);
+
+    return true;
+}
+
 int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 {
     msg_info("write 53 handler %p %zu", data, length);
 
-    log_assert(length == 1);
+    if(data_length_is_unexpected(length, 1))
+        return -1;
 
-    if(*data != 0)
+    if(data[0] != 0)
         return -1;
 
     if(!may_change_config())
@@ -470,9 +496,10 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
 {
     msg_info("write 54 handler %p %zu", data, length);
 
-    log_assert(length == 1);
+    if(data_length_is_unexpected(length, 1))
+        return -1;
 
-    if(*data != 0)
+    if(data[0] != 0)
         return -1;
 
     memset(&nwconfig_write_data, 0, sizeof(nwconfig_write_data));
@@ -491,7 +518,8 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
     const struct register_network_interface_t *const iface =
         get_network_iface_data(registers_get_data());
 
-    log_assert(length == sizeof(iface->mac_address_string));
+    if(data_length_is_unexpected(length, sizeof(iface->mac_address_string)))
+        return -1;
 
     if(length <  sizeof(iface->mac_address_string))
         return -1;
@@ -508,11 +536,8 @@ int dcpregs_write_51_mac_address(const uint8_t *data, size_t length)
     const struct register_network_interface_t *const iface =
         get_network_iface_data(registers_get_data());
 
-    if(length != sizeof(iface->mac_address_string))
-    {
-        msg_error(EINVAL, LOG_ERR, "Unexpected data length %zu", length);
+    if(data_length_is_unexpected(length, sizeof(iface->mac_address_string)))
         return -1;
-    }
 
     if(data[sizeof(iface->mac_address_string) - 1] != '\0')
     {
@@ -530,7 +555,9 @@ int dcpregs_write_51_mac_address(const uint8_t *data, size_t length)
 ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
 {
     msg_info("read 55 handler %p %zu", response, length);
-    log_assert(length == 1);
+
+    if(data_length_is_unexpected(length, 1))
+        return -1;
 
     response[0] = 0;
     return length;
@@ -539,7 +566,9 @@ ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
 int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
 {
     msg_info("write 55 handler %p %zu", data, length);
-    log_assert(length == 1);
+
+    if(data_length_is_unexpected(length, 1))
+        return -1;
 
     if(!may_change_config())
         return -1;
@@ -604,8 +633,9 @@ static int copy_ipv4_address(char *dest, const uint32_t requested_change,
 
 int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length)
 {
-    log_assert(length >= 7);
-    log_assert(length <= SIZE_OF_IPV4_ADDRESS_STRING);
+    if(data_length_is_in_unexpected_range(length,
+                                          7, SIZE_OF_IPV4_ADDRESS_STRING))
+        return -1;
 
     if(!may_change_config())
         return -1;
@@ -616,8 +646,9 @@ int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length)
 
 int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
 {
-    log_assert(length >= 7);
-    log_assert(length <= SIZE_OF_IPV4_ADDRESS_STRING);
+    if(data_length_is_in_unexpected_range(length,
+                                          7, SIZE_OF_IPV4_ADDRESS_STRING))
+        return -1;
 
     if(!may_change_config())
         return -1;
@@ -628,8 +659,9 @@ int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
 
 int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length)
 {
-    log_assert(length >= 7);
-    log_assert(length <= SIZE_OF_IPV4_ADDRESS_STRING);
+    if(data_length_is_in_unexpected_range(length,
+                                          7, SIZE_OF_IPV4_ADDRESS_STRING))
+       return -1;
 
     if(!may_change_config())
         return -1;
