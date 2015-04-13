@@ -94,6 +94,10 @@ void inifile_new(struct ini_file *inifile);
  *
  * \param filename
  *     Name of an INI file.
+ *
+ * \retval 0 on success
+ * \retval 1 if file does not exist
+ * \retval -1 on error
  */
 int inifile_parse_from_file(struct ini_file *inifile, const char *filename);
 
