@@ -125,54 +125,6 @@ void test_lookup_all_nonexistent_registers(void)
     }
 }
 
-/*!\test
- * Read out MAC address of built-in Ethernet interface.
- */
-void test_read_mac_address(void)
-{
-    static const char mac_address[] = "DE:CA:FD:EA:DB:AD";
-    register_init(mac_address, NULL);
-
-    const struct dcp_register_t *reg = register_lookup(51);
-    cppcut_assert_not_null(reg);
-
-    uint8_t redzone_content[10];
-    memset(redzone_content, 0xff, sizeof(redzone_content));
-
-    uint8_t buffer[sizeof(redzone_content) + 18 + sizeof(redzone_content)];
-    memset(buffer, 0xff, sizeof(buffer));
-
-    mock_messages->expect_msg_info("read 51 handler %p %zu");
-
-    reg->read_handler(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
-
-    cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
-                            sizeof(redzone_content));
-    cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
-                            buffer + sizeof(redzone_content) + 18, sizeof(redzone_content));
-    cut_assert_equal_memory(mac_address, sizeof(mac_address),
-                            buffer + sizeof(redzone_content), 18);
-}
-
-/*!\test
- * MAC address of built-in Ethernet interface is an invalid address if not set.
- */
-void test_read_mac_address_default(void)
-{
-    register_init(NULL, NULL);
-
-    const struct dcp_register_t *reg = register_lookup(51);
-    cppcut_assert_not_null(reg);
-
-    uint8_t buffer[18];
-
-    mock_messages->expect_msg_info("read 51 handler %p %zu");
-    reg->read_handler(buffer, sizeof(buffer));
-
-    const char *buffer_ptr = static_cast<const char *>(static_cast<void *>(buffer));
-    cppcut_assert_equal("02:00:00:00:00:00", buffer_ptr);
-}
-
 };
 
 namespace spi_registers_tests_drc
@@ -404,6 +356,80 @@ void test_slave_drc_list_item_add_to_favorites(void)
     mock_dbus_iface->expect_dbus_get_list_item_iface(dbus_dcpd_list_item_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_item_emit_add_to_list(dbus_dcpd_list_item_iface_dummy, "Favorites", 0);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+};
+
+namespace spi_registers_networking
+{
+
+static MockMessages *mock_messages;
+
+void cut_setup(void)
+{
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+}
+
+void cut_teardown(void)
+{
+    mock_messages->check();
+
+    mock_messages_singleton = nullptr;
+
+    delete mock_messages;
+
+    mock_messages = nullptr;
+}
+
+/*!\test
+ * Read out MAC address of built-in Ethernet interface.
+ */
+void test_read_mac_address(void)
+{
+    static const char mac_address[] = "DE:CA:FD:EA:DB:AD";
+    register_init(mac_address, NULL);
+
+    const struct dcp_register_t *reg = register_lookup(51);
+    cppcut_assert_not_null(reg);
+
+    uint8_t redzone_content[10];
+    memset(redzone_content, 0xff, sizeof(redzone_content));
+
+    uint8_t buffer[sizeof(redzone_content) + 18 + sizeof(redzone_content)];
+    memset(buffer, 0xff, sizeof(buffer));
+
+    mock_messages->expect_msg_info("read 51 handler %p %zu");
+
+    reg->read_handler(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
+
+    cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
+                            sizeof(redzone_content));
+    cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
+                            buffer + sizeof(redzone_content) + 18, sizeof(redzone_content));
+    cut_assert_equal_memory(mac_address, sizeof(mac_address),
+                            buffer + sizeof(redzone_content), 18);
+}
+
+/*!\test
+ * MAC address of built-in Ethernet interface is an invalid address if not set.
+ */
+void test_read_mac_address_default(void)
+{
+    register_init(NULL, NULL);
+
+    const struct dcp_register_t *reg = register_lookup(51);
+    cppcut_assert_not_null(reg);
+
+    uint8_t buffer[18];
+
+    mock_messages->expect_msg_info("read 51 handler %p %zu");
+    reg->read_handler(buffer, sizeof(buffer));
+
+    const char *buffer_ptr = static_cast<const char *>(static_cast<void *>(buffer));
+    cppcut_assert_equal("02:00:00:00:00:00", buffer_ptr);
 }
 
 };
