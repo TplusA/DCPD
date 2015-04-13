@@ -92,7 +92,6 @@ HEXARGUMENTS=$(echo $HEXARGUMENTS)
 
 
 LEN=$(echo $HEXARGUMENTS | wc -w)
-echo $LEN
 HEXLEN=$(printf %04x $LEN)
 HEXLENHI=$(echo $HEXLEN | cut -b 1-2)
 HEXLENLO=$(echo $HEXLEN | cut -b 3-4)
