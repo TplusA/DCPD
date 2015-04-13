@@ -460,7 +460,10 @@ int inifile_parse_from_file(struct ini_file *inifile, const char *filename)
     struct os_mapped_file_data mapped;
 
     if(os_map_file_to_memory(&mapped, filename) < 0)
-        return -1;
+    {
+        inifile_new(inifile);
+        return 1;
+    }
 
     int ret = inifile_parse_from_memory(inifile, filename,
                                         mapped.ptr, mapped.length);

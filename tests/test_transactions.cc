@@ -380,16 +380,16 @@ void test_register_write_request_transaction(void)
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t write_reg_55_enable_dhcp[] = { 0x02, 0x37, 0x01, 0x00, 0x01 };
-    read_data->set(write_reg_55_enable_dhcp, 4);
-    read_data->set(write_reg_55_enable_dhcp + 4, sizeof(write_reg_55_enable_dhcp) - 4);
+    static const uint8_t write_reg_54_selected_ip_profile[] = { 0x02, 0x36, 0x01, 0x00, 0x00 };
+    read_data->set(write_reg_54_selected_ip_profile, 4);
+    read_data->set(write_reg_54_selected_ip_profile + 4,
+                   sizeof(write_reg_54_selected_ip_profile) - 4);
 
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Should enable DHCP");
+    mock_messages->expect_msg_info("write 54 handler %p %zu");
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 

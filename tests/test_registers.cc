@@ -22,6 +22,7 @@
 
 #include "registers.h"
 #include "dcpregs_drcp.h"
+#include "dcpregs_networking.h"
 #include "drcp_command_codes.h"
 
 #include "mock_dcpd_dbus.hh"
@@ -42,7 +43,10 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 6> existing_registers = { 17, 37, 51, 55, 71, 72, };
+static const std::array<uint8_t, 11> existing_registers =
+{
+    17, 37, 51, 53, 54, 55, 56, 57, 58, 71, 72,
+};
 
 void cut_setup(void)
 {
@@ -364,6 +368,27 @@ namespace spi_registers_networking
 {
 
 static MockMessages *mock_messages;
+static MockOs *mock_os;
+
+static const char mac_address[] = "DE:CA:FD:EA:DB:AD";
+static const char expected_config_filename[] = "/var/lib/connman/builtin_decafdeadbad.config";
+
+
+static std::vector<char> os_write_buffer;
+static constexpr int expected_os_write_fd = 42;
+static constexpr int expected_os_map_file_to_memory_fd = 23;
+
+static int write_from_buffer_callback(const void *src, size_t count, int fd)
+{
+    cppcut_assert_equal(expected_os_write_fd, fd);
+    cppcut_assert_not_null(src);
+    cppcut_assert_operator(size_t(0), <, count);
+
+    std::copy_n(static_cast<const char *>(src), count,
+                std::back_inserter<std::vector<char>>(os_write_buffer));
+
+    return 0;
+}
 
 void cut_setup(void)
 {
@@ -371,17 +396,30 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
     mock_messages_singleton = mock_messages;
+
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
+
+    os_write_buffer.clear();
 }
 
 void cut_teardown(void)
 {
+    os_write_buffer.clear();
+
     mock_messages->check();
+    mock_os->check();
 
     mock_messages_singleton = nullptr;
+    mock_os_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_os;
 
     mock_messages = nullptr;
+    mock_os = nullptr;
 }
 
 /*!\test
@@ -389,7 +427,6 @@ void cut_teardown(void)
  */
 void test_read_mac_address(void)
 {
-    static const char mac_address[] = "DE:CA:FD:EA:DB:AD";
     register_init(mac_address, NULL, NULL);
 
     const struct dcp_register_t *reg = register_lookup(51);
@@ -430,6 +467,218 @@ void test_read_mac_address_default(void)
 
     const char *buffer_ptr = static_cast<const char *>(static_cast<void *>(buffer));
     cppcut_assert_equal("02:00:00:00:00:00", buffer_ptr);
+}
+
+static void start_ipv4_config()
+{
+    const struct dcp_register_t *reg = register_lookup(54);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->write_handler == dcpregs_write_54_selected_ip_profile);
+
+    mock_messages->expect_msg_info("write 54 handler %p %zu");
+
+    static const uint8_t zero = 0;
+    cppcut_assert_equal(0, reg->write_handler(&zero, 1));
+}
+
+static void commit_ipv4_config(bool add_message_expectation)
+{
+    const struct dcp_register_t *reg = register_lookup(53);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->write_handler == dcpregs_write_53_active_ip_profile);
+
+    if(add_message_expectation)
+        mock_messages->expect_msg_info("write 53 handler %p %zu");
+
+    static const uint8_t zero = 0;
+    cppcut_assert_equal(0, reg->write_handler(&zero, 1));
+}
+
+static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *existing_file,
+                                             char *written_config_file,
+                                             size_t written_config_file_size)
+{
+    start_ipv4_config();
+
+    static const char ipv4_address[] = "192.168.166.177";
+    static const char ipv4_netmask[] = "255.255.255.0";
+    static const char ipv4_gateway[] = "192.168.166.15";
+
+    const struct dcp_register_t *reg = register_lookup(56);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->write_handler == dcpregs_write_56_ipv4_address);
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_address)), sizeof(ipv4_address)));
+
+    reg = register_lookup(57);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->write_handler == dcpregs_write_57_ipv4_netmask);
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_netmask)), sizeof(ipv4_netmask)));
+
+    reg = register_lookup(58);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->write_handler == dcpregs_write_58_ipv4_gateway);
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_gateway)), sizeof(ipv4_gateway)));
+
+    mock_messages->expect_msg_info("write 53 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+
+    if(existing_file == nullptr)
+        mock_os->expect_os_map_file_to_memory(-1, false, expected_config_filename);
+    else
+    {
+        mock_os->expect_os_map_file_to_memory(existing_file, expected_config_filename);
+        mock_os->expect_os_unmap_file(existing_file);
+    }
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    commit_ipv4_config(false);
+
+    static const char expected_config_file_format[] =
+        "[global]\n"
+        "Name = StrBo\n"
+        "Description = StrBo-managed built-in wired interface\n"
+        "[service_config]\n"
+        "MAC = %s\n"
+        "Type = ethernet\n"
+        "IPv4 = %s/%s/%s\n";
+
+    snprintf(written_config_file, written_config_file_size,
+             expected_config_file_format,
+             mac_address, ipv4_address, ipv4_netmask, ipv4_gateway);
+
+    size_t written_config_file_length = strlen(written_config_file);
+
+    cut_assert_equal_memory(written_config_file, written_config_file_length,
+                            os_write_buffer.data(), os_write_buffer.size());
+
+    return written_config_file_length;
+}
+
+static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *existing_file,
+                                           char *written_config_file,
+                                           size_t written_config_file_size)
+{
+    start_ipv4_config();
+
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Enable DHCP");
+    const struct dcp_register_t *reg = register_lookup(55);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->write_handler == dcpregs_write_55_dhcp_enabled);
+    static const uint8_t one = 1;
+    cppcut_assert_equal(0, reg->write_handler(&one, 1));
+
+    mock_messages->expect_msg_info("write 53 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+
+    if(existing_file == nullptr)
+        mock_os->expect_os_map_file_to_memory(-1, false, expected_config_filename);
+    else
+    {
+        mock_os->expect_os_map_file_to_memory(existing_file, expected_config_filename);
+        mock_os->expect_os_unmap_file(existing_file);
+    }
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    commit_ipv4_config(false);
+
+    static const char expected_config_file_format[] =
+        "[global]\n"
+        "Name = StrBo\n"
+        "Description = StrBo-managed built-in wired interface\n"
+        "[service_config]\n"
+        "MAC = %s\n"
+        "Type = ethernet\n"
+        "IPv4 = dhcp\n";
+
+    snprintf(written_config_file, written_config_file_size,
+             expected_config_file_format, mac_address);
+
+    size_t written_config_file_length = strlen(written_config_file);
+
+    cut_assert_equal_memory(written_config_file, written_config_file_length,
+                            os_write_buffer.data(), os_write_buffer.size());
+
+    return written_config_file_length;
+}
+
+/*!\test
+ * Initial setting of static IPv4 configuration generates a Connman
+ * configuration file.
+ */
+void test_set_initial_static_ipv4_configuration(void)
+{
+    register_init(mac_address, NULL, "/var/lib/connman");
+
+    char buffer[512];
+    (void)do_test_set_static_ipv4_config(NULL, buffer, sizeof(buffer));
+}
+
+/*!\test
+ * Initial enabling of DHCPv4 generates a Connman configuration file.
+ */
+void test_set_initial_dhcp_ipv4_configuration(void)
+{
+    register_init(mac_address, NULL, "/var/lib/connman");
+
+    char buffer[512];
+    (void)do_test_set_dhcp_ipv4_config(NULL, buffer, sizeof(buffer));
+}
+
+/*!\test
+ * Setting static IPv4 configuration while a DHCPv4 configuration is active
+ * rewrites the corresponding Connman configuration file.
+ */
+void test_switch_to_dhcp_ipv4_configuration(void)
+{
+    register_init(mac_address, NULL, "/var/lib/connman");
+
+    char config_file_buffer[512];
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = do_test_set_static_ipv4_config(NULL, config_file_buffer,
+                                                 sizeof(config_file_buffer)),
+    };
+
+    os_write_buffer.clear();
+
+    char new_config_file_buffer[512];
+    (void)do_test_set_dhcp_ipv4_config(&config_file, new_config_file_buffer,
+                                       sizeof(new_config_file_buffer));
+}
+
+/*!\test
+ * Enabling DHCPv4 while a static IPv4 configuration is active rewrites the
+ * corresponding Connman configuration file.
+ */
+void test_switch_to_static_ipv4_configuration(void)
+{
+    register_init(mac_address, NULL, "/var/lib/connman");
+
+    char config_file_buffer[512];
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = do_test_set_dhcp_ipv4_config(NULL, config_file_buffer,
+                                               sizeof(config_file_buffer)),
+    };
+
+    os_write_buffer.clear();
+
+    char new_config_file_buffer[512];
+    (void)do_test_set_static_ipv4_config(&config_file, new_config_file_buffer,
+                                         sizeof(new_config_file_buffer));
 }
 
 };

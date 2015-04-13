@@ -90,11 +90,43 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_51_mac_address,
     },
     {
+        /* Active IP profile (here: commit network configuration changes; see
+         * also register 54) */
+        .address = 53,
+        .max_data_size = 1,
+        .write_handler = dcpregs_write_53_active_ip_profile,
+    },
+    {
+        /* Selected IP profile (here: start changing network configuration; see
+         * also register 53) */
+        .address = 54,
+        .max_data_size = 1,
+        .write_handler = dcpregs_write_54_selected_ip_profile,
+    },
+    {
         /* Enable or disable DHCP */
         .address = 55,
         .max_data_size = 1,
         .read_handler = dcpregs_read_55_dhcp_enabled,
         .write_handler = dcpregs_write_55_dhcp_enabled,
+    },
+    {
+        /* IPv4 address */
+        .address = 56,
+        .max_data_size = 16,
+        .write_handler = dcpregs_write_56_ipv4_address,
+    },
+    {
+        /* IPv4 netmask */
+        .address = 57,
+        .max_data_size = 16,
+        .write_handler = dcpregs_write_57_ipv4_netmask,
+    },
+    {
+        /* IPv4 gateway */
+        .address = 58,
+        .max_data_size = 16,
+        .write_handler = dcpregs_write_58_ipv4_gateway,
     },
     {
         /* DRC protocol */
