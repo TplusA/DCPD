@@ -100,4 +100,4 @@ HEXLENLO=$(echo $HEXLEN | cut -b 3-4)
 HEXCOMMAND="$HEXDCPCOMMAND $HEXCODE $HEXLENLO $HEXLENHI $HEXARGUMENTS"
 
 echo "Sending '$HEXCOMMAND' to $HOST:$PORT"
-echo "0 $HEXCOMMAND" | xxd -r | nc "$HOST" "$PORT" | hexdump -C
+echo "0 $HEXCOMMAND" | xxd -r -c 256 | nc "$HOST" "$PORT" | hexdump -C
