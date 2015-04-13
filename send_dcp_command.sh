@@ -86,7 +86,17 @@ HEXCODE="$(printf %02x $CODE)"
 HEXARGUMENTS=
 for C in "$@"
 do
-    HEXARGUMENTS="$HEXARGUMENTS$(printf %02x $C) "
+    STRING="$(echo $C | sed 's/^"\([^"]\+\)"$/\1/g')"
+
+    if test "x$STRING" != "x$C"
+    then
+        for CC in $(echo -n $STRING | xxd -a -i -c 1 | sed 's/.*0x\(..\).*/\1/')
+        do
+            HEXARGUMENTS="$HEXARGUMENTS$CC "
+        done
+    else
+        HEXARGUMENTS="$HEXARGUMENTS$(printf %02x $C) "
+    fi
 done
 HEXARGUMENTS=$(echo $HEXARGUMENTS)
 
