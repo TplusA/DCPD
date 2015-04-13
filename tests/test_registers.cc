@@ -390,7 +390,7 @@ void cut_teardown(void)
 void test_read_mac_address(void)
 {
     static const char mac_address[] = "DE:CA:FD:EA:DB:AD";
-    register_init(mac_address, NULL);
+    register_init(mac_address, NULL, NULL);
 
     const struct dcp_register_t *reg = register_lookup(51);
     cppcut_assert_not_null(reg);
@@ -418,7 +418,7 @@ void test_read_mac_address(void)
  */
 void test_read_mac_address_default(void)
 {
-    register_init(NULL, NULL);
+    register_init(NULL, NULL, NULL);
 
     const struct dcp_register_t *reg = register_lookup(51);
     cppcut_assert_not_null(reg);

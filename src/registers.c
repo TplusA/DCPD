@@ -136,13 +136,15 @@ static void copy_mac_address(char *dest, size_t dest_size, const char *src)
 }
 
 void register_init(const char *ethernet_mac_address,
-                   const char *wlan_mac_address)
+                   const char *wlan_mac_address,
+                   const char *connman_config_path)
 {
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
     const char *temp;
 
     iface_data = &config->builtin_ethernet_interface;
+    iface_data->is_builtin = true;
     iface_data->is_wired = true;
     temp = check_mac_address(ethernet_mac_address,
                              sizeof(iface_data->mac_address_string) - 1,
@@ -151,6 +153,7 @@ void register_init(const char *ethernet_mac_address,
                      sizeof(iface_data->mac_address_string), temp);
 
     iface_data = &config->builtin_wlan_interface;
+    iface_data->is_builtin = true;
     iface_data->is_wired = false;
     temp = check_mac_address(wlan_mac_address,
                              sizeof(iface_data->mac_address_string) - 1,
@@ -159,6 +162,7 @@ void register_init(const char *ethernet_mac_address,
                      sizeof(iface_data->mac_address_string), temp);
 
     config->active_interface = NULL;
+    config->connman_config_path = connman_config_path;
 }
 
 const struct dcp_register_t *register_lookup(uint8_t register_number)

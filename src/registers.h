@@ -59,7 +59,8 @@ extern "C" {
  * configuration file. These data are passed here.
  */
 void register_init(const char *ethernet_mac_address,
-                   const char *wlan_mac_address);
+                   const char *wlan_mac_address,
+                   const char *connman_config_path);
 
 /*!
  * Find register structure by register number (address).

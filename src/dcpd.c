@@ -762,7 +762,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
 
     register_init(parameters.ethernet_interface_mac_address,
-                  parameters.wlan_interface_mac_address);
+                  parameters.wlan_interface_mac_address,
+                  "/var/lib/connman");
 
     if(dbus_setup(parameters.connect_to_session_dbus) < 0)
     {
