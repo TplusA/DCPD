@@ -636,6 +636,13 @@ error_exit:
     return -1;
 }
 
+static void free_kv_pair(struct ini_key_value_pair *kv)
+{
+    parser_free(kv->key);
+    parser_free(kv->value);
+    parser_free(kv);
+}
+
 void inifile_free(struct ini_file *inifile)
 {
     log_assert(inifile != NULL);
@@ -656,17 +663,13 @@ void inifile_free(struct ini_file *inifile)
             for(struct ini_key_value_pair *next_kv = kv->next; kv != NULL; kv = next_kv)
             {
                 next_kv = kv->next;
-
-                parser_free(kv->key);
-                parser_free(kv->value);
-                parser_free(kv);
+                free_kv_pair(kv);
             }
         }
 
         parser_free(s->name);
         parser_free(s);
     }
-
 }
 
 struct ini_key_value_pair *
@@ -736,6 +739,40 @@ inifile_section_store_value(struct ini_section *section,
     }
 
     return kv;
+}
+
+bool inifile_section_remove_value(struct ini_section *section,
+                                  const char *key, size_t key_length)
+{
+    log_assert(section != NULL);
+    log_assert(key != NULL);
+
+    if(key_length == 0)
+        key_length = strlen(key);
+
+    struct ini_key_value_pair *preceding = NULL;
+
+    for(struct ini_key_value_pair *kv = section->values_head; kv != NULL; kv = kv->next)
+    {
+        if(kv->key_length == key_length && memcmp(kv->key, key, key_length) == 0)
+        {
+            if(section->values_head == kv)
+                section->values_head = kv->next;
+            else
+                preceding->next = kv->next;
+
+            if(section->values_tail == kv)
+                section->values_tail = preceding;
+
+            free_kv_pair(kv);
+
+            return true;
+        }
+
+        preceding = kv;
+    }
+
+    return false;
 }
 
 struct ini_key_value_pair *

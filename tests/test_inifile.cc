@@ -321,7 +321,7 @@ void test_parser_ignores_insignificant_spaces()
     cppcut_assert_null(pair);
 }
 
-/*!
+/*!\test
  * In case the input file ends within a section header, that section is
  * ignored.
  */
@@ -355,7 +355,7 @@ void test_end_of_file_within_section_header_ignores_section()
     cppcut_assert_null(section);
 }
 
-/*!
+/*!\test
  * In case there is a line break within a section header, that section is
  * ignored.
  */
@@ -422,7 +422,7 @@ void test_end_of_line_within_section_header_ignores_section()
     cppcut_assert_null(pair);
 }
 
-/*!
+/*!\test
  * Line numbering in error messages is not confused if there are multiple
  * parser errors.
  */
@@ -627,6 +627,13 @@ void test_second_assignment_character_is_part_of_value()
     cppcut_assert_equal("value = foo", static_cast<const char *>(pair->value));
 }
 
+/*!\test
+ * A section header with empty name is invalid and causes the parser to search
+ * for the next valid section header.
+ *
+ * Anything betwee the empty section header and the next valid section header
+ * gets ignored.
+ */
 void test_sections_with_empty_section_name_are_skipped()
 {
     static const char text[] =
@@ -664,6 +671,9 @@ void test_sections_with_empty_section_name_are_skipped()
     cppcut_assert_equal("value 2", static_cast<const char *>(pair->value));
 }
 
+/*!\test
+ * A section header name may be a simple whitespace.
+ */
 void test_sections_with_whitespace_section_names_are_ok()
 {
     static const char text[] =
@@ -682,6 +692,10 @@ void test_sections_with_whitespace_section_names_are_ok()
     cppcut_assert_equal("bar", static_cast<const char *>(pair->value));
 }
 
+/*!\test
+ * Only blank characters and a newline may follow the closing bracket of a
+ * section header, otherwise the header is considered invalid.
+ */
 void test_sections_with_junk_after_section_header_are_skipped()
 {
     static const char text[] =
@@ -719,6 +733,10 @@ void test_sections_with_junk_after_section_header_are_skipped()
     cppcut_assert_equal("value 3", static_cast<const char *>(pair->value));
 }
 
+/*!\test
+ * Keys can have values assigned multiple times, but only the last value is
+ * taken.
+ */
 void test_multiple_assignments_to_a_key_name_keeps_last_assignment()
 {
     static const char text[] =
@@ -955,6 +973,120 @@ void test_write_file_fails_if_file_cannot_be_written()
     cppcut_assert_equal(-1, inifile_write_to_file(&ini, "outfile.config"));
 
     cut_assert_true(os_write_buffer.empty());
+}
+
+/*!\test
+ * Removing a key from an empty section returns an error.
+ */
+void test_remove_key_from_empty_section()
+{
+    auto *section = inifile_new_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    cut_assert_false(inifile_section_remove_value(section, "key", 0));
+}
+
+/*!\test
+ * Removing the only key results in an empty section.
+ */
+void test_remove_only_key_from_section()
+{
+    auto *section = inifile_new_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key", 0, "value", 0));
+
+    cut_assert_true(inifile_section_remove_value(section, "key", 0));
+    cppcut_assert_null(section->values_head);
+    cppcut_assert_null(section->values_tail);
+}
+
+/*!\test
+ * Removing the first key from a section works as expected.
+ */
+void test_remove_existing_first_key_from_section()
+{
+    auto *section = inifile_new_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 1", 0, "value 1", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 2", 0, "value 2", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 3", 0, "value 3", 0));
+
+    auto *head = section->values_head;
+    auto *tail = section->values_tail;
+
+    cut_assert_true(inifile_section_remove_value(section, "key 1", 0));
+
+    cppcut_assert_null(inifile_section_lookup_kv_pair(section, "key 1", 0));
+    cppcut_assert_not_null(inifile_section_lookup_kv_pair(section, "key 2", 0));
+    cppcut_assert_not_null(inifile_section_lookup_kv_pair(section, "key 3", 0));
+
+    cppcut_assert_not_equal(head, section->values_head);
+    cppcut_assert_equal(tail, section->values_tail);
+}
+
+/*!\test
+ * Removing a key from the middle of a section works as expected.
+ */
+void test_remove_existing_middle_key_from_section()
+{
+    auto *section = inifile_new_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 1", 0, "value 1", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 2", 0, "value 2", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 3", 0, "value 3", 0));
+
+    auto *head = section->values_head;
+    auto *tail = section->values_tail;
+
+    cut_assert_true(inifile_section_remove_value(section, "key 2", 0));
+
+    cppcut_assert_not_null(inifile_section_lookup_kv_pair(section, "key 1", 0));
+    cppcut_assert_null(inifile_section_lookup_kv_pair(section, "key 2", 0));
+    cppcut_assert_not_null(inifile_section_lookup_kv_pair(section, "key 3", 0));
+
+    cppcut_assert_equal(head, section->values_head);
+    cppcut_assert_equal(tail, section->values_tail);
+}
+
+/*!\test
+ * Removing the last key from a section works as expected.
+ */
+void test_remove_existing_tail_key_from_section()
+{
+    auto *section = inifile_new_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 1", 0, "value 1", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 2", 0, "value 2", 0));
+    cppcut_assert_not_null(inifile_section_store_value(section, "key 3", 0, "value 3", 0));
+
+    auto *head = section->values_head;
+    auto *tail = section->values_tail;
+
+    cut_assert_true(inifile_section_remove_value(section, "key 3", 0));
+
+    cppcut_assert_not_null(inifile_section_lookup_kv_pair(section, "key 1", 0));
+    cppcut_assert_not_null(inifile_section_lookup_kv_pair(section, "key 2", 0));
+    cppcut_assert_null(inifile_section_lookup_kv_pair(section, "key 3", 0));
+
+    cppcut_assert_equal(head, section->values_head);
+    cppcut_assert_not_equal(tail, section->values_tail);
+}
+
+/*!\test
+ * Removing a non-existent key from a section returns an error.
+ */
+void test_remove_nonexistant_key_from_section()
+{
+    auto *section = inifile_new_section(&ini, "section", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "key", 0, "value", 0));
+    cut_assert_false(inifile_section_remove_value(section, "k", 0));
+    cppcut_assert_not_null(inifile_section_lookup_kv_pair(section, "key", 0));
 }
 
 };

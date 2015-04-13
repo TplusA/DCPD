@@ -19,6 +19,7 @@
 #ifndef INIFILE_H
 #define INIFILE_H
 
+#include <stdbool.h>
 #include <unistd.h>
 
 /*!
@@ -205,6 +206,23 @@ struct ini_key_value_pair *
 inifile_section_store_value(struct ini_section *section,
                             const char *key, size_t key_length,
                             const char *value, size_t value_length);
+
+/*!
+ * Remove value with given key from the given section.
+ *
+ * \param section
+ *     The section the key/value pair should be removed from.
+ *
+ * \param key, key_length
+ *     Key name and length of the key name in number of characters, without the
+ *     trailing zero-terminator. The function will call \c strlen() for \p key
+ *     in case 0 is passed as \p key_length.
+ *
+ * \returns
+ *     True on success, false in case \p key was not found in the section.
+ */
+bool inifile_section_remove_value(struct ini_section *section,
+                                  const char *key, size_t key_length);
 
 /*!
  * Lookup value by key name.
