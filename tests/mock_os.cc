@@ -33,9 +33,11 @@ enum class OsFn
     file_new,
     file_close,
     file_delete,
+    map_file_to_memory,
+    unmap_file,
 
     first_valid_os_fn_id = write_from_buffer,
-    last_valid_os_fn_id = file_delete,
+    last_valid_os_fn_id = unmap_file,
 };
 
 
@@ -73,6 +75,14 @@ static std::ostream &operator<<(std::ostream &os, const OsFn id)
       case OsFn::file_delete:
         os << "file_delete";
         break;
+
+      case OsFn::map_file_to_memory:
+        os << "map_file_to_memory";
+        break;
+
+      case OsFn::unmap_file:
+        os << "unmap_file";
+        break;
     }
 
     os << "()";
@@ -92,6 +102,8 @@ class MockOs::Expectation
         std::string arg_filename_;
         const void *arg_src_pointer_;
         void *arg_dest_pointer_;
+        struct os_mapped_file_data *arg_mapped_pointer_;
+        const struct os_mapped_file_data *arg_mapped_template_;
         bool arg_pointer_expect_concrete_value_;
         bool arg_pointer_shall_be_null_;
         size_t arg_count_;
@@ -105,6 +117,8 @@ class MockOs::Expectation
             arg_fd_(-5),
             arg_src_pointer_(nullptr),
             arg_dest_pointer_(nullptr),
+            arg_mapped_pointer_(nullptr),
+            arg_mapped_template_(nullptr),
             arg_pointer_expect_concrete_value_(false),
             arg_pointer_shall_be_null_(false),
             arg_count_(0),
@@ -199,6 +213,53 @@ class MockOs::Expectation
         data_.arg_fd_ = fd;
     }
 
+    explicit Expectation(OsFn fn, bool expect_null_pointer):
+        d(fn)
+    {
+        data_.arg_pointer_shall_be_null_ = expect_null_pointer;
+    }
+
+    explicit Expectation(int ret, struct os_mapped_file_data *mapped,
+                         const char *filename):
+        d(OsFn::map_file_to_memory)
+    {
+        data_.ret_code_ = ret;
+        data_.arg_mapped_pointer_ = mapped;
+        data_.arg_pointer_shall_be_null_ = (mapped == nullptr);
+        data_.arg_filename_ = filename;
+    }
+
+    explicit Expectation(const struct os_mapped_file_data *mapped,
+                         const char *filename):
+        d(OsFn::map_file_to_memory)
+    {
+        data_.ret_code_ = (mapped != nullptr && mapped->fd >= 0 && mapped->ptr != NULL) ? 0 : -1;
+        data_.arg_mapped_template_ = mapped;
+        data_.arg_filename_ = filename;
+    }
+
+    explicit Expectation(int ret, bool expect_null_pointer,
+                         const char *filename):
+        d(OsFn::map_file_to_memory)
+    {
+        data_.ret_code_ = ret;
+        data_.arg_pointer_shall_be_null_ = expect_null_pointer;
+        data_.arg_filename_ = filename;
+    }
+
+    explicit Expectation(struct os_mapped_file_data *mapped):
+        d(OsFn::unmap_file)
+    {
+        data_.arg_mapped_pointer_ = mapped;
+        data_.arg_pointer_shall_be_null_ = (mapped == nullptr);
+    }
+
+    explicit Expectation(const struct os_mapped_file_data *mapped):
+        d(OsFn::unmap_file)
+    {
+        data_.arg_mapped_template_ = mapped;
+    }
+
     explicit Expectation(OsFn fn):
         d(fn)
     {}
@@ -285,6 +346,45 @@ void MockOs::expect_os_file_delete(const char *filename)
     expectations_->add(Expectation(OsFn::file_delete, filename));
 }
 
+void MockOs::expect_os_map_file_to_memory(int ret, struct os_mapped_file_data *mapped,
+                                          const char *filename)
+{
+    expectations_->add(Expectation(ret, mapped, filename));
+}
+
+void MockOs::expect_os_map_file_to_memory(int ret, bool expect_null_pointer,
+                                          const char *filename)
+{
+    if(expect_null_pointer)
+        expectations_->add(Expectation(ret, nullptr, filename));
+    else
+        expectations_->add(Expectation(ret, false, filename));
+}
+
+void MockOs::expect_os_map_file_to_memory(const struct os_mapped_file_data *mapped,
+                                          const char *filename)
+{
+    expectations_->add(Expectation(mapped, filename));
+}
+
+void MockOs::expect_os_unmap_file(struct os_mapped_file_data *mapped)
+{
+    expectations_->add(Expectation(mapped));
+}
+
+void MockOs::expect_os_unmap_file(const struct os_mapped_file_data *mapped)
+{
+    expectations_->add(Expectation(mapped));
+}
+
+void MockOs::expect_os_unmap_file(bool expect_null_pointer)
+{
+    if(expect_null_pointer)
+        expectations_->add(Expectation(static_cast<struct os_mapped_file_data *>(nullptr)));
+    else
+        expectations_->add(Expectation(OsFn::unmap_file, false));
+}
+
 
 MockOs *mock_os_singleton = nullptr;
 
@@ -361,4 +461,47 @@ void os_file_delete(const char *filename)
 
     cppcut_assert_equal(expect.d.function_id_, OsFn::file_delete);
     cppcut_assert_equal(expect.d.arg_filename_, std::string(filename));
+}
+
+int os_map_file_to_memory(struct os_mapped_file_data *mapped,
+                          const char *filename)
+{
+    const auto &expect(mock_os_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, OsFn::map_file_to_memory);
+
+    if(expect.d.arg_mapped_template_ != nullptr)
+        *mapped = *expect.d.arg_mapped_template_;
+    else
+    {
+        if(expect.d.arg_pointer_expect_concrete_value_)
+            cppcut_assert_equal(expect.d.arg_mapped_pointer_, mapped);
+        else if(expect.d.arg_pointer_shall_be_null_)
+            cppcut_assert_null(mapped);
+        else
+            cppcut_assert_not_null(mapped);
+    }
+
+    cppcut_assert_equal(expect.d.arg_filename_, std::string(filename));
+
+    return expect.d.ret_code_;
+}
+
+void os_unmap_file(struct os_mapped_file_data *mapped)
+{
+    const auto &expect(mock_os_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, OsFn::unmap_file);
+
+    if(expect.d.arg_mapped_template_ != nullptr)
+        *mapped = *expect.d.arg_mapped_template_;
+    else
+    {
+        if(expect.d.arg_pointer_expect_concrete_value_)
+            cppcut_assert_equal(expect.d.arg_mapped_pointer_, mapped);
+        else if(expect.d.arg_pointer_shall_be_null_)
+            cppcut_assert_null(mapped);
+        else
+            cppcut_assert_not_null(mapped);
+    }
 }

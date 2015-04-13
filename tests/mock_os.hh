@@ -55,6 +55,16 @@ class MockOs
     void expect_os_file_new(int ret, const char *filename);
     void expect_os_file_close(int fd);
     void expect_os_file_delete(const char *filename);
+
+    void expect_os_map_file_to_memory(int ret, struct os_mapped_file_data *mapped,
+                                      const char *filename);
+    void expect_os_map_file_to_memory(const struct os_mapped_file_data *mapped,
+                                      const char *filename);
+    void expect_os_map_file_to_memory(int ret, bool expect_null_pointer,
+                                      const char *filename);
+    void expect_os_unmap_file(struct os_mapped_file_data *mapped);
+    void expect_os_unmap_file(const struct os_mapped_file_data *mapped);
+    void expect_os_unmap_file(bool expect_null_pointer);
 };
 
 extern MockOs *mock_os_singleton;
