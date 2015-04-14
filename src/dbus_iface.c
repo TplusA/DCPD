@@ -26,28 +26,63 @@
 #include "dbus_iface.h"
 #include "dbus_iface_deep.h"
 #include "dcpd_dbus.h"
+#include "connman_dbus.h"
 #include "messages.h"
 
 struct dbus_data
 {
-    GThread *thread;
-    GMainLoop *loop;
     guint owner_id;
     int acquired;
+};
+
+/*!
+ * \todo Is this whole threading thing really needed?
+ */
+struct dbus_process_data
+{
+    GThread *thread;
+    GMainLoop *loop;
+};
+
+static struct dbus_data dbus_data_system_bus;
+static struct dbus_data dbus_data_session_bus;
+
+static struct
+{
+    bool connect_to_session_bus;
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
     tdbusdcpdListNavigation *list_navigation_iface;
     tdbusdcpdListItem *list_item_iface;
-};
+}
+dcpd_iface_data;
+
+static struct
+{
+    tdbusconnmanManager *connman_manager_iface;
+}
+connman_iface_data;
 
 static gpointer process_dbus(gpointer user_data)
 {
-    struct dbus_data *data = user_data;
+    struct dbus_process_data *data = user_data;
 
     log_assert(data->loop != NULL);
 
     g_main_loop_run(data->loop);
     return NULL;
+}
+
+static int handle_dbus_error(GError **error)
+{
+    if(*error == NULL)
+        return 0;
+
+    msg_error(0, LOG_EMERG, "%s", (*error)->message);
+    g_error_free(*error);
+    *error = NULL;
+
+    return -1;
 }
 
 static void try_export_iface(GDBusConnection *connection,
@@ -57,11 +92,7 @@ static void try_export_iface(GDBusConnection *connection,
 
     g_dbus_interface_skeleton_export(iface, connection, "/de/tahifi/Dcpd", &error);
 
-    if(error)
-    {
-        msg_error(0, LOG_EMERG, "%s", error->message);
-        g_error_free(error);
-    }
+    (void)handle_dbus_error(&error);
 }
 
 static void bus_acquired(GDBusConnection *connection,
@@ -69,15 +100,23 @@ static void bus_acquired(GDBusConnection *connection,
 {
     struct dbus_data *data = user_data;
 
-    data->playback_iface = tdbus_dcpd_playback_skeleton_new();
-    data->views_iface = tdbus_dcpd_views_skeleton_new();
-    data->list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
-    data->list_item_iface = tdbus_dcpd_list_item_skeleton_new();
+    const bool is_session_bus = (data == &dbus_data_session_bus);
 
-    try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->playback_iface));
-    try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->views_iface));
-    try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->list_navigation_iface));
-    try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(data->list_item_iface));
+    msg_info("D-Bus \"%s\" acquired (%s bus)",
+             name, is_session_bus ? "session" : "system");
+
+    if(is_session_bus == dcpd_iface_data.connect_to_session_bus)
+    {
+        dcpd_iface_data.playback_iface = tdbus_dcpd_playback_skeleton_new();
+        dcpd_iface_data.views_iface = tdbus_dcpd_views_skeleton_new();
+        dcpd_iface_data.list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
+        dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
+
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.playback_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.views_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_item_iface));
+    }
 }
 
 static void name_acquired(GDBusConnection *connection,
@@ -85,8 +124,24 @@ static void name_acquired(GDBusConnection *connection,
 {
     struct dbus_data *data = user_data;
 
-    msg_info("D-Bus name \"%s\" acquired", name);
+    const bool is_session_bus = (data == &dbus_data_session_bus);
+
+    msg_info("D-Bus name \"%s\" acquired (%s bus)",
+             name, is_session_bus ? "session" : "system");
     data->acquired = 1;
+
+    if(!is_session_bus)
+    {
+        /* Connman is always on system bus */
+        GError *error = NULL;
+
+        connman_iface_data.connman_manager_iface =
+            tdbus_connman_manager_proxy_new_sync(connection,
+                                                 G_DBUS_PROXY_FLAGS_NONE,
+                                                 "net.connman", "/",
+                                                 NULL, &error);
+        (void)handle_dbus_error(&error);
+    }
 }
 
 static void name_lost(GDBusConnection *connection,
@@ -103,7 +158,7 @@ static void destroy_notification(gpointer data)
     msg_info("Bus destroyed.");
 }
 
-static struct dbus_data dbus_data;
+static struct dbus_process_data process_data;
 
 int dbus_setup(bool connect_to_session_bus)
 {
@@ -111,45 +166,72 @@ int dbus_setup(bool connect_to_session_bus)
     g_type_init();
 #endif
 
-    memset(&dbus_data, 0, sizeof(dbus_data));
+    memset(&dbus_data_system_bus, 0, sizeof(dbus_data_system_bus));
+    memset(&dbus_data_session_bus, 0, sizeof(dbus_data_session_bus));
+    memset(&dcpd_iface_data, 0, sizeof(dcpd_iface_data));
+    memset(&connman_iface_data, 0, sizeof(connman_iface_data));
+    memset(&process_data, 0, sizeof(process_data));
 
-    dbus_data.loop = g_main_loop_new(NULL, FALSE);
-    if(dbus_data.loop == NULL)
+    process_data.loop = g_main_loop_new(NULL, FALSE);
+    if(process_data.loop == NULL)
     {
         msg_error(ENOMEM, LOG_EMERG, "Failed creating GLib main loop");
         return -1;
     }
 
-    GBusType bus_type =
-        connect_to_session_bus ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM;
+    dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
-    dbus_data.owner_id =
-        g_bus_own_name(bus_type, bus_name, G_BUS_NAME_OWNER_FLAGS_NONE,
-                       bus_acquired, name_acquired, name_lost, &dbus_data,
-                       destroy_notification);
+    dbus_data_system_bus.owner_id =
+        g_bus_own_name(G_BUS_TYPE_SYSTEM, bus_name,
+                       G_BUS_NAME_OWNER_FLAGS_NONE,
+                       bus_acquired, name_acquired, name_lost,
+                       &dbus_data_system_bus, destroy_notification);
 
-    while(dbus_data.acquired == 0)
+    if(connect_to_session_bus)
+        dbus_data_session_bus.owner_id =
+            g_bus_own_name(G_BUS_TYPE_SESSION, bus_name,
+                           G_BUS_NAME_OWNER_FLAGS_NONE,
+                           bus_acquired, name_acquired, name_lost,
+                           &dbus_data_session_bus, destroy_notification);
+
+    log_assert(dbus_data_system_bus.owner_id != 0 ||
+               dbus_data_session_bus.owner_id != 0);
+
+    while((dbus_data_system_bus.owner_id == 0 || dbus_data_system_bus.acquired == 0) ||
+          (dbus_data_session_bus.owner_id == 0 || dbus_data_session_bus.acquired == 0))
     {
-        /* do whatever has to be done behind the scenes until one of the
+        /* do whatever has to be done behind the scenes until all of the
          * guaranteed callbacks gets called */
         g_main_context_iteration(NULL, TRUE);
     }
 
-    if(dbus_data.acquired < 0)
+    bool failed = false;
+
+    if(dbus_data_system_bus.owner_id > 0 && dbus_data_system_bus.acquired < 0)
     {
-        msg_error(EPIPE, LOG_EMERG, "Failed acquiring D-Bus name");
-        return -1;
+        msg_error(EPIPE, LOG_EMERG, "Failed acquiring D-Bus name on system bus");
+        failed = true;
     }
 
-    log_assert(dbus_data.playback_iface != NULL);
-    log_assert(dbus_data.views_iface != NULL);
-    log_assert(dbus_data.list_navigation_iface != NULL);
-    log_assert(dbus_data.list_item_iface != NULL);
+    if(dbus_data_session_bus.owner_id > 0 && dbus_data_session_bus.acquired < 0)
+    {
+        msg_error(EPIPE, LOG_EMERG, "Failed acquiring D-Bus name on session bus");
+        failed = true;
+    }
 
-    dbus_data.thread = g_thread_new("D-Bus I/O", process_dbus, &dbus_data);
-    if(dbus_data.thread == NULL)
+    if(failed)
+        return -1;
+
+    log_assert(dcpd_iface_data.playback_iface != NULL);
+    log_assert(dcpd_iface_data.views_iface != NULL);
+    log_assert(dcpd_iface_data.list_navigation_iface != NULL);
+    log_assert(dcpd_iface_data.list_item_iface != NULL);
+    log_assert(connman_iface_data.connman_manager_iface != NULL);
+
+    process_data.thread = g_thread_new("D-Bus I/O", process_dbus, &process_data);
+    if(process_data.thread == NULL)
     {
         msg_error(EAGAIN, LOG_EMERG, "Failed spawning D-Bus I/O thread");
         return -1;
@@ -160,39 +242,51 @@ int dbus_setup(bool connect_to_session_bus)
 
 void dbus_shutdown(void)
 {
-    if(dbus_data.loop == NULL)
+    if(process_data.loop == NULL)
         return;
 
-    g_bus_unown_name(dbus_data.owner_id);
+    if(dbus_data_system_bus.owner_id > 0)
+        g_bus_unown_name(dbus_data_system_bus.owner_id);
 
-    g_main_loop_quit(dbus_data.loop);
-    (void)g_thread_join(dbus_data.thread);
-    g_main_loop_unref(dbus_data.loop);
+    if(dbus_data_session_bus.owner_id)
+        g_bus_unown_name(dbus_data_session_bus.owner_id);
 
-    g_object_unref(dbus_data.playback_iface);
-    g_object_unref(dbus_data.views_iface);
-    g_object_unref(dbus_data.list_navigation_iface);
-    g_object_unref(dbus_data.list_item_iface);
+    g_main_loop_quit(process_data.loop);
+    (void)g_thread_join(process_data.thread);
+    g_main_loop_unref(process_data.loop);
 
-    dbus_data.loop = NULL;
+    g_object_unref(dcpd_iface_data.playback_iface);
+    g_object_unref(dcpd_iface_data.views_iface);
+    g_object_unref(dcpd_iface_data.list_navigation_iface);
+    g_object_unref(dcpd_iface_data.list_item_iface);
+
+    if(connman_iface_data.connman_manager_iface != NULL)
+        g_object_unref(connman_iface_data.connman_manager_iface);
+
+    process_data.loop = NULL;
 }
 
 tdbusdcpdPlayback *dbus_get_playback_iface(void)
 {
-    return dbus_data.playback_iface;
+    return dcpd_iface_data.playback_iface;
 }
 
 tdbusdcpdViews *dbus_get_views_iface(void)
 {
-    return dbus_data.views_iface;
+    return dcpd_iface_data.views_iface;
 }
 
 tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void)
 {
-    return dbus_data.list_navigation_iface;
+    return dcpd_iface_data.list_navigation_iface;
 }
 
 tdbusdcpdListItem *dbus_get_list_item_iface(void)
 {
-    return dbus_data.list_item_iface;
+    return dcpd_iface_data.list_item_iface;
+}
+
+tdbusconnmanManager *dbus_get_connman_manager_iface(void)
+{
+    return connman_iface_data.connman_manager_iface;
 }

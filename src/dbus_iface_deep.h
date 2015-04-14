@@ -20,6 +20,7 @@
 #define DBUS_IFACE_DEEP_H
 
 #include "dcpd_dbus.h"
+#include "connman_dbus.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +30,8 @@ tdbusdcpdPlayback *dbus_get_playback_iface(void);
 tdbusdcpdViews *dbus_get_views_iface(void);
 tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void);
 tdbusdcpdListItem *dbus_get_list_item_iface(void);
+
+tdbusconnmanManager *dbus_get_connman_manager_iface(void);
 
 #ifdef __cplusplus
 }
