@@ -24,6 +24,7 @@
 #include "registers.h"
 
 #include "mock_dcpd_dbus.hh"
+#include "mock_connman.hh"
 #include "mock_messages.hh"
 #include "mock_os.hh"
 
@@ -318,6 +319,7 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 static MockDcpdDBus *mock_dcpd_dbus;
+static MockConnman *mock_connman;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
 
@@ -338,6 +340,11 @@ void cut_setup(void)
     mock_dcpd_dbus->init();
     mock_dcpd_dbus_singleton = mock_dcpd_dbus;
 
+    mock_connman = new MockConnman();
+    cppcut_assert_not_null(mock_connman);
+    mock_connman->init();
+    mock_connman_singleton = mock_connman;
+
     read_data = new read_data_t;
     cppcut_assert_not_null(read_data);
 
@@ -351,18 +358,22 @@ void cut_teardown(void)
     mock_messages->check();
     mock_os->check();
     mock_dcpd_dbus->check();
+    mock_connman->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
+    mock_connman_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
     delete mock_dcpd_dbus;
+    delete mock_connman;
 
     mock_messages = nullptr;
     mock_os = nullptr;
     mock_dcpd_dbus = nullptr;
+    mock_connman = nullptr;
 
     delete read_data;
     read_data = nullptr;
@@ -466,6 +477,8 @@ static int read_answer(const void *src, size_t count, int fd)
  */
 void test_register_read_request_transaction(void)
 {
+    register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere");
+
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
@@ -475,7 +488,15 @@ void test_register_read_request_transaction(void)
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
+    static auto *dummy_connman_iface_data =
+        reinterpret_cast<struct ConnmanInterfaceData *>(123456);
+
     mock_messages->expect_msg_info("read 55 handler %p %zu");
+    mock_connman->expect_connman_find_active_primary_interface(dummy_connman_iface_data,
+        "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
+    mock_connman->expect_connman_get_dhcp_mode(false, dummy_connman_iface_data);
+    mock_connman->expect_connman_free_interface_data(dummy_connman_iface_data);
+
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 

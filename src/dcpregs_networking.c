@@ -29,6 +29,7 @@
 #include "dcpregs_networking.h"
 #include "registers_priv.h"
 #include "inifile.h"
+#include "connman.h"
 #include "messages.h"
 
 #define REQ_MAC_ADDRESS_51              ((uint32_t)(1U << 0))
@@ -417,9 +418,14 @@ exit_error_free_filename:
     return ret;
 }
 
+static bool in_edit_mode(void)
+{
+    return nwconfig_write_data.selected_interface != NULL;
+}
+
 static bool may_change_config(void)
 {
-    if(nwconfig_write_data.selected_interface != NULL)
+    if(in_edit_mode())
         return true;
 
     msg_error(0, LOG_ERR,
@@ -559,7 +565,25 @@ ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
     if(data_length_is_unexpected(length, 1))
         return -1;
 
-    response[0] = 0;
+    if(in_edit_mode() && IS_REQUESTED(REQ_DHCP_MODE_55))
+        response[0] = nwconfig_write_data.dhcpv4_mode;
+    else
+    {
+        const struct register_configuration_t *config = registers_get_data();
+
+        struct ConnmanInterfaceData *iface_data =
+            in_edit_mode()
+            ? connman_find_interface(nwconfig_write_data.selected_interface->mac_address_string)
+            : connman_find_active_primary_interface(get_network_iface_data(config)->mac_address_string,
+                                                    config->builtin_ethernet_interface.mac_address_string,
+                                                    config->builtin_wlan_interface.mac_address_string);
+
+        response[0] =
+            (iface_data != NULL) ? connman_get_dhcp_mode(iface_data) : 0;
+
+        connman_free_interface_data(iface_data);
+    }
+
     return length;
 }
 

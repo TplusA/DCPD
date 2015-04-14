@@ -26,6 +26,7 @@ dcpd_SOURCES = \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networking.h \
+    connman.c connman.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h
 
 AM_CFLAGS = $(CWARNINGS)

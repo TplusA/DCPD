@@ -70,6 +70,7 @@ test_drcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 test_transactions_la_SOURCES = \
     test_transactions.cc \
     mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
+    mock_connman.hh mock_connman.cc \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
