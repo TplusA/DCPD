@@ -736,6 +736,57 @@ void test_dhcp_parameter_boundaries(void)
 }
 
 /*!\test
+ * Switching DHCP off and setting no IPv4 configuration tells us to disable the
+ * interface for IPv4.
+ */
+void test_explicitly_disabling_dhcp_disables_whole_interface(void)
+{
+    start_ipv4_config();
+
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
+
+    static const uint8_t zero = 0;
+
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Disable DHCP");
+    cppcut_assert_equal(0, reg->write_handler(&zero, 1));
+
+    mock_messages->expect_msg_info("write 53 handler %p %zu");
+    mock_messages->expect_msg_info_formatted(
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_error_formatted(0, LOG_WARNING,
+        "Disabling IPv4 on interface DE:CA:FD:EA:DB:AD because DHCPv4 "
+        "was disabled and static IPv4 configuration was not sent");
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    commit_ipv4_config(false);
+
+    static const char expected_config_file_format[] =
+        "[global]\n"
+        "Name = StrBo\n"
+        "Description = StrBo-managed built-in wired interface\n"
+        "[service_config]\n"
+        "MAC = %s\n"
+        "Type = ethernet\n"
+        "IPv4 = off\n";
+
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer),
+             expected_config_file_format, ethernet_mac_address);
+
+    size_t written_config_file_length = strlen(buffer);
+
+    cut_assert_equal_memory(buffer, written_config_file_length,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+/*!\test
  * When being asked for DHCP mode in normal mode, Connman is consulted
  * (reporting "disabled" in this test).
  */
