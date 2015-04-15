@@ -702,6 +702,9 @@ void test_big_master_transaction(void)
     cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
 }
 
+/*!\test
+ * Accesses to unsupported registers are intercepted.
+ */
 void test_bad_register_addresses_are_handled_in_master_transactions(void)
 {
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
@@ -713,6 +716,10 @@ void test_bad_register_addresses_are_handled_in_master_transactions(void)
     cut_assert_false(transaction_set_address_for_master(t, 42));
 }
 
+/*!\test
+ * Accesses to unsupported registers are intercepted in fragmented
+ * transactions.
+ */
 void test_bad_register_addresses_are_handled_in_fragmented_transactions(void)
 {
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
