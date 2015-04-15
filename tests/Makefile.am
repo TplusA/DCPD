@@ -51,6 +51,7 @@ test_registers_la_SOURCES = \
     test_registers.cc \
     mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
     mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_connman.hh mock_connman.cc \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh

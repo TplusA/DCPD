@@ -114,6 +114,11 @@ static struct
 }
 nwconfig_write_data;
 
+void dcpregs_networking_init(void)
+{
+    nwconfig_write_data.selected_interface = NULL;
+}
+
 struct config_filename_template
 {
     const char *const template;

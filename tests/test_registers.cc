@@ -27,6 +27,7 @@
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_dbus_iface.hh"
+#include "mock_connman.hh"
 #include "mock_messages.hh"
 #include "mock_os.hh"
 
@@ -367,12 +368,15 @@ void test_slave_drc_list_item_add_to_favorites(void)
 namespace spi_registers_networking
 {
 
+static MockConnman *mock_connman;
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 
 static const char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
 static const char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
 static const char expected_config_filename[] = "/var/lib/connman/builtin_decafdeadbad.config";
+static struct ConnmanInterfaceData *const dummy_connman_iface =
+    reinterpret_cast<struct ConnmanInterfaceData *>(0xbeefbeef);
 
 
 static std::vector<char> os_write_buffer;
@@ -403,8 +407,14 @@ void cut_setup(void)
     mock_os->init();
     mock_os_singleton = mock_os;
 
+    mock_connman = new MockConnman;
+    cppcut_assert_not_null(mock_connman);
+    mock_connman->init();
+    mock_connman_singleton = mock_connman;
+
     os_write_buffer.clear();
 
+    dcpregs_networking_init();
     register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman");
 }
 
@@ -414,15 +424,19 @@ void cut_teardown(void)
 
     mock_messages->check();
     mock_os->check();
+    mock_connman->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
+    mock_connman_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
+    delete mock_connman;
 
     mock_messages = nullptr;
     mock_os = nullptr;
+    mock_connman = nullptr;
 }
 
 /*!\test
@@ -565,10 +579,10 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
 {
     start_ipv4_config();
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Enable DHCP");
     const struct dcp_register_t *reg = register_lookup(55);
     cppcut_assert_not_null(reg);
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Enable DHCP");
     cut_assert(reg->write_handler == dcpregs_write_55_dhcp_enabled);
     static const uint8_t one = 1;
     cppcut_assert_equal(0, reg->write_handler(&one, 1));
@@ -672,6 +686,103 @@ void test_switch_to_static_ipv4_configuration(void)
     char new_config_file_buffer[512];
     (void)do_test_set_static_ipv4_config(&config_file, new_config_file_buffer,
                                          sizeof(new_config_file_buffer));
+}
+
+/*!\test
+ * When being asked for DHCP mode in normal mode, Connman is consulted
+ * (reporting "disabled" in this test).
+ */
+void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled(void)
+{
+    const struct dcp_register_t *reg = register_lookup(55);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
+
+    mock_messages->expect_msg_info("read 55 handler %p %zu");
+    mock_connman->expect_connman_find_active_primary_interface(dummy_connman_iface,
+                                                               ethernet_mac_address,
+                                                               ethernet_mac_address,
+                                                               wlan_mac_address);
+    mock_connman->expect_connman_get_dhcp_mode(false, dummy_connman_iface);
+    mock_connman->expect_connman_free_interface_data(dummy_connman_iface);
+
+    uint8_t buffer = UINT8_MAX;
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+
+    cppcut_assert_equal(0, int(buffer));
+}
+
+/*!\test
+ * When being asked for DHCP mode in normal mode, Connman is consulted
+ * (reporting "enabled" in this test).
+ */
+void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled(void)
+{
+    const struct dcp_register_t *reg = register_lookup(55);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
+
+    mock_messages->expect_msg_info("read 55 handler %p %zu");
+    mock_connman->expect_connman_find_active_primary_interface(dummy_connman_iface,
+                                                               ethernet_mac_address,
+                                                               ethernet_mac_address,
+                                                               wlan_mac_address);
+    mock_connman->expect_connman_get_dhcp_mode(true, dummy_connman_iface);
+    mock_connman->expect_connman_free_interface_data(dummy_connman_iface);
+
+    uint8_t buffer = UINT8_MAX;
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+
+    cppcut_assert_equal(1, int(buffer));
+}
+
+/*!\test
+ * When being asked for DHCP mode in edit mode, Connman is consulted if the
+ * mode has not been set during this edit session.
+ */
+void test_read_dhcp_mode_in_edit_mode_before_any_changes(void)
+{
+    start_ipv4_config();
+
+    const struct dcp_register_t *reg = register_lookup(55);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
+
+    mock_messages->expect_msg_info("read 55 handler %p %zu");
+    mock_connman->expect_connman_find_interface(dummy_connman_iface, ethernet_mac_address);
+    mock_connman->expect_connman_get_dhcp_mode(true, dummy_connman_iface);
+    mock_connman->expect_connman_free_interface_data(dummy_connman_iface);
+
+    uint8_t buffer = UINT8_MAX;
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+
+    cppcut_assert_equal(1, int(buffer));
+}
+
+/*!\test
+ * When being asked for DHCP mode in edit mode, the mode written during this
+ * edit session is returned.
+ */
+void test_read_dhcp_mode_in_edit_mode_after_change(void)
+{
+    start_ipv4_config();
+
+    const struct dcp_register_t *reg = register_lookup(55);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
+    cut_assert(reg->write_handler == dcpregs_write_55_dhcp_enabled);
+
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Enable DHCP");
+    static const uint8_t one = 1;
+    cppcut_assert_equal(0, reg->write_handler(&one, 1));
+
+    mock_messages->expect_msg_info("read 55 handler %p %zu");
+
+    uint8_t buffer = UINT8_MAX;
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+
+    cppcut_assert_equal(1, int(buffer));
 }
 
 };
