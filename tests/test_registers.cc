@@ -710,6 +710,32 @@ void test_switch_to_static_ipv4_configuration(void)
 }
 
 /*!\test
+ * Only values 0 and 1 are valid parameters for register 55.
+ */
+void test_dhcp_parameter_boundaries(void)
+{
+    start_ipv4_config();
+
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
+
+    uint8_t buffer = 2;
+
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Received invalid DHCP configuration parameter 0x02 (Invalid argument)");
+    cppcut_assert_equal(-1, reg->write_handler(&buffer, 1));
+
+    buffer = UINT8_MAX;
+
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Received invalid DHCP configuration parameter 0xff (Invalid argument)");
+    cppcut_assert_equal(-1, reg->write_handler(&buffer, 1));
+}
+
+/*!\test
  * When being asked for DHCP mode in normal mode, Connman is consulted
  * (reporting "disabled" in this test).
  */
