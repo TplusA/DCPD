@@ -121,12 +121,14 @@ static const struct dcp_register_t register_map[] =
         /* IPv4 netmask */
         .address = 57,
         .max_data_size = 16,
+        .read_handler = dcpregs_read_57_ipv4_netmask,
         .write_handler = dcpregs_write_57_ipv4_netmask,
     },
     {
         /* IPv4 gateway */
         .address = 58,
         .max_data_size = 16,
+        .read_handler = dcpregs_read_58_ipv4_gateway,
         .write_handler = dcpregs_write_58_ipv4_gateway,
     },
     {

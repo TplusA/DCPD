@@ -49,8 +49,10 @@ int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length);
 int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length);
 
+ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length);
 int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length);
 
+ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length);
 int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length);
 
 #ifdef __cplusplus

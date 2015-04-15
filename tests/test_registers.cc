@@ -543,13 +543,13 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_address)), sizeof(ipv4_address)));
 
     reg = lookup_register_expect_handlers(57,
-                                          NULL,
+                                          dcpregs_read_57_ipv4_netmask,
                                           dcpregs_write_57_ipv4_netmask);
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_netmask)), sizeof(ipv4_netmask)));
 
     reg = lookup_register_expect_handlers(58,
-                                          NULL,
+                                          dcpregs_read_58_ipv4_gateway,
                                           dcpregs_write_58_ipv4_gateway);
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_gateway)), sizeof(ipv4_gateway)));
@@ -805,27 +805,55 @@ void test_read_dhcp_mode_in_edit_mode_after_change(void)
     cppcut_assert_equal(1, int(buffer));
 }
 
-/*!\test
- * When being asked for the IPv4 address in normal mode, Connman is consulted.
- */
-void test_read_ipv4_address_in_normal_mode(void)
+template <uint8_t Register>
+struct RegisterTraits;
+
+template <>
+struct RegisterTraits<56U>
 {
-    auto *reg = lookup_register_expect_handlers(56,
-                                                dcpregs_read_56_ipv4_address,
-                                                dcpregs_write_56_ipv4_address);
+    static constexpr auto expected_read_handler_log_message = "read 56 handler %p %zu";
+    static constexpr auto expected_read_handler = &dcpregs_read_56_ipv4_address;
+    static constexpr auto expected_write_handler = &dcpregs_write_56_ipv4_address;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_address_string;
+};
+
+template <>
+struct RegisterTraits<57U>
+{
+    static constexpr auto expected_read_handler_log_message = "read 57 handler %p %zu";
+    static constexpr auto expected_read_handler = &dcpregs_read_57_ipv4_netmask;
+    static constexpr auto expected_write_handler = &dcpregs_write_57_ipv4_netmask;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_netmask_string;
+};
+
+template <>
+struct RegisterTraits<58U>
+{
+    static constexpr auto expected_read_handler_log_message = "read 58 handler %p %zu";
+    static constexpr auto expected_read_handler = &dcpregs_read_58_ipv4_gateway;
+    static constexpr auto expected_write_handler = &dcpregs_write_58_ipv4_gateway;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
+};
+
+template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
+static void read_ipv4_parameter_in_normal_mode(void)
+{
+    auto *reg = lookup_register_expect_handlers(Register,
+                                                RegTraits::expected_read_handler,
+                                                RegTraits::expected_write_handler);
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
     static const char ip_address[] = "123.213.132.112";
 
-    mock_messages->expect_msg_info("read 56 handler %p %zu");
+    mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_ipv4_address_string(ip_address,
-                                                 dummy_connman_iface, false,
-                                                 sizeof(buffer));
+    (mock_connman->*RegTraits::expect_get_string_memberfn)(ip_address,
+                                                           dummy_connman_iface, false,
+                                                           sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     cppcut_assert_equal(ssize_t(sizeof(ip_address)),
@@ -835,27 +863,24 @@ void test_read_ipv4_address_in_normal_mode(void)
                             buffer, sizeof(ip_address));
 }
 
-/*!\test
- * When being asked for the IPv4 address in edit mode, Connman is consulted if
- * the address has not been set during this edit session.
- */
-void test_read_ipv4_address_in_edit_mode_before_any_changes(void)
+template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
+static void read_ipv4_parameter_in_edit_mode_before_any_changes(void)
 {
     start_ipv4_config();
 
-    auto *reg = lookup_register_expect_handlers(56,
-                                                dcpregs_read_56_ipv4_address,
-                                                dcpregs_write_56_ipv4_address);
+    auto *reg = lookup_register_expect_handlers(Register,
+                                                RegTraits::expected_read_handler,
+                                                RegTraits::expected_write_handler);
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    static const char ip_address[] = "123.213.132.112";
+    static const char ip_address[] = "132.213.112.123";
 
-    mock_messages->expect_msg_info("read 56 handler %p %zu");
+    mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_get_ipv4_address_string(ip_address,
-                                                 dummy_connman_iface, false,
-                                                 sizeof(buffer));
+    (mock_connman->*RegTraits::expect_get_string_memberfn)(ip_address,
+                                                           dummy_connman_iface, false,
+                                                           sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     cppcut_assert_equal(ssize_t(sizeof(ip_address)),
@@ -865,26 +890,23 @@ void test_read_ipv4_address_in_edit_mode_before_any_changes(void)
                             buffer, sizeof(ip_address));
 }
 
-/*!\test
- * When being asked for the IPv4 address in edit mode, the address written
- * during this edit session is returned.
- */
-void test_read_ipv4_address_in_edit_mode_after_change(void)
+template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
+static void read_ipv4_parameter_in_edit_mode_after_change(void)
 {
     start_ipv4_config();
 
-    auto *reg = lookup_register_expect_handlers(56,
-                                                dcpregs_read_56_ipv4_address,
-                                                dcpregs_write_56_ipv4_address);
+    auto *reg = lookup_register_expect_handlers(Register,
+                                                RegTraits::expected_read_handler,
+                                                RegTraits::expected_write_handler);
     static const char ip_address[] = "123.215.179.174";
     cppcut_assert_equal(0, reg->write_handler((uint8_t *)ip_address,
                                               sizeof(ip_address)));
 
-    mock_messages->expect_msg_info("read 56 handler %p %zu");
-
     uint8_t buffer[4 + 16 + 4];
     memset(buffer, UINT8_MAX, sizeof(buffer));
     cppcut_assert_operator(sizeof(ip_address), <=, sizeof(buffer));
+
+    mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
 
     cppcut_assert_equal(ssize_t(sizeof(ip_address)),
                         reg->read_handler(buffer + 4, sizeof(ip_address)));
@@ -901,6 +923,84 @@ void test_read_ipv4_address_in_edit_mode_after_change(void)
     cut_assert_equal_memory(red_zone_bytes, sizeof(red_zone_bytes),
                             buffer + sizeof(ip_address) + sizeof(red_zone_bytes),
                             sizeof(red_zone_bytes));
+}
+
+/*!\test
+ * When being asked for the IPv4 address in normal mode, Connman is consulted.
+ */
+void test_read_ipv4_address_in_normal_mode(void)
+{
+    read_ipv4_parameter_in_normal_mode<56>();
+}
+
+/*!\test
+ * When being asked for the IPv4 address in edit mode, Connman is consulted if
+ * the address has not been set during this edit session.
+ */
+void test_read_ipv4_address_in_edit_mode_before_any_changes(void)
+{
+    read_ipv4_parameter_in_edit_mode_before_any_changes<56>();
+}
+
+/*!\test
+ * When being asked for the IPv4 address in edit mode, the address written
+ * during this edit session is returned.
+ */
+void test_read_ipv4_address_in_edit_mode_after_change(void)
+{
+    read_ipv4_parameter_in_edit_mode_after_change<56>();
+}
+
+/*!\test
+ * When being asked for the IPv4 netmask in normal mode, Connman is consulted.
+ */
+void test_read_ipv4_netmask_in_normal_mode(void)
+{
+    read_ipv4_parameter_in_normal_mode<57>();
+}
+
+/*!\test
+ * When being asked for the IPv4 netmask in edit mode, Connman is consulted if
+ * the mask has not been set during this edit session.
+ */
+void test_read_ipv4_netmask_in_edit_mode_before_any_changes(void)
+{
+    read_ipv4_parameter_in_edit_mode_before_any_changes<57>();
+}
+
+/*!\test
+ * When being asked for the IPv4 netmask in edit mode, the address written
+ * during this edit session is returned.
+ */
+void test_read_ipv4_netmask_in_edit_mode_after_change(void)
+{
+    read_ipv4_parameter_in_edit_mode_after_change<57>();
+}
+
+/*!\test
+ * When being asked for the IPv4 gateway in normal mode, Connman is consulted.
+ */
+void test_read_ipv4_gateway_in_normal_mode(void)
+{
+    read_ipv4_parameter_in_normal_mode<58>();
+}
+
+/*!\test
+ * When being asked for the IPv4 gateway in edit mode, Connman is consulted if
+ * the gateway has not been set during this edit session.
+ */
+void test_read_ipv4_gateway_in_edit_mode_before_any_changes(void)
+{
+    read_ipv4_parameter_in_edit_mode_before_any_changes<58>();
+}
+
+/*!\test
+ * When being asked for the IPv4 gateway in edit mode, the gateway written
+ * during this edit session is returned.
+ */
+void test_read_ipv4_gateway_in_edit_mode_after_change(void)
+{
+    read_ipv4_parameter_in_edit_mode_after_change<58>();
 }
 
 };

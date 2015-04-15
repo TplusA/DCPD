@@ -280,32 +280,52 @@ bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
     return retval;
 }
 
-void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
-                                     char *dest, size_t dest_size)
+static void get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
+                                      const char *parameter_name,
+                                      char *dest, size_t dest_size)
 {
     log_assert(iface_data != NULL);
+    log_assert(parameter_name != NULL);
     log_assert(dest != NULL);
     log_assert(dest_size > 0);
 
     GVariantDict dict;
     init_subdict((GVariant *)iface_data, &dict, "IPv4");
 
-    GVariant *ipv4_address_variant =
-        g_variant_dict_lookup_value(&dict, "Address", G_VARIANT_TYPE_STRING);
+    GVariant *ipv4_parameter_variant =
+        g_variant_dict_lookup_value(&dict, parameter_name, G_VARIANT_TYPE_STRING);
 
-    if(ipv4_address_variant != NULL)
+    if(ipv4_parameter_variant != NULL)
     {
-        const char *ipv4_address = g_variant_get_string(ipv4_address_variant, NULL);
+        const char *ipv4_parameter = g_variant_get_string(ipv4_parameter_variant, NULL);
 
-        strncpy(dest, ipv4_address, dest_size);
+        strncpy(dest, ipv4_parameter, dest_size);
         dest[dest_size - 1] = '\0';
 
-        g_variant_unref(ipv4_address_variant);
+        g_variant_unref(ipv4_parameter_variant);
     }
     else
         dest[0] = '\0';
 
     g_variant_dict_clear(&dict);
+}
+
+void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+                                     char *dest, size_t dest_size)
+{
+    get_ipv4_parameter_string(iface_data, "Address", dest, dest_size);
+}
+
+void connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
+                                     char *dest, size_t dest_size)
+{
+    get_ipv4_parameter_string(iface_data, "Netmask", dest, dest_size);
+}
+
+void connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
+                                     char *dest, size_t dest_size)
+{
+    get_ipv4_parameter_string(iface_data, "Gateway", dest, dest_size);
 }
 
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)

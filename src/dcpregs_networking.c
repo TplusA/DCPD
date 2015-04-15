@@ -654,22 +654,23 @@ int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
     return 0;
 }
 
-ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
+static ssize_t
+read_ipv4_parameter(uint32_t requested_mask,
+                    const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
+                    void (*connman_query_fn)(struct ConnmanInterfaceData *, char *, size_t),
+                    uint8_t *response, size_t length)
 {
-    msg_info("read 56 handler %p %zu", response, length);
-
-    if(data_length_is_unexpectedly_small(length, 16))
+    if(data_length_is_unexpectedly_small(length, SIZE_OF_IPV4_ADDRESS_STRING))
         return -1;
 
-    if(in_edit_mode() && IS_REQUESTED(REQ_IP_ADDRESS_56))
-        memcpy(response, nwconfig_write_data.ipv4_address,
-               sizeof(nwconfig_write_data.ipv4_address));
+    if(in_edit_mode() && IS_REQUESTED(requested_mask))
+        memcpy(response, edited_ipv4_parameter, SIZE_OF_IPV4_ADDRESS_STRING);
     else
     {
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
         if(iface_data != NULL)
-            connman_get_ipv4_address_string(iface_data, (char *)response, length);
+            connman_query_fn(iface_data, (char *)response, length);
         else
             response[0] = '\0';
 
@@ -677,6 +678,36 @@ ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
     }
 
     return strlen((char *)response) + 1;
+}
+
+ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
+{
+    msg_info("read 56 handler %p %zu", response, length);
+
+    return read_ipv4_parameter(REQ_IP_ADDRESS_56,
+                               nwconfig_write_data.ipv4_address,
+                               connman_get_ipv4_address_string,
+                               response, length);
+}
+
+ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length)
+{
+    msg_info("read 57 handler %p %zu", response, length);
+
+    return read_ipv4_parameter(REQ_NETMASK_57,
+                               nwconfig_write_data.ipv4_netmask,
+                               connman_get_ipv4_netmask_string,
+                               response, length);
+}
+
+ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
+{
+    msg_info("read 58 handler %p %zu", response, length);
+
+    return read_ipv4_parameter(REQ_DEFAULT_GATEWAY_58,
+                               nwconfig_write_data.ipv4_gateway,
+                               connman_get_ipv4_gateway_string,
+                               response, length);
 }
 
 static size_t trim_trailing_zero_padding(const uint8_t *data, size_t length)
