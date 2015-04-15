@@ -370,7 +370,8 @@ namespace spi_registers_networking
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 
-static const char mac_address[] = "DE:CA:FD:EA:DB:AD";
+static const char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
+static const char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
 static const char expected_config_filename[] = "/var/lib/connman/builtin_decafdeadbad.config";
 
 
@@ -427,7 +428,7 @@ void cut_teardown(void)
  */
 void test_read_mac_address(void)
 {
-    register_init(mac_address, NULL, NULL);
+    register_init(ethernet_mac_address, wlan_mac_address, NULL);
 
     const struct dcp_register_t *reg = register_lookup(51);
     cppcut_assert_not_null(reg);
@@ -446,7 +447,7 @@ void test_read_mac_address(void)
                             sizeof(redzone_content));
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
                             buffer + sizeof(redzone_content) + 18, sizeof(redzone_content));
-    cut_assert_equal_memory(mac_address, sizeof(mac_address),
+    cut_assert_equal_memory(ethernet_mac_address, sizeof(ethernet_mac_address),
                             buffer + sizeof(redzone_content), 18);
 }
 
@@ -548,7 +549,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
 
     snprintf(written_config_file, written_config_file_size,
              expected_config_file_format,
-             mac_address, ipv4_address, ipv4_netmask, ipv4_gateway);
+             ethernet_mac_address, ipv4_address, ipv4_netmask, ipv4_gateway);
 
     size_t written_config_file_length = strlen(written_config_file);
 
@@ -600,7 +601,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
         "IPv4 = dhcp\n";
 
     snprintf(written_config_file, written_config_file_size,
-             expected_config_file_format, mac_address);
+             expected_config_file_format, ethernet_mac_address);
 
     size_t written_config_file_length = strlen(written_config_file);
 
@@ -616,7 +617,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
  */
 void test_set_initial_static_ipv4_configuration(void)
 {
-    register_init(mac_address, NULL, "/var/lib/connman");
+    register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman");
 
     char buffer[512];
     (void)do_test_set_static_ipv4_config(NULL, buffer, sizeof(buffer));
@@ -627,7 +628,7 @@ void test_set_initial_static_ipv4_configuration(void)
  */
 void test_set_initial_dhcp_ipv4_configuration(void)
 {
-    register_init(mac_address, NULL, "/var/lib/connman");
+    register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman");
 
     char buffer[512];
     (void)do_test_set_dhcp_ipv4_config(NULL, buffer, sizeof(buffer));
@@ -639,7 +640,7 @@ void test_set_initial_dhcp_ipv4_configuration(void)
  */
 void test_switch_to_dhcp_ipv4_configuration(void)
 {
-    register_init(mac_address, NULL, "/var/lib/connman");
+    register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman");
 
     char config_file_buffer[512];
     const struct os_mapped_file_data config_file =
@@ -663,7 +664,7 @@ void test_switch_to_dhcp_ipv4_configuration(void)
  */
 void test_switch_to_static_ipv4_configuration(void)
 {
-    register_init(mac_address, NULL, "/var/lib/connman");
+    register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman");
 
     char config_file_buffer[512];
     const struct os_mapped_file_data config_file =
