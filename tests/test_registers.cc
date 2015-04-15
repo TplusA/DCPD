@@ -699,12 +699,12 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled(void)
     cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
 
     mock_messages->expect_msg_info("read 55 handler %p %zu");
-    mock_connman->expect_connman_find_active_primary_interface(dummy_connman_iface,
-                                                               ethernet_mac_address,
-                                                               ethernet_mac_address,
-                                                               wlan_mac_address);
-    mock_connman->expect_connman_get_dhcp_mode(false, dummy_connman_iface);
-    mock_connman->expect_connman_free_interface_data(dummy_connman_iface);
+    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
+                                                       ethernet_mac_address,
+                                                       ethernet_mac_address,
+                                                       wlan_mac_address);
+    mock_connman->expect_get_dhcp_mode(false, dummy_connman_iface);
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
@@ -723,12 +723,12 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled(void)
     cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
 
     mock_messages->expect_msg_info("read 55 handler %p %zu");
-    mock_connman->expect_connman_find_active_primary_interface(dummy_connman_iface,
-                                                               ethernet_mac_address,
-                                                               ethernet_mac_address,
-                                                               wlan_mac_address);
-    mock_connman->expect_connman_get_dhcp_mode(true, dummy_connman_iface);
-    mock_connman->expect_connman_free_interface_data(dummy_connman_iface);
+    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
+                                                       ethernet_mac_address,
+                                                       ethernet_mac_address,
+                                                       wlan_mac_address);
+    mock_connman->expect_get_dhcp_mode(true, dummy_connman_iface);
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
@@ -749,9 +749,9 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes(void)
     cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
 
     mock_messages->expect_msg_info("read 55 handler %p %zu");
-    mock_connman->expect_connman_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_connman_get_dhcp_mode(true, dummy_connman_iface);
-    mock_connman->expect_connman_free_interface_data(dummy_connman_iface);
+    mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
+    mock_connman->expect_get_dhcp_mode(true, dummy_connman_iface);
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));

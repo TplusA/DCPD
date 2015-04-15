@@ -492,10 +492,10 @@ void test_register_read_request_transaction(void)
         reinterpret_cast<struct ConnmanInterfaceData *>(123456);
 
     mock_messages->expect_msg_info("read 55 handler %p %zu");
-    mock_connman->expect_connman_find_active_primary_interface(dummy_connman_iface_data,
+    mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
         "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
-    mock_connman->expect_connman_get_dhcp_mode(false, dummy_connman_iface_data);
-    mock_connman->expect_connman_free_interface_data(dummy_connman_iface_data);
+    mock_connman->expect_get_dhcp_mode(false, dummy_connman_iface_data);
+    mock_connman->expect_free_interface_data(dummy_connman_iface_data);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));

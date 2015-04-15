@@ -158,22 +158,22 @@ void MockConnman::check() const
     expectations_->check();
 }
 
-void MockConnman::expect_connman_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address)
+void MockConnman::expect_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address)
 {
     expectations_->add(Expectation(ret, mac_address));
 }
 
-void MockConnman::expect_connman_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address)
+void MockConnman::expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address)
 {
     expectations_->add(Expectation(ret, default_mac_address, wired_mac_address, wireless_mac_address));
 }
 
-void MockConnman::expect_connman_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data)
+void MockConnman::expect_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data)
 {
     expectations_->add(Expectation(ret, iface_data));
 }
 
-void MockConnman::expect_connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
+void MockConnman::expect_free_interface_data(struct ConnmanInterfaceData *iface_data)
 {
     expectations_->add(Expectation(iface_data));
 }

@@ -38,10 +38,10 @@ class MockConnman
     void init();
     void check() const;
 
-    void expect_connman_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address);
-    void expect_connman_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address);
-    void expect_connman_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data);
-    void expect_connman_free_interface_data(struct ConnmanInterfaceData *iface_data);
+    void expect_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address);
+    void expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address);
+    void expect_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data);
+    void expect_free_interface_data(struct ConnmanInterfaceData *iface_data);
 };
 
 extern MockConnman *mock_connman_singleton;
