@@ -443,14 +443,28 @@ void cut_teardown(void)
     mock_connman = nullptr;
 }
 
+static const struct dcp_register_t *
+lookup_register_expect_handlers(uint8_t register_number,
+                                ssize_t (*const expected_read_handler)(uint8_t *, size_t),
+                                int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    const struct dcp_register_t *reg = register_lookup(register_number);
+    cppcut_assert_not_null(reg);
+
+    cut_assert(reg->read_handler == expected_read_handler);
+    cut_assert(reg->write_handler == expected_write_handler);
+
+    return reg;
+}
+
 /*!\test
  * Read out MAC address of built-in Ethernet interface.
  */
 void test_read_mac_address(void)
 {
-    const struct dcp_register_t *reg = register_lookup(51);
-    cppcut_assert_not_null(reg);
-
+    auto *reg = lookup_register_expect_handlers(51,
+                                                dcpregs_read_51_mac_address,
+                                                dcpregs_write_51_mac_address);
     uint8_t redzone_content[10];
     memset(redzone_content, 0xff, sizeof(redzone_content));
 
@@ -476,9 +490,9 @@ void test_read_mac_address_default(void)
 {
     register_init(NULL, NULL, NULL);
 
-    const struct dcp_register_t *reg = register_lookup(51);
-    cppcut_assert_not_null(reg);
-
+    auto *reg = lookup_register_expect_handlers(51,
+                                                dcpregs_read_51_mac_address,
+                                                dcpregs_write_51_mac_address);
     uint8_t buffer[18];
 
     mock_messages->expect_msg_info("read 51 handler %p %zu");
@@ -490,9 +504,9 @@ void test_read_mac_address_default(void)
 
 static void start_ipv4_config()
 {
-    const struct dcp_register_t *reg = register_lookup(54);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->write_handler == dcpregs_write_54_selected_ip_profile);
+    auto *reg = lookup_register_expect_handlers(54,
+                                                NULL,
+                                                dcpregs_write_54_selected_ip_profile);
 
     mock_messages->expect_msg_info("write 54 handler %p %zu");
 
@@ -502,9 +516,9 @@ static void start_ipv4_config()
 
 static void commit_ipv4_config(bool add_message_expectation)
 {
-    const struct dcp_register_t *reg = register_lookup(53);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->write_handler == dcpregs_write_53_active_ip_profile);
+    auto *reg = lookup_register_expect_handlers(53,
+                                                NULL,
+                                                dcpregs_write_53_active_ip_profile);
 
     if(add_message_expectation)
         mock_messages->expect_msg_info("write 53 handler %p %zu");
@@ -522,20 +536,22 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     static const char ipv4_address[] = "192.168.166.177";
     static const char ipv4_netmask[] = "255.255.255.0";
     static const char ipv4_gateway[] = "192.168.166.15";
+    auto *reg = lookup_register_expect_handlers(56,
+                                                dcpregs_read_56_ipv4_address,
+                                                dcpregs_write_56_ipv4_address);
 
-    const struct dcp_register_t *reg = register_lookup(56);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->write_handler == dcpregs_write_56_ipv4_address);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_address)), sizeof(ipv4_address)));
 
-    reg = register_lookup(57);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->write_handler == dcpregs_write_57_ipv4_netmask);
+    reg = lookup_register_expect_handlers(57,
+                                          NULL,
+                                          dcpregs_write_57_ipv4_netmask);
+
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_netmask)), sizeof(ipv4_netmask)));
 
-    reg = register_lookup(58);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->write_handler == dcpregs_write_58_ipv4_gateway);
+    reg = lookup_register_expect_handlers(58,
+                                          NULL,
+                                          dcpregs_write_58_ipv4_gateway);
+
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_gateway)), sizeof(ipv4_gateway)));
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
@@ -583,11 +599,12 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
 {
     start_ipv4_config();
 
-    const struct dcp_register_t *reg = register_lookup(55);
-    cppcut_assert_not_null(reg);
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
+
     mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Enable DHCP");
-    cut_assert(reg->write_handler == dcpregs_write_55_dhcp_enabled);
     static const uint8_t one = 1;
     cppcut_assert_equal(0, reg->write_handler(&one, 1));
 
@@ -698,9 +715,9 @@ void test_switch_to_static_ipv4_configuration(void)
  */
 void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled(void)
 {
-    const struct dcp_register_t *reg = register_lookup(55);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
 
     mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
@@ -722,9 +739,9 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled(void)
  */
 void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled(void)
 {
-    const struct dcp_register_t *reg = register_lookup(55);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
 
     mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
@@ -748,9 +765,9 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes(void)
 {
     start_ipv4_config();
 
-    const struct dcp_register_t *reg = register_lookup(55);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
 
     mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
@@ -771,10 +788,9 @@ void test_read_dhcp_mode_in_edit_mode_after_change(void)
 {
     start_ipv4_config();
 
-    const struct dcp_register_t *reg = register_lookup(55);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->read_handler == dcpregs_read_55_dhcp_enabled);
-    cut_assert(reg->write_handler == dcpregs_write_55_dhcp_enabled);
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
 
     mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Enable DHCP");
@@ -794,10 +810,9 @@ void test_read_dhcp_mode_in_edit_mode_after_change(void)
  */
 void test_read_ipv4_address_in_normal_mode(void)
 {
-    const struct dcp_register_t *reg = register_lookup(56);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->read_handler == dcpregs_read_56_ipv4_address);
-
+    auto *reg = lookup_register_expect_handlers(56,
+                                                dcpregs_read_56_ipv4_address,
+                                                dcpregs_write_56_ipv4_address);
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
@@ -828,10 +843,9 @@ void test_read_ipv4_address_in_edit_mode_before_any_changes(void)
 {
     start_ipv4_config();
 
-    const struct dcp_register_t *reg = register_lookup(56);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->read_handler == dcpregs_read_56_ipv4_address);
-
+    auto *reg = lookup_register_expect_handlers(56,
+                                                dcpregs_read_56_ipv4_address,
+                                                dcpregs_write_56_ipv4_address);
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
@@ -859,11 +873,9 @@ void test_read_ipv4_address_in_edit_mode_after_change(void)
 {
     start_ipv4_config();
 
-    const struct dcp_register_t *reg = register_lookup(56);
-    cppcut_assert_not_null(reg);
-    cut_assert(reg->read_handler == dcpregs_read_56_ipv4_address);
-    cut_assert(reg->write_handler == dcpregs_write_56_ipv4_address);
-
+    auto *reg = lookup_register_expect_handlers(56,
+                                                dcpregs_read_56_ipv4_address,
+                                                dcpregs_write_56_ipv4_address);
     static const char ip_address[] = "123.215.179.174";
     cppcut_assert_equal(0, reg->write_handler((uint8_t *)ip_address,
                                               sizeof(ip_address)));
