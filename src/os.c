@@ -16,6 +16,10 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif /* HAVE_CONFIG_H */
+
 #include <inttypes.h>
 #include <stdlib.h>
 #include <errno.h>
