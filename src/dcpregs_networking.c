@@ -576,6 +576,21 @@ int dcpregs_write_51_mac_address(const uint8_t *data, size_t length)
     return 0;
 }
 
+static struct ConnmanInterfaceData *get_connman_iface_data(void)
+{
+    const struct register_configuration_t *config = registers_get_data();
+
+    if(in_edit_mode())
+        return connman_find_interface(
+                   nwconfig_write_data.selected_interface->mac_address_string);
+    else
+        return connman_find_active_primary_interface(
+                   get_network_iface_data(config)->mac_address_string,
+                   config->builtin_ethernet_interface.mac_address_string,
+                   config->builtin_wlan_interface.mac_address_string);
+
+}
+
 ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
 {
     msg_info("read 55 handler %p %zu", response, length);
@@ -587,14 +602,7 @@ ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
         response[0] = nwconfig_write_data.dhcpv4_mode;
     else
     {
-        const struct register_configuration_t *config = registers_get_data();
-
-        struct ConnmanInterfaceData *iface_data =
-            in_edit_mode()
-            ? connman_find_interface(nwconfig_write_data.selected_interface->mac_address_string)
-            : connman_find_active_primary_interface(get_network_iface_data(config)->mac_address_string,
-                                                    config->builtin_ethernet_interface.mac_address_string,
-                                                    config->builtin_wlan_interface.mac_address_string);
+        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
         response[0] =
             (iface_data != NULL) ? connman_get_dhcp_mode(iface_data) : 0;
@@ -658,14 +666,7 @@ ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
                sizeof(nwconfig_write_data.ipv4_address));
     else
     {
-        const struct register_configuration_t *config = registers_get_data();
-
-        struct ConnmanInterfaceData *iface_data =
-            in_edit_mode()
-            ? connman_find_interface(nwconfig_write_data.selected_interface->mac_address_string)
-            : connman_find_active_primary_interface(get_network_iface_data(config)->mac_address_string,
-                                                    config->builtin_ethernet_interface.mac_address_string,
-                                                    config->builtin_wlan_interface.mac_address_string);
+        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
         if(iface_data != NULL)
             connman_get_ipv4_address_string(iface_data, (char *)response, length);

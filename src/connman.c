@@ -59,6 +59,17 @@ static void init_dict_from_temp_gvariant(GVariant *temp, GVariantDict *dict)
     g_variant_unref(temp);
 }
 
+static void init_subdict(GVariant *tuple,
+                         GVariantDict *subdict, const char *subdict_name)
+{
+    GVariantDict dict;
+    init_dict_from_temp_gvariant(g_variant_get_child_value(tuple, 1), &dict);
+    init_dict_from_temp_gvariant(g_variant_dict_lookup_value(&dict, subdict_name,
+                                                             G_VARIANT_TYPE_VARDICT),
+                                 subdict);
+    g_variant_dict_clear(&dict);
+}
+
 static int determine_service_rank(GVariant *state_variant)
 {
     log_assert(state_variant != NULL);
@@ -253,26 +264,17 @@ bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
 {
     log_assert(iface_data != NULL);
 
-    GVariant *const tuple = (GVariant *)iface_data;
-
     GVariantDict dict;
-    init_dict_from_temp_gvariant(g_variant_get_child_value(tuple, 1), &dict);
-
-    GVariantDict ipv4config_dict;
-    init_dict_from_temp_gvariant(g_variant_dict_lookup_value(&dict, "IPv4.Configuration",
-                                                             G_VARIANT_TYPE_VARDICT),
-                                 &ipv4config_dict);
+    init_subdict((GVariant *)iface_data, &dict, "IPv4.Configuration");
 
     GVariant *method_variant =
-        g_variant_dict_lookup_value(&ipv4config_dict, "Method", G_VARIANT_TYPE_STRING);
+        g_variant_dict_lookup_value(&dict, "Method", G_VARIANT_TYPE_STRING);
     log_assert(method_variant != NULL);
 
     const char *method = g_variant_get_string(method_variant, NULL);
     bool retval = (strcmp(method, "dhcp") == 0);
 
     g_variant_unref(method_variant);
-
-    g_variant_dict_clear(&ipv4config_dict);
     g_variant_dict_clear(&dict);
 
     return retval;
@@ -285,18 +287,11 @@ void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
     log_assert(dest != NULL);
     log_assert(dest_size > 0);
 
-    GVariant *const tuple = (GVariant *)iface_data;
-
     GVariantDict dict;
-    init_dict_from_temp_gvariant(g_variant_get_child_value(tuple, 1), &dict);
-
-    GVariantDict ipv4_dict;
-    init_dict_from_temp_gvariant(g_variant_dict_lookup_value(&dict, "IPv4",
-                                                             G_VARIANT_TYPE_VARDICT),
-                                 &ipv4_dict);
+    init_subdict((GVariant *)iface_data, &dict, "IPv4");
 
     GVariant *ipv4_address_variant =
-        g_variant_dict_lookup_value(&ipv4_dict, "Address", G_VARIANT_TYPE_STRING);
+        g_variant_dict_lookup_value(&dict, "Address", G_VARIANT_TYPE_STRING);
 
     if(ipv4_address_variant != NULL)
     {
@@ -310,7 +305,6 @@ void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
     else
         dest[0] = '\0';
 
-    g_variant_dict_clear(&ipv4_dict);
     g_variant_dict_clear(&dict);
 }
 
