@@ -32,6 +32,8 @@ enum class ConnmanFn
     get_ipv4_address_string,
     get_ipv4_netmask_string,
     get_ipv4_gateway_string,
+    get_ipv4_primary_dns_string,
+    get_ipv4_secondary_dns_string,
     free_interface_data,
 
     first_valid_connman_fn_id = find_interface,
@@ -71,6 +73,14 @@ static std::ostream &operator<<(std::ostream &os, const ConnmanFn id)
 
       case ConnmanFn::get_ipv4_gateway_string:
         os << "get_ipv4_gateway_string";
+        break;
+
+      case ConnmanFn::get_ipv4_primary_dns_string:
+        os << "get_ipv4_primary_dns_string";
+        break;
+
+      case ConnmanFn::get_ipv4_secondary_dns_string:
+        os << "get_ipv4_secondary_dns_string";
         break;
 
       case ConnmanFn::free_interface_data:
@@ -157,7 +167,11 @@ class MockConnman::Expectation
                          bool expect_null_pointer, size_t dest_size):
         d(fn)
     {
-        data_.ret_string_ = ret_string;
+        if(ret_string != NULL)
+            data_.ret_string_ = ret_string;
+        else
+            data_.ret_string_ = "";
+
         data_.arg_iface_data_ = iface_data;
         data_.arg_pointer_shall_be_null_ = expect_null_pointer;
         data_.arg_dest_size_ = dest_size;
@@ -219,6 +233,18 @@ void MockConnman::expect_get_ipv4_netmask_string(const char *ret_string, struct 
 void MockConnman::expect_get_ipv4_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
 {
     expectations_->add(Expectation(ConnmanFn::get_ipv4_gateway_string,
+                                   ret_string, iface_data, expect_null_pointer, dest_size));
+}
+
+void MockConnman::expect_get_ipv4_primary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size)
+{
+    expectations_->add(Expectation(ConnmanFn::get_ipv4_primary_dns_string,
+                                   ret_string, iface_data, expect_null_pointer, dest_size));
+}
+
+void MockConnman::expect_get_ipv4_secondary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size)
+{
+    expectations_->add(Expectation(ConnmanFn::get_ipv4_secondary_dns_string,
                                    ret_string, iface_data, expect_null_pointer, dest_size));
 }
 
@@ -315,6 +341,24 @@ void connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_gateway_string);
+    get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+}
+
+void connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                         char *dest, size_t dest_size)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_primary_dns_string);
+    get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+}
+
+void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                           char *dest, size_t dest_size)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_secondary_dns_string);
     get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
 }
 

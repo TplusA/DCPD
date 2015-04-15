@@ -328,6 +328,53 @@ void connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
     get_ipv4_parameter_string(iface_data, "Gateway", dest, dest_size);
 }
 
+static void get_nameserver_string(struct ConnmanInterfaceData *iface_data,
+                                  size_t idx, char *dest, size_t dest_size)
+{
+    log_assert(iface_data != NULL);
+    log_assert(dest != NULL);
+    log_assert(dest_size > 0);
+
+    dest[0] = '\0';
+
+    GVariantDict dict;
+    init_dict_from_temp_gvariant(g_variant_get_child_value((GVariant *)iface_data, 1),
+                                 &dict);
+
+    GVariant *dns_array = g_variant_dict_lookup_value(&dict, "Nameservers",
+                                                      G_VARIANT_TYPE_ARRAY);
+
+    if(dns_array != NULL)
+    {
+        if(idx < g_variant_n_children(dns_array))
+        {
+            GVariant *dns_string = g_variant_get_child_value(dns_array, idx);
+            const char *string = g_variant_get_string(dns_string, NULL);
+
+            strncpy(dest, string, dest_size);
+            dest[dest_size - 1] = '\0';
+
+            g_variant_unref(dns_string);
+        }
+
+        g_variant_unref(dns_array);
+    }
+
+    g_variant_dict_clear(&dict);
+}
+
+void connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                         char *dest, size_t dest_size)
+{
+    get_nameserver_string(iface_data, 0, dest, dest_size);
+}
+
+void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                           char *dest, size_t dest_size)
+{
+    get_nameserver_string(iface_data, 1, dest, dest_size);
+}
+
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
 {
     if(iface_data != NULL)

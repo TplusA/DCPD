@@ -48,6 +48,10 @@ void connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);
 void connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);
+void connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                         char *dest, size_t dest_size);
+void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                           char *dest, size_t dest_size);
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data);
 
 #ifdef __cplusplus

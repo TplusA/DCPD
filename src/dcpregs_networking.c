@@ -242,21 +242,51 @@ static int complement_inifile_with_boilerplate(struct ini_file *ini,
     return 0;
 }
 
+static bool in_edit_mode(void)
+{
+    return nwconfig_write_data.selected_interface != NULL;
+}
+
+static const struct register_network_interface_t *
+get_network_iface_data(const struct register_configuration_t *config)
+{
+    return (config->active_interface != NULL)
+        ? config->active_interface
+        : &config->builtin_ethernet_interface;
+}
+
+static struct ConnmanInterfaceData *get_connman_iface_data(void)
+{
+    const struct register_configuration_t *config = registers_get_data();
+
+    if(in_edit_mode())
+        return connman_find_interface(
+                   nwconfig_write_data.selected_interface->mac_address_string);
+    else
+        return connman_find_active_primary_interface(
+                   get_network_iface_data(config)->mac_address_string,
+                   config->builtin_ethernet_interface.mac_address_string,
+                   config->builtin_wlan_interface.mac_address_string);
+
+}
+
 /*!
  * \todo Not implemented
  */
-static bool is_valid_ip_address_string(const char *string)
+static bool is_valid_ip_address_string(const char *string, bool is_empty_ok)
 {
     return true;
 }
 
 static int fill_in_missing_ipv4_config_requests(void)
 {
+    log_assert(IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58));
+
     if(ALL_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
         return
-            (is_valid_ip_address_string(nwconfig_write_data.ipv4_address) &&
-             is_valid_ip_address_string(nwconfig_write_data.ipv4_netmask) &&
-             is_valid_ip_address_string(nwconfig_write_data.ipv4_gateway))
+            (is_valid_ip_address_string(nwconfig_write_data.ipv4_address, false) &&
+             is_valid_ip_address_string(nwconfig_write_data.ipv4_netmask, false) &&
+             is_valid_ip_address_string(nwconfig_write_data.ipv4_gateway, false))
             ? 0
             : -1;
 
@@ -265,14 +295,136 @@ static int fill_in_missing_ipv4_config_requests(void)
     return -1;
 }
 
-static int fill_in_missing_dns_server_config_requests(void)
+/*!
+ * Short helper for improving code readability.
+ */
+static void copy_as_primary_dns(const char *src)
 {
+    memcpy(nwconfig_write_data.ipv4_dns_server1, src,
+           sizeof(nwconfig_write_data.ipv4_dns_server1));
+
+    nwconfig_write_data.ipv4_dns_server1[sizeof(nwconfig_write_data.ipv4_dns_server1) - 1] = '\0';
+}
+
+/*!
+ * Short helper for improving code readability.
+ */
+static void copy_as_secondary_dns(const char *src)
+{
+    memcpy(nwconfig_write_data.ipv4_dns_server2, src,
+           sizeof(nwconfig_write_data.ipv4_dns_server2));
+
+    nwconfig_write_data.ipv4_dns_server2[sizeof(nwconfig_write_data.ipv4_dns_server2) - 1] = '\0';
+}
+
+/*!
+ * Move secondary DNS to primary slot.
+ */
+static void shift_dns_servers(void)
+{
+    copy_as_primary_dns(nwconfig_write_data.ipv4_dns_server2);
+    nwconfig_write_data.ipv4_dns_server2[0] = '\0';
+}
+
+/*!
+ * Move secondary DNS to primary slot in case the primary slot is empty.
+ */
+static void shift_dns_servers_if_necessary(void)
+{
+    if(nwconfig_write_data.ipv4_dns_server1[0] == '\0')
+        shift_dns_servers();
+}
+
+/*!
+ * Merge existing DNS server list with newly set servers.
+ *
+ * Because of the poor DCP design, this function is much more complicated that
+ * it should be.
+ *
+ * There are several cases to consider:
+ * - One or both servers could have been explicitly removed by sending an empty
+ *   string.
+ * - One or both servers could have been replaced by new servers.
+ * - In case only a secondary server was sent,
+ *   - it becomes the secondary DNS in case a primary DNS was already defined;
+ *   - it may replace the previously defined secondary DNS in case there was
+ *     one defined already;
+ *   - it becomes the primary one if no DNS servers were defined before.
+ */
+static void fill_in_missing_dns_server_config_requests(void)
+{
+    log_assert(IS_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63));
+
     if(ALL_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63))
-        return 0;
+    {
+        shift_dns_servers_if_necessary();
+        return;
+    }
 
-    BUG("%s(): not implemented", __func__);
+    /* at this point we know that only one DNS server was sent to us, either a
+     * "primary" one or a "secondary" */
 
-    return -1;
+    char previous_primary[SIZE_OF_IPV4_ADDRESS_STRING];
+    char previous_secondary[SIZE_OF_IPV4_ADDRESS_STRING];
+
+    struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+
+    if(iface_data == NULL)
+        previous_primary[0] = previous_secondary[0] = '\0';
+    else
+    {
+        connman_get_ipv4_primary_dns_string(iface_data, previous_primary,
+                                            sizeof(previous_primary));
+        connman_get_ipv4_secondary_dns_string(iface_data, previous_secondary,
+                                              sizeof(previous_secondary));
+        connman_free_interface_data(iface_data);
+    }
+
+    const bool have_dns_servers =
+        previous_primary[0] != '\0' || previous_secondary[0] != '\0';
+
+    if(!have_dns_servers)
+    {
+        /*
+         * There are no previously defined DNS servers, and only one DNS server
+         * was sent. If the sent DNS was meant to be the secondary one, we
+         * silently make it the new primary one.
+         */
+        if(IS_REQUESTED(REQ_DNS_SERVER2_63))
+            shift_dns_servers();
+    }
+    else
+    {
+        /*
+         * So we have two lists. For sure there must be a primary DNS server in
+         * the \c previous_primary buffer (otherwise \c kv would have been
+         * \c NULL). There might be a secondary DNS in \c previous_secondary as
+         * well. */
+        log_assert(previous_primary[0] != '\0');
+
+        if(IS_REQUESTED(REQ_DNS_SERVER1_62))
+        {
+            /* have new primary server, now copy over the previously defined,
+             * secondary one (if any) */
+            copy_as_secondary_dns(previous_secondary);
+            shift_dns_servers_if_necessary();
+        }
+        else
+        {
+            /* have new secondary server, now copy over the previously defined,
+             * primary one */
+            copy_as_primary_dns(previous_primary);
+        }
+    }
+}
+
+static bool query_dhcp_mode(void)
+{
+    struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+    bool ret = (iface_data != NULL) ? connman_get_dhcp_mode(iface_data) : false;
+    connman_free_interface_data(iface_data);
+
+    return ret;
 }
 
 static int apply_changes_to_inifile(struct ini_file *ini,
@@ -282,6 +434,13 @@ static int apply_changes_to_inifile(struct ini_file *ini,
         inifile_find_section(ini, service_section_name, sizeof(service_section_name) - 1);
 
     log_assert(section != NULL);
+
+    const bool is_dhcp_mode =
+        ((IS_REQUESTED(REQ_DHCP_MODE_55) != 0)
+         ? nwconfig_write_data.dhcpv4_mode
+         : ((IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58) != 0)
+            ? false
+            : query_dhcp_mode()));
 
     if(IS_REQUESTED(REQ_DHCP_MODE_55) != 0)
     {
@@ -303,11 +462,16 @@ static int apply_changes_to_inifile(struct ini_file *ini,
 
             if(inifile_section_store_value(section, "IPv4", 0, "off", 0) == NULL)
                 return -1;
+
+            nwconfig_write_data.requested_changes &=
+                ~(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
         }
     }
 
     if(IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
     {
+        log_assert(!is_dhcp_mode);
+
         if(fill_in_missing_ipv4_config_requests() < 0)
         {
             msg_error(0, LOG_ERR,
@@ -338,12 +502,7 @@ static int apply_changes_to_inifile(struct ini_file *ini,
 
     if(IS_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63))
     {
-        if(fill_in_missing_dns_server_config_requests() < 0)
-        {
-            msg_error(0, LOG_ERR,
-                      "DNS server data incomplete, cannot set interface configuration");
-            return -1;
-        }
+        fill_in_missing_dns_server_config_requests();
 
         if(nwconfig_write_data.ipv4_dns_server1[0] != '\0')
         {
@@ -373,8 +532,6 @@ static int apply_changes_to_inifile(struct ini_file *ini,
         REQ_PROXY_MODE_59 |
         REQ_PROXY_SERVER_60 |
         REQ_PROXY_PORT_61 |
-        REQ_DNS_SERVER1_62 |
-        REQ_DNS_SERVER2_63 |
         REQ_WLAN_SECURITY_MODE_92 |
         REQ_WLAN_IBSS_MODE_93 |
         REQ_WLAN_SSID_94 |
@@ -430,11 +587,6 @@ exit_error_free_filename:
     return ret;
 }
 
-static bool in_edit_mode(void)
-{
-    return nwconfig_write_data.selected_interface != NULL;
-}
-
 static bool may_change_config(void)
 {
     if(in_edit_mode())
@@ -445,14 +597,6 @@ static bool may_change_config(void)
               "request for changing the configuration");
 
     return false;
-}
-
-static const struct register_network_interface_t *
-get_network_iface_data(const struct register_configuration_t *config)
-{
-    return (config->active_interface != NULL)
-        ? config->active_interface
-        : &config->builtin_ethernet_interface;
 }
 
 static bool data_length_is_unexpected(size_t length, size_t expected)
@@ -583,21 +727,6 @@ int dcpregs_write_51_mac_address(const uint8_t *data, size_t length)
     return 0;
 }
 
-static struct ConnmanInterfaceData *get_connman_iface_data(void)
-{
-    const struct register_configuration_t *config = registers_get_data();
-
-    if(in_edit_mode())
-        return connman_find_interface(
-                   nwconfig_write_data.selected_interface->mac_address_string);
-    else
-        return connman_find_active_primary_interface(
-                   get_network_iface_data(config)->mac_address_string,
-                   config->builtin_ethernet_interface.mac_address_string,
-                   config->builtin_wlan_interface.mac_address_string);
-
-}
-
 ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
 {
     msg_info("read 55 handler %p %zu", response, length);
@@ -608,14 +737,7 @@ ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
     if(in_edit_mode() && IS_REQUESTED(REQ_DHCP_MODE_55))
         response[0] = nwconfig_write_data.dhcpv4_mode;
     else
-    {
-        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
-
-        response[0] =
-            (iface_data != NULL) ? connman_get_dhcp_mode(iface_data) : 0;
-
-        connman_free_interface_data(iface_data);
-    }
+        response[0] = query_dhcp_mode();
 
     return length;
 }
@@ -717,6 +839,26 @@ ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
                                response, length);
 }
 
+ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length)
+{
+    msg_info("read 62 handler %p %zu", response, length);
+
+    return read_ipv4_parameter(REQ_DNS_SERVER1_62,
+                               nwconfig_write_data.ipv4_dns_server1,
+                               connman_get_ipv4_primary_dns_string,
+                               response, length);
+}
+
+ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length)
+{
+    msg_info("read 63 handler %p %zu", response, length);
+
+    return read_ipv4_parameter(REQ_DNS_SERVER2_63,
+                               nwconfig_write_data.ipv4_dns_server2,
+                               connman_get_ipv4_secondary_dns_string,
+                               response, length);
+}
+
 static size_t trim_trailing_zero_padding(const uint8_t *data, size_t length)
 {
     while(length > 0 && data[length - 1] == '\0')
@@ -726,18 +868,26 @@ static size_t trim_trailing_zero_padding(const uint8_t *data, size_t length)
 }
 
 static int copy_ipv4_address(char *dest, const uint32_t requested_change,
-                             const uint8_t *data, size_t length)
+                             const uint8_t *data, size_t length,
+                             bool is_empty_ok)
 {
     length = trim_trailing_zero_padding(data, length);
 
-    if(length < MINIMUM_IPV4_ADDRESS_STRING_LENGTH ||
-       length > SIZE_OF_IPV4_ADDRESS_STRING - 1)
+    if(length == 0)
+    {
+        if(!is_empty_ok)
+            return -1;
+    }
+    else if(length < MINIMUM_IPV4_ADDRESS_STRING_LENGTH ||
+            length > SIZE_OF_IPV4_ADDRESS_STRING - 1)
         return -1;
 
-    memcpy(dest, data, length);
+    if(length > 0)
+        memcpy(dest, data, length);
+
     dest[length] = '\0';
 
-    if(!is_valid_ip_address_string(dest))
+    if(!is_valid_ip_address_string(dest, is_empty_ok))
         return -1;
 
     nwconfig_write_data.requested_changes |= requested_change;
@@ -756,7 +906,7 @@ int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length)
         return -1;
 
     return copy_ipv4_address(nwconfig_write_data.ipv4_address,
-                             REQ_IP_ADDRESS_56, data, length);
+                             REQ_IP_ADDRESS_56, data, length, false);
 }
 
 int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
@@ -770,7 +920,7 @@ int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
         return -1;
 
     return copy_ipv4_address(nwconfig_write_data.ipv4_netmask,
-                             REQ_NETMASK_57, data, length);
+                             REQ_NETMASK_57, data, length, false);
 }
 
 int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length)
@@ -784,5 +934,35 @@ int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length)
         return -1;
 
     return copy_ipv4_address(nwconfig_write_data.ipv4_gateway,
-                             REQ_DEFAULT_GATEWAY_58, data, length);
+                             REQ_DEFAULT_GATEWAY_58, data, length, false);
+}
+
+int dcpregs_write_62_primary_dns(const uint8_t *data, size_t length)
+{
+    if(length > 0 &&
+       data_length_is_in_unexpected_range(length,
+                                          MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
+                                          SIZE_OF_IPV4_ADDRESS_STRING))
+        return -1;
+
+    if(!may_change_config())
+        return -1;
+
+    return copy_ipv4_address(nwconfig_write_data.ipv4_dns_server1,
+                             REQ_DNS_SERVER1_62, data, length, true);
+}
+
+int dcpregs_write_63_secondary_dns(const uint8_t *data, size_t length)
+{
+    if(length > 0 &&
+       data_length_is_in_unexpected_range(length,
+                                          MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
+                                          SIZE_OF_IPV4_ADDRESS_STRING))
+        return -1;
+
+    if(!may_change_config())
+        return -1;
+
+    return copy_ipv4_address(nwconfig_write_data.ipv4_dns_server2,
+                             REQ_DNS_SERVER2_63, data, length, true);
 }

@@ -55,6 +55,12 @@ int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length);
 int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length);
 
+ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length);
+int dcpregs_write_62_primary_dns(const uint8_t *data, size_t length);
+
+ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length);
+int dcpregs_write_63_secondary_dns(const uint8_t *data, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

@@ -48,9 +48,9 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 11> existing_registers =
+static const std::array<uint8_t, 13> existing_registers =
 {
-    17, 37, 51, 53, 54, 55, 56, 57, 58, 71, 72,
+    17, 37, 51, 53, 54, 55, 56, 57, 58, 62, 63, 71, 72,
 };
 
 void cut_setup(void)
@@ -385,8 +385,8 @@ static struct ConnmanInterfaceData *const dummy_connman_iface =
 static constexpr char standard_ipv4_address[] = "192.168.166.177";
 static constexpr char standard_ipv4_netmask[] = "255.255.255.0";
 static constexpr char standard_ipv4_gateway[] = "192.168.166.15";
-
-
+static constexpr char standard_dns1_address[] = "113.224.135.246";
+static constexpr char standard_dns2_address[] = "114.225.136.247";
 
 static std::vector<char> os_write_buffer;
 static constexpr int expected_os_write_fd = 42;
@@ -915,6 +915,22 @@ struct RegisterTraits<58U>
     static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
 };
 
+template <>
+struct RegisterTraits<62U>
+{
+    static constexpr auto expected_read_handler = &dcpregs_read_62_primary_dns;
+    static constexpr auto expected_write_handler = &dcpregs_write_62_primary_dns;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
+};
+
+template <>
+struct RegisterTraits<63U>
+{
+    static constexpr auto expected_read_handler = &dcpregs_read_63_secondary_dns;
+    static constexpr auto expected_write_handler = &dcpregs_write_63_secondary_dns;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
+};
+
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
 static void read_ipv4_parameter_in_normal_mode(void)
 {
@@ -1076,6 +1092,165 @@ void test_read_ipv4_gateway_in_edit_mode_before_any_changes(void)
 void test_read_ipv4_gateway_in_edit_mode_after_change(void)
 {
     read_ipv4_parameter_in_edit_mode_after_change<58>();
+}
+
+template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
+static void set_one_dns_server(const char *dns_server_address, size_t dns_server_size,
+                               const char *old_primary_dns,
+                               const char *old_secondary_dns)
+{
+    char config_file_buffer[512];
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = do_test_set_static_ipv4_config(NULL, config_file_buffer,
+                                                 sizeof(config_file_buffer)),
+    };
+
+    os_write_buffer.clear();
+
+    start_ipv4_config();
+
+    auto *reg = lookup_register_expect_handlers(Register,
+                                                RegTraits::expected_read_handler,
+                                                RegTraits::expected_write_handler);
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(dns_server_address)), dns_server_size));
+
+    mock_messages->expect_msg_info("write 53 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_connman->expect_find_active_primary_interface(
+        dummy_connman_iface,
+        ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
+    mock_connman->expect_get_dhcp_mode(false, dummy_connman_iface);
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
+    mock_connman->expect_find_active_primary_interface(
+        dummy_connman_iface,
+        ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
+    mock_connman->expect_get_ipv4_primary_dns_string(old_primary_dns, dummy_connman_iface, false, 16);
+    mock_connman->expect_get_ipv4_secondary_dns_string(old_secondary_dns, dummy_connman_iface, false, 16);
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    commit_ipv4_config(false);
+
+    static const char expected_config_file_format[] =
+        "[global]\n"
+        "Name = StrBo\n"
+        "Description = StrBo-managed built-in wired interface\n"
+        "[service_config]\n"
+        "MAC = %s\n"
+        "Type = ethernet\n"
+        "IPv4 = %s/%s/%s\n"
+        "Nameservers = %s%s%s\n";
+
+    char new_config_file_buffer[512];
+    snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
+             expected_config_file_format,
+             ethernet_mac_address, standard_ipv4_address,
+             standard_ipv4_netmask, standard_ipv4_gateway,
+             dns_server_address, "", "");
+
+    size_t written_config_file_length = strlen(new_config_file_buffer);
+
+    cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+/*!\test
+ * Add primary DNS server address to static IPv4 configuration without
+ * previously defined DNS servers.
+ */
+void test_set_only_first_dns_server(void)
+{
+    set_one_dns_server<62>(standard_dns1_address, sizeof(standard_dns1_address),
+                           NULL, NULL);
+}
+
+/*!\test
+ * Add secondary DNS server address to static IPv4 configuration without
+ * previously defined DNS servers.
+ *
+ * Since this is the only address sent to the device, it becomes the primary
+ * DNS server.
+ */
+void test_set_only_second_dns_server(void)
+{
+    set_one_dns_server<63>(standard_dns2_address, sizeof(standard_dns2_address),
+                           NULL, NULL);
+}
+
+/*!\test
+ * Add two DNS servers to static IPv4 configuration without previously defined
+ * DNS servers.
+ */
+void test_set_both_dns_servers(void)
+{
+    char config_file_buffer[512];
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = do_test_set_static_ipv4_config(NULL, config_file_buffer,
+                                                 sizeof(config_file_buffer)),
+    };
+
+    os_write_buffer.clear();
+
+    start_ipv4_config();
+
+    auto *reg = lookup_register_expect_handlers(62,
+                                                dcpregs_read_62_primary_dns,
+                                                dcpregs_write_62_primary_dns);
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns1_address)), sizeof(standard_dns1_address)));
+
+    reg = lookup_register_expect_handlers(63,
+                                          dcpregs_read_63_secondary_dns,
+                                          dcpregs_write_63_secondary_dns);
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns2_address)), sizeof(standard_dns2_address)));
+
+    mock_messages->expect_msg_info("write 53 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_connman->expect_find_active_primary_interface(
+        dummy_connman_iface,
+        ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
+    mock_connman->expect_get_dhcp_mode(false, dummy_connman_iface);
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    commit_ipv4_config(false);
+
+    static const char expected_config_file_format[] =
+        "[global]\n"
+        "Name = StrBo\n"
+        "Description = StrBo-managed built-in wired interface\n"
+        "[service_config]\n"
+        "MAC = %s\n"
+        "Type = ethernet\n"
+        "IPv4 = %s/%s/%s\n"
+        "Nameservers = %s,%s\n";
+
+    char new_config_file_buffer[512];
+    snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
+             expected_config_file_format,
+             ethernet_mac_address, standard_ipv4_address,
+             standard_ipv4_netmask, standard_ipv4_gateway,
+             standard_dns1_address, standard_dns2_address);
+
+    size_t written_config_file_length = strlen(new_config_file_buffer);
+
+    cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
+                            os_write_buffer.data(), os_write_buffer.size());
 }
 
 };

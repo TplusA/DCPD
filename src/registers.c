@@ -132,6 +132,20 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_58_ipv4_gateway,
     },
     {
+        /* Primary DNS server IPv4 address */
+        .address = 62,
+        .max_data_size = 16,
+        .read_handler = dcpregs_read_62_primary_dns,
+        .write_handler = dcpregs_write_62_primary_dns,
+    },
+    {
+        /* Secondary DNS server IPv4 address */
+        .address = 63,
+        .max_data_size = 16,
+        .read_handler = dcpregs_read_63_secondary_dns,
+        .write_handler = dcpregs_write_63_secondary_dns,
+    },
+    {
         /* DRC protocol */
         .address = 71,
         .max_data_size = 256,
