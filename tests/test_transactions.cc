@@ -477,9 +477,10 @@ static int read_answer(const void *src, size_t count, int fd)
 }
 
 /*!\test
- * A whole simple register read transaction initiated by the slave device.
+ * A whole simple register read transaction initiated by the slave device, one
+ * byte of payload.
  */
-void test_register_read_request_transaction(void)
+void test_register_read_request_size_1_transaction(void)
 {
     register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere");
 
@@ -517,6 +518,59 @@ void test_register_read_request_transaction(void)
 
         /* DHCP is not enabled */
         0x00
+    };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            answer_written_to_fifo->data(), answer_written_to_fifo->size());
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
+ * A whole simple register read transaction initiated by the slave device,
+ * several bytes of payload.
+ */
+void test_register_read_request_size_16_transaction(void)
+{
+    register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere");
+
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t read_reg_56_read_ipv4_address[] = { 0x01, 0x38, 0x00, 0x00 };
+    read_data->set(read_reg_56_read_ipv4_address);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    static auto *dummy_connman_iface_data =
+        reinterpret_cast<struct ConnmanInterfaceData *>(123456);
+
+    mock_messages->expect_msg_info("read 56 handler %p %zu");
+    mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
+        "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
+    mock_connman->expect_get_ipv4_address_string("111.222.255.100",
+                                                 dummy_connman_iface_data,
+                                                 false, 16);
+    mock_connman->expect_free_interface_data(dummy_connman_iface_data);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
+
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    static const uint8_t expected_answer[] =
+    {
+        /* command header, payload size is 16 bytes */
+        0x03, 0x38, 0x10, 0x00,
+
+        /* zero-terminated string "111.222.255.100" */
+        0x31, 0x31, 0x31, 0x2e, 0x32, 0x32, 0x32, 0x2e,
+        0x32, 0x35, 0x35, 0x2e, 0x31, 0x30, 0x30, 0x00
     };
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
