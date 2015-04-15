@@ -789,6 +789,108 @@ void test_read_dhcp_mode_in_edit_mode_after_change(void)
     cppcut_assert_equal(1, int(buffer));
 }
 
+/*!\test
+ * When being asked for the IPv4 address in normal mode, Connman is consulted.
+ */
+void test_read_ipv4_address_in_normal_mode(void)
+{
+    const struct dcp_register_t *reg = register_lookup(56);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->read_handler == dcpregs_read_56_ipv4_address);
+
+    uint8_t buffer[50];
+    memset(buffer, UINT8_MAX, sizeof(buffer));
+
+    static const char ip_address[] = "123.213.132.112";
+
+    mock_messages->expect_msg_info("read 56 handler %p %zu");
+    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
+                                                       ethernet_mac_address,
+                                                       ethernet_mac_address,
+                                                       wlan_mac_address);
+    mock_connman->expect_get_ipv4_address_string(ip_address,
+                                                 dummy_connman_iface, false,
+                                                 sizeof(buffer));
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
+
+    cppcut_assert_equal(ssize_t(sizeof(ip_address)),
+                        reg->read_handler(buffer, sizeof(buffer)));
+
+    cut_assert_equal_memory(ip_address, sizeof(ip_address),
+                            buffer, sizeof(ip_address));
+}
+
+/*!\test
+ * When being asked for the IPv4 address in edit mode, Connman is consulted if
+ * the address has not been set during this edit session.
+ */
+void test_read_ipv4_address_in_edit_mode_before_any_changes(void)
+{
+    start_ipv4_config();
+
+    const struct dcp_register_t *reg = register_lookup(56);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->read_handler == dcpregs_read_56_ipv4_address);
+
+    uint8_t buffer[50];
+    memset(buffer, UINT8_MAX, sizeof(buffer));
+
+    static const char ip_address[] = "123.213.132.112";
+
+    mock_messages->expect_msg_info("read 56 handler %p %zu");
+    mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
+    mock_connman->expect_get_ipv4_address_string(ip_address,
+                                                 dummy_connman_iface, false,
+                                                 sizeof(buffer));
+    mock_connman->expect_free_interface_data(dummy_connman_iface);
+
+    cppcut_assert_equal(ssize_t(sizeof(ip_address)),
+                        reg->read_handler(buffer, sizeof(buffer)));
+
+    cut_assert_equal_memory(ip_address, sizeof(ip_address),
+                            buffer, sizeof(ip_address));
+}
+
+/*!\test
+ * When being asked for the IPv4 address in edit mode, the address written
+ * during this edit session is returned.
+ */
+void test_read_ipv4_address_in_edit_mode_after_change(void)
+{
+    start_ipv4_config();
+
+    const struct dcp_register_t *reg = register_lookup(56);
+    cppcut_assert_not_null(reg);
+    cut_assert(reg->read_handler == dcpregs_read_56_ipv4_address);
+    cut_assert(reg->write_handler == dcpregs_write_56_ipv4_address);
+
+    static const char ip_address[] = "123.215.179.174";
+    cppcut_assert_equal(0, reg->write_handler((uint8_t *)ip_address,
+                                              sizeof(ip_address)));
+
+    mock_messages->expect_msg_info("read 56 handler %p %zu");
+
+    uint8_t buffer[4 + 16 + 4];
+    memset(buffer, UINT8_MAX, sizeof(buffer));
+    cppcut_assert_operator(sizeof(ip_address), <=, sizeof(buffer));
+
+    cppcut_assert_equal(ssize_t(sizeof(ip_address)),
+                        reg->read_handler(buffer + 4, sizeof(ip_address)));
+
+    cut_assert_equal_memory(ip_address, sizeof(ip_address), buffer + 4, sizeof(ip_address));
+
+    static const uint8_t red_zone_bytes[] =
+    {
+        UINT8_MAX, UINT8_MAX, UINT8_MAX, UINT8_MAX
+    };
+
+    cut_assert_equal_memory(red_zone_bytes, sizeof(red_zone_bytes),
+                            buffer, sizeof(red_zone_bytes));
+    cut_assert_equal_memory(red_zone_bytes, sizeof(red_zone_bytes),
+                            buffer + sizeof(ip_address) + sizeof(red_zone_bytes),
+                            sizeof(red_zone_bytes));
+}
+
 };
 
 /*!@}*/

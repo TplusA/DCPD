@@ -29,6 +29,7 @@ enum class ConnmanFn
     find_interface,
     find_active_primary_interface,
     get_dhcp_mode,
+    get_ipv4_address_string,
     free_interface_data,
 
     first_valid_connman_fn_id = find_interface,
@@ -58,6 +59,10 @@ static std::ostream &operator<<(std::ostream &os, const ConnmanFn id)
         os << "get_dhcp_mode";
         break;
 
+      case ConnmanFn::get_ipv4_address_string:
+        os << "get_ipv4_address_string";
+        break;
+
       case ConnmanFn::free_interface_data:
         os << "free_interface_data";
         break;
@@ -76,17 +81,22 @@ class MockConnman::Expectation
         const ConnmanFn function_id_;
 
         bool ret_bool_;
+        std::string ret_string_;
         struct ConnmanInterfaceData *ret_data_;
         struct ConnmanInterfaceData *arg_iface_data_;
         std::string arg_mac_address_;
         std::string arg_wired_mac_address_;
         std::string arg_wireless_mac_address_;
+        bool arg_pointer_shall_be_null_;
+        size_t arg_dest_size_;
 
         explicit Data(ConnmanFn fn):
             function_id_(fn),
             ret_bool_(false),
             ret_data_(nullptr),
-            arg_iface_data_(nullptr)
+            arg_iface_data_(nullptr),
+            arg_pointer_shall_be_null_(false),
+            arg_dest_size_(9876543)
         {}
     };
 
@@ -132,6 +142,16 @@ class MockConnman::Expectation
         data_.arg_iface_data_ = iface_data;
     }
 
+    explicit Expectation(const char *ret_string, struct ConnmanInterfaceData *iface_data,
+                         bool expect_null_pointer, size_t dest_size):
+        d(ConnmanFn::get_ipv4_address_string)
+    {
+        data_.ret_string_ = ret_string;
+        data_.arg_iface_data_ = iface_data;
+        data_.arg_pointer_shall_be_null_ = expect_null_pointer;
+        data_.arg_dest_size_ = dest_size;
+    }
+
     Expectation(Expectation &&) = default;
 };
 
@@ -171,6 +191,11 @@ void MockConnman::expect_find_active_primary_interface(struct ConnmanInterfaceDa
 void MockConnman::expect_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data)
 {
     expectations_->add(Expectation(ret, iface_data));
+}
+
+void MockConnman::expect_get_ipv4_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
+{
+    expectations_->add(Expectation(ret_string, iface_data, expect_null_pointer, dest_size));
 }
 
 void MockConnman::expect_free_interface_data(struct ConnmanInterfaceData *iface_data)
@@ -214,6 +239,34 @@ bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
     cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
 
     return expect.d.ret_bool_;
+}
+
+void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+                                     char *dest, size_t dest_size)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_address_string);
+    cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
+    cppcut_assert_equal(expect.d.arg_dest_size_, dest_size);
+
+    if(expect.d.arg_pointer_shall_be_null_)
+        cppcut_assert_null(dest);
+    else
+    {
+        cppcut_assert_not_null(dest);
+
+        if(dest_size > 0)
+        {
+            if(expect.d.ret_string_.size() > 0)
+            {
+                strncpy(dest, expect.d.ret_string_.c_str(), dest_size);
+                dest[dest_size - 1] = '\0';
+            }
+            else
+                dest[0] = '\0';
+        }
+    }
 }
 
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)

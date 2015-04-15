@@ -114,6 +114,7 @@ static const struct dcp_register_t register_map[] =
         /* IPv4 address */
         .address = 56,
         .max_data_size = 16,
+        .read_handler = dcpregs_read_56_ipv4_address,
         .write_handler = dcpregs_write_56_ipv4_address,
     },
     {

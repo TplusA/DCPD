@@ -278,6 +278,42 @@ bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
     return retval;
 }
 
+void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+                                     char *dest, size_t dest_size)
+{
+    log_assert(iface_data != NULL);
+    log_assert(dest != NULL);
+    log_assert(dest_size > 0);
+
+    GVariant *const tuple = (GVariant *)iface_data;
+
+    GVariantDict dict;
+    init_dict_from_temp_gvariant(g_variant_get_child_value(tuple, 1), &dict);
+
+    GVariantDict ipv4_dict;
+    init_dict_from_temp_gvariant(g_variant_dict_lookup_value(&dict, "IPv4",
+                                                             G_VARIANT_TYPE_VARDICT),
+                                 &ipv4_dict);
+
+    GVariant *ipv4_address_variant =
+        g_variant_dict_lookup_value(&ipv4_dict, "Address", G_VARIANT_TYPE_STRING);
+
+    if(ipv4_address_variant != NULL)
+    {
+        const char *ipv4_address = g_variant_get_string(ipv4_address_variant, NULL);
+
+        strncpy(dest, ipv4_address, dest_size);
+        dest[dest_size - 1] = '\0';
+
+        g_variant_unref(ipv4_address_variant);
+    }
+    else
+        dest[0] = '\0';
+
+    g_variant_dict_clear(&ipv4_dict);
+    g_variant_dict_clear(&dict);
+}
+
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
 {
     if(iface_data != NULL)

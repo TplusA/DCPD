@@ -473,6 +473,19 @@ static bool data_length_is_in_unexpected_range(size_t length,
     return true;
 }
 
+static bool data_length_is_unexpectedly_small(size_t length,
+                                              size_t expected_min)
+{
+    if(length >= expected_min)
+        return false;
+
+    msg_error(EINVAL, LOG_ERR,
+              "Unexpected data length %zu (expected minimum of %zu)",
+              length, expected_min);
+
+    return true;
+}
+
 int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 {
     msg_info("write 53 handler %p %zu", data, length);
@@ -631,6 +644,38 @@ int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
     }
 
     return 0;
+}
+
+ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
+{
+    msg_info("read 56 handler %p %zu", response, length);
+
+    if(data_length_is_unexpectedly_small(length, 16))
+        return -1;
+
+    if(in_edit_mode() && IS_REQUESTED(REQ_IP_ADDRESS_56))
+        memcpy(response, nwconfig_write_data.ipv4_address,
+               sizeof(nwconfig_write_data.ipv4_address));
+    else
+    {
+        const struct register_configuration_t *config = registers_get_data();
+
+        struct ConnmanInterfaceData *iface_data =
+            in_edit_mode()
+            ? connman_find_interface(nwconfig_write_data.selected_interface->mac_address_string)
+            : connman_find_active_primary_interface(get_network_iface_data(config)->mac_address_string,
+                                                    config->builtin_ethernet_interface.mac_address_string,
+                                                    config->builtin_wlan_interface.mac_address_string);
+
+        if(iface_data != NULL)
+            connman_get_ipv4_address_string(iface_data, (char *)response, length);
+        else
+            response[0] = '\0';
+
+        connman_free_interface_data(iface_data);
+    }
+
+    return strlen((char *)response) + 1;
 }
 
 static size_t trim_trailing_zero_padding(const uint8_t *data, size_t length)

@@ -42,6 +42,8 @@ connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wireless_mac_address);
 
 bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data);
+void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+                                     char *dest, size_t dest_size);
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data);
 
 #ifdef __cplusplus
