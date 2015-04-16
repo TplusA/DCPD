@@ -56,6 +56,13 @@
 
 #define SIZE_OF_IPV4_ADDRESS_STRING     (4U * 3U + 3U + 1U)
 
+/*!
+ * Minimum size of an IPv4 address in bytes, not including zero-terminator.
+ *
+ * The shortest valid address contains only single digits, such as "8.8.8.8".
+ */
+#define MINIMUM_IPV4_ADDRESS_STRING_LENGTH     7U
+
 #define IS_REQUESTED(R) \
     ((nwconfig_write_data.requested_changes & (R)) != 0)
 
@@ -723,7 +730,8 @@ static int copy_ipv4_address(char *dest, const uint32_t requested_change,
 {
     length = trim_trailing_zero_padding(data, length);
 
-    if(length < 7 || length > SIZE_OF_IPV4_ADDRESS_STRING - 1)
+    if(length < MINIMUM_IPV4_ADDRESS_STRING_LENGTH ||
+       length > SIZE_OF_IPV4_ADDRESS_STRING - 1)
         return -1;
 
     memcpy(dest, data, length);
@@ -740,7 +748,8 @@ static int copy_ipv4_address(char *dest, const uint32_t requested_change,
 int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
-                                          7, SIZE_OF_IPV4_ADDRESS_STRING))
+                                          MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
+                                          SIZE_OF_IPV4_ADDRESS_STRING))
         return -1;
 
     if(!may_change_config())
@@ -753,7 +762,8 @@ int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length)
 int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
-                                          7, SIZE_OF_IPV4_ADDRESS_STRING))
+                                          MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
+                                          SIZE_OF_IPV4_ADDRESS_STRING))
         return -1;
 
     if(!may_change_config())
@@ -766,7 +776,8 @@ int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
 int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
-                                          7, SIZE_OF_IPV4_ADDRESS_STRING))
+                                          MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
+                                          SIZE_OF_IPV4_ADDRESS_STRING))
        return -1;
 
     if(!may_change_config())
