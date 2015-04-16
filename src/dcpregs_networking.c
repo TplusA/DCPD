@@ -32,27 +32,26 @@
 #include "connman.h"
 #include "messages.h"
 
-#define REQ_MAC_ADDRESS_51              ((uint32_t)(1U << 0))
-#define REQ_DHCP_MODE_55                ((uint32_t)(1U << 1))
-#define REQ_IP_ADDRESS_56               ((uint32_t)(1U << 2))
-#define REQ_NETMASK_57                  ((uint32_t)(1U << 3))
-#define REQ_DEFAULT_GATEWAY_58          ((uint32_t)(1U << 4))
-#define REQ_PROXY_MODE_59               ((uint32_t)(1U << 5))
-#define REQ_PROXY_SERVER_60             ((uint32_t)(1U << 6))
-#define REQ_PROXY_PORT_61               ((uint32_t)(1U << 7))
-#define REQ_DNS_SERVER1_62              ((uint32_t)(1U << 8))
-#define REQ_DNS_SERVER2_63              ((uint32_t)(1U << 9))
-#define REQ_WLAN_SECURITY_MODE_92       ((uint32_t)(1U << 10))
-#define REQ_WLAN_IBSS_MODE_93           ((uint32_t)(1U << 11))
-#define REQ_WLAN_SSID_94                ((uint32_t)(1U << 12))
-#define REQ_WLAN_WEP_MODE_95            ((uint32_t)(1U << 13))
-#define REQ_WLAN_WEP_KEY_INDEX_96       ((uint32_t)(1U << 14))
-#define REQ_WLAN_WEP_KEY0_97            ((uint32_t)(1U << 15))
-#define REQ_WLAN_WEP_KEY1_98            ((uint32_t)(1U << 16))
-#define REQ_WLAN_WEP_KEY2_99            ((uint32_t)(1U << 17))
-#define REQ_WLAN_WEP_KEY3_100           ((uint32_t)(1U << 18))
-#define REQ_WLAN_WPA_CIPHER_TYPE_101    ((uint32_t)(1U << 19))
-#define REQ_WLAN_WPA_PASSPHRASE_102     ((uint32_t)(1U << 20))
+#define REQ_DHCP_MODE_55                ((uint32_t)(1U << 0))
+#define REQ_IP_ADDRESS_56               ((uint32_t)(1U << 1))
+#define REQ_NETMASK_57                  ((uint32_t)(1U << 2))
+#define REQ_DEFAULT_GATEWAY_58          ((uint32_t)(1U << 3))
+#define REQ_PROXY_MODE_59               ((uint32_t)(1U << 4))
+#define REQ_PROXY_SERVER_60             ((uint32_t)(1U << 5))
+#define REQ_PROXY_PORT_61               ((uint32_t)(1U << 6))
+#define REQ_DNS_SERVER1_62              ((uint32_t)(1U << 7))
+#define REQ_DNS_SERVER2_63              ((uint32_t)(1U << 8))
+#define REQ_WLAN_SECURITY_MODE_92       ((uint32_t)(1U << 9))
+#define REQ_WLAN_IBSS_MODE_93           ((uint32_t)(1U << 10))
+#define REQ_WLAN_SSID_94                ((uint32_t)(1U << 11))
+#define REQ_WLAN_WEP_MODE_95            ((uint32_t)(1U << 12))
+#define REQ_WLAN_WEP_KEY_INDEX_96       ((uint32_t)(1U << 13))
+#define REQ_WLAN_WEP_KEY0_97            ((uint32_t)(1U << 14))
+#define REQ_WLAN_WEP_KEY1_98            ((uint32_t)(1U << 15))
+#define REQ_WLAN_WEP_KEY2_99            ((uint32_t)(1U << 16))
+#define REQ_WLAN_WEP_KEY3_100           ((uint32_t)(1U << 17))
+#define REQ_WLAN_WPA_CIPHER_TYPE_101    ((uint32_t)(1U << 18))
+#define REQ_WLAN_WPA_PASSPHRASE_102     ((uint32_t)(1U << 19))
 
 #define SIZE_OF_IPV4_ADDRESS_STRING     (4U * 3U + 3U + 1U)
 
@@ -528,7 +527,6 @@ static int apply_changes_to_inifile(struct ini_file *ini,
     }
 
     static const uint32_t not_implemented =
-        REQ_MAC_ADDRESS_51 |
         REQ_PROXY_MODE_59 |
         REQ_PROXY_SERVER_60 |
         REQ_PROXY_PORT_61 |
@@ -702,29 +700,6 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
     memcpy(response, iface->mac_address_string, sizeof(iface->mac_address_string));
 
     return sizeof(iface->mac_address_string);
-}
-
-int dcpregs_write_51_mac_address(const uint8_t *data, size_t length)
-{
-    msg_info("write 51 handler %p %zu", data, length);
-
-    const struct register_network_interface_t *const iface =
-        get_network_iface_data(registers_get_data());
-
-    if(data_length_is_unexpected(length, sizeof(iface->mac_address_string)))
-        return -1;
-
-    if(data[sizeof(iface->mac_address_string) - 1] != '\0')
-    {
-        msg_error(EINVAL, LOG_ERR,
-                  "Received MAC address not zero-terminated");
-        return -1;
-    }
-
-    msg_info("Received MAC address \"%s\", should validate address and "
-             "configure adapter", (const char *)data);
-
-    return 0;
 }
 
 ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)

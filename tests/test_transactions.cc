@@ -435,40 +435,6 @@ void test_register_simple_write_not_supported(void)
     cppcut_assert_null(t);
 }
 
-/*!\test
- * A whole multi-step register write transaction initiated by the slave device.
- */
-void test_register_multi_step_write_request_transaction(void)
-{
-    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
-
-    static const uint8_t write_reg_51_set_mac_address[] =
-    {
-        /* command header, want to write 18 bytes */
-        0x02, 0x33, 0x12, 0x00,
-
-        /* MAC address 83:9F:0D:13:68:E1 */
-        0x38, 0x33, 0x3a, 0x39, 0x46, 0x3a, 0x30, 0x44,
-        0x3a, 0x31, 0x33, 0x3a, 0x36, 0x38, 0x3a, 0x45,
-        0x31, 0x00
-    };
-
-    read_data->set(write_reg_51_set_mac_address, 4);
-    read_data->set(write_reg_51_set_mac_address + 4, sizeof(write_reg_51_set_mac_address) - 4);
-
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
-
-    mock_messages->expect_msg_info("write 51 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Received MAC address \"83:9F:0D:13:68:E1\", should validate address and configure adapter");
-    cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
-}
-
 static int read_answer(const void *src, size_t count, int fd)
 {
     std::copy_n(static_cast<const uint8_t *>(src), count,

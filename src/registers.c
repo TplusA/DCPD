@@ -87,7 +87,6 @@ static const struct dcp_register_t register_map[] =
         .address = 51,
         .max_data_size = 18,
         .read_handler = dcpregs_read_51_mac_address,
-        .write_handler = dcpregs_write_51_mac_address,
     },
     {
         /* Active IP profile (here: commit network configuration changes; see

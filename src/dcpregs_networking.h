@@ -37,7 +37,6 @@ extern "C" {
 void dcpregs_networking_init(void);
 
 ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length);
-int dcpregs_write_51_mac_address(const uint8_t *data, size_t length);
 
 int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length);
 

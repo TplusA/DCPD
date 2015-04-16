@@ -469,7 +469,7 @@ void test_read_mac_address(void)
 {
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
-                                                dcpregs_write_51_mac_address);
+                                                NULL);
     uint8_t redzone_content[10];
     memset(redzone_content, 0xff, sizeof(redzone_content));
 
@@ -497,7 +497,7 @@ void test_read_mac_address_default(void)
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
-                                                dcpregs_write_51_mac_address);
+                                                NULL);
     uint8_t buffer[18];
 
     mock_messages->expect_msg_info("read 51 handler %p %zu");
