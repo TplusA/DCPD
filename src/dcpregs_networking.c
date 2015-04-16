@@ -434,13 +434,6 @@ static int apply_changes_to_inifile(struct ini_file *ini,
 
     log_assert(section != NULL);
 
-    const bool is_dhcp_mode =
-        ((IS_REQUESTED(REQ_DHCP_MODE_55) != 0)
-         ? nwconfig_write_data.dhcpv4_mode
-         : ((IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58) != 0)
-            ? false
-            : query_dhcp_mode()));
-
     if(IS_REQUESTED(REQ_DHCP_MODE_55) != 0)
     {
         if(nwconfig_write_data.dhcpv4_mode)
@@ -469,8 +462,6 @@ static int apply_changes_to_inifile(struct ini_file *ini,
 
     if(IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
     {
-        log_assert(!is_dhcp_mode);
-
         if(fill_in_missing_ipv4_config_requests() < 0)
         {
             msg_error(0, LOG_ERR,

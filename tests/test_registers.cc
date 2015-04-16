@@ -1122,11 +1122,6 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
     mock_connman->expect_find_active_primary_interface(
         dummy_connman_iface,
         ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_dhcp_mode(false, dummy_connman_iface);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_connman->expect_find_active_primary_interface(
-        dummy_connman_iface,
-        ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
     mock_connman->expect_get_ipv4_primary_dns_string(old_primary_dns, dummy_connman_iface, false, 16);
     mock_connman->expect_get_ipv4_secondary_dns_string(old_secondary_dns, dummy_connman_iface, false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
@@ -1216,11 +1211,6 @@ void test_set_both_dns_servers(void)
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
-    mock_connman->expect_find_active_primary_interface(
-        dummy_connman_iface,
-        ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_dhcp_mode(false, dummy_connman_iface);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
