@@ -376,11 +376,16 @@ static MockConnman *mock_connman;
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 
-static const char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
-static const char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
-static const char expected_config_filename[] = "/var/lib/connman/builtin_decafdeadbad.config";
+static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
+static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
+static constexpr char expected_config_filename[] = "/var/lib/connman/builtin_decafdeadbad.config";
 static struct ConnmanInterfaceData *const dummy_connman_iface =
     reinterpret_cast<struct ConnmanInterfaceData *>(0xbeefbeef);
+
+static constexpr char standard_ipv4_address[] = "192.168.166.177";
+static constexpr char standard_ipv4_netmask[] = "255.255.255.0";
+static constexpr char standard_ipv4_gateway[] = "192.168.166.15";
+
 
 
 static std::vector<char> os_write_buffer;
@@ -533,26 +538,23 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
 {
     start_ipv4_config();
 
-    static const char ipv4_address[] = "192.168.166.177";
-    static const char ipv4_netmask[] = "255.255.255.0";
-    static const char ipv4_gateway[] = "192.168.166.15";
     auto *reg = lookup_register_expect_handlers(56,
                                                 dcpregs_read_56_ipv4_address,
                                                 dcpregs_write_56_ipv4_address);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_address)), sizeof(ipv4_address)));
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_ipv4_address)), sizeof(standard_ipv4_address)));
 
     reg = lookup_register_expect_handlers(57,
                                           dcpregs_read_57_ipv4_netmask,
                                           dcpregs_write_57_ipv4_netmask);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_netmask)), sizeof(ipv4_netmask)));
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_ipv4_netmask)), sizeof(standard_ipv4_netmask)));
 
     reg = lookup_register_expect_handlers(58,
                                           dcpregs_read_58_ipv4_gateway,
                                           dcpregs_write_58_ipv4_gateway);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ipv4_gateway)), sizeof(ipv4_gateway)));
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_ipv4_gateway)), sizeof(standard_ipv4_gateway)));
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
@@ -583,7 +585,8 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
 
     snprintf(written_config_file, written_config_file_size,
              expected_config_file_format,
-             ethernet_mac_address, ipv4_address, ipv4_netmask, ipv4_gateway);
+             ethernet_mac_address, standard_ipv4_address,
+             standard_ipv4_netmask, standard_ipv4_gateway);
 
     size_t written_config_file_length = strlen(written_config_file);
 
@@ -921,23 +924,21 @@ static void read_ipv4_parameter_in_normal_mode(void)
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    static const char ip_address[] = "123.213.132.112";
-
     mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    (mock_connman->*RegTraits::expect_get_string_memberfn)(ip_address,
+    (mock_connman->*RegTraits::expect_get_string_memberfn)(standard_ipv4_address,
                                                            dummy_connman_iface, false,
                                                            sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
-    cppcut_assert_equal(ssize_t(sizeof(ip_address)),
+    cppcut_assert_equal(ssize_t(sizeof(standard_ipv4_address)),
                         reg->read_handler(buffer, sizeof(buffer)));
 
-    cut_assert_equal_memory(ip_address, sizeof(ip_address),
-                            buffer, sizeof(ip_address));
+    cut_assert_equal_memory(standard_ipv4_address, sizeof(standard_ipv4_address),
+                            buffer, sizeof(standard_ipv4_address));
 }
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
@@ -951,20 +952,18 @@ static void read_ipv4_parameter_in_edit_mode_before_any_changes(void)
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    static const char ip_address[] = "132.213.112.123";
-
     mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    (mock_connman->*RegTraits::expect_get_string_memberfn)(ip_address,
+    (mock_connman->*RegTraits::expect_get_string_memberfn)(standard_ipv4_address,
                                                            dummy_connman_iface, false,
                                                            sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
-    cppcut_assert_equal(ssize_t(sizeof(ip_address)),
+    cppcut_assert_equal(ssize_t(sizeof(standard_ipv4_address)),
                         reg->read_handler(buffer, sizeof(buffer)));
 
-    cut_assert_equal_memory(ip_address, sizeof(ip_address),
-                            buffer, sizeof(ip_address));
+    cut_assert_equal_memory(standard_ipv4_address, sizeof(standard_ipv4_address),
+                            buffer, sizeof(standard_ipv4_address));
 }
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
@@ -975,20 +974,19 @@ static void read_ipv4_parameter_in_edit_mode_after_change(void)
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
                                                 RegTraits::expected_write_handler);
-    static const char ip_address[] = "123.215.179.174";
-    cppcut_assert_equal(0, reg->write_handler((uint8_t *)ip_address,
-                                              sizeof(ip_address)));
+    cppcut_assert_equal(0, reg->write_handler((uint8_t *)standard_ipv4_address,
+                                              sizeof(standard_ipv4_address)));
 
     uint8_t buffer[4 + 16 + 4];
     memset(buffer, UINT8_MAX, sizeof(buffer));
-    cppcut_assert_operator(sizeof(ip_address), <=, sizeof(buffer));
+    cppcut_assert_operator(sizeof(standard_ipv4_address), <=, sizeof(buffer));
 
     mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
 
-    cppcut_assert_equal(ssize_t(sizeof(ip_address)),
-                        reg->read_handler(buffer + 4, sizeof(ip_address)));
+    cppcut_assert_equal(ssize_t(sizeof(standard_ipv4_address)),
+                        reg->read_handler(buffer + 4, sizeof(standard_ipv4_address)));
 
-    cut_assert_equal_memory(ip_address, sizeof(ip_address), buffer + 4, sizeof(ip_address));
+    cut_assert_equal_memory(standard_ipv4_address, sizeof(standard_ipv4_address), buffer + 4, sizeof(standard_ipv4_address));
 
     static const uint8_t red_zone_bytes[] =
     {
@@ -998,7 +996,7 @@ static void read_ipv4_parameter_in_edit_mode_after_change(void)
     cut_assert_equal_memory(red_zone_bytes, sizeof(red_zone_bytes),
                             buffer, sizeof(red_zone_bytes));
     cut_assert_equal_memory(red_zone_bytes, sizeof(red_zone_bytes),
-                            buffer + sizeof(ip_address) + sizeof(red_zone_bytes),
+                            buffer + sizeof(standard_ipv4_address) + sizeof(red_zone_bytes),
                             sizeof(red_zone_bytes));
 }
 
