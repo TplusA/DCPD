@@ -426,6 +426,107 @@ static bool query_dhcp_mode(void)
     return ret;
 }
 
+static int handle_set_dhcp_mode(struct ini_section *section,
+                                const struct register_network_interface_t *selected)
+{
+    if(!IS_REQUESTED(REQ_DHCP_MODE_55))
+        return 0;
+
+    if(nwconfig_write_data.dhcpv4_mode)
+    {
+        if(inifile_section_store_value(section, "IPv4", 0, "dhcp", 0) == NULL)
+            return -1;
+
+        nwconfig_write_data.requested_changes &=
+            ~(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58 |
+              REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
+    }
+    else if(!IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
+    {
+        msg_error(0, LOG_WARNING,
+                  "Disabling IPv4 on interface %s because DHCPv4 was "
+                  "disabled and static IPv4 configuration was not sent",
+                  selected->mac_address_string);
+
+        if(inifile_section_store_value(section, "IPv4", 0, "off", 0) == NULL)
+            return -1;
+
+        nwconfig_write_data.requested_changes &=
+            ~(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
+    }
+
+    return 0;
+}
+
+static int handle_set_static_ipv4_config(struct ini_section *section,
+                                         const struct register_network_interface_t *selected)
+{
+    if(!IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
+        return 0;
+
+    if(fill_in_missing_ipv4_config_requests() < 0)
+    {
+        msg_error(0, LOG_ERR,
+                  "IPv4 data incomplete, cannot set interface configuration");
+        return -1;
+    }
+
+    if(nwconfig_write_data.ipv4_address[0] != '\0')
+    {
+        char string_buffer[128];
+        snprintf(string_buffer, sizeof(string_buffer), "%s/%s/%s",
+                 nwconfig_write_data.ipv4_address,
+                 nwconfig_write_data.ipv4_netmask,
+                 nwconfig_write_data.ipv4_gateway);
+
+        if(inifile_section_store_value(section, "IPv4", 0, string_buffer, 0) == NULL)
+            return -1;
+    }
+    else
+    {
+        msg_info("Disabling IPv4 on interface %s",
+                 selected->mac_address_string);
+
+        if(inifile_section_store_value(section, "IPv4", 0, "off", 0) == NULL)
+            return -1;
+    }
+
+    return 0;
+}
+
+static int handle_set_dns_servers(struct ini_section *section,
+                                  const struct register_network_interface_t *selected)
+{
+    if(!IS_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63))
+        return 0;
+
+    fill_in_missing_dns_server_config_requests();
+
+    if(nwconfig_write_data.ipv4_dns_server1[0] != '\0')
+    {
+        const bool have_second =
+            (nwconfig_write_data.ipv4_dns_server2[0] != '\0');
+
+        char string_buffer[128];
+        snprintf(string_buffer, sizeof(string_buffer), "%s%s%s",
+                 nwconfig_write_data.ipv4_dns_server1,
+                 have_second ? "," : "",
+                 have_second ? nwconfig_write_data.ipv4_dns_server2 : "");
+
+        if(inifile_section_store_value(section, "Nameservers", 0, string_buffer, 0) == NULL)
+            return -1;
+    }
+    else
+    {
+        msg_info("No nameservers on interface %s",
+                 selected->mac_address_string);
+
+        (void)inifile_section_remove_value(section, "Nameservers", 0);
+    }
+
+    return 0;
+}
+
 static int apply_changes_to_inifile(struct ini_file *ini,
                                     const struct register_network_interface_t *selected)
 {
@@ -434,88 +535,14 @@ static int apply_changes_to_inifile(struct ini_file *ini,
 
     log_assert(section != NULL);
 
-    if(IS_REQUESTED(REQ_DHCP_MODE_55) != 0)
-    {
-        if(nwconfig_write_data.dhcpv4_mode)
-        {
-            if(inifile_section_store_value(section, "IPv4", 0, "dhcp", 0) == NULL)
-                return -1;
+    if(handle_set_dhcp_mode(section, selected) < 0)
+        return -1;
 
-            nwconfig_write_data.requested_changes &=
-                ~(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58 |
-                  REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
-        }
-        else if(!IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
-        {
-            msg_error(0, LOG_WARNING,
-                      "Disabling IPv4 on interface %s because DHCPv4 was "
-                      "disabled and static IPv4 configuration was not sent",
-                      selected->mac_address_string);
+    if(handle_set_static_ipv4_config(section, selected) < 0)
+        return -1;
 
-            if(inifile_section_store_value(section, "IPv4", 0, "off", 0) == NULL)
-                return -1;
-
-            nwconfig_write_data.requested_changes &=
-                ~(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
-        }
-    }
-
-    if(IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
-    {
-        if(fill_in_missing_ipv4_config_requests() < 0)
-        {
-            msg_error(0, LOG_ERR,
-                      "IPv4 data incomplete, cannot set interface configuration");
-            return -1;
-        }
-
-        if(nwconfig_write_data.ipv4_address[0] != '\0')
-        {
-            char string_buffer[128];
-            snprintf(string_buffer, sizeof(string_buffer), "%s/%s/%s",
-                     nwconfig_write_data.ipv4_address,
-                     nwconfig_write_data.ipv4_netmask,
-                     nwconfig_write_data.ipv4_gateway);
-
-            if(inifile_section_store_value(section, "IPv4", 0, string_buffer, 0) == NULL)
-                return -1;
-        }
-        else
-        {
-            msg_info("Disabling IPv4 on interface %s",
-                     selected->mac_address_string);
-
-            if(inifile_section_store_value(section, "IPv4", 0, "off", 0) == NULL)
-                return -1;
-        }
-    }
-
-    if(IS_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63))
-    {
-        fill_in_missing_dns_server_config_requests();
-
-        if(nwconfig_write_data.ipv4_dns_server1[0] != '\0')
-        {
-            const bool have_second =
-                (nwconfig_write_data.ipv4_dns_server2[0] != '\0');
-
-            char string_buffer[128];
-            snprintf(string_buffer, sizeof(string_buffer), "%s%s%s",
-                     nwconfig_write_data.ipv4_dns_server1,
-                     have_second ? "," : "",
-                     have_second ? nwconfig_write_data.ipv4_dns_server2 : "");
-
-            if(inifile_section_store_value(section, "Nameservers", 0, string_buffer, 0) == NULL)
-                return -1;
-        }
-        else
-        {
-            msg_info("No nameservers on interface %s",
-                     selected->mac_address_string);
-
-            (void)inifile_section_remove_value(section, "Nameservers", 0);
-        }
-    }
+    if(handle_set_dns_servers(section, selected) < 0)
+        return -1;
 
     static const uint32_t not_implemented =
         REQ_PROXY_MODE_59 |
