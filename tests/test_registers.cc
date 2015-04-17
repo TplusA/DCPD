@@ -378,7 +378,10 @@ static MockOs *mock_os;
 
 static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
 static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
-static constexpr char expected_config_filename[] = "/var/lib/connman/builtin_decafdeadbad.config";
+static constexpr char expected_ethernet_config_filename[] =
+    "/var/lib/connman/builtin_decafdeadbad.config";
+static constexpr char expected_wlan_config_filename[] =
+    "/var/lib/connman/builtin_baddeadbeef1.config";
 static struct ConnmanInterfaceData *const dummy_connman_iface =
     reinterpret_cast<struct ConnmanInterfaceData *>(0xbeefbeef);
 
@@ -560,14 +563,14 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     if(existing_file == nullptr)
-        mock_os->expect_os_map_file_to_memory(-1, false, expected_config_filename);
+        mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
     else
     {
-        mock_os->expect_os_map_file_to_memory(existing_file, expected_config_filename);
+        mock_os->expect_os_map_file_to_memory(existing_file, expected_ethernet_config_filename);
         mock_os->expect_os_unmap_file(existing_file);
     }
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
@@ -615,14 +618,14 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     if(existing_file == nullptr)
-        mock_os->expect_os_map_file_to_memory(-1, false, expected_config_filename);
+        mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
     else
     {
-        mock_os->expect_os_map_file_to_memory(existing_file, expected_config_filename);
+        mock_os->expect_os_map_file_to_memory(existing_file, expected_ethernet_config_filename);
         mock_os->expect_os_unmap_file(existing_file);
     }
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
@@ -762,8 +765,8 @@ void test_explicitly_disabling_dhcp_disables_whole_interface(void)
     mock_messages->expect_msg_error_formatted(0, LOG_WARNING,
         "Disabling IPv4 on interface DE:CA:FD:EA:DB:AD because DHCPv4 "
         "was disabled and static IPv4 configuration was not sent");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_config_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
@@ -1125,9 +1128,9 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
     mock_connman->expect_get_ipv4_primary_dns_string(old_primary_dns, dummy_connman_iface, false, 16);
     mock_connman->expect_get_ipv4_secondary_dns_string(old_secondary_dns, dummy_connman_iface, false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_ethernet_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
@@ -1211,9 +1214,9 @@ void test_set_both_dns_servers(void)
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_ethernet_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
