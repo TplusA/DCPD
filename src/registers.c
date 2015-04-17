@@ -155,6 +155,36 @@ static const struct dcp_register_t register_map[] =
         .max_data_size = 1,
         .write_handler = dcpregs_write_drcp_command,
     },
+    {
+        .address = 92,
+        .max_data_size = 8,
+        .write_handler = dcpregs_write_92_wlan_security,
+        .read_handler = dcpregs_read_92_wlan_security,
+    },
+    {
+        .address = 93,
+        .max_data_size = 8,
+        .write_handler = dcpregs_write_93_ibss,
+        .read_handler = dcpregs_read_93_ibss,
+    },
+    {
+        .address = 94,
+        .max_data_size = 32,
+        .write_handler = dcpregs_write_94_ssid,
+        .read_handler = dcpregs_read_94_ssid,
+    },
+    {
+        .address = 101,
+        .max_data_size = 8,
+        .write_handler = dcpregs_write_101_wpa_cipher,
+        .read_handler = dcpregs_read_101_wpa_cipher,
+    },
+    {
+        .address = 102,
+        .max_data_size = 64,
+        .write_handler = dcpregs_write_102_passphrase,
+        .read_handler = dcpregs_read_102_passphrase,
+    },
 };
 
 static int compare_register_address(const void *a, const void *b)

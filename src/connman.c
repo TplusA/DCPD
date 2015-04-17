@@ -375,6 +375,80 @@ void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_da
     get_nameserver_string(iface_data, 1, dest, dest_size);
 }
 
+bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
+                                           char *dest, size_t dest_size)
+{
+    log_assert(iface_data != NULL);
+    log_assert(dest != NULL);
+    log_assert(dest_size > 0);
+
+    dest[0] = '\0';
+
+    bool retval = false;
+    GVariantDict dict;
+    init_dict_from_temp_gvariant(g_variant_get_child_value((GVariant *)iface_data, 1),
+                                 &dict);
+
+    GVariant *security_array =
+        g_variant_dict_lookup_value(&dict, "Security", G_VARIANT_TYPE_ARRAY);
+
+    if(security_array != NULL)
+    {
+        if(g_variant_n_children(security_array) > 0)
+        {
+            GVariant *security_string = g_variant_get_child_value(security_array, 0);
+            const char *string = g_variant_get_string(security_string, NULL);
+
+            strncpy(dest, string, dest_size);
+            dest[dest_size - 1] = '\0';
+
+            retval = true;
+
+            g_variant_unref(security_string);
+        }
+
+        g_variant_unref(security_array);
+    }
+
+    g_variant_dict_clear(&dict);
+
+    return retval;
+}
+
+/*!
+ * \todo Need to check what happens in case a binary SSID is used.
+ */
+size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,
+                             uint8_t *dest, size_t dest_size)
+{
+    log_assert(iface_data != NULL);
+    log_assert(dest != NULL);
+
+    size_t retval = 0;
+    GVariantDict dict;
+    init_dict_from_temp_gvariant(g_variant_get_child_value((GVariant *)iface_data, 1),
+                                 &dict);
+
+    GVariant *ssid_string =
+        g_variant_dict_lookup_value(&dict, "Name", G_VARIANT_TYPE_STRING);
+
+    if(ssid_string != NULL)
+    {
+        const char *string = g_variant_get_string(ssid_string, NULL);
+
+        strncpy((char *)dest, string, dest_size);
+        dest[dest_size - 1] = '\0';
+
+        retval = strlen((const char *)dest);
+
+        g_variant_unref(ssid_string);
+    }
+
+    g_variant_dict_clear(&dict);
+
+    return retval;
+}
+
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
 {
     if(iface_data != NULL)

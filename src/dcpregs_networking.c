@@ -42,18 +42,23 @@
 #define REQ_DNS_SERVER1_62              ((uint32_t)(1U << 7))
 #define REQ_DNS_SERVER2_63              ((uint32_t)(1U << 8))
 #define REQ_WLAN_SECURITY_MODE_92       ((uint32_t)(1U << 9))
-#define REQ_WLAN_IBSS_MODE_93           ((uint32_t)(1U << 10))
-#define REQ_WLAN_SSID_94                ((uint32_t)(1U << 11))
-#define REQ_WLAN_WEP_MODE_95            ((uint32_t)(1U << 12))
-#define REQ_WLAN_WEP_KEY_INDEX_96       ((uint32_t)(1U << 13))
-#define REQ_WLAN_WEP_KEY0_97            ((uint32_t)(1U << 14))
-#define REQ_WLAN_WEP_KEY1_98            ((uint32_t)(1U << 15))
-#define REQ_WLAN_WEP_KEY2_99            ((uint32_t)(1U << 16))
-#define REQ_WLAN_WEP_KEY3_100           ((uint32_t)(1U << 17))
-#define REQ_WLAN_WPA_CIPHER_TYPE_101    ((uint32_t)(1U << 18))
-#define REQ_WLAN_WPA_PASSPHRASE_102     ((uint32_t)(1U << 19))
+#define REQ_WLAN_SSID_94                ((uint32_t)(1U << 10))
+#define REQ_WLAN_WEP_MODE_95            ((uint32_t)(1U << 11))
+#define REQ_WLAN_WEP_KEY_INDEX_96       ((uint32_t)(1U << 12))
+#define REQ_WLAN_WEP_KEY0_97            ((uint32_t)(1U << 13))
+#define REQ_WLAN_WEP_KEY1_98            ((uint32_t)(1U << 14))
+#define REQ_WLAN_WEP_KEY2_99            ((uint32_t)(1U << 15))
+#define REQ_WLAN_WEP_KEY3_100           ((uint32_t)(1U << 16))
+#define REQ_WLAN_WPA_PASSPHRASE_102     ((uint32_t)(1U << 17))
+
+static const uint32_t req_wireless_only_parameters =
+    REQ_WLAN_SECURITY_MODE_92 | REQ_WLAN_SSID_94 |
+    REQ_WLAN_WEP_MODE_95 | REQ_WLAN_WEP_KEY_INDEX_96 | REQ_WLAN_WEP_KEY0_97 |
+    REQ_WLAN_WEP_KEY1_98 | REQ_WLAN_WEP_KEY2_99 | REQ_WLAN_WEP_KEY3_100 |
+    REQ_WLAN_WPA_PASSPHRASE_102;
 
 #define SIZE_OF_IPV4_ADDRESS_STRING     (4U * 3U + 3U + 1U)
+#define SIZE_OF_WLAN_SECURITY_MODE      8U
 
 /*!
  * Minimum size of an IPv4 address in bytes, not including zero-terminator.
@@ -105,16 +110,20 @@ static struct
     char ipv4_gateway[SIZE_OF_IPV4_ADDRESS_STRING];
     char ipv4_dns_server1[SIZE_OF_IPV4_ADDRESS_STRING];
     char ipv4_dns_server2[SIZE_OF_IPV4_ADDRESS_STRING];
+
     bool proxy_mode;
     char *proxy_server_name;
     uint16_t proxy_server_port;
-    char wlan_security_mode[9];
-    bool wlan_ibss_mode_is_ad_hoc;
-    char wlan_ssid[33];
+
+    char wlan_security_mode[SIZE_OF_WLAN_SECURITY_MODE];
+
+    size_t wlan_ssid_length;
+    uint8_t wlan_ssid[32];
+
     bool wlan_wep_mode_is_open;
     uint8_t wlan_wep_key_index;
     uint8_t wlan_wep_keys[4][28];
-    char wlan_wpa_cipher[9];
+
     bool wlan_wpa_passphrase_is_ascii;
     uint8_t wlan_wpa_passphrase[64];
 }
@@ -527,6 +536,137 @@ static int handle_set_dns_servers(struct ini_section *section,
     return 0;
 }
 
+static char nibble_to_char(uint8_t nibble)
+{
+    if(nibble < 10)
+        return '0' + nibble;
+    else
+        return 'a' + nibble - 10;
+}
+
+static void binary_to_hexdump(char *dest, const uint8_t *src, size_t len)
+{
+    size_t j = 0;
+
+    for(size_t i = 0; i < len; ++i)
+    {
+        const uint8_t byte = nwconfig_write_data.wlan_ssid[i];
+
+        dest[j++] = nibble_to_char(byte >> 4);
+        dest[j++] = nibble_to_char(byte & 0x0f);
+    }
+
+    dest[j] = '\0';
+}
+
+static bool is_wlan_ssid_simple_ascii(const uint8_t *ssid, size_t len)
+{
+    log_assert(len > 0);
+    log_assert(len <= 32);
+
+    for(size_t i = 0; i < len; ++i)
+    {
+        const uint8_t ch = ssid[i];
+
+        if(ch <= ' ')
+            return false;
+
+        if(ch > 0x7e)
+            return false;
+    }
+
+    return true;
+}
+
+static int handle_set_wireless_config(struct ini_section *section,
+                                      const struct register_network_interface_t *selected)
+{
+    if(!IS_REQUESTED(req_wireless_only_parameters))
+        return 0;
+
+    if(selected->is_wired)
+    {
+        msg_info("Ignoring wireless parameters for active wired interface");
+        return 0;
+    }
+
+    char security_type[16];
+    security_type[0] = '\0';
+
+    if(IS_REQUESTED(REQ_WLAN_SECURITY_MODE_92))
+    {
+        if(strcmp(nwconfig_write_data.wlan_security_mode, "NONE") == 0)
+            strcpy(security_type, "none");
+        else if(strcmp(nwconfig_write_data.wlan_security_mode, "WPAPSK") == 0 ||
+                strcmp(nwconfig_write_data.wlan_security_mode, "WPA2PSK") == 0)
+            strcpy(security_type, "psk");
+        else if(strcmp(nwconfig_write_data.wlan_security_mode, "WEP") == 0)
+            BUG("Support for insecure WLAN mode \"WEP\" not implemented yet");
+        else
+            msg_error(EINVAL, LOG_ERR, "Invalid WLAN security mode \"%s\"",
+                      nwconfig_write_data.wlan_security_mode);
+    }
+    else
+    {
+        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+
+        if(iface_data != NULL)
+        {
+            connman_get_wlan_security_type_string(iface_data, security_type,
+                                                  sizeof(security_type));
+            connman_free_interface_data(iface_data);
+        }
+    }
+
+    if(security_type[0] == '\0')
+    {
+        msg_error(EINVAL, LOG_ERR,
+                  "Cannot set WLAN parameters, security mode missing");
+        return -1;
+    }
+
+    if(inifile_section_store_value(section, "Security", 0,
+                                   security_type, 0) == NULL)
+        return -1;
+
+    if(IS_REQUESTED(REQ_WLAN_SSID_94) &&
+       nwconfig_write_data.wlan_ssid_length > 0)
+    {
+        if(is_wlan_ssid_simple_ascii(nwconfig_write_data.wlan_ssid,
+                                     nwconfig_write_data.wlan_ssid_length))
+        {
+            if(inifile_section_store_value(section, "Name", 0,
+                                           (char *)nwconfig_write_data.wlan_ssid,
+                                           nwconfig_write_data.wlan_ssid_length) == NULL)
+                return -1;
+        }
+
+        char buffer[2 * sizeof(nwconfig_write_data.wlan_ssid) + 1];
+
+        binary_to_hexdump(buffer, nwconfig_write_data.wlan_ssid,
+                          nwconfig_write_data.wlan_ssid_length);
+
+        if(inifile_section_store_value(section, "SSID", 0,
+                                       buffer, 0) == NULL)
+            return -1;
+    }
+
+    if(IS_REQUESTED(REQ_WLAN_WPA_PASSPHRASE_102))
+    {
+        const size_t passphrase_length =
+            nwconfig_write_data.wlan_wpa_passphrase_is_ascii
+            ? 0
+            : sizeof(nwconfig_write_data.wlan_wpa_passphrase);
+
+        if(inifile_section_store_value(section, "Passphrase", 0,
+                                       (const char *)nwconfig_write_data.wlan_wpa_passphrase,
+                                       passphrase_length) == NULL)
+            return -1;
+    }
+
+    return 0;
+}
+
 static int apply_changes_to_inifile(struct ini_file *ini,
                                     const struct register_network_interface_t *selected)
 {
@@ -544,21 +684,19 @@ static int apply_changes_to_inifile(struct ini_file *ini,
     if(handle_set_dns_servers(section, selected) < 0)
         return -1;
 
+    if(handle_set_wireless_config(section, selected) < 0)
+        return -1;
+
     static const uint32_t not_implemented =
         REQ_PROXY_MODE_59 |
         REQ_PROXY_SERVER_60 |
         REQ_PROXY_PORT_61 |
-        REQ_WLAN_SECURITY_MODE_92 |
-        REQ_WLAN_IBSS_MODE_93 |
-        REQ_WLAN_SSID_94 |
         REQ_WLAN_WEP_MODE_95 |
         REQ_WLAN_WEP_KEY_INDEX_96 |
         REQ_WLAN_WEP_KEY0_97 |
         REQ_WLAN_WEP_KEY1_98 |
         REQ_WLAN_WEP_KEY2_99 |
-        REQ_WLAN_WEP_KEY3_100 |
-        REQ_WLAN_WPA_CIPHER_TYPE_101 |
-        REQ_WLAN_WPA_PASSPHRASE_102;
+        REQ_WLAN_WEP_KEY3_100;
 
     if((nwconfig_write_data.requested_changes & not_implemented) != 0)
     {
@@ -958,4 +1096,286 @@ int dcpregs_write_63_secondary_dns(const uint8_t *data, size_t length)
 
     return copy_ipv4_address(nwconfig_write_data.ipv4_dns_server2,
                              REQ_DNS_SERVER2_63, data, length, true);
+}
+
+ssize_t dcpregs_read_92_wlan_security(uint8_t *response, size_t length)
+{
+    if(data_length_is_unexpectedly_small(length, SIZE_OF_WLAN_SECURITY_MODE))
+        return -1;
+
+    bool failed = false;
+
+    if(in_edit_mode() && IS_REQUESTED(REQ_WLAN_SECURITY_MODE_92))
+        memcpy(response, nwconfig_write_data.wlan_security_mode,
+               SIZE_OF_WLAN_SECURITY_MODE);
+    else
+    {
+        response[0] = '\0';
+
+        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+
+        if(iface_data != NULL)
+        {
+            char buffer[12];
+
+            if(connman_get_wlan_security_type_string(iface_data, buffer, sizeof(buffer)))
+            {
+                if(strcmp(buffer, "none") == 0)
+                    strcpy((char *)response, "NONE");
+                else if(strcmp(buffer, "psk") == 0)
+                    strcpy((char *)response, "WPA2PSK");
+                else if(strcmp(buffer, "wep") == 0)
+                    strcpy((char *)response, "WEP");
+                else
+                    msg_error(0, LOG_ERR,
+                              "Cannot convert Connman security type \"%s\" to DCP",
+                              buffer);
+            }
+            else
+                failed = true;
+
+            connman_free_interface_data(iface_data);
+        }
+        else
+            failed = true;
+    }
+
+    if(failed)
+    {
+        msg_error(EINVAL, LOG_ERR,
+                  "No Connman security type set for active interface");
+        return -1;
+    }
+
+    return strlen((char *)response) + 1;
+}
+
+int dcpregs_write_92_wlan_security(const uint8_t *data, size_t length)
+{
+    if(data_length_is_in_unexpected_range(length,
+                                          3, SIZE_OF_WLAN_SECURITY_MODE))
+        return -1;
+
+    if(!may_change_config())
+        return -1;
+
+    memcpy(nwconfig_write_data.wlan_security_mode, data, length);
+    nwconfig_write_data.wlan_security_mode[length] = '\0';
+    nwconfig_write_data.requested_changes |= REQ_WLAN_SECURITY_MODE_92;
+
+    return 0;
+}
+
+ssize_t dcpregs_read_93_ibss(uint8_t *response, size_t length)
+{
+    if(data_length_is_unexpectedly_small(length, 8))
+        return -1;
+
+    strcpy((char *)response, "false");
+
+    return 6;
+}
+
+int dcpregs_write_93_ibss(const uint8_t *data, size_t length)
+{
+    if(data_length_is_in_unexpected_range(length, 4, 8))
+        return -1;
+
+    char buffer[9];
+    memcpy(buffer, data, length);
+    buffer[length] = '\0';
+
+    if(strcmp(buffer, "false") == 0)
+    {
+        msg_info("Ignoring IBSS infrastructure mode request (always using that mode)");
+        return 0;
+    }
+    else if(strcmp(buffer, "true") == 0)
+        msg_error(EINVAL, LOG_NOTICE,
+                  "Cannot change IBSS mode to ad-hoc, always using infrastructure mode");
+    else
+        msg_error(EINVAL, LOG_ERR, "Got invalid IBSS mode request");
+
+    return -1;
+}
+
+ssize_t dcpregs_read_94_ssid(uint8_t *response, size_t length)
+{
+    if(data_length_is_unexpectedly_small(length, 32))
+        return -1;
+
+    ssize_t retval;
+
+    if(in_edit_mode() && IS_REQUESTED(REQ_WLAN_SSID_94))
+    {
+        if(nwconfig_write_data.wlan_ssid_length > 0)
+            memcpy(response, nwconfig_write_data.wlan_ssid, nwconfig_write_data.wlan_ssid_length);
+
+        retval = nwconfig_write_data.wlan_ssid_length;
+    }
+    else
+    {
+        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+
+        if(iface_data != NULL)
+        {
+            retval = connman_get_wlan_ssid(iface_data, response, length);
+            connman_free_interface_data(iface_data);
+        }
+        else
+            retval = 0;
+    }
+
+    return retval;
+}
+
+int dcpregs_write_94_ssid(const uint8_t *data, size_t length)
+{
+    if(data_length_is_in_unexpected_range(length, 1, 32))
+        return -1;
+
+    if(!may_change_config())
+        return -1;
+
+    memcpy(nwconfig_write_data.wlan_ssid, data, length);
+    nwconfig_write_data.wlan_ssid_length = length;
+    nwconfig_write_data.requested_changes |= REQ_WLAN_SSID_94;
+
+    return 0;
+}
+
+ssize_t dcpregs_read_101_wpa_cipher(uint8_t *response, size_t length)
+{
+    if(data_length_is_unexpectedly_small(length, 8))
+        return -1;
+
+    strcpy((char *)response, "AES");
+
+    return 4;
+}
+
+int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length)
+{
+    if(data_length_is_in_unexpected_range(length, 3, 8))
+        return -1;
+
+    char buffer[9];
+    memcpy(buffer, data, length);
+    buffer[length] = '\0';
+
+    if(strcmp(buffer, "AES") == 0 || strcmp(buffer, "TKIP") == 0)
+    {
+        msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
+        return 0;
+   }
+
+    msg_error(EINVAL, LOG_ERR, "Got invalid WPA cipher");
+
+    return -1;
+}
+
+ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
+{
+    if(data_length_is_unexpectedly_small(length, sizeof(nwconfig_write_data.wlan_wpa_passphrase)))
+        return -1;
+
+    if(!in_edit_mode())
+    {
+        msg_info("Passphrase cannot be read out while in non-edit mode");
+        return -1;
+    }
+
+    ssize_t copied_bytes;
+
+    if(IS_REQUESTED(REQ_WLAN_WPA_PASSPHRASE_102))
+    {
+        copied_bytes = (nwconfig_write_data.wlan_wpa_passphrase_is_ascii
+                        ? ((nwconfig_write_data.wlan_wpa_passphrase[0] == '\0')
+                           ? 0
+                           : strlen((const char *)nwconfig_write_data.wlan_wpa_passphrase) - 1)
+                        : sizeof(nwconfig_write_data.wlan_wpa_passphrase));
+
+        if(copied_bytes > 0)
+            memcpy(response, nwconfig_write_data.wlan_wpa_passphrase,
+                   copied_bytes);
+        else
+        {
+            msg_info("Passphrase set, but empty");
+            copied_bytes = 0;
+        }
+    }
+    else
+    {
+        msg_info("No passphrase set yet");
+        copied_bytes = 0;
+    }
+
+    return copied_bytes;
+}
+
+int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
+{
+    if(length > 0 &&
+       data_length_is_in_unexpected_range(length,
+                                          8,
+                                          sizeof(nwconfig_write_data.wlan_wpa_passphrase)))
+        return -1;
+
+    if(!may_change_config())
+        return -1;
+
+    if(length > 0)
+    {
+        bool passphrase_is_hex = true;
+        nwconfig_write_data.wlan_wpa_passphrase_is_ascii = true;
+
+        for(size_t i = 0; i < length; ++i)
+        {
+            uint8_t ch = nwconfig_write_data.wlan_wpa_passphrase[i] = data[i];
+
+            if(ch < (uint8_t)' ' || ch > (uint8_t)'~')
+                nwconfig_write_data.wlan_wpa_passphrase_is_ascii = false;
+            else
+            {
+                ch = tolower(ch);
+
+                if(!isdigit(ch) && !(ch >= 'a' && ch <= 'f'))
+                    passphrase_is_hex = false;
+            }
+        }
+
+        static const char invalid_passphrase_fmt[] = "Invalid passphrase: %s";
+
+        if(length == sizeof(nwconfig_write_data.wlan_wpa_passphrase))
+        {
+            if(!passphrase_is_hex)
+            {
+                msg_error(EINVAL, LOG_ERR, invalid_passphrase_fmt,
+                          "not a hex-string");
+                return -1;
+            }
+
+            nwconfig_write_data.wlan_wpa_passphrase_is_ascii = false;
+        }
+        else
+        {
+            if(!nwconfig_write_data.wlan_wpa_passphrase_is_ascii)
+            {
+                msg_error(EINVAL, LOG_ERR, invalid_passphrase_fmt,
+                          "expected ASCII passphrase");
+                return -1;
+            }
+
+            nwconfig_write_data.wlan_wpa_passphrase[length] = '\0';
+        }
+    }
+    else
+    {
+        nwconfig_write_data.wlan_wpa_passphrase[0] = '\0';
+        nwconfig_write_data.wlan_wpa_passphrase_is_ascii = true;
+    }
+
+    nwconfig_write_data.requested_changes |= REQ_WLAN_WPA_PASSPHRASE_102;
+
+    return 0;
 }

@@ -46,6 +46,8 @@ class MockConnman
     void expect_get_ipv4_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
     void expect_get_ipv4_primary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
     void expect_get_ipv4_secondary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
+    void expect_get_wlan_security_type_string(bool ret, const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);
+    void expect_get_wlan_ssid(const uint8_t *ret_bytes, size_t ret_bytes_size, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);
     void expect_free_interface_data(struct ConnmanInterfaceData *iface_data);
 };
 

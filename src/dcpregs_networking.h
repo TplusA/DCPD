@@ -60,6 +60,21 @@ int dcpregs_write_62_primary_dns(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length);
 int dcpregs_write_63_secondary_dns(const uint8_t *data, size_t length);
 
+ssize_t dcpregs_read_92_wlan_security(uint8_t *response, size_t length);
+int dcpregs_write_92_wlan_security(const uint8_t *data, size_t length);
+
+ssize_t dcpregs_read_93_ibss(uint8_t *response, size_t length);
+int dcpregs_write_93_ibss(const uint8_t *data, size_t length);
+
+ssize_t dcpregs_read_94_ssid(uint8_t *response, size_t length);
+int dcpregs_write_94_ssid(const uint8_t *data, size_t length);
+
+ssize_t dcpregs_read_101_wpa_cipher(uint8_t *response, size_t length);
+int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length);
+
+ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length);
+int dcpregs_write_102_passphrase(const uint8_t *data, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

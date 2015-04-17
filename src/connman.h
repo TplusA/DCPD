@@ -20,6 +20,7 @@
 #define CONNMAN_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /*!
  * Internal type for Connman interface code for storing D-Bus results.
@@ -52,6 +53,10 @@ void connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data
                                          char *dest, size_t dest_size);
 void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
                                            char *dest, size_t dest_size);
+bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
+                                           char *dest, size_t dest_size);
+size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,
+                             uint8_t *dest, size_t dest_size);
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data);
 
 #ifdef __cplusplus

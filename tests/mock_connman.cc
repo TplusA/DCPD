@@ -34,6 +34,8 @@ enum class ConnmanFn
     get_ipv4_gateway_string,
     get_ipv4_primary_dns_string,
     get_ipv4_secondary_dns_string,
+    get_wlan_security_type_string,
+    get_wlan_ssid,
     free_interface_data,
 
     first_valid_connman_fn_id = find_interface,
@@ -83,6 +85,14 @@ static std::ostream &operator<<(std::ostream &os, const ConnmanFn id)
         os << "get_ipv4_secondary_dns_string";
         break;
 
+      case ConnmanFn::get_wlan_security_type_string:
+        os << "get_wlan_security_type_string";
+        break;
+
+      case ConnmanFn::get_wlan_ssid:
+        os << "get_wlan_ssid";
+        break;
+
       case ConnmanFn::free_interface_data:
         os << "free_interface_data";
         break;
@@ -102,6 +112,8 @@ class MockConnman::Expectation
 
         bool ret_bool_;
         std::string ret_string_;
+        const uint8_t *ret_bytes_;
+        size_t ret_bytes_size_;
         struct ConnmanInterfaceData *ret_data_;
         struct ConnmanInterfaceData *arg_iface_data_;
         std::string arg_mac_address_;
@@ -113,6 +125,8 @@ class MockConnman::Expectation
         explicit Data(ConnmanFn fn):
             function_id_(fn),
             ret_bool_(false),
+            ret_bytes_(nullptr),
+            ret_bytes_size_(123456),
             ret_data_(nullptr),
             arg_iface_data_(nullptr),
             arg_pointer_shall_be_null_(false),
@@ -164,7 +178,8 @@ class MockConnman::Expectation
 
     explicit Expectation(ConnmanFn fn, const char *ret_string,
                          struct ConnmanInterfaceData *iface_data,
-                         bool expect_null_pointer, size_t dest_size):
+                         bool expect_null_pointer, size_t dest_size,
+                         bool ret = false):
         d(fn)
     {
         if(ret_string != NULL)
@@ -172,6 +187,20 @@ class MockConnman::Expectation
         else
             data_.ret_string_ = "";
 
+        data_.ret_bool_ = ret;
+        data_.arg_iface_data_ = iface_data;
+        data_.arg_pointer_shall_be_null_ = expect_null_pointer;
+        data_.arg_dest_size_ = dest_size;
+    }
+
+    explicit Expectation(ConnmanFn fn,
+                         const uint8_t *ret_bytes, size_t ret_bytes_size,
+                         struct ConnmanInterfaceData *iface_data,
+                         bool expect_null_pointer, size_t dest_size):
+        d(fn)
+    {
+        data_.ret_bytes_ = ret_bytes;
+        data_.ret_bytes_size_ = ret_bytes_size;
         data_.arg_iface_data_ = iface_data;
         data_.arg_pointer_shall_be_null_ = expect_null_pointer;
         data_.arg_dest_size_ = dest_size;
@@ -246,6 +275,19 @@ void MockConnman::expect_get_ipv4_secondary_dns_string(const char *ret_string, s
 {
     expectations_->add(Expectation(ConnmanFn::get_ipv4_secondary_dns_string,
                                    ret_string, iface_data, expect_null_pointer, dest_size));
+}
+
+void MockConnman::expect_get_wlan_security_type_string(bool ret, const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
+{
+    expectations_->add(Expectation(ConnmanFn::get_wlan_security_type_string,
+                                   ret_string, iface_data, expect_null_pointer, dest_size, ret));
+}
+
+void MockConnman::expect_get_wlan_ssid(const uint8_t *ret_bytes, size_t ret_bytes_size, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
+{
+    expectations_->add(Expectation(ConnmanFn::get_wlan_ssid,
+                                   ret_bytes, ret_bytes_size, iface_data,
+                                   expect_null_pointer, dest_size));
 }
 
 void MockConnman::expect_free_interface_data(struct ConnmanInterfaceData *iface_data)
@@ -360,6 +402,45 @@ void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_da
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_secondary_dns_string);
     get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+}
+
+bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
+                                           char *dest, size_t dest_size)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_wlan_security_type_string);
+    get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+
+    return expect.d.ret_bool_;
+}
+
+size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,
+                             uint8_t *dest, size_t dest_size)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_wlan_ssid);
+    cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
+    cppcut_assert_equal(expect.d.arg_dest_size_, dest_size);
+
+    if(expect.d.arg_pointer_shall_be_null_)
+    {
+        cppcut_assert_null(dest);
+        return 0;
+    }
+
+    cppcut_assert_not_null(dest);
+
+    if(dest_size == 0)
+        return 0;
+
+    const size_t count = std::min(expect.d.ret_bytes_size_, dest_size);
+
+    if(count > 0)
+        memcpy(dest, expect.d.ret_bytes_, count);
+
+    return count;
 }
 
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
