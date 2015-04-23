@@ -1249,7 +1249,7 @@ void test_set_both_dns_servers(void)
                             os_write_buffer.data(), os_write_buffer.size());
 }
 
-/*!
+/*!\test
  * Read out the primary DNS in edit mode, Connman is consulted if the primary
  * DNS server has not been set during this edit session.
  */
@@ -1280,7 +1280,7 @@ void test_read_primary_dns_in_edit_mode_before_any_changes(void)
     commit_ipv4_config(true);
 }
 
-/*!
+/*!\test
  * Read out the secondary DNS in edit mode, Connman is consulted if the
  * secondary DNS server has not been set during this edit session.
  */
@@ -1311,7 +1311,7 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes(void)
     commit_ipv4_config(true);
 }
 
-/*!
+/*!\test
  * Given two previously defined DNS servers, replace the primary one.
  */
 void test_replace_primary_dns_server_of_two_servers(void)
@@ -1369,7 +1369,7 @@ void test_replace_primary_dns_server_of_two_servers(void)
                             os_write_buffer.data(), os_write_buffer.size());
 }
 
-/*!
+/*!\test
  * Given two previously defined DNS servers, replace the secondary one.
  */
 void test_replace_secondary_dns_server_of_two_servers(void)
@@ -1427,7 +1427,7 @@ void test_replace_secondary_dns_server_of_two_servers(void)
                             os_write_buffer.data(), os_write_buffer.size());
 }
 
-/*!
+/*!\test
  * Given one previously defined DNS server, add a secondary one.
  */
 void test_add_secondary_dns_server_to_primary_server(void)
