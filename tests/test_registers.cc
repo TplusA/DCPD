@@ -302,6 +302,107 @@ void test_slave_drc_playback_fast_find_set_speed_with_two_parameters(void)
 }
 
 /*!\test
+ * Slave sends DRC command for opening the view with binary ID 0.
+ */
+void test_slave_drc_views_goto_view_by_id_0(void)
+{
+    static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "UPnP");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends DRC command for opening the view with binary ID 1.
+ */
+void test_slave_drc_views_goto_view_by_id_1(void)
+{
+    static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x01, DRCP_ACCEPT };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "TuneIn");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends DRC command for opening the view with binary ID 2.
+ */
+void test_slave_drc_views_goto_view_by_id_2(void)
+{
+    static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x02, DRCP_ACCEPT };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Filesystem");
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends DRC command for opening a view with unknown binary ID.
+ */
+void test_slave_drc_views_goto_view_by_id_unknown_id(void)
+{
+    static const uint8_t buffer_lowest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x03, DRCP_ACCEPT };
+    static const uint8_t buffer_highest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, UINT8_MAX, DRCP_ACCEPT };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0x03 (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_lowest_unknown, sizeof(buffer_lowest_unknown)));
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0xff (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_highest_unknown, sizeof(buffer_highest_unknown)));
+}
+
+/*!\test
+ * Slave sends malformed DRC command for opening a view by ID.
+ */
+void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code(void)
+{
+    static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT - 1U };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends too short DRC command for opening view by ID.
+ */
+void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes(void)
+{
+    static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 1, expected 2 (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends too long DRC command for opening view by ID.
+ */
+void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes(void)
+{
+    static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 3, expected 2 (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
  * Slave sends DRC command for opening the internet radio view.
  */
 void test_slave_drc_views_goto_internet_radio(void)

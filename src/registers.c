@@ -152,7 +152,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* DRC command */
         .address = 72,
-        .max_data_size = 1,
+        .max_data_size = 3,
         .write_handler = dcpregs_write_drcp_command,
     },
     {

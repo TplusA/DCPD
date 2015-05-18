@@ -58,6 +58,33 @@ static int handle_fast_wind_set_factor(tdbusdcpdPlayback *iface,
     return 0;
 }
 
+static int handle_goto_view_by_id(tdbusdcpdViews *iface,
+                                  const uint8_t *data, size_t length)
+{
+    if(!is_length_correct(2, length))
+        return -1;
+
+    if(data[1] != DRCP_ACCEPT)
+        return -1;
+
+    static const char *view_names[] =
+    {
+        "UPnP",
+        "TuneIn",
+        "Filesystem",
+    };
+
+    if(data[0] >= sizeof(view_names) / sizeof(view_names[0]))
+    {
+        msg_error(EINVAL, LOG_NOTICE, "Unknown view ID 0x%02x", data[0]);
+        return -1;
+    }
+
+    tdbus_dcpd_views_emit_open(iface, view_names[data[0]]);
+
+    return 0;
+}
+
 static void handle_goto_internet_radio(tdbusdcpdViews *iface)
 {
     tdbus_dcpd_views_emit_open(iface, "Internet Radio");
@@ -196,6 +223,11 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_SCROLL_PAGE_DOWN,
         .iface_id = DBUSIFACE_LIST_NAVIGATION,
         .dbus_signal.list_navigation = handle_scroll_one_page_down,
+    },
+    {
+        .code = DRCP_BROWSE_VIEW_OPEN_SOURCE,
+        .iface_id = DBUSIFACE_VIEWS_WITH_DATA,
+        .dbus_signal.views_d = handle_goto_view_by_id,
     },
     {
         .code = DRCP_GOTO_INTERNET_RADIO,
