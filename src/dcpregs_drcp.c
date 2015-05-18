@@ -31,12 +31,21 @@
 #include "dynamic_buffer.h"
 #include "messages.h"
 
+static bool is_length_correct(size_t expected, size_t length)
+{
+    if(length == expected)
+        return true;
+
+    msg_error(EINVAL, LOG_NOTICE,
+              "Unexpected data length %zu, expected %zu", length, expected);
+
+    return false;
+}
+
 static int handle_fast_wind_set_factor(tdbusdcpdPlayback *iface,
                                        const uint8_t *data, size_t length)
 {
-    log_assert(length == 1);
-
-    if(length != 1)
+    if(!is_length_correct(1, length))
         return -1;
 
     const uint8_t factor_code = data[0];

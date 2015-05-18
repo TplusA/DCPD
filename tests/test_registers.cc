@@ -280,9 +280,8 @@ void test_slave_drc_playback_fast_find_set_speed_without_parameter(void)
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED };
 
     mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(0, LOG_EMERG, "Assertion failed at ", "length == 1");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 0, expected 1 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_os->expect_os_abort();
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
@@ -296,9 +295,8 @@ void test_slave_drc_playback_fast_find_set_speed_with_two_parameters(void)
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4, DRCP_KEY_DIGIT_4 };
 
     mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(0, LOG_EMERG, "Assertion failed at ", "length == 1");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 2, expected 1 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_os->expect_os_abort();
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
