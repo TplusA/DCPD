@@ -618,9 +618,11 @@ int inifile_write_to_file(const struct ini_file *inifile,
 
         for(const struct ini_key_value_pair *kv = s->values_head; kv != NULL; kv = kv->next)
         {
+            const size_t value_length = strlen(kv->value);
+
             if(os_write_from_buffer(kv->key, kv->key_length, fd) < 0 ||
                os_write_from_buffer(" = ", 3, fd) < 0 ||
-               os_write_from_buffer(kv->value, strlen(kv->value), fd) < 0 ||
+               (value_length > 0 && os_write_from_buffer(kv->value, value_length, fd) < 0) ||
                os_write_from_buffer("\n", 1, fd) < 0)
             {
                 goto error_exit;
@@ -679,27 +681,11 @@ void inifile_free(struct ini_file *inifile)
     }
 }
 
-struct ini_key_value_pair *
-inifile_section_store_value(struct ini_section *section,
-                            const char *key, size_t key_length,
-                            const char *value, size_t value_length)
+static struct ini_key_value_pair *
+do_store_value(struct ini_section *section,
+               const char *key, size_t key_length,
+               const char *value, size_t value_length)
 {
-    log_assert(section != NULL);
-    log_assert(key != NULL);
-    log_assert(value != NULL);
-
-    if(key_length == 0)
-        key_length = strlen(key);
-
-    if(key_length == 0)
-        return NULL;
-
-    if(value_length == 0)
-        value_length = strlen(value);
-
-    if(value_length == 0)
-        return NULL;
-
     char *value_copy = parser_strdup(value, value_length);
     if(value_copy == NULL)
         return NULL;
@@ -746,6 +732,46 @@ inifile_section_store_value(struct ini_section *section,
     }
 
     return kv;
+}
+
+struct ini_key_value_pair *
+inifile_section_store_value(struct ini_section *section,
+                            const char *key, size_t key_length,
+                            const char *value, size_t value_length)
+{
+    log_assert(section != NULL);
+    log_assert(key != NULL);
+    log_assert(value != NULL);
+
+    if(key_length == 0)
+        key_length = strlen(key);
+
+    if(key_length == 0)
+        return NULL;
+
+    if(value_length == 0)
+        value_length = strlen(value);
+
+    if(value_length == 0)
+        return NULL;
+
+    return do_store_value(section, key, key_length, value, value_length);
+}
+
+struct ini_key_value_pair *
+inifile_section_store_empty_value(struct ini_section *section,
+                                  const char *key, size_t key_length)
+{
+    log_assert(section != NULL);
+    log_assert(key != NULL);
+
+    if(key_length == 0)
+        key_length = strlen(key);
+
+    if(key_length == 0)
+        return NULL;
+
+    return do_store_value(section, key, key_length, "", 0);
 }
 
 bool inifile_section_remove_value(struct ini_section *section,

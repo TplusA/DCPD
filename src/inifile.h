@@ -205,11 +205,24 @@ void inifile_free(struct ini_file *inifile);
  * \returns
  *     A structure with zero-terminated copies of key and values, or \c NULL in
  *     case no memory could be allocated.
+ *
+ * \see #inifile_section_store_empty_value()
  */
 struct ini_key_value_pair *
 inifile_section_store_value(struct ini_section *section,
                             const char *key, size_t key_length,
                             const char *value, size_t value_length);
+
+/*!
+ * Store empty value with given key in given section.
+ *
+ * This is just like #inifile_section_store_value(), but specifically intended
+ * for storing an empty value (since the #inifile_section_store_value()
+ * interface does not allow for storing empty values).
+ */
+struct ini_key_value_pair *
+inifile_section_store_empty_value(struct ini_section *section,
+                                  const char *key, size_t key_length);
 
 /*!
  * Remove value with given key from the given section.

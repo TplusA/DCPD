@@ -887,6 +887,41 @@ void test_new_write_ini_file()
 }
 
 /*!\test
+ * It is possible to assign empty values to keys.
+ */
+void test_write_empty_value_to_ini_file()
+{
+    auto *section = inifile_new_section(&ini, "First", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_empty_value(section, "empty", 0));
+
+    section = inifile_new_section(&ini, "Second", 0);
+    cppcut_assert_not_null(section);
+
+    cppcut_assert_not_null(inifile_section_store_value(section, "foo", 0, "bar", 0));
+    cppcut_assert_not_null(inifile_section_store_empty_value(section, "foobar", 0));
+
+    mock_os->expect_os_file_new(expected_os_write_fd, "outfile.config");
+    for(int i = 0; i < 2 * 3 + 3 + 4 + 3; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+
+    cppcut_assert_equal(0, inifile_write_to_file(&ini, "outfile.config"));
+
+    static const char expected_ini_file[] =
+        "[First]\n"
+        "empty = \n"
+        "[Second]\n"
+        "foo = bar\n"
+        "foobar = \n"
+        ;
+
+    cut_assert_equal_memory(expected_ini_file, sizeof(expected_ini_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+/*!\test
  * Parse an INI file, change a few values, write a new INI file containing the
  * changes.
  */
