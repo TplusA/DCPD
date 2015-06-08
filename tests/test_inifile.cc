@@ -156,6 +156,43 @@ void test_parse_from_memory()
 }
 
 /*!\test
+ * Read a file containing an assignment of nothing to some value.
+ */
+void test_parse_empty_value()
+{
+    static const char text[] =
+        "[global]\n"
+        "key 1 =\n"
+        "key 2=\n"
+        "key 3 = \n"
+        "key 4 =     \n"
+        ;
+
+    cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
+    cppcut_assert_not_null(ini.sections_head);
+    cppcut_assert_not_null(ini.sections_tail);
+
+    const auto *section = inifile_find_section(&ini, "global", 0);
+    cppcut_assert_not_null(section);
+
+    const auto *pair = inifile_section_lookup_kv_pair(section, "key 1", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key 2", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key 3", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("", static_cast<const char *>(pair->value));
+
+    pair = inifile_section_lookup_kv_pair(section, "key 4", 0);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("", static_cast<const char *>(pair->value));
+}
+
+/*!\test
  * Attempting to find non-existent keys in a section returns \c NULL pointers.
  */
 void test_lookup_nonexistent_key_in_section_returns_null()
@@ -534,9 +571,6 @@ void test_missing_value_after_assignment_is_detected()
         ;
 
     /* EOL */
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Expected value after equals sign (line 2 in \"test\") (Invalid argument)");
-
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 1));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -544,7 +578,8 @@ void test_missing_value_after_assignment_is_detected()
     cppcut_assert_not_null(section);
 
     const auto *pair = inifile_section_lookup_kv_pair(section, "key", 0);
-    cppcut_assert_null(pair);
+    cppcut_assert_not_null(pair);
+    cppcut_assert_equal("", static_cast<const char *>(pair->value));
 
     pair = inifile_section_lookup_kv_pair(section, "a", 0);
     cppcut_assert_not_null(pair);
@@ -553,9 +588,6 @@ void test_missing_value_after_assignment_is_detected()
     inifile_free(&ini);
 
     /* EOF */
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Expected value after equals sign (line 2 in \"test\") (Invalid argument)");
-
     cppcut_assert_equal(0, inifile_parse_from_memory(&ini, "test", text, sizeof(text) - 8));
     cppcut_assert_not_null(ini.sections_head);
 
@@ -563,7 +595,7 @@ void test_missing_value_after_assignment_is_detected()
     cppcut_assert_not_null(section);
 
     pair = inifile_section_lookup_kv_pair(section, "key", 0);
-    cppcut_assert_null(pair);
+    cppcut_assert_not_null(pair);
 }
 
 /*!\test

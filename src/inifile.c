@@ -322,6 +322,52 @@ static int parse_key_or_value(struct parser_data *data, size_t start_of_token,
     return 0;
 }
 
+static int parse_nonempty_value(struct parser_data *const data,
+                                const size_t start_of_key, const size_t length_of_key)
+{
+    const size_t start_of_value = data->pos;
+
+    enum skip_result skipped = skip_until(data, '\n');
+
+    switch(skipped)
+    {
+      case SKIP_RESULT_EOL:
+        BUG("Unexpected skip result");
+        return 1;
+
+      case SKIP_RESULT_OK:
+      case SKIP_RESULT_EOF:
+        break;
+    }
+
+    size_t length_of_value;
+    if(parse_key_or_value(data, start_of_value, "value", &length_of_value) < 0)
+        return 1;
+
+    struct ini_key_value_pair *kv =
+        inifile_section_store_value(data->current_section,
+                                    data->content + start_of_key,
+                                    length_of_key,
+                                    data->content + start_of_value,
+                                    length_of_value);
+
+    if(skipped == SKIP_RESULT_OK)
+        ++data->line;
+
+    return kv != NULL ? 0 : -1;
+}
+
+static int insert_empty_value_for_key(struct parser_data *const data,
+                                const size_t start_of_key, const size_t length_of_key)
+{
+    struct ini_key_value_pair *kv =
+        inifile_section_store_empty_value(data->current_section,
+                                          data->content + start_of_key,
+                                          length_of_key);
+
+    return kv != NULL ? 0 : -1;
+}
+
 /*!
  * Read key/value pair.
  *
@@ -376,6 +422,7 @@ static int parse_assignment(struct parser_data *data)
     if(parse_key_or_value(data, start_of_key, "key name", &length_of_key) < 0)
         return 1;
 
+    int ret = -1;
 
     switch(skip_spaces(data))
     {
@@ -384,45 +431,15 @@ static int parse_assignment(struct parser_data *data)
         /* fall-through */
 
       case SKIP_RESULT_EOL:
-        msg_error(EINVAL, LOG_ERR,
-                  "Expected value after equals sign" ERROR_LOCATION_FMTSTR,
-                  data->line - 1, data->source);
-        return 0;
+        ret = insert_empty_value_for_key(data, start_of_key, length_of_key);
+        break;
 
       case SKIP_RESULT_OK:
+        ret = parse_nonempty_value(data, start_of_key, length_of_key);
         break;
     }
 
-    const size_t start_of_value = data->pos;
-
-    enum skip_result skipped = skip_until(data, '\n');
-
-    switch(skipped)
-    {
-      case SKIP_RESULT_EOL:
-        BUG("Unexpected skip result");
-        return 1;
-
-      case SKIP_RESULT_OK:
-      case SKIP_RESULT_EOF:
-        break;
-    }
-
-    size_t length_of_value;
-    if(parse_key_or_value(data, start_of_value, "value", &length_of_value) < 0)
-        return 1;
-
-    struct ini_key_value_pair *kv =
-        inifile_section_store_value(data->current_section,
-                                    data->content + start_of_key,
-                                    length_of_key,
-                                    data->content + start_of_value,
-                                    length_of_value);
-
-    if(skipped == SKIP_RESULT_OK)
-        ++data->line;
-
-    return kv != NULL ? 0 : -1;
+    return ret;
 }
 
 /*!
