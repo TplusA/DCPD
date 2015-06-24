@@ -9,31 +9,18 @@
 
 set -eu
 
-if test $# -lt 1 || test $# -gt 3
-then
-    echo "Usage: $0 [host [port]] drcp_code"
+usage()
+{
+    echo "Usage: $0 [host [port]] -- (r|w) drcp_code [drcp data]"
     exit 1
-fi
+}
 
-HOST='localhost'
-PORT='8465'
-
-if test $# -gt 1
+if test $# -lt 3
 then
-    HOST="$1"
-    shift
+    usage
 fi
 
-if test $# -gt 1
-then
-    PORT="$1"
-    shift
-fi
+# patch in the DRCP register
+ARGS="$(echo $@ | sed 's/\(-- [rw]\) \+/\1 72 /')"
 
-CODE="$1"
-
-HEXCODE="$(printf %02x $CODE)"
-HEXCOMMAND="02 48 01 00 $HEXCODE"
-
-echo "Sending '$HEXCOMMAND' to $HOST:$PORT"
-echo "0 $HEXCOMMAND" | xxd -r | nc "$HOST" "$PORT" | hexdump -C
+exec "$(dirname $0)"/send_dcp_command.sh $ARGS
