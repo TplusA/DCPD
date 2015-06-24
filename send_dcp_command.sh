@@ -14,7 +14,7 @@ usage()
     exit 1
 }
 
-if test $# -lt 2
+if test $# -lt 3
 then
     usage
 fi
