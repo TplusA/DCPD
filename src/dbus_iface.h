@@ -25,7 +25,7 @@
 extern "C" {
 #endif
 
-int dbus_setup(bool connect_to_session_bus);
+int dbus_setup(bool connect_to_session_bus, bool with_connman);
 void dbus_shutdown(void);
 
 #ifdef __cplusplus

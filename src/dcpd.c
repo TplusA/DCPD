@@ -765,7 +765,7 @@ int main(int argc, char *argv[])
                   parameters.wlan_interface_mac_address,
                   "/var/lib/connman");
 
-    if(dbus_setup(parameters.connect_to_session_dbus) < 0)
+    if(dbus_setup(parameters.connect_to_session_dbus, true) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;

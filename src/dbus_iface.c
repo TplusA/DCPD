@@ -160,7 +160,7 @@ static void destroy_notification(gpointer data)
 
 static struct dbus_process_data process_data;
 
-int dbus_setup(bool connect_to_session_bus)
+int dbus_setup(bool connect_to_session_bus, bool with_connman)
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();
@@ -183,11 +183,12 @@ int dbus_setup(bool connect_to_session_bus)
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
-    dbus_data_system_bus.owner_id =
-        g_bus_own_name(G_BUS_TYPE_SYSTEM, bus_name,
-                       G_BUS_NAME_OWNER_FLAGS_NONE,
-                       bus_acquired, name_acquired, name_lost,
-                       &dbus_data_system_bus, destroy_notification);
+    if(with_connman || !connect_to_session_bus)
+        dbus_data_system_bus.owner_id =
+            g_bus_own_name(G_BUS_TYPE_SYSTEM, bus_name,
+                           G_BUS_NAME_OWNER_FLAGS_NONE,
+                           bus_acquired, name_acquired, name_lost,
+                           &dbus_data_system_bus, destroy_notification);
 
     if(connect_to_session_bus)
         dbus_data_session_bus.owner_id =
@@ -199,8 +200,8 @@ int dbus_setup(bool connect_to_session_bus)
     log_assert(dbus_data_system_bus.owner_id != 0 ||
                dbus_data_session_bus.owner_id != 0);
 
-    while((dbus_data_system_bus.owner_id == 0 || dbus_data_system_bus.acquired == 0) ||
-          (dbus_data_session_bus.owner_id == 0 || dbus_data_session_bus.acquired == 0))
+    while((dbus_data_system_bus.owner_id != 0 && dbus_data_system_bus.acquired == 0) ||
+          (dbus_data_session_bus.owner_id != 0 && dbus_data_session_bus.acquired == 0))
     {
         /* do whatever has to be done behind the scenes until all of the
          * guaranteed callbacks gets called */
@@ -228,7 +229,9 @@ int dbus_setup(bool connect_to_session_bus)
     log_assert(dcpd_iface_data.views_iface != NULL);
     log_assert(dcpd_iface_data.list_navigation_iface != NULL);
     log_assert(dcpd_iface_data.list_item_iface != NULL);
-    log_assert(connman_iface_data.connman_manager_iface != NULL);
+
+    if(with_connman)
+        log_assert(connman_iface_data.connman_manager_iface != NULL);
 
     process_data.thread = g_thread_new("D-Bus I/O", process_dbus, &process_data);
     if(process_data.thread == NULL)

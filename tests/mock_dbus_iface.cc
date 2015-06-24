@@ -86,6 +86,7 @@ class MockDBusIface::Expectation
     void *const ret_dbus_object_;
     const int ret_code_;
     const bool arg_connect_to_session_bus_;
+    const bool arg_with_connman_;
 
     Expectation(const Expectation &) = delete;
     Expectation &operator=(const Expectation &) = delete;
@@ -94,42 +95,49 @@ class MockDBusIface::Expectation
         function_id_(id),
         ret_dbus_object_(nullptr),
         ret_code_(0),
-        arg_connect_to_session_bus_(false)
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
     {}
 
-    explicit Expectation(DBusFn id, int ret, bool connect_to_session_bus):
+    explicit Expectation(DBusFn id, int ret,
+                         bool connect_to_session_bus, bool with_connman):
         function_id_(id),
         ret_dbus_object_(nullptr),
         ret_code_(ret),
-        arg_connect_to_session_bus_(connect_to_session_bus)
+        arg_connect_to_session_bus_(connect_to_session_bus),
+        arg_with_connman_(with_connman)
     {}
 
     explicit Expectation(tdbusdcpdPlayback *ret_object):
         function_id_(DBusFn::get_playback_iface),
         ret_dbus_object_(static_cast<void *>(ret_object)),
         ret_code_(0),
-        arg_connect_to_session_bus_(false)
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
     {}
 
     explicit Expectation(tdbusdcpdViews *ret_object):
         function_id_(DBusFn::get_views_iface),
         ret_dbus_object_(static_cast<void *>(ret_object)),
         ret_code_(0),
-        arg_connect_to_session_bus_(false)
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
     {}
 
     explicit Expectation(tdbusdcpdListNavigation *ret_object):
         function_id_(DBusFn::get_list_navigation_iface),
         ret_dbus_object_(static_cast<void *>(ret_object)),
         ret_code_(0),
-        arg_connect_to_session_bus_(false)
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
     {}
 
     explicit Expectation(tdbusdcpdListItem *ret_object):
         function_id_(DBusFn::get_list_item_iface),
         ret_dbus_object_(static_cast<void *>(ret_object)),
         ret_code_(0),
-        arg_connect_to_session_bus_(false)
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
     {}
 
     Expectation(Expectation &&) = default;
@@ -159,9 +167,9 @@ void MockDBusIface::check() const
 }
 
 
-void MockDBusIface::expect_dbus_setup(int ret, bool connect_to_session_bus)
+void MockDBusIface::expect_dbus_setup(int ret, bool connect_to_session_bus, bool with_connman)
 {
-    expectations_->add(Expectation(DBusFn::setup, ret, connect_to_session_bus));
+    expectations_->add(Expectation(DBusFn::setup, ret, connect_to_session_bus, with_connman));
 }
 
 void MockDBusIface::expect_dbus_shutdown(void)
@@ -193,12 +201,13 @@ void MockDBusIface::expect_dbus_get_list_item_iface(tdbusdcpdListItem *ret)
 
 MockDBusIface *mock_dbus_iface_singleton = nullptr;
 
-int dbus_setup(bool connect_to_session_bus)
+int dbus_setup(bool connect_to_session_bus, bool with_connman)
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.function_id_, DBusFn::setup);
     cppcut_assert_equal(expect.arg_connect_to_session_bus_, connect_to_session_bus);
+    cppcut_assert_equal(expect.arg_with_connman_, with_connman);
     return expect.ret_code_;
 }
 

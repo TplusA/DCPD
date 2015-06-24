@@ -40,7 +40,7 @@ class MockDBusIface
     void init();
     void check() const;
 
-    void expect_dbus_setup(int ret, bool connect_to_session_bus);
+    void expect_dbus_setup(int ret, bool connect_to_session_bus, bool with_connman);
     void expect_dbus_shutdown(void);
 
     void expect_dbus_get_playback_iface(tdbusdcpdPlayback *);
