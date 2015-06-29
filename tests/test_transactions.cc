@@ -643,7 +643,7 @@ void test_small_master_transaction(void)
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-    static const uint8_t expected_header[] = { 0x03, 71, sizeof(xml_data) - 1U, 0x00 };
+    static const uint8_t expected_header[] = { 0x02, 71, sizeof(xml_data) - 1U, 0x00 };
     cppcut_assert_equal(sizeof(expected_header) + sizeof(xml_data) - 1U,
                         answer_written_to_fifo->size());
     cut_assert_equal_memory(expected_header, sizeof(expected_header),
@@ -720,7 +720,7 @@ void test_big_master_transaction(void)
         const size_t expected_data_size = std::min(bytes_left, max_data_size);
         const uint8_t expected_header[] =
         {
-            0x03, 71,
+            0x02, 71,
             static_cast<uint8_t>(expected_data_size & 0xff),
             static_cast<uint8_t>(expected_data_size >> 8)
         };

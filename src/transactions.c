@@ -186,7 +186,7 @@ bool transaction_set_address_for_master(struct transaction *t,
     if(!transaction_set_register_struct(t, register_address, true))
         return false;
 
-    t->command = DCP_COMMAND_MULTI_READ_REGISTER;
+    t->command = DCP_COMMAND_MULTI_WRITE_REGISTER;
 
     t->request_header[0] = t->command;
     t->request_header[1] = register_address;
@@ -397,17 +397,15 @@ enum transaction_process_status transaction_process(struct transaction *t,
         if(!fill_request_header(t, from_slave_fd))
             break;
 
-        /* fall-through */
-
-      case TRANSACTION_STATE_PUSH_TO_SLAVE:
         if(!allocate_payload_buffer(t))
             break;
 
-        if(t->command == DCP_COMMAND_WRITE_REGISTER ||
-           t->command == DCP_COMMAND_MULTI_WRITE_REGISTER)
+        log_assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER ||
+                   t->command == DCP_COMMAND_READ_REGISTER);
+
+        if(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER)
         {
-            if(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER &&
-               !fill_payload_buffer(t, from_slave_fd))
+            if(!fill_payload_buffer(t, from_slave_fd))
                 break;
 
             t->state = TRANSACTION_STATE_SLAVE_PROCESS_WRITE;
@@ -416,6 +414,16 @@ enum transaction_process_status transaction_process(struct transaction *t,
             t->state = TRANSACTION_STATE_SLAVE_PREPARE_ANSWER;
 
         return TRANSACTION_IN_PROGRESS;
+
+      case TRANSACTION_STATE_PUSH_TO_SLAVE:
+        if(!allocate_payload_buffer(t))
+            break;
+
+        log_assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
+
+        t->state = TRANSACTION_STATE_SLAVE_PREPARE_ANSWER;
+
+        /* fall-through */
 
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
         if(t->reg->read_handler == NULL)
@@ -463,7 +471,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         return TRANSACTION_FINISHED;
 
       case TRANSACTION_STATE_MASTER_PREPARE:
-        if(t->command == DCP_COMMAND_MULTI_READ_REGISTER)
+        if(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER)
             dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
                                 t->payload.pos);
         else
