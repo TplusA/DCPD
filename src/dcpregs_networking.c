@@ -840,6 +840,52 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
     return 0;
 }
 
+ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
+{
+    msg_info("read 50 handler %p %zu", response, length);
+
+    if(data_length_is_unexpected(length, 2))
+        return -1;
+
+    const struct register_configuration_t *config = registers_get_data();
+    struct ConnmanInterfaceData *iface_data =
+        connman_find_active_primary_interface(
+            get_network_iface_data(config)->mac_address_string,
+            config->builtin_ethernet_interface.mac_address_string,
+            config->builtin_wlan_interface.mac_address_string);
+
+    response[0] = 0x00;
+    response[1] = 0x00;
+
+    if(iface_data == NULL)
+        return length;
+
+    char result[2];
+
+    connman_get_ipv4_address_string(iface_data, result, sizeof(result));
+
+    if(result[0] != '\0')
+        response[0] = connman_get_dhcp_mode(iface_data) ? 0x02 : 0x01;
+
+    const enum ConnmanConnectionType ctype = connman_get_connection_type(iface_data);
+
+    switch(ctype)
+    {
+      case CONNMAN_CONNECTION_TYPE_UNKNOWN:
+      case CONNMAN_CONNECTION_TYPE_ETHERNET:
+        response[1] = 0x01;
+        break;
+
+      case CONNMAN_CONNECTION_TYPE_WLAN:
+        response[1] = 0x02;
+        break;
+    }
+
+    connman_free_interface_data(iface_data);
+
+    return length;
+}
+
 ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
 {
     msg_info("read 51 handler %p %zu", response, length);

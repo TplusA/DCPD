@@ -280,6 +280,46 @@ bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
     return retval;
 }
 
+enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data)
+{
+    log_assert(iface_data != NULL);
+
+    GVariant *dict = g_variant_get_child_value((GVariant *)iface_data, 1);
+    GVariant *type_variant =
+        dict != NULL
+        ? g_variant_lookup_value(dict, "Type", G_VARIANT_TYPE_STRING)
+        : NULL;
+
+    if(type_variant == NULL)
+    {
+        msg_error(0, LOG_NOTICE, "No connection type set for network interface");
+
+        if(dict != NULL)
+            g_variant_unref(dict);
+
+        return CONNMAN_CONNECTION_TYPE_UNKNOWN;
+    }
+
+    const char *connection_type = g_variant_get_string(type_variant, NULL);
+
+    enum ConnmanConnectionType retval;
+
+    if(strcmp(connection_type, "ethernet") == 0)
+        retval = CONNMAN_CONNECTION_TYPE_ETHERNET;
+    else if(strcmp(connection_type, "wifi") == 0)
+        retval = CONNMAN_CONNECTION_TYPE_WLAN;
+    else
+    {
+        msg_error(0, LOG_NOTICE, "Unsupported connection type \"%s\"", connection_type);
+        retval = CONNMAN_CONNECTION_TYPE_UNKNOWN;
+    }
+
+    g_variant_unref(type_variant);
+    g_variant_unref(dict);
+
+    return retval;
+}
+
 static void get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
                                       const char *parameter_name,
                                       char *dest, size_t dest_size)

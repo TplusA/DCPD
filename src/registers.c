@@ -83,6 +83,12 @@ static const struct dcp_register_t register_map[] =
         .read_handler = read_37_image_version,
     },
     {
+        /* Network status */
+        .address = 50,
+        .max_data_size = 2,
+        .read_handler = dcpregs_read_50_network_status,
+    },
+    {
         /* MAC address */
         .address = 51,
         .max_data_size = 18,

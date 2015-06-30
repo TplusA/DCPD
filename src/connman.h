@@ -35,6 +35,13 @@ struct ConnmanInterfaceData;
 extern "C" {
 #endif
 
+enum ConnmanConnectionType
+{
+    CONNMAN_CONNECTION_TYPE_UNKNOWN,
+    CONNMAN_CONNECTION_TYPE_ETHERNET,
+    CONNMAN_CONNECTION_TYPE_WLAN,
+};
+
 struct ConnmanInterfaceData *connman_find_interface(const char *mac_address);
 
 struct ConnmanInterfaceData *
@@ -43,6 +50,7 @@ connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wireless_mac_address);
 
 bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data);
+enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
 void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);
 void connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
