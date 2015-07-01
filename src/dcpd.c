@@ -567,8 +567,9 @@ static void main_loop(struct files *files, int register_changed_fd)
     network_sockets.server_fd = network_create_socket();
     network_sockets.peer_fd = -1;
 
-    /* send device status register (17) */
+    /* send device status register (17) and network status register (50) */
     push_register_to_slave(17);
+    push_register_to_slave(50);
 
     msg_info("Ready for accepting traffic");
 
