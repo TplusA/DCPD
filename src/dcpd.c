@@ -469,8 +469,7 @@ static void handle_register_change(unsigned int wait_result, int fd,
 }
 
 static void handle_network_connection(unsigned int wait_result,
-                                      struct network_socket_pair *sockets,
-                                      struct state *state)
+                                      struct network_socket_pair *sockets)
 {
     if((wait_result & (WAITEVENT_CAN_READ_FROM_SERVER_SOCKET |
                        WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET |
@@ -594,7 +593,7 @@ static void main_loop(struct files *files, int register_changed_fd)
         }
 
         handle_register_change(wait_result, register_changed_fd, &state);
-        handle_network_connection(wait_result, &network_sockets, &state);
+        handle_network_connection(wait_result, &network_sockets);
 
         try_dequeue_next_transaction(&state);
 
