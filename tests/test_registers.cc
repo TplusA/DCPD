@@ -528,7 +528,7 @@ void cut_setup(void)
     os_write_buffer.clear();
 
     dcpregs_networking_init();
-    register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman");
+    register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman", NULL);
 }
 
 void cut_teardown(void)
@@ -597,7 +597,7 @@ void test_read_mac_address(void)
  */
 void test_read_mac_address_default(void)
 {
-    register_init(NULL, NULL, NULL);
+    register_init(NULL, NULL, NULL, NULL);
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,

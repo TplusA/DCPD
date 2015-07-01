@@ -25,6 +25,7 @@
 
 #include "dbus_iface.h"
 #include "dbus_iface_deep.h"
+#include "dbus_handlers.h"
 #include "dcpd_dbus.h"
 #include "connman_dbus.h"
 #include "messages.h"
@@ -231,7 +232,12 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     log_assert(dcpd_iface_data.list_item_iface != NULL);
 
     if(with_connman)
+    {
         log_assert(connman_iface_data.connman_manager_iface != NULL);
+
+        g_signal_connect(connman_iface_data.connman_manager_iface, "g-signal",
+                         G_CALLBACK(dbussignal_connman_manager), NULL);
+    }
 
     process_data.thread = g_thread_new("D-Bus I/O", process_dbus, &process_data);
     if(process_data.thread == NULL)

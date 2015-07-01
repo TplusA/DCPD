@@ -221,7 +221,8 @@ static void copy_mac_address(char *dest, size_t dest_size, const char *src)
 
 void register_init(const char *ethernet_mac_address,
                    const char *wlan_mac_address,
-                   const char *connman_config_path)
+                   const char *connman_config_path,
+                   void (*register_changed_callback)(uint8_t reg_number))
 {
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
@@ -247,6 +248,7 @@ void register_init(const char *ethernet_mac_address,
 
     config->active_interface = NULL;
     config->connman_config_path = connman_config_path;
+    config->register_changed_notification_fn = register_changed_callback;
 }
 
 const struct dcp_register_t *register_lookup(uint8_t register_number)

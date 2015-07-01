@@ -858,7 +858,8 @@ int main(int argc, char *argv[])
 
     register_init(parameters.ethernet_interface_mac_address,
                   parameters.wlan_interface_mac_address,
-                  "/var/lib/connman");
+                  "/var/lib/connman",
+                  push_register_to_slave);
 
     if(dbus_setup(parameters.connect_to_session_dbus, true) < 0)
     {

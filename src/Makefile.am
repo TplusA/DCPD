@@ -27,7 +27,7 @@ dcpd_SOURCES = \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networking.h \
     connman.c connman.h \
-    dbus_iface.c dbus_iface.h dbus_iface_deep.h
+    dbus_iface.c dbus_iface.h dbus_iface_deep.h dbus_handlers.h
 
 AM_CFLAGS = $(CWARNINGS)
 
@@ -39,6 +39,7 @@ noinst_LTLIBRARIES = \
     libregisters.la \
     libinifile.la \
     libdrcpdcomm.la \
+    libdbus_handlers.la \
     libdcpd_dbus.la \
     libconnman_dbus.la
 
@@ -58,6 +59,9 @@ libregisters_la_CFLAGS = $(AM_CFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
+
+libdbus_handlers_la_SOURCES = dbus_handlers.c dbus_handlers.h dcpregs_networking.h
+libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)

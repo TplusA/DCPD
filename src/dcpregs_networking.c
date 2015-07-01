@@ -129,9 +129,27 @@ static struct
 }
 nwconfig_write_data;
 
+/*!
+ * Network status register data.
+ */
+static struct
+{
+    /*!
+     * The status last communicated to the slave device.
+     *
+     * Status changes are only sent to the slave if the information represented
+     * by the status register actually changed.
+     */
+    uint8_t previous_response[2];
+}
+nwstatus_data;
+
 void dcpregs_networking_init(void)
 {
     nwconfig_write_data.selected_interface = NULL;
+
+    nwstatus_data.previous_response[0] = UINT8_MAX;
+    nwstatus_data.previous_response[1] = UINT8_MAX;
 }
 
 struct config_filename_template
@@ -840,13 +858,8 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
     return 0;
 }
 
-ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
+static void fill_network_status_register_response(uint8_t response[static 2])
 {
-    msg_info("read 50 handler %p %zu", response, length);
-
-    if(data_length_is_unexpected(length, 2))
-        return -1;
-
     const struct register_configuration_t *config = registers_get_data();
     struct ConnmanInterfaceData *iface_data =
         connman_find_active_primary_interface(
@@ -858,7 +871,7 @@ ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
     response[1] = 0x00;
 
     if(iface_data == NULL)
-        return length;
+        return;
 
     char result[2];
 
@@ -882,6 +895,17 @@ ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
     }
 
     connman_free_interface_data(iface_data);
+}
+
+ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
+{
+    msg_info("read 50 handler %p %zu", response, length);
+
+    if(data_length_is_unexpected(length, 2))
+        return -1;
+
+    fill_network_status_register_response(response);
+    memcpy(nwstatus_data.previous_response, response, sizeof(nwstatus_data.previous_response));
 
     return length;
 }
@@ -1424,4 +1448,14 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
     nwconfig_write_data.requested_changes |= REQ_WLAN_WPA_PASSPHRASE_102;
 
     return 0;
+}
+
+void dcpregs_networking_interfaces_changed(void)
+{
+    uint8_t response[sizeof(nwstatus_data.previous_response)];
+
+    fill_network_status_register_response(response);
+
+    if(memcmp(nwstatus_data.previous_response, response, sizeof(response)) != 0)
+        registers_get_data()->register_changed_notification_fn(50);
 }

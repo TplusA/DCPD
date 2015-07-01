@@ -60,7 +60,8 @@ extern "C" {
  */
 void register_init(const char *ethernet_mac_address,
                    const char *wlan_mac_address,
-                   const char *connman_config_path);
+                   const char *connman_config_path,
+                   void (*register_changed_callback)(uint8_t reg_number));
 
 /*!
  * Find register structure by register number (address).
