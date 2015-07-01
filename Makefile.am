@@ -32,6 +32,13 @@ EXTRA_DIST += \
     dbus_interfaces/de_tahifi_dcpd.xml \
     dbus_interfaces/net_connman.xml
 
+BUILT_SOURCES = versioninfo.h
+
+CLEANFILES += $(BUILT_SOURCES)
+
+versioninfo.h: versioninfo.cache
+	(cd $(top_srcdir) && $(AUTOREVISION) -t h -o $(abs_top_builddir)/versioninfo.cache >$(abs_top_builddir)/$@)
+
 .md.html:
 	$(MARKDOWN) $< >$@
 

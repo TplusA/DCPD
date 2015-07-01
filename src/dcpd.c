@@ -36,6 +36,7 @@
 #include "dbus_iface.h"
 #include "registers.h"
 #include "os.h"
+#include "versioninfo.h"
 
 /* generic events */
 #define WAITEVENT_POLL_ERROR                            (1U << 0)
@@ -114,6 +115,23 @@ static volatile bool keep_running = true;
  * The read end is passed as parameter to #main_loop().
  */
 static int register_changed_write_fd;
+
+static void show_version_info(void)
+{
+    printf("%s\n"
+           "Revision %s%s\n"
+           "         %s+%d, %s\n",
+           PACKAGE_STRING,
+           VCS_FULL_HASH, VCS_WC_MODIFIED ? " (tained)" : "",
+           VCS_TAG, VCS_TICK, VCS_DATE);
+}
+
+static void log_version_info(void)
+{
+    msg_info("Rev %s%s, %s+%d, %s",
+             VCS_FULL_HASH, VCS_WC_MODIFIED ? " (tained)" : "",
+             VCS_TAG, VCS_TICK, VCS_DATE);
+}
 
 static void schedule_transaction(struct state *state, struct transaction *t)
 {
@@ -664,6 +682,8 @@ static int setup(const struct parameters *parameters, struct files *files,
         }
     }
 
+    log_version_info();
+
     msg_info("Attempting to open named pipes");
 
     files->dcpspi_fifo.in_fd =
@@ -729,6 +749,7 @@ static void usage(const char *program_name)
            "\n"
            "Options:\n"
            "  --help         Show this help.\n"
+           "  --version      Print version information to stdout.\n"
            "  --fg           Run in foreground, don't run as daemon.\n"
            "  --ethernet-mac MAC address of built-in Ethernet interface (mandatory).\n"
            "  --wlan-mac     MAC address of built-in W-LAN interface.\n"
@@ -769,6 +790,8 @@ static int process_command_line(int argc, char *argv[],
     {
         if(strcmp(argv[i], "--help") == 0)
             return 1;
+        else if(strcmp(argv[i], "--version") == 0)
+            return 2;
         else if(strcmp(argv[i], "--fg") == 0)
             parameters->run_in_foreground = true;
         else if(strcmp(argv[i], "--ispi") == 0)
@@ -841,6 +864,11 @@ int main(int argc, char *argv[])
     else if(ret == 1)
     {
         usage(argv[0]);
+        return EXIT_SUCCESS;
+    }
+    else if(ret == 2)
+    {
+        show_version_info();
         return EXIT_SUCCESS;
     }
 
