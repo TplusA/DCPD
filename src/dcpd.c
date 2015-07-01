@@ -698,7 +698,6 @@ static int setup(const struct parameters *parameters, struct files *files,
 
     return 0;
 
-error_daemon:
 error_pipe_to_self:
     fifo_close(&files->dcpspi_fifo.out_fd);
 
@@ -711,6 +710,7 @@ error_drcp_fifo_out:
 error_drcp_fifo_in:
     fifo_close(&files->dcpspi_fifo.in_fd);
 
+error_daemon:
 error_dcpspi_fifo_in:
     return -1;
 }
