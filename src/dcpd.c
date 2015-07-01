@@ -52,6 +52,9 @@
 #define WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET         (1U << 7)
 #define WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED       (1U << 8)
 
+/* internal events */
+#define WAITEVENT_REGISTER_CHANGED                      (1U << 9)
+
 /*!
  * Global state of the DCP machinery.
  */
@@ -103,6 +106,14 @@ ssize_t (*os_write)(int fd, const void *buf, size_t count) = write;
  * For clean shutdown.
  */
 static volatile bool keep_running = true;
+
+/*!
+ * Global write end of pipe to self for communicating back register changes
+ * from others contexts.
+ *
+ * The read end is passed as parameter to #main_loop().
+ */
+static int register_changed_write_fd;
 
 static void schedule_transaction(struct state *state, struct transaction *t)
 {
@@ -183,6 +194,21 @@ static unsigned int handle_dcp_fifo_out_events(int fd, short revents)
     return result;
 }
 
+static unsigned int handle_register_events(int fd, short revents)
+{
+    unsigned int result = 0;
+
+    if(revents & POLLIN)
+        result |= WAITEVENT_REGISTER_CHANGED;
+
+    if(revents & ~POLLIN)
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on internal socket fd %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
 static unsigned int handle_network_server_events(int fd, short revents)
 {
     unsigned int result = 0;
@@ -228,6 +254,7 @@ static unsigned int wait_for_events(struct state *state,
                                     const int dcpspi_fifo_in_fd,
                                     const int server_socket_fd,
                                     const int peer_socket_fd,
+                                    const int register_changed_fd,
                                     bool do_block)
 {
     struct pollfd fds[] =
@@ -246,6 +273,10 @@ static unsigned int wait_for_events(struct state *state,
         },
         {
             .fd = peer_socket_fd,
+            .events = POLLIN,
+        },
+        {
+            .fd = register_changed_fd,
             .events = POLLIN,
         },
     };
@@ -269,6 +300,7 @@ static unsigned int wait_for_events(struct state *state,
     return_value |= handle_dcp_fifo_out_events(drcp_fifo_in_fd,    fds[1].revents);
     return_value |= handle_network_server_events(server_socket_fd, fds[2].revents);
     return_value |= handle_network_peer_events(peer_socket_fd,     fds[3].revents, state);
+    return_value |= handle_register_events(register_changed_fd,    fds[4].revents);
 
     return return_value;
 }
@@ -413,6 +445,29 @@ static bool handle_reopen_connections(unsigned int wait_result,
     return true;
 }
 
+static void handle_register_change(unsigned int wait_result, int fd,
+                                   struct state *state)
+{
+    if((wait_result & WAITEVENT_REGISTER_CHANGED) == 0)
+        return;
+
+    ssize_t ret;
+    uint8_t reg_number;
+
+    while((ret = read(fd, &reg_number, sizeof(reg_number))) < 0 && errno == EINTR)
+        ;
+
+    if(ret < 0)
+        msg_error(errno, LOG_ERR, "Failed dequeuing register number");
+    else if(ret != sizeof(reg_number))
+        msg_error(0, LOG_ERR,
+                  "Read %zd bytes instead of 1 while trying to dequeue register number",
+                  ret);
+    else
+        transaction_push_register_to_slave(&state->master_transaction_queue,
+                                           reg_number, TRANSACTION_CHANNEL_SPI);
+}
+
 static void handle_network_connection(unsigned int wait_result,
                                       struct network_socket_pair *sockets,
                                       struct state *state)
@@ -458,9 +513,29 @@ static void handle_network_connection(unsigned int wait_result,
 }
 
 /*!
+ * Callback from network status register implementation.
+ *
+ * In case some register has changed, push it to the slave device.
+ */
+static void push_register_to_slave(uint8_t reg_number)
+{
+    ssize_t ret;
+
+    while((ret = write(register_changed_write_fd, &reg_number, sizeof(reg_number))) < 0 && errno == EINTR)
+        ;
+
+    if(ret < 0)
+        msg_error(errno, LOG_ERR, "Failed queuing change of register %u", reg_number);
+    else if(ret != sizeof(reg_number))
+        msg_error(0, LOG_ERR,
+                  "Wrote %zd bytes instead of 1 while trying to queue change of register %u",
+                  ret, reg_number);
+}
+
+/*!
  * Process DCP.
  */
-static void main_loop(struct files *files)
+static void main_loop(struct files *files, int register_changed_fd)
 {
     static struct state state;
 
@@ -476,9 +551,7 @@ static void main_loop(struct files *files)
     network_sockets.peer_fd = -1;
 
     /* send device status register (17) */
-    transaction_push_register_to_slave(&state.master_transaction_queue,
-                                       17, TRANSACTION_CHANNEL_SPI);
-    try_dequeue_next_transaction(&state);
+    push_register_to_slave(17);
 
     msg_info("Ready for accepting traffic");
 
@@ -488,6 +561,7 @@ static void main_loop(struct files *files)
             wait_for_events(&state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             network_sockets.server_fd, network_sockets.peer_fd,
+                            register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
 
         if((wait_result & WAITEVENT_POLL_ERROR) != 0)
@@ -519,6 +593,7 @@ static void main_loop(struct files *files)
             continue;
         }
 
+        handle_register_change(wait_result, register_changed_fd, &state);
         handle_network_connection(wait_result, &network_sockets, &state);
 
         try_dequeue_next_transaction(&state);
@@ -573,7 +648,8 @@ struct parameters
 /*!
  * Open devices, daemonize.
  */
-static int setup(const struct parameters *parameters, struct files *files)
+static int setup(const struct parameters *parameters, struct files *files,
+                 int *reg_changed_read_fd)
 {
     msg_enable_syslog(!parameters->run_in_foreground);
 
@@ -611,9 +687,20 @@ static int setup(const struct parameters *parameters, struct files *files)
     if(files->dcpspi_fifo.out_fd < 0)
         goto error_dcpspi_fifo_out;
 
+    int fds[2];
+    if(pipe(fds) < 0)
+    {
+        msg_error(errno, LOG_ERR, "Failed creating pipe");
+        goto error_pipe_to_self;
+    }
+
+    *reg_changed_read_fd = fds[0];
+    register_changed_write_fd = fds[1];
+
     return 0;
 
 error_daemon:
+error_pipe_to_self:
     fifo_close(&files->dcpspi_fifo.out_fd);
 
 error_dcpspi_fifo_out:
@@ -758,7 +845,16 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
-    if(setup(&parameters, &files) < 0)
+    /*!
+     * File descriptor from which register changes can be read.
+     *
+     * The fd is supposed to be read byte by byte. Each byte corresponds to a
+     * register that has changed and whose content should be pushed to the
+     * slave.
+     */
+    int register_changed_fd;
+
+    if(setup(&parameters, &files, &register_changed_fd) < 0)
         return EXIT_FAILURE;
 
     register_init(parameters.ethernet_interface_mac_address,
@@ -783,7 +879,7 @@ int main(int argc, char *argv[])
 
     transaction_init_allocator();
 
-    main_loop(&files);
+    main_loop(&files, register_changed_fd);
 
     msg_info("Shutting down");
 
