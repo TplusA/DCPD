@@ -2622,4 +2622,287 @@ void test_get_wpa_cipher_returns_aes(void)
 
 };
 
+namespace spi_registers_misc
+{
+
+static MockMessages *mock_messages;
+static MockOs *mock_os;
+
+static constexpr char expected_config_filename[] = "/etc/os-release";
+
+static constexpr int expected_os_map_file_to_memory_fd = 5;
+
+void cut_setup(void)
+{
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
+
+    register_init(NULL, NULL, NULL, NULL);
+}
+
+void cut_teardown(void)
+{
+    mock_messages->check();
+    mock_os->check();
+
+    mock_messages_singleton = nullptr;
+    mock_os_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_os;
+
+    mock_messages = nullptr;
+    mock_os = nullptr;
+}
+
+/*!\test
+ * Register 37 cannot be written to.
+ */
+void test_dcp_register_37_has_no_write_handler()
+{
+    const auto *reg = register_lookup(37);
+
+    cppcut_assert_not_null(reg);
+    cppcut_assert_equal(37U, unsigned(reg->address));
+    cut_assert(reg->read_handler != NULL);
+    cut_assert(reg->write_handler == NULL);
+}
+
+static void do_test_read_image_version(const os_mapped_file_data &config_file,
+                                       size_t dest_buffer_size,
+                                       const char *expected_build_id,
+                                       size_t expected_build_id_size)
+{
+    char expected_build_id_memory[dest_buffer_size];
+    memset(expected_build_id_memory, 0, dest_buffer_size);
+
+    if(expected_build_id_size > 1)
+        memcpy(expected_build_id_memory, expected_build_id, expected_build_id_size - 1);
+
+    uint8_t redzone_content[10];
+    memset(redzone_content, 0xff, sizeof(redzone_content));
+
+    uint8_t buffer[sizeof(redzone_content) + dest_buffer_size + sizeof(redzone_content)];
+    memset(buffer, 0xff, sizeof(buffer));
+
+    auto *reg = register_lookup(37);
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+    mock_messages->expect_msg_info("read 37 handler %p %zu");
+
+    cppcut_assert_equal(ssize_t(expected_build_id_size),
+                        reg->read_handler(buffer + sizeof(redzone_content),
+                                          sizeof(buffer) - 2 * sizeof(redzone_content)));
+
+    cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
+                            sizeof(redzone_content));
+    cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
+                            buffer + sizeof(redzone_content) + dest_buffer_size,
+                            sizeof(redzone_content));
+    cut_assert_equal_memory(expected_build_id_memory, dest_buffer_size,
+                            buffer + sizeof(redzone_content),
+                            dest_buffer_size);
+}
+
+/*!\test
+ * Realistic test with real-life configuration data.
+ */
+void test_read_image_version()
+{
+    static char config_file_buffer[] =
+        "ID=strbo\n"
+        "NAME=StrBo (T+A Streaming Board)\n"
+        "VERSION=1.0.0\n"
+        "VERSION_ID=1.0.0\n"
+        "PRETTY_NAME=StrBo (T+A Streaming Board) 1.0.0\n"
+        "BUILD_ID=20150708122013\n"
+        "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "20150708122013";
+
+    do_test_read_image_version(config_file, 20,
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * Build ID can be read if it appears in the first line of the config file.
+ */
+void test_read_image_version_with_build_id_in_first_line()
+{
+    static char config_file_buffer[] =
+        "BUILD_ID=20150708122013\n"
+        "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "20150708122013";
+
+    do_test_read_image_version(config_file, 20,
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * Build ID can be read if it appears in the last line of the config file.
+ */
+void test_read_image_version_with_build_id_in_last_line()
+{
+    static char config_file_buffer[] =
+        "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n"
+        "BUILD_ID=20150708122013\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "20150708122013";
+
+    do_test_read_image_version(config_file, 20,
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * Build ID can be read if it appears in the last line of the config file, even
+ * if not terminated with a newline character.
+ */
+void test_read_image_version_with_build_id_in_last_line_without_newline()
+{
+    static char config_file_buffer[] =
+        "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n"
+        "BUILD_ID=20150708122013";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "20150708122013";
+
+    do_test_read_image_version(config_file, 20,
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * Very short build IDs are returned correctly.
+ */
+void test_read_image_version_with_single_character_build_id()
+{
+    static char config_file_buffer[] = "BUILD_ID=X\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "X";
+
+    do_test_read_image_version(config_file, 20,
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * The empty build ID is returned correctly.
+ */
+void test_read_image_version_with_empty_build_id()
+{
+    static char config_file_buffer[] = "BUILD_ID=\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "";
+
+    do_test_read_image_version(config_file, 20,
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * No buffer overflow for long build ID vs small buffer.
+ */
+void test_read_image_version_with_small_buffer()
+{
+    static char config_file_buffer[] = "BUILD_ID=20150708122013\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "2015070";
+
+    do_test_read_image_version(config_file, sizeof(expected_build_id),
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * No buffer overflow for long build ID vs single byte buffer.
+ */
+void test_read_image_version_with_very_small_buffer()
+{
+    static char config_file_buffer[] = "BUILD_ID=20150708122013\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_build_id[] = "";
+
+    do_test_read_image_version(config_file, sizeof(expected_build_id),
+                               expected_build_id, sizeof(expected_build_id));
+}
+
+/*!\test
+ * No buffer overflow for long build ID vs no buffer.
+ */
+void test_read_image_version_with_zero_size_buffer()
+{
+    static char config_file_buffer[] = "BUILD_ID=20150708122013\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    do_test_read_image_version(config_file, 0, NULL, 0);
+}
+
+};
+
 /*!@}*/

@@ -47,20 +47,65 @@ static ssize_t read_17_device_status(uint8_t *response, size_t length)
     return length;
 }
 
+static size_t skip_to_eol(const char *str, size_t len, size_t offset)
+{
+    while(offset < len && str[offset] != '\n')
+        ++offset;
+
+    return offset;
+}
 static ssize_t read_37_image_version(uint8_t *response, size_t length)
 {
     msg_info("read 37 handler %p %zu", response, length);
 
-    /*
-     * FIXME: Hard-coded, wrong version string for testing purposes.
-     */
-    static const char image_version[] = "1234";
+    static const char osrelease_filename[] = "/etc/os-release";
+    static const char key[] = "BUILD_ID=";
 
-    if(sizeof(image_version) < length)
-        length = sizeof(image_version);
+    struct os_mapped_file_data f;
+    if(os_map_file_to_memory(&f, osrelease_filename) < 0)
+        return -1;
 
-    memcpy(response, image_version, length);
-    return length;
+    const char *const content = f.ptr;
+    bool ok = false;
+
+    for(size_t i = 0; i < f.length; ++i)
+    {
+        const size_t remaining = f.length - i;
+
+        if(remaining < sizeof(key) - 1)
+            break;
+
+        if(memcmp(key, content + i, sizeof(key) - 1) == 0)
+        {
+            i += sizeof(key) - 1;
+
+            const size_t id_length = skip_to_eol(content, f.length, i) - i;
+            const size_t bytes_to_fill =
+                length > id_length + 1 ? id_length + 1 : length;
+
+            if(bytes_to_fill > 0)
+            {
+                memcpy(response, content + i, bytes_to_fill - 1);
+                memset(response + bytes_to_fill - 1, 0, length - bytes_to_fill + 1);
+            }
+            else if(length > 0)
+                memset(response, 0, length);
+
+            ok = true;
+            length = bytes_to_fill;
+
+            break;
+        }
+
+        i = skip_to_eol(content, f.length, i);
+    }
+
+    os_unmap_file(&f);
+
+    if(!ok)
+        msg_error(0, LOG_ERR, "No BUILD_ID in %s", osrelease_filename);
+
+    return ok ? (ssize_t)length : -1;
 }
 
 /*!
