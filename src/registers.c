@@ -83,6 +83,17 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
             const size_t bytes_to_fill =
                 length > id_length + 1 ? id_length + 1 : length;
 
+            if(length <= id_length)
+            {
+                if(length > 0)
+                    msg_error(0, LOG_NOTICE,
+                              "Truncating build ID of length %zu to %zu characters",
+                              id_length, length - 1);
+                else
+                    msg_error(0, LOG_NOTICE,
+                              "Cannot copy build ID to zero length buffer");
+            }
+
             if(bytes_to_fill > 0)
             {
                 memcpy(response, content + i, bytes_to_fill - 1);

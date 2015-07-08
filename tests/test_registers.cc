@@ -2678,7 +2678,8 @@ void test_dcp_register_37_has_no_write_handler()
 static void do_test_read_image_version(const os_mapped_file_data &config_file,
                                        size_t dest_buffer_size,
                                        const char *expected_build_id,
-                                       size_t expected_build_id_size)
+                                       size_t expected_build_id_size,
+                                       const char *expected_warning = nullptr)
 {
     char expected_build_id_memory[dest_buffer_size];
     memset(expected_build_id_memory, 0, dest_buffer_size);
@@ -2697,6 +2698,9 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
     mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
     mock_messages->expect_msg_info("read 37 handler %p %zu");
+
+    if(expected_warning != nullptr)
+        mock_messages->expect_msg_error_formatted(0, LOG_NOTICE, expected_warning);
 
     cppcut_assert_equal(ssize_t(expected_build_id_size),
                         reg->read_handler(buffer + sizeof(redzone_content),
@@ -2863,7 +2867,8 @@ void test_read_image_version_with_small_buffer()
     static const char expected_build_id[] = "2015070";
 
     do_test_read_image_version(config_file, sizeof(expected_build_id),
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_build_id, sizeof(expected_build_id),
+                               "Truncating build ID of length 14 to 7 characters");
 }
 
 /*!\test
@@ -2883,7 +2888,8 @@ void test_read_image_version_with_very_small_buffer()
     static const char expected_build_id[] = "";
 
     do_test_read_image_version(config_file, sizeof(expected_build_id),
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_build_id, sizeof(expected_build_id),
+                               "Truncating build ID of length 14 to 0 characters");
 }
 
 /*!\test
@@ -2900,7 +2906,8 @@ void test_read_image_version_with_zero_size_buffer()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    do_test_read_image_version(config_file, 0, NULL, 0);
+    do_test_read_image_version(config_file, 0, NULL, 0,
+                               "Cannot copy build ID to zero length buffer");
 }
 
 };
