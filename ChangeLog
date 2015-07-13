@@ -1,3 +1,14 @@
+2015-07-13  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.1 released.
+
+	* Implement reading of network status register (register 50).
+	  Also, status changes are automatically sent to the slave.
+
+	* Implement reading software image build ID (register 37).
+
+	* Show version information in log, add --version option.
+
 2015-06-29  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.0 released.
