@@ -32,6 +32,7 @@
 
 #include "dcpregs_drcp.h"
 #include "dcpregs_networking.h"
+#include "dcpregs_filetransfer.h"
 #include "registers_priv.h"
 
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
@@ -137,6 +138,23 @@ static const struct dcp_register_t register_map[] =
         .address = 37,
         .max_data_size = 20,
         .read_handler = read_37_image_version,
+    },
+    {
+        /* File transfer host control register (HCR) */
+        .address = 40,
+        .max_data_size = 2,
+        .write_handler = dcpregs_write_40_download_control,
+    },
+    {
+        /* File transfer status register (HCR-STATUS) */
+        .address = 41,
+        .max_data_size = 2,
+        .read_handler = dcpregs_read_41_download_status,
+    },
+    {
+        /* Send file via XMODEM to host controller */
+        .address = 44,
+        .max_data_size = 256,
     },
     {
         /* Network status */
@@ -251,6 +269,12 @@ static const struct dcp_register_t register_map[] =
         .max_data_size = 64,
         .write_handler = dcpregs_write_102_passphrase,
         .read_handler = dcpregs_read_102_passphrase,
+    },
+    {
+        /* File transfer CRC mode, encryption mode, URL */
+        .address = 209,
+        .max_data_size = 8 + 1024,
+        .write_handler = dcpregs_write_209_download_url,
     },
 };
 
