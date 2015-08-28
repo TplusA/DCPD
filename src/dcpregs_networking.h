@@ -77,6 +77,12 @@ int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length);
 int dcpregs_write_102_passphrase(const uint8_t *data, size_t length);
 
+/*!
+ * Report change of networking interfaces.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
+ */
 void dcpregs_networking_interfaces_changed(void);
 
 #ifdef __cplusplus
