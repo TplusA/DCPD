@@ -22,6 +22,8 @@
 #include <stdint.h>
 #include <unistd.h>
 
+#include "de_tahifi_lists_errors.h"
+
 /*!
  * \addtogroup registers
  */
@@ -31,9 +33,39 @@
 extern "C" {
 #endif
 
+/*!
+ * Function required by unit tests for initializing static data.
+ */
+void dcpregs_filetransfer_init(void);
+
+/*!
+ * Function required by unit tests for freeing static data.
+ */
+void dcpregs_filetransfer_deinit(void);
+
 int dcpregs_write_40_download_control(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length);
 int dcpregs_write_209_download_url(const uint8_t *data, size_t length);
+
+/*!
+ * Report download progress.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
+ */
+void dcpregs_filetransfer_progress_notification(uint32_t xfer_id,
+                                                uint32_t tick,
+                                                uint32_t total_ticks);
+
+/*!
+ * Report download finished.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
+ */
+void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
+                                            enum DBusListsErrorCode error,
+                                            const char *path);
 
 #ifdef __cplusplus
 }

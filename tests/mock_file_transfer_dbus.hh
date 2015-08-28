@@ -16,40 +16,32 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MOCK_DBUS_IFACE_HH
-#define MOCK_DBUS_IFACE_HH
+#ifndef MOCK_FILE_TRANSFER_DBUS_HH
+#define MOCK_FILE_TRANSFER_DBUS_HH
 
-#include "dbus_iface_deep.h"
+#include "dbusdl_dbus.h"
 #include "mock_expectation.hh"
 
-class MockDBusIface
+class MockFileTransferDBus
 {
   public:
-    MockDBusIface(const MockDBusIface &) = delete;
-    MockDBusIface &operator=(const MockDBusIface &) = delete;
+    MockFileTransferDBus(const MockFileTransferDBus &) = delete;
+    MockFileTransferDBus &operator=(const MockFileTransferDBus &) = delete;
 
     class Expectation;
     typedef MockExpectationsTemplate<Expectation> MockExpectations;
     MockExpectations *expectations_;
 
-    bool ignore_all_;
-
-    explicit MockDBusIface();
-    ~MockDBusIface();
+    explicit MockFileTransferDBus();
+    ~MockFileTransferDBus();
 
     void init();
     void check() const;
 
-    void expect_dbus_setup(int ret, bool connect_to_session_bus, bool with_connman);
-    void expect_dbus_shutdown(void);
-
-    void expect_dbus_get_playback_iface(tdbusdcpdPlayback *);
-    void expect_dbus_get_views_iface(tdbusdcpdViews *);
-    void expect_dbus_get_list_navigation_iface(tdbusdcpdListNavigation *);
-    void expect_dbus_get_list_item_iface(tdbusdcpdListItem *);
-    void expect_dbus_get_file_transfer_iface(tdbusFileTransfer *);
+    void expect_tdbus_file_transfer_call_download_sync(gboolean retval, guint ret_id, tdbusFileTransfer *object, const gchar *url, guint ticks);
+    void expect_tdbus_file_transfer_call_cancel_sync(gboolean retval, tdbusFileTransfer *object, guint arg_id);
 };
 
-extern MockDBusIface *mock_dbus_iface_singleton;
+extern MockFileTransferDBus *mock_file_transfer_dbus_singleton;
 
-#endif /* !MOCK_DBUS_IFACE_HH */
+#endif /* !MOCK_FILE_TRANSFER_DBUS_HH */

@@ -25,6 +25,7 @@
 
 #include "dbus_handlers.h"
 #include "dcpregs_networking.h"
+#include "dcpregs_filetransfer.h"
 #include "messages.h"
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
@@ -84,10 +85,46 @@ void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
     if(strcmp(signal_name, "Progress") == 0)
     {
         check_parameter_assertions(parameters, 3);
+
+        GVariant *val = g_variant_get_child_value(parameters, 0);
+        uint32_t xfer_id = g_variant_get_uint32(val);
+        g_variant_unref(val);
+
+        val = g_variant_get_child_value(parameters, 1);
+        uint32_t tick = g_variant_get_uint32(val);
+        g_variant_unref(val);
+
+        val = g_variant_get_child_value(parameters, 2);
+        uint32_t total_ticks = g_variant_get_uint32(val);
+        g_variant_unref(val);
+
+        dcpregs_filetransfer_progress_notification(xfer_id, tick, total_ticks);
     }
     else if(strcmp(signal_name, "Done") == 0)
     {
         check_parameter_assertions(parameters, 3);
+
+        GVariant *val = g_variant_get_child_value(parameters, 0);
+        uint32_t xfer_id = g_variant_get_uint32(val);
+        g_variant_unref(val);
+
+        val = g_variant_get_child_value(parameters, 1);
+        uint8_t error_code_raw = g_variant_get_byte(val);
+        g_variant_unref(val);
+
+        val = g_variant_get_child_value(parameters, 2);
+        gsize path_length;
+        const gchar *path = g_variant_get_string(val, &path_length);
+
+        enum DBusListsErrorCode error_code =
+            (error_code_raw <= LIST_ERROR_LAST_ERROR_CODE
+             ? (enum DBusListsErrorCode)error_code_raw
+             : LIST_ERROR_INTERNAL);
+
+        dcpregs_filetransfer_done_notification(xfer_id, error_code,
+                                               path_length > 0 ? path : NULL);
+
+        g_variant_unref(val);
     }
     else
         unknown_signal(iface_name, signal_name, sender_name);

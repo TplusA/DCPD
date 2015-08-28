@@ -848,6 +848,7 @@ void cut_teardown(void)
     inifile_free(&ini);
 
     os_write_buffer.clear();
+    os_write_buffer.shrink_to_fit();
 
     mock_messages->check();
     mock_os->check();

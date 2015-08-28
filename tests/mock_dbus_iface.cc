@@ -32,9 +32,10 @@ enum class DBusFn
     get_views_iface,
     get_list_navigation_iface,
     get_list_item_iface,
+    get_file_transfer_iface,
 
     first_valid_dbus_fn_id = setup,
-    last_valid_dbus_fn_id = get_list_item_iface,
+    last_valid_dbus_fn_id = get_file_transfer_iface,
 };
 
 static std::ostream &operator<<(std::ostream &os, const DBusFn id)
@@ -70,6 +71,10 @@ static std::ostream &operator<<(std::ostream &os, const DBusFn id)
 
       case DBusFn::get_list_item_iface:
         os << "get_list_item_iface";
+        break;
+
+      case DBusFn::get_file_transfer_iface:
+        os << "get_file_transfer_iface";
         break;
     }
 
@@ -140,6 +145,14 @@ class MockDBusIface::Expectation
         arg_with_connman_(false)
     {}
 
+    explicit Expectation(tdbusFileTransfer *ret_object):
+        function_id_(DBusFn::get_file_transfer_iface),
+        ret_dbus_object_(static_cast<void *>(ret_object)),
+        ret_code_(0),
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
+    {}
+
     Expectation(Expectation &&) = default;
 };
 
@@ -198,6 +211,11 @@ void MockDBusIface::expect_dbus_get_list_item_iface(tdbusdcpdListItem *ret)
     expectations_->add(Expectation(ret));
 }
 
+void MockDBusIface::expect_dbus_get_file_transfer_iface(tdbusFileTransfer *ret)
+{
+    expectations_->add(Expectation(ret));
+}
+
 
 MockDBusIface *mock_dbus_iface_singleton = nullptr;
 
@@ -248,4 +266,12 @@ tdbusdcpdListItem *dbus_get_list_item_iface(void)
 
     cppcut_assert_equal(expect.function_id_, DBusFn::get_list_item_iface);
     return static_cast<tdbusdcpdListItem *>(expect.ret_dbus_object_);
+}
+
+tdbusFileTransfer *dbus_get_file_transfer_iface(void)
+{
+    const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.function_id_, DBusFn::get_file_transfer_iface);
+    return static_cast<tdbusFileTransfer *>(expect.ret_dbus_object_);
 }

@@ -25,7 +25,7 @@ dcpd_SOURCES = \
     network.c network.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
-    dcpregs_drcp.h dcpregs_networking.h dcpregs_filetransfer.h \
+    dcpregs_drcp.h dcpregs_networking.h dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     connman.c connman.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h dbus_handlers.h
 
@@ -58,7 +58,9 @@ libregisters_la_SOURCES = \
     registers.c registers.h registers_priv.h \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_networking.c dcpregs_networking.h \
-    dcpregs_filetransfer.c dcpregs_filetransfer.h dbusdl_dbus.h \
+    dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
+    dbusdl_dbus.h \
+    $(DBUS_IFACES)/de_tahifi_lists_errors.h \
     drcp_command_codes.h messages.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 

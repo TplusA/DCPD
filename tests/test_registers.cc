@@ -28,9 +28,12 @@
 #include "registers_priv.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_networking.h"
+#include "dcpregs_filetransfer.h"
+#include "dcpregs_filetransfer_priv.h"
 #include "drcp_command_codes.h"
 
 #include "mock_dcpd_dbus.hh"
+#include "mock_file_transfer_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
 #include "mock_messages.hh"
@@ -43,6 +46,20 @@
  * SPI registers unit tests.
  */
 /*!@{*/
+
+static const struct dcp_register_t *
+lookup_register_expect_handlers(uint8_t register_number,
+                                ssize_t (*const expected_read_handler)(uint8_t *, size_t),
+                                int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    const struct dcp_register_t *reg = register_lookup(register_number);
+    cppcut_assert_not_null(reg);
+
+    cut_assert(reg->read_handler == expected_read_handler);
+    cut_assert(reg->write_handler == expected_write_handler);
+
+    return reg;
+}
 
 namespace spi_registers_tests
 {
@@ -541,6 +558,7 @@ void cut_setup(void)
 void cut_teardown(void)
 {
     os_write_buffer.clear();
+    os_write_buffer.shrink_to_fit();
 
     mock_messages->check();
     mock_os->check();
@@ -557,20 +575,6 @@ void cut_teardown(void)
     mock_messages = nullptr;
     mock_os = nullptr;
     mock_connman = nullptr;
-}
-
-static const struct dcp_register_t *
-lookup_register_expect_handlers(uint8_t register_number,
-                                ssize_t (*const expected_read_handler)(uint8_t *, size_t),
-                                int (*const expected_write_handler)(const uint8_t *, size_t))
-{
-    const struct dcp_register_t *reg = register_lookup(register_number);
-    cppcut_assert_not_null(reg);
-
-    cut_assert(reg->read_handler == expected_read_handler);
-    cut_assert(reg->write_handler == expected_write_handler);
-
-    return reg;
 }
 
 /*!\test
@@ -2625,6 +2629,400 @@ void test_get_wpa_cipher_returns_aes(void)
     uint8_t response[8];
     cppcut_assert_equal(ssize_t(4), reg->read_handler(response, sizeof(response)));
     cppcut_assert_equal("AES", static_cast<const char *>(static_cast<const void *>(response)));
+}
+
+};
+
+namespace spi_registers_file_transfer
+{
+
+static MockMessages *mock_messages;
+static MockOs *mock_os;
+static MockFileTransferDBus *mock_file_transfer_dbus;
+static MockDBusIface *mock_dbus_iface;
+
+static tdbusFileTransfer *const dbus_dcpd_file_transfer_iface_dummy =
+    reinterpret_cast<tdbusFileTransfer *>(0x55990011);
+
+class RegisterChangedNotificationData
+{
+  private:
+    bool was_called_;
+    bool is_expected_;
+    uint8_t expected_register_;
+
+  public:
+    RegisterChangedNotificationData(const RegisterChangedNotificationData &) = delete;
+    RegisterChangedNotificationData &operator=(const RegisterChangedNotificationData &) = delete;
+
+    explicit RegisterChangedNotificationData() { init(); }
+
+    void init() { expect(0); }
+
+    void expect(uint8_t reg_number)
+    {
+        was_called_ = false;
+        is_expected_ = (reg_number > 0);
+        expected_register_ = reg_number;
+    }
+
+    void check(uint8_t reg_number)
+    {
+        was_called_ = true;
+        cut_assert_true(is_expected_);
+        cppcut_assert_equal(expected_register_, reg_number);
+    }
+
+    void check()
+    {
+        cppcut_assert_equal(is_expected_, was_called_);
+        init();
+    }
+};
+
+static RegisterChangedNotificationData register_changed_notification_data;
+
+static void register_changed_notification(uint8_t reg_number)
+{
+    register_changed_notification_data.check(reg_number);
+}
+
+void cut_setup(void)
+{
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
+
+    mock_file_transfer_dbus = new MockFileTransferDBus;
+    cppcut_assert_not_null(mock_file_transfer_dbus);
+    mock_file_transfer_dbus->init();
+    mock_file_transfer_dbus_singleton = mock_file_transfer_dbus;
+
+    mock_dbus_iface = new MockDBusIface;
+    cppcut_assert_not_null(mock_dbus_iface);
+    mock_dbus_iface->init();
+    mock_dbus_iface_singleton = mock_dbus_iface;
+
+    register_changed_notification_data.init();
+
+    dcpregs_filetransfer_init();
+    register_init(NULL, NULL, NULL, register_changed_notification);
+}
+
+void cut_teardown(void)
+{
+    register_changed_notification_data.check();
+
+    mock_messages->check();
+    mock_os->check();
+    mock_file_transfer_dbus->check();
+    mock_dbus_iface->check();
+
+    mock_messages_singleton = nullptr;
+    mock_os_singleton = nullptr;
+    mock_file_transfer_dbus_singleton = nullptr;
+    mock_dbus_iface_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_os;
+    delete mock_file_transfer_dbus;
+    delete mock_dbus_iface;
+
+    mock_messages = nullptr;
+    mock_os = nullptr;
+    mock_file_transfer_dbus = nullptr;
+    mock_dbus_iface = nullptr;
+
+    dcpregs_filetransfer_deinit();
+}
+
+/*!\test
+ * Download URL buffer size must be within a certain range.
+ */
+void test_download_url_length_restrictions()
+{
+    auto *reg =
+        lookup_register_expect_handlers(209, NULL,
+                                        dcpregs_write_209_download_url);
+
+    uint8_t url_buffer[8 + 1024 + 1];
+
+    memset(url_buffer, 'x', sizeof(url_buffer));
+    url_buffer[0] = HCR_FILE_TRANSFER_CRC_MODE_NONE;
+    url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info("Cleared URL");
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, 0));
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 1 (expected 9...1032) (Invalid argument)");
+    cppcut_assert_equal(-1, reg->write_handler(url_buffer, 1));
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 8 (expected 9...1032) (Invalid argument)");
+    cppcut_assert_equal(-1, reg->write_handler(url_buffer, 8));
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Set URL \"x\"");
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, 9));
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 1033 (expected 9...1032) (Invalid argument)");
+    cppcut_assert_equal(-1, reg->write_handler(url_buffer, sizeof(url_buffer)));
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info("Set URL \"%s\"");
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer) - 1));
+}
+
+static void start_download(const std::string &url, uint32_t download_id)
+{
+    uint8_t url_buffer[8 + url.length()];
+
+    memset(url_buffer, 0, 8);
+    url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
+    memcpy(url_buffer + 8, url.c_str(), url.length());
+
+    auto *reg =
+        lookup_register_expect_handlers(209, NULL,
+                                        dcpregs_write_209_download_url);
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info("Set URL \"%s\"");
+
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, 8 + url.length()));
+
+    static constexpr uint8_t hcr_command[] =
+        { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD };
+
+    reg = lookup_register_expect_handlers(40, NULL,
+                                          dcpregs_write_40_download_control);
+    mock_messages->expect_msg_info("write 40 handler %p %zu");
+    mock_messages->expect_msg_info("Download started, transfer ID %u");
+    mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
+    mock_file_transfer_dbus->expect_tdbus_file_transfer_call_download_sync(
+        TRUE, download_id, dbus_dcpd_file_transfer_iface_dummy, url.c_str(), 20);
+
+    cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
+}
+
+static void cancel_download(uint32_t download_id)
+{
+    auto *reg =
+        lookup_register_expect_handlers(209, NULL,
+                                        dcpregs_write_209_download_url);
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info("Cleared URL");
+    mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
+    mock_file_transfer_dbus->expect_tdbus_file_transfer_call_cancel_sync(
+        TRUE, dbus_dcpd_file_transfer_iface_dummy, download_id);
+
+    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+
+}
+
+/*!\test
+ * Request to download a URL triggers a D-Bus message to D-Bus DL.
+ */
+void test_download_url()
+{
+    start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 5);
+}
+
+/*!\test
+ * Request to download without setting the URL is an error.
+ */
+void test_download_without_url_returns_error()
+{
+    static constexpr uint8_t hcr_command[] =
+    {
+        HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE,
+        HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD
+    };
+
+    auto *reg =
+        lookup_register_expect_handlers(40, NULL,
+                                        dcpregs_write_40_download_control);
+
+    mock_messages->expect_msg_info("write 40 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE,
+                                              "Download URL not configured (Invalid argument)");
+
+    cppcut_assert_equal(-1, reg->write_handler(hcr_command, sizeof(hcr_command)));
+}
+
+static void get_download_status(uint8_t (&buffer)[2])
+{
+    auto *reg =
+        lookup_register_expect_handlers(41, dcpregs_read_41_download_status,
+                                        NULL);
+
+    mock_messages->expect_msg_info("read 41 handler %p %zu");
+    cppcut_assert_equal(static_cast<ssize_t>(sizeof(buffer)),
+                        reg->read_handler(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Reading out the download status when idle yields plain OK code.
+ */
+void test_download_status_while_not_downloading_is_OK_code()
+{
+    uint8_t buffer[2];
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer[] =
+        { HCR_STATUS_CATEGORY_GENERIC, HCR_STATUS_GENERIC_OK };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            buffer, sizeof(buffer));
+}
+
+/*!\test
+ * Reading out the download status while download is in progress yields
+ * progress percentage.
+ */
+void test_download_status_during_download_is_percentage()
+{
+    static constexpr uint32_t xfer_id = 3;
+    start_download("http://download.something.com/file", xfer_id);
+
+    uint8_t buffer[2];
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_1[] =
+        { HCR_STATUS_CATEGORY_PROGRESS, 0 };
+    cut_assert_equal_memory(expected_answer_1, sizeof(expected_answer_1),
+                            buffer, sizeof(buffer));
+
+    /* simulate D-Bus DL progress report */
+    register_changed_notification_data.expect(41);
+    dcpregs_filetransfer_progress_notification(xfer_id, 10, 20);
+    register_changed_notification_data.check();
+
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_2[] =
+        { HCR_STATUS_CATEGORY_PROGRESS, 50 };
+    cut_assert_equal_memory(expected_answer_2, sizeof(expected_answer_2),
+                            buffer, sizeof(buffer));
+}
+
+/*!\test
+ * Reading out the download status after successful download yields download
+ * status code OK.
+ */
+void test_download_status_after_successful_download_is_status_code()
+{
+    static constexpr uint32_t xfer_id = 7;
+    start_download("https://updates.server.com/file", xfer_id);
+
+    uint8_t buffer[2];
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_1[] =
+        { HCR_STATUS_CATEGORY_PROGRESS, 0 };
+    cut_assert_equal_memory(expected_answer_1, sizeof(expected_answer_1),
+                            buffer, sizeof(buffer));
+
+    /* simulate D-Bus DL progress report */
+    register_changed_notification_data.expect(41);
+    dcpregs_filetransfer_progress_notification(xfer_id, 100, 100);
+    register_changed_notification_data.check();
+
+    /* progress 100% */
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_2[] =
+        { HCR_STATUS_CATEGORY_PROGRESS, 100 };
+    cut_assert_equal_memory(expected_answer_2, sizeof(expected_answer_2),
+                            buffer, sizeof(buffer));
+
+    /* simulate D-Bus DL done report */
+    register_changed_notification_data.expect(41);
+    dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_OK,
+                                           "/some/path/0000000007.dbusdl");
+    register_changed_notification_data.check();
+
+    /* Download OK status */
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_3[] =
+        { HCR_STATUS_CATEGORY_DOWNLOAD, HCR_STATUS_DOWNLOAD_OK };
+    cut_assert_equal_memory(expected_answer_3, sizeof(expected_answer_3),
+                            buffer, sizeof(buffer));
+
+    /* Reading out the status again yields the same answer */
+    get_download_status(buffer);
+    cut_assert_equal_memory(expected_answer_3, sizeof(expected_answer_3),
+                            buffer, sizeof(buffer));
+}
+
+/*!\test
+ * Reading out the download status after failed download yields appropriate
+ * download status code.
+ */
+void test_download_status_after_failed_download_is_status_code()
+{
+    static constexpr uint32_t xfer_id = 15;
+    start_download("https://does.not.exist/file", xfer_id);
+
+    uint8_t buffer[2];
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_1[] =
+        { HCR_STATUS_CATEGORY_PROGRESS, 0 };
+    cut_assert_equal_memory(expected_answer_1, sizeof(expected_answer_1),
+                            buffer, sizeof(buffer));
+
+    /* simulate D-Bus DL done report with error */
+    register_changed_notification_data.expect(41);
+    dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_NET_IO, NULL);
+    register_changed_notification_data.check();
+
+    /* No network connection status */
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_2[] =
+        { HCR_STATUS_CATEGORY_DOWNLOAD, HCR_STATUS_DOWNLOAD_NETWORK_ERROR };
+    cut_assert_equal_memory(expected_answer_2, sizeof(expected_answer_2),
+                            buffer, sizeof(buffer));
+
+    /* Reading out the status again yields the same answer */
+    get_download_status(buffer);
+    cut_assert_equal_memory(expected_answer_2, sizeof(expected_answer_2),
+                            buffer, sizeof(buffer));
+}
+
+/*!\test
+ * Reading out the download status after canceling a download yields generic OK
+ * status code.
+ */
+void test_cancel_download_resets_download_status()
+{
+    static constexpr uint32_t xfer_id = 23;
+    start_download("ftp://short.com/f", xfer_id);
+
+    uint8_t buffer[2];
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_1[] =
+        { HCR_STATUS_CATEGORY_PROGRESS, 0 };
+    cut_assert_equal_memory(expected_answer_1, sizeof(expected_answer_1),
+                            buffer, sizeof(buffer));
+
+    cancel_download(xfer_id);
+
+    get_download_status(buffer);
+
+    static constexpr uint8_t expected_answer_2[] =
+        { HCR_STATUS_CATEGORY_GENERIC, HCR_STATUS_GENERIC_OK };
+    cut_assert_equal_memory(expected_answer_2, sizeof(expected_answer_2),
+                            buffer, sizeof(buffer));
 }
 
 };
