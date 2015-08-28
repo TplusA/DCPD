@@ -29,9 +29,12 @@ dcpd_SOURCES = \
     connman.c connman.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h dbus_handlers.h
 
+DBUS_IFACES = $(top_srcdir)/dbus_interfaces
+
 AM_CFLAGS = $(CWARNINGS)
 
 AM_CPPFLAGS = $(DCPD_DEPENDENCIES_CFLAGS)
+AM_CPPFLAGS += -I$(DBUS_IFACES)
 
 noinst_LTLIBRARIES = \
     libtransactions.la \
@@ -88,8 +91,6 @@ BUILT_SOURCES = \
     connman_dbus.stamp
 
 CLEANFILES = $(BUILT_SOURCES)
-
-DBUS_IFACES = $(top_srcdir)/dbus_interfaces
 
 de_tahifi_dcpd.h: dcpd_dbus.stamp
 de_tahifi_dcpd.md: dcpd_dbus.stamp
