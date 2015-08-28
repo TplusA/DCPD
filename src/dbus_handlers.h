@@ -34,6 +34,10 @@ extern "C" {
 void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                                 const gchar *signal_name, GVariant *parameters,
                                 gpointer user_data);
+void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
+                              const gchar *signal_name, GVariant *parameters,
+                              gpointer user_data);
+
 
 #ifdef __cplusplus
 }

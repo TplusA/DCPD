@@ -30,6 +30,7 @@ CLEANFILES = README.html
 EXTRA_DIST += \
     dbus_interfaces/extract_documentation.py \
     dbus_interfaces/de_tahifi_dcpd.xml \
+    dbus_interfaces/de_tahifi_filetransfer.xml \
     dbus_interfaces/net_connman.xml
 
 BUILT_SOURCES = versioninfo.h

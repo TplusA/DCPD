@@ -72,3 +72,23 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
     else
         unknown_signal(iface_name, signal_name, sender_name);
 }
+
+void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
+                              const gchar *signal_name, GVariant *parameters,
+                              gpointer user_data)
+{
+    static const char iface_name[] = "de.tahifi.FileTransfer";
+
+    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
+
+    if(strcmp(signal_name, "Progress") == 0)
+    {
+        check_parameter_assertions(parameters, 3);
+    }
+    else if(strcmp(signal_name, "Done") == 0)
+    {
+        check_parameter_assertions(parameters, 3);
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
+}

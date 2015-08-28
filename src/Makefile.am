@@ -44,6 +44,7 @@ noinst_LTLIBRARIES = \
     libdrcpdcomm.la \
     libdbus_handlers.la \
     libdcpd_dbus.la \
+    libdbusdl_dbus.la \
     libconnman_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
@@ -57,7 +58,7 @@ libregisters_la_SOURCES = \
     registers.c registers.h registers_priv.h \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_networking.c dcpregs_networking.h \
-    dcpregs_filetransfer.c dcpregs_filetransfer.h \
+    dcpregs_filetransfer.c dcpregs_filetransfer.h dbusdl_dbus.h \
     drcp_command_codes.h messages.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 
@@ -73,6 +74,9 @@ libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libconnman_dbus_la_SOURCES = connman_dbus.c connman_dbus.h
 libconnman_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libdbusdl_dbus_la_SOURCES = dbusdl_dbus.c dbusdl_dbus.h
+libdbusdl_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 libdrcpdcomm_la_SOURCES = drcp.c drcp.h named_pipe.h dynamic_buffer.h messages.h
 libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 
@@ -86,6 +90,10 @@ BUILT_SOURCES = \
     de_tahifi_dcpd.h \
     de_tahifi_dcpd.md \
     dcpd_dbus.stamp \
+    $(nodist_libdbusdl_dbus_la_SOURCES) \
+    de_tahifi_dbusdl.h \
+    de_tahifi_dbusdl.md \
+    dbusdl_dbus.stamp \
     $(nodist_libconnman_dbus_la_SOURCES) \
     net_connman.h \
     net_connman.md \
@@ -100,6 +108,15 @@ dcpd_dbus.h: dcpd_dbus.stamp
 dcpd_dbus.stamp: $(DBUS_IFACES)/de_tahifi_dcpd.xml
 	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix de.tahifi.Dcpd. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dcpd.md -H de_tahifi_dcpd.h -c tdbus_dcpd -s de.tahifi.Dcpd. -n "$(PACKAGE_NAME)"
+	touch $@
+
+de_tahifi_dbusdl.h: dbusdl_dbus.stamp
+de_tahifi_dbusdl.md: dbusdl_dbus.stamp
+dbusdl_dbus.c: dbusdl_dbus.stamp
+dbusdl_dbus.h: dbusdl_dbus.stamp
+dbusdl_dbus.stamp: $(DBUS_IFACES)/de_tahifi_filetransfer.xml
+	$(GDBUS_CODEGEN) --generate-c-code=dbusdl_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dbusdl.md -H de_tahifi_dbusdl.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME)"
 	touch $@
 
 net_connman.h: connman_dbus.stamp

@@ -60,6 +60,13 @@ dcpd_iface_data;
 
 static struct
 {
+    bool connect_to_session_bus;
+    tdbusFileTransfer *iface;
+}
+filetransfer_iface_data;
+
+static struct
+{
     tdbusconnmanManager *connman_manager_iface;
 }
 connman_iface_data;
@@ -131,6 +138,18 @@ static void name_acquired(GDBusConnection *connection,
              name, is_session_bus ? "session" : "system");
     data->acquired = 1;
 
+    if(is_session_bus == filetransfer_iface_data.connect_to_session_bus)
+    {
+        GError *error = NULL;
+
+        filetransfer_iface_data.iface =
+            tdbus_file_transfer_proxy_new_sync(connection,
+                                               G_DBUS_PROXY_FLAGS_NONE,
+                                               "de.tahifi.DBusDL", "/de/tahifi/DBusDL",
+                                               NULL, &error);
+        (void)handle_dbus_error(&error);
+    }
+
     if(!is_session_bus)
     {
         /* Connman is always on system bus */
@@ -170,6 +189,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     memset(&dbus_data_system_bus, 0, sizeof(dbus_data_system_bus));
     memset(&dbus_data_session_bus, 0, sizeof(dbus_data_session_bus));
     memset(&dcpd_iface_data, 0, sizeof(dcpd_iface_data));
+    memset(&filetransfer_iface_data, 0, sizeof(filetransfer_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&process_data, 0, sizeof(process_data));
 
@@ -181,6 +201,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     }
 
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
+    filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
@@ -230,6 +251,10 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     log_assert(dcpd_iface_data.views_iface != NULL);
     log_assert(dcpd_iface_data.list_navigation_iface != NULL);
     log_assert(dcpd_iface_data.list_item_iface != NULL);
+    log_assert(filetransfer_iface_data.iface != NULL);
+
+    g_signal_connect(filetransfer_iface_data.iface, "g-signal",
+                     G_CALLBACK(dbussignal_file_transfer), NULL);
 
     if(with_connman)
     {
@@ -269,6 +294,8 @@ void dbus_shutdown(void)
     g_object_unref(dcpd_iface_data.list_navigation_iface);
     g_object_unref(dcpd_iface_data.list_item_iface);
 
+    g_object_unref(filetransfer_iface_data.iface);
+
     if(connman_iface_data.connman_manager_iface != NULL)
         g_object_unref(connman_iface_data.connman_manager_iface);
 
@@ -293,6 +320,11 @@ tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void)
 tdbusdcpdListItem *dbus_get_list_item_iface(void)
 {
     return dcpd_iface_data.list_item_iface;
+}
+
+tdbusFileTransfer *dbus_get_file_transfer_iface(void)
+{
+    return filetransfer_iface_data.iface;
 }
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)
