@@ -49,6 +49,15 @@ void msg_error(int error_code, int priority, const char *error_format, ...)
 void msg_info(const char *format_string, ...)
     __attribute__ ((format (printf, 1, 2)));
 
+/*!
+ * Emit standard log message about out of memory condition.
+ *
+ * \returns
+ *     Always -1 so that it is possible to emit the message and return an
+ *     error in one line of code.
+ */
+int msg_out_of_memory(const char *what);
+
 #ifdef __cplusplus
 }
 #endif

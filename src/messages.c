@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "messages.h"
 
@@ -71,4 +72,10 @@ void msg_info(const char *format_string, ...)
     va_start(va, format_string);
     show_message(0, LOG_INFO, format_string, va);
     va_end(va);
+}
+
+int msg_out_of_memory(const char *what)
+{
+    msg_error(ENOMEM, LOG_EMERG, "Failed allocating memory for %s", what);
+    return -1;
 }
