@@ -45,6 +45,8 @@ void dcpregs_filetransfer_deinit(void);
 
 int dcpregs_write_40_download_control(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length);
+ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length);
+int dcpregs_write_45_xmodem_command(const uint8_t *data, size_t length);
 int dcpregs_write_209_download_url(const uint8_t *data, size_t length);
 
 /*!

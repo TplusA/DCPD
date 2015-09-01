@@ -59,7 +59,11 @@ test_registers_la_SOURCES = \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
-test_registers_la_LIBADD = $(top_builddir)/src/libregisters.la $(top_builddir)/src/libdynamic_buffer.la $(top_builddir)/src/libinifile.la
+test_registers_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libdynamic_buffer.la \
+    $(top_builddir)/src/libinifile.la \
+    $(top_builddir)/src/libxmodem.la
 test_registers_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 test_registers_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
 

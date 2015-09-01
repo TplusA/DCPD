@@ -66,11 +66,11 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 23> existing_registers =
+static const std::array<uint8_t, 24> existing_registers =
 {
     17,
     37,
-    40, 41, 44,
+    40, 41, 44, 45,
     50, 51, 53, 54, 55, 56, 57, 58,
     62, 63,
     71, 72,

@@ -152,9 +152,16 @@ static const struct dcp_register_t register_map[] =
         .read_handler = dcpregs_read_41_download_status,
     },
     {
-        /* Send file via XMODEM to host controller */
+        /* Send XMODEM block to host controller */
         .address = 44,
-        .max_data_size = 256,
+        .max_data_size = 3 + 128 + 2,
+        .read_handler = dcpregs_read_44_xmodem_data,
+    },
+    {
+        /* XMODEM channel from host controller */
+        .address = 45,
+        .max_data_size = 1,
+        .write_handler = dcpregs_write_45_xmodem_command,
     },
     {
         /* Network status */
