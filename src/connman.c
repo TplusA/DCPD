@@ -43,11 +43,15 @@ static int handle_dbus_error(GError **error)
 static GVariant *query_services(void)
 {
     GVariant *result = NULL;
-    GError *error = NULL;
+    tdbusconnmanManager *iface = dbus_get_connman_manager_iface();
 
-    tdbus_connman_manager_call_get_services_sync(dbus_get_connman_manager_iface(),
-                                                 &result, NULL, &error);
-    (void)handle_dbus_error(&error);
+    if(iface != NULL)
+    {
+        GError *error = NULL;
+        tdbus_connman_manager_call_get_services_sync(iface,
+                                                     &result, NULL, &error);
+        (void)handle_dbus_error(&error);
+    }
 
     return result;
 }
