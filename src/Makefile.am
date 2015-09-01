@@ -42,6 +42,7 @@ noinst_LTLIBRARIES = \
     libregisters.la \
     libinifile.la \
     libdrcpdcomm.la \
+    libxmodem.la \
     libdbus_handlers.la \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
@@ -86,6 +87,9 @@ libtransactions_la_SOURCES = \
     transactions.c transactions.h os.h \
     dynamic_buffer.h registers.h named_pipe.h dcpdefs.h messages.h
 libtransactions_la_CFLAGS = $(AM_CFLAGS)
+
+libxmodem_la_SOURCES = xmodem.c xmodem.h crc16.h os.h
+libxmodem_la_CFLAGS = $(AM_CFLAGS)
 
 BUILT_SOURCES = \
     $(nodist_libdcpd_dbus_la_SOURCES) \
