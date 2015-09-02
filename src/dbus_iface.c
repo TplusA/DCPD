@@ -36,9 +36,6 @@ struct dbus_data
     int acquired;
 };
 
-/*!
- * \todo Is this whole threading thing really needed?
- */
 struct dbus_process_data
 {
     GThread *thread;
