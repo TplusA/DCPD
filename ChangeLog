@@ -1,3 +1,16 @@
+2015-09-03  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.2 released.
+
+	* Download files: Initial implementation of downloading files from the
+	  internet using registers 40, 41, and 209. Requires D-Bus DL daemon.
+
+	* XMODEM: Initial implementation of file transfers via XMODEM protocol
+	  over DCP (registers 40, 41, 44, and 45). After a file that has been
+	  downloaded by D-Bus DL, it's contents can be read by the SPI slave.
+
+	* Misc: Various cosmetic changes.
+
 2015-07-13  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.1 released.
