@@ -32,7 +32,7 @@
 #include "network.h"
 #include "messages.h"
 
-int network_create_socket(void)
+int network_create_socket(uint16_t port, int backlog)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -45,7 +45,7 @@ int network_create_socket(void)
     struct sockaddr_in addr =
     {
         .sin_family = AF_INET,
-        .sin_port = htons(8465),        /* "TA", meaning T + A */
+        .sin_port = htons(port),
         .sin_addr =
         {
             .s_addr = INADDR_ANY,
@@ -60,10 +60,7 @@ int network_create_socket(void)
         return -1;
     }
 
-    /* could use SOMAXCONN instead of the tiny value used here, but this
-     * connection is only for internal testing and is most probably not going
-     * to be heavily loaded */
-    if(listen(fd, 4) < 0)
+    if(listen(fd, backlog) < 0)
     {
         msg_error(errno, LOG_CRIT, "Failed to listen on socket fd %d", fd);
         network_close(&fd);

@@ -22,6 +22,7 @@ bin_PROGRAMS = dcpd
 
 dcpd_SOURCES = \
     dcpd.c os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
+    dcp_over_tcp.c dcp_over_tcp.h \
     network.c network.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \

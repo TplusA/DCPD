@@ -28,7 +28,7 @@
 #include <errno.h>
 
 #include "named_pipe.h"
-#include "network.h"
+#include "dcp_over_tcp.h"
 #include "messages.h"
 #include "transactions.h"
 #include "dynamic_buffer.h"
@@ -420,7 +420,7 @@ static bool try_reopen(int *fd, const char *devname, const char *errorname)
 }
 
 static void terminate_active_transaction(struct state *state,
-                                         int *network_peer_fd)
+                                         struct dcp_over_tcp_data *dot)
 {
     switch(transaction_get_channel(state->active_transaction))
     {
@@ -428,7 +428,7 @@ static void terminate_active_transaction(struct state *state,
         break;
 
       case TRANSACTION_CHANNEL_INET:
-        network_close(network_peer_fd);
+        dot_close_peer(dot);
         break;
     }
 
@@ -440,7 +440,7 @@ static void terminate_active_transaction(struct state *state,
 
 static bool handle_reopen_connections(unsigned int wait_result,
                                       struct files *files,
-                                      struct network_socket_pair *network,
+                                      struct dcp_over_tcp_data *dot,
                                       struct state *state)
 {
     if((wait_result & (WAITEVENT_DRCP_CONNECTION_DIED |
@@ -448,7 +448,7 @@ static bool handle_reopen_connections(unsigned int wait_result,
         return true;
 
     if(state->active_transaction != NULL)
-        terminate_active_transaction(state, &network->peer_fd);
+        terminate_active_transaction(state, dot);
 
     if((wait_result & WAITEVENT_DRCP_CONNECTION_DIED) != 0 &&
        !try_reopen(&files->drcp_fifo.in_fd, files->drcp_fifo_in_name,
@@ -486,49 +486,6 @@ static void handle_register_change(unsigned int wait_result, int fd,
                                            reg_number, TRANSACTION_CHANNEL_SPI);
 }
 
-static void handle_network_connection(unsigned int wait_result,
-                                      struct network_socket_pair *sockets)
-{
-    if((wait_result & (WAITEVENT_CAN_READ_FROM_SERVER_SOCKET |
-                       WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET |
-                       WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED)) == 0)
-        return;
-
-    if((wait_result & WAITEVENT_CAN_READ_FROM_SERVER_SOCKET) != 0)
-    {
-        int peer_fd = network_accept_peer_connection(sockets->server_fd);
-
-        if(peer_fd >= 0)
-        {
-            if(sockets->peer_fd >= 0)
-            {
-                network_close(&peer_fd);
-                msg_info("Rejected peer connection, only single connection supported");
-            }
-            else
-            {
-                sockets->peer_fd = peer_fd;
-                msg_info("Accepted peer connection, fd %d", sockets->peer_fd);
-            }
-        }
-    }
-
-    if((wait_result & WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET) != 0)
-    {
-        log_assert(sockets->peer_fd >= 0);
-        msg_info("DCP over TCP/IP");
-    }
-
-    if((wait_result & WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED) != 0)
-    {
-        if(sockets->peer_fd >= 0)
-        {
-            msg_info("Peer disconnected");
-            network_close(&sockets->peer_fd);
-        }
-    }
-}
-
 /*!
  * Callback from network status register implementation.
  *
@@ -562,10 +519,8 @@ static void main_loop(struct files *files, int register_changed_fd)
         transaction_alloc(true, TRANSACTION_CHANNEL_INET, true);
     dynamic_buffer_init(&state.drcp_buffer);
 
-    static struct network_socket_pair network_sockets;
-
-    network_sockets.server_fd = network_create_socket();
-    network_sockets.peer_fd = -1;
+    static struct dcp_over_tcp_data dot;
+    (void)dot_init(&dot);
 
     /* send device status register (17) and network status register (50) */
     push_register_to_slave(17);
@@ -578,7 +533,7 @@ static void main_loop(struct files *files, int register_changed_fd)
         const unsigned int wait_result =
             wait_for_events(&state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
-                            network_sockets.server_fd, network_sockets.peer_fd,
+                            dot.server_fd, dot.peer_fd,
                             register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
 
@@ -605,14 +560,20 @@ static void main_loop(struct files *files, int register_changed_fd)
             }
         }
 
-        if(!handle_reopen_connections(wait_result, files, &network_sockets, &state))
+        if(!handle_reopen_connections(wait_result, files, &dot, &state))
         {
             keep_running = false;
             continue;
         }
 
         handle_register_change(wait_result, register_changed_fd, &state);
-        handle_network_connection(wait_result, &network_sockets);
+
+        if((wait_result & WAITEVENT_CAN_READ_FROM_SERVER_SOCKET) != 0)
+            dot_handle_incoming(&dot);
+
+        dot_handle_outgoing(&dot,
+                            (wait_result & WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET) != 0,
+                            (wait_result & WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED) != 0);
 
         try_dequeue_next_transaction(&state);
 
@@ -630,8 +591,8 @@ static void main_loop(struct files *files, int register_changed_fd)
             break;
 
           case TRANSACTION_CHANNEL_INET:
-            in_fd = network_sockets.peer_fd;
-            out_fd = network_sockets.peer_fd;
+            in_fd = dot.peer_fd;
+            out_fd = dot.peer_fd;
             break;
         }
 
@@ -642,7 +603,7 @@ static void main_loop(struct files *files, int register_changed_fd)
 
           case TRANSACTION_FINISHED:
           case TRANSACTION_ERROR:
-            terminate_active_transaction(&state, &network_sockets.peer_fd);
+            terminate_active_transaction(&state, &dot);
             try_dequeue_next_transaction(&state);
             break;
         }
@@ -651,8 +612,7 @@ static void main_loop(struct files *files, int register_changed_fd)
     transaction_free(&state.preallocated_spi_slave_transaction);
     transaction_free(&state.preallocated_inet_slave_transaction);
 
-    network_close(&network_sockets.server_fd);
-    network_close(&network_sockets.peer_fd);
+    dot_close(&dot);
 }
 
 struct parameters

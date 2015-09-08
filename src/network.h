@@ -20,20 +20,42 @@
 #define NETWORK_H
 
 #include <stdbool.h>
-
-struct network_socket_pair
-{
-    int server_fd;
-    int peer_fd;
-};
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int network_create_socket(void);
+/*!
+ * Create a socket, bind it, and listen to it.
+ *
+ * \param port
+ *     TCP port to bind to.
+ *
+ * \param backlog
+ *     Maximum length to which the queue of pending connections for the socket
+ *     may grow. This parameter is passed directly to \c listen(2).
+ *
+ * \returns
+ *     File descriptor of the socket, or -1 on error.
+ */
+int network_create_socket(uint16_t port, int backlog);
+
+/*!
+ * Accept incoming connection.
+ */
 int network_accept_peer_connection(int server_fd);
+
+/*!
+ * Check if there is any incoming data on the socket.
+ *
+ * Uses \c recv() with \c MSG_PEEK to check presence of data.
+ */
 bool network_have_data(int peer_fd);
+
+/*!
+ * Close network socket.
+ */
 void network_close(int *fd);
 
 #ifdef __cplusplus
