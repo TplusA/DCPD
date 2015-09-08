@@ -23,7 +23,7 @@ bin_PROGRAMS = dcpd
 dcpd_SOURCES = \
     dcpd.c os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
     dcp_over_tcp.c dcp_over_tcp.h \
-    network.c network.h \
+    network.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.h \
@@ -45,6 +45,7 @@ noinst_LTLIBRARIES = \
     libinifile.la \
     libdrcpdcomm.la \
     libxmodem.la \
+    libnetwork_dispatcher.la \
     libdbus_handlers.la \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
@@ -92,6 +93,12 @@ libtransactions_la_CFLAGS = $(AM_CFLAGS)
 
 libxmodem_la_SOURCES = xmodem.c xmodem.h crc16.h os.h
 libxmodem_la_CFLAGS = $(AM_CFLAGS)
+
+libnetwork_dispatcher_la_SOURCES = \
+    network_dispatcher.c network_dispatcher.h \
+    network.c network.h \
+    messages.h
+libnetwork_dispatcher_la_CFLAGS = $(AM_CFLAGS)
 
 BUILT_SOURCES = \
     $(nodist_libdcpd_dbus_la_SOURCES) \

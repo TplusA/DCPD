@@ -43,7 +43,8 @@ check_LTLIBRARIES = \
     test_drcpdcomm.la \
     test_transactions.la \
     test_inifile.la \
-    test_xmodem.la
+    test_xmodem.la \
+    test_network_dispatcher.la
 
 test_dynamic_buffer_la_SOURCES = test_dynamic_buffer.c
 test_dynamic_buffer_la_LIBADD = $(top_builddir)/src/libdynamic_buffer.la
@@ -104,6 +105,16 @@ test_xmodem_la_SOURCES = \
 test_xmodem_la_LIBADD = $(top_builddir)/src/libxmodem.la
 test_xmodem_la_CFLAGS = $(AM_CFLAGS)
 test_xmodem_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_network_dispatcher_la_SOURCES = \
+    test_network_dispatcher.cc \
+    ../src/network_dispatcher.h \
+    mock_os.hh mock_os.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_network_dispatcher_la_LIBADD = $(top_builddir)/src/libnetwork_dispatcher.la
+test_network_dispatcher_la_CFLAGS = $(AM_CFLAGS)
+test_network_dispatcher_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 CLEANFILES = test_report.xml test_report_junit.xml valgrind.xml
 
