@@ -112,16 +112,6 @@ bool network_have_data(int peer_fd)
 
 void network_close(int *fd)
 {
-    if(*fd < 0)
-        return;
-
-    int ret;
-
-    while((ret = close(*fd)) < 0 && errno == EINTR)
-        ;
-
-    if(ret < 0)
-        msg_error(errno, LOG_ERR, "Failed closing socket fd %d", *fd);
-
+    os_file_close(*fd);
     *fd = -1;
 }
