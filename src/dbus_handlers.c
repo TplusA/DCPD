@@ -56,7 +56,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
     if(strcmp(signal_name, "ServicesChanged") == 0)
     {
         check_parameter_assertions(parameters, 2);
-        dcpregs_networking_interfaces_changed();
+        dcpregs_networkconfig_interfaces_changed();
     }
     else if(strcmp(signal_name, "PropertyChanged") == 0)
     {
@@ -66,7 +66,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         log_assert(name != NULL);
 
         if(strcmp(g_variant_get_string(name, NULL), "State") == 0)
-            dcpregs_networking_interfaces_changed();
+            dcpregs_networkconfig_interfaces_changed();
 
         g_variant_unref(name);
     }

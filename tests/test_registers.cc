@@ -551,7 +551,7 @@ void cut_setup(void)
 
     os_write_buffer.clear();
 
-    dcpregs_networking_init();
+    dcpregs_networkconfig_init();
     register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman", NULL);
 }
 

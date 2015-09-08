@@ -144,7 +144,7 @@ static struct
 }
 nwstatus_data;
 
-void dcpregs_networking_init(void)
+void dcpregs_networkconfig_init(void)
 {
     nwconfig_write_data.selected_interface = NULL;
 
@@ -1450,7 +1450,7 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
     return 0;
 }
 
-void dcpregs_networking_interfaces_changed(void)
+void dcpregs_networkconfig_interfaces_changed(void)
 {
     uint8_t response[sizeof(nwstatus_data.previous_response)];
 
