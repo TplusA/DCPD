@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_NETWORKING_H
-#define DCPREGS_NETWORKING_H
+#ifndef DCPREGS_NETWORKCONFIG_H
+#define DCPREGS_NETWORKCONFIG_H
 
 #include <stdint.h>
 #include <unistd.h>
@@ -91,4 +91,4 @@ void dcpregs_networking_interfaces_changed(void);
 
 /*!@}*/
 
-#endif /* !DCPREGS_NETWORKING_H */
+#endif /* !DCPREGS_NETWORKCONFIG_H */

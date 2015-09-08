@@ -25,7 +25,8 @@ dcpd_SOURCES = \
     network.c network.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
-    dcpregs_drcp.h dcpregs_networking.h dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
+    dcpregs_drcp.h dcpregs_networkconfig.h \
+    dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     connman.c connman.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h dbus_handlers.h
 
@@ -58,7 +59,7 @@ libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 libregisters_la_SOURCES = \
     registers.c registers.h registers_priv.h \
     dcpregs_drcp.c dcpregs_drcp.h \
-    dcpregs_networking.c dcpregs_networking.h \
+    dcpregs_networkconfig.c dcpregs_networkconfig.h \
     dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dbusdl_dbus.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \
@@ -68,7 +69,7 @@ libregisters_la_CFLAGS = $(AM_CFLAGS)
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
 
-libdbus_handlers_la_SOURCES = dbus_handlers.c dbus_handlers.h dcpregs_networking.h
+libdbus_handlers_la_SOURCES = dbus_handlers.c dbus_handlers.h dcpregs_networkconfig.h
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h

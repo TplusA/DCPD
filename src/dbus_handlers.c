@@ -24,7 +24,7 @@
 #include <errno.h>
 
 #include "dbus_handlers.h"
-#include "dcpregs_networking.h"
+#include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
 #include "messages.h"
 

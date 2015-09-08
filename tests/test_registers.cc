@@ -27,7 +27,7 @@
 #include "registers.h"
 #include "registers_priv.h"
 #include "dcpregs_drcp.h"
-#include "dcpregs_networking.h"
+#include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer_priv.h"
 #include "drcp_command_codes.h"

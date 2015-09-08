@@ -31,7 +31,7 @@
 #include "messages.h"
 
 #include "dcpregs_drcp.h"
-#include "dcpregs_networking.h"
+#include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
 #include "registers_priv.h"
 

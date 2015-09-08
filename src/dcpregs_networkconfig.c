@@ -26,7 +26,7 @@
 #include <ctype.h>
 #include <errno.h>
 
-#include "dcpregs_networking.h"
+#include "dcpregs_networkconfig.h"
 #include "registers_priv.h"
 #include "inifile.h"
 #include "connman.h"
