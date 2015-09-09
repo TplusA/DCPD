@@ -29,6 +29,7 @@
 
 #include "named_pipe.h"
 #include "dcp_over_tcp.h"
+#include "network_dispatcher.h"
 #include "messages.h"
 #include "transactions.h"
 #include "dynamic_buffer.h"
@@ -275,7 +276,24 @@ static unsigned int wait_for_events(struct state *state,
                                     const int register_changed_fd,
                                     bool do_block)
 {
-    struct pollfd fds[] =
+    /*
+     * Local define for array layout below.
+     */
+#define FIRST_NWDISPATCH_INDEX  5U
+
+    /*
+     * File descriptor breakdown:
+     * - 1 fd for the incoming named pipe from dcpspi
+     * - 1 fd for the incoming named pipe from drcpd
+     * - 1 fd for the incoming internal pipe from ourselves used for
+     *   communicating register changes from the DCP register code
+     * - 2 fds for the DCP over TCP control interface, not registered with the
+     *   network dispatcher
+     * - the remaining #NWDISPATCH_MAX_CONNECTIONS fds are for server and
+     *   client connections to the TCP tunnel (registers 119, 120, 121), all
+     *   registered with the network dispatcher
+     */
+    struct pollfd fds[FIRST_NWDISPATCH_INDEX + NWDISPATCH_MAX_CONNECTIONS] =
     {
         {
             .fd = dcpspi_fifo_in_fd,
@@ -299,6 +317,9 @@ static unsigned int wait_for_events(struct state *state,
         },
     };
 
+    (void)nwdispatch_scatter_fds(&fds[FIRST_NWDISPATCH_INDEX],
+                                 NWDISPATCH_MAX_CONNECTIONS, POLLIN);
+
     int ret = poll(fds, sizeof(fds) / sizeof(fds[0]), do_block ? -1 : 0);
 
     if(ret <= 0)
@@ -312,6 +333,9 @@ static unsigned int wait_for_events(struct state *state,
         return WAITEVENT_POLL_ERROR;
     }
 
+    (void)nwdispatch_handle_events(&fds[FIRST_NWDISPATCH_INDEX],
+                                   NWDISPATCH_MAX_CONNECTIONS);
+
     unsigned int return_value = 0;
 
     return_value |= handle_dcp_fifo_in_events(dcpspi_fifo_in_fd,   fds[0].revents, state);
@@ -321,6 +345,8 @@ static unsigned int wait_for_events(struct state *state,
     return_value |= handle_register_events(register_changed_fd,    fds[4].revents);
 
     return return_value;
+
+#undef FIRST_NWDISPATCH_INDEX
 }
 
 static bool try_preallocate_buffer(struct dynamic_buffer *buffer,
