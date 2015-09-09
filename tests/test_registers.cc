@@ -47,6 +47,21 @@
  */
 /*!@{*/
 
+static ssize_t test_os_read(int fd, void *dest, size_t count)
+{
+    cut_fail("Unexpected call of os_read()");
+    return -99999;
+}
+
+static ssize_t test_os_write(int fd, const void *buf, size_t count)
+{
+    cut_fail("Unexpected call of os_write()");
+    return -99999;
+}
+
+ssize_t (*os_read)(int fd, void *dest, size_t count) = test_os_read;
+ssize_t (*os_write)(int fd, const void *buf, size_t count) = test_os_write;
+
 static const struct dcp_register_t *
 lookup_register_expect_handlers(uint8_t register_number,
                                 ssize_t (*const expected_read_handler)(uint8_t *, size_t),
@@ -66,7 +81,7 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 24> existing_registers =
+static const std::array<uint8_t, 27> existing_registers =
 {
     17,
     37,
@@ -76,6 +91,8 @@ static const std::array<uint8_t, 24> existing_registers =
     71, 72,
     92, 93, 94,
     101, 102,
+    119,
+    120, 121,
     209,
 };
 

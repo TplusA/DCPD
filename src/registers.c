@@ -33,6 +33,7 @@
 #include "dcpregs_drcp.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
+#include "dcpregs_tcptunnel.h"
 #include "registers_priv.h"
 
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
@@ -276,6 +277,24 @@ static const struct dcp_register_t register_map[] =
         .max_data_size = 64,
         .write_handler = dcpregs_write_102_passphrase,
         .read_handler = dcpregs_read_102_passphrase,
+    },
+    {
+        /* TCP tunnel control */
+        .address = 119,
+        .max_data_size = 3,
+        .write_handler = dcpregs_write_119_tcp_tunnel_control,
+    },
+    {
+        /* TCP tunnel: receive data from peer */
+        .address = 120,
+        .max_data_size = 256,
+        .read_handler = dcpregs_read_120_tcp_tunnel_read,
+    },
+    {
+        /* TCP tunnel: send data to peer */
+        .address = 121,
+        .max_data_size = 256,
+        .write_handler = dcpregs_write_121_tcp_tunnel_write,
     },
     {
         /* File transfer CRC mode, encryption mode, URL */

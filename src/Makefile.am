@@ -28,6 +28,7 @@ dcpd_SOURCES = \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.h \
     dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
+    dcpregs_tcptunnel.h \
     connman.c connman.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h dbus_handlers.h
 
@@ -63,6 +64,7 @@ libregisters_la_SOURCES = \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_networkconfig.c dcpregs_networkconfig.h \
     dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
+    dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
     dbusdl_dbus.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \
     drcp_command_codes.h messages.h
