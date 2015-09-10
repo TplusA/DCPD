@@ -1,3 +1,18 @@
+2015-09-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.3 released.
+
+	* TCP tunnel: Initial implementation of TCP tunnels for incoming
+	  connections (server side).
+
+	  The SPI slave may ask to open one or more tunnels on any TCP port.
+	  The Streaming Board will then listen on that port and forward any
+	  data exchanged between the SPI slave and connecting clients using
+	  DCP registers 119, 120, and 121.
+
+	  It is not possible to initiate outgoing connections to external
+	  servers using these kind of TCP tunnels.
+
 2015-09-03  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.2 released.
