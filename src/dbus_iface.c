@@ -64,6 +64,7 @@ filetransfer_iface_data;
 
 static struct
 {
+    bool is_enabled;
     tdbusconnmanManager *connman_manager_iface;
 }
 connman_iface_data;
@@ -152,12 +153,15 @@ static void name_acquired(GDBusConnection *connection,
         /* Connman is always on system bus */
         GError *error = NULL;
 
-        connman_iface_data.connman_manager_iface =
-            tdbus_connman_manager_proxy_new_sync(connection,
-                                                 G_DBUS_PROXY_FLAGS_NONE,
-                                                 "net.connman", "/",
-                                                 NULL, &error);
-        (void)handle_dbus_error(&error);
+        if(connman_iface_data.is_enabled)
+        {
+            connman_iface_data.connman_manager_iface =
+                tdbus_connman_manager_proxy_new_sync(connection,
+                                                     G_DBUS_PROXY_FLAGS_NONE,
+                                                     "net.connman", "/",
+                                                     NULL, &error);
+            (void)handle_dbus_error(&error);
+        }
     }
 }
 
@@ -190,6 +194,8 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&process_data, 0, sizeof(process_data));
 
+    connman_iface_data.is_enabled = with_connman;
+
     process_data.loop = g_main_loop_new(NULL, FALSE);
     if(process_data.loop == NULL)
     {
@@ -202,7 +208,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
-    if(with_connman || !connect_to_session_bus)
+    if(connman_iface_data.is_enabled || !connect_to_session_bus)
         dbus_data_system_bus.owner_id =
             g_bus_own_name(G_BUS_TYPE_SYSTEM, bus_name,
                            G_BUS_NAME_OWNER_FLAGS_NONE,
@@ -253,7 +259,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
                      G_CALLBACK(dbussignal_file_transfer), NULL);
 
-    if(with_connman)
+    if(connman_iface_data.is_enabled)
     {
         log_assert(connman_iface_data.connman_manager_iface != NULL);
 
