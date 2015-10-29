@@ -74,6 +74,15 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         unknown_signal(iface_name, signal_name, sender_name);
 }
 
+void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
+                               const gchar *signal_name, GVariant *parameters,
+                               gpointer user_data)
+{
+    static const char iface_name[] = "org.freedesktop.login1.Manager";
+
+    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
+}
+
 void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
                               const gchar *signal_name, GVariant *parameters,
                               gpointer user_data)

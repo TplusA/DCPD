@@ -28,6 +28,9 @@ extern "C" {
 int dbus_setup(bool connect_to_session_bus, bool with_connman);
 void dbus_shutdown(void);
 
+void dbus_lock_shutdown_sequence(const char *why);
+void dbus_unlock_shutdown_sequence(void);
+
 #ifdef __cplusplus
 }
 #endif

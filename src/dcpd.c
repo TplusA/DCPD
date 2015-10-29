@@ -893,12 +893,14 @@ int main(int argc, char *argv[])
     sigaction(SIGTERM, &action, NULL);
 
     transaction_init_allocator();
+    dbus_lock_shutdown_sequence("Notify SPI slave");
 
     main_loop(&files, register_changed_fd);
 
     msg_info("Shutting down");
 
     shutdown(&files);
+    dbus_unlock_shutdown_sequence();
     dbus_shutdown();
 
     return EXIT_SUCCESS;

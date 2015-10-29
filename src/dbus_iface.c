@@ -23,11 +23,14 @@
 #include <string.h>
 #include <errno.h>
 
+#include <gio/gunixfdlist.h>
+
 #include "dbus_iface.h"
 #include "dbus_iface_deep.h"
 #include "dbus_handlers.h"
 #include "dcpd_dbus.h"
 #include "connman_dbus.h"
+#include "logind_dbus.h"
 #include "messages.h"
 
 struct dbus_data
@@ -68,6 +71,13 @@ static struct
     tdbusconnmanManager *connman_manager_iface;
 }
 connman_iface_data;
+
+static struct
+{
+    int lock_fd;
+    tdbuslogindManager *login1_manager_iface;
+}
+login1_iface_data;
 
 static gpointer process_dbus(gpointer user_data)
 {
@@ -150,7 +160,7 @@ static void name_acquired(GDBusConnection *connection,
 
     if(!is_session_bus)
     {
-        /* Connman is always on system bus */
+        /* Connman and logind are always on system bus */
         GError *error = NULL;
 
         if(connman_iface_data.is_enabled)
@@ -162,6 +172,14 @@ static void name_acquired(GDBusConnection *connection,
                                                      NULL, &error);
             (void)handle_dbus_error(&error);
         }
+
+        login1_iface_data.login1_manager_iface =
+            tdbus_logind_manager_proxy_new_sync(connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                "org.freedesktop.login1",
+                                                "/org/freedesktop/login1",
+                                                NULL, &error);
+        (void)handle_dbus_error(&error);
     }
 }
 
@@ -192,9 +210,11 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     memset(&dcpd_iface_data, 0, sizeof(dcpd_iface_data));
     memset(&filetransfer_iface_data, 0, sizeof(filetransfer_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
+    memset(&login1_iface_data, 0, sizeof(login1_iface_data));
     memset(&process_data, 0, sizeof(process_data));
 
     connman_iface_data.is_enabled = with_connman;
+    login1_iface_data.lock_fd = -1;
 
     process_data.loop = g_main_loop_new(NULL, FALSE);
     if(process_data.loop == NULL)
@@ -208,12 +228,11 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
-    if(connman_iface_data.is_enabled || !connect_to_session_bus)
-        dbus_data_system_bus.owner_id =
-            g_bus_own_name(G_BUS_TYPE_SYSTEM, bus_name,
-                           G_BUS_NAME_OWNER_FLAGS_NONE,
-                           bus_acquired, name_acquired, name_lost,
-                           &dbus_data_system_bus, destroy_notification);
+    dbus_data_system_bus.owner_id =
+        g_bus_own_name(G_BUS_TYPE_SYSTEM, bus_name,
+                       G_BUS_NAME_OWNER_FLAGS_NONE,
+                       bus_acquired, name_acquired, name_lost,
+                       &dbus_data_system_bus, destroy_notification);
 
     if(connect_to_session_bus)
         dbus_data_session_bus.owner_id =
@@ -267,6 +286,10 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
                          G_CALLBACK(dbussignal_connman_manager), NULL);
     }
 
+    log_assert(login1_iface_data.login1_manager_iface != NULL);
+    g_signal_connect(login1_iface_data.login1_manager_iface, "g-signal",
+                     G_CALLBACK(dbussignal_logind_manager), NULL);
+
     process_data.thread = g_thread_new("D-Bus I/O", process_dbus, &process_data);
     if(process_data.thread == NULL)
     {
@@ -302,7 +325,75 @@ void dbus_shutdown(void)
     if(connman_iface_data.connman_manager_iface != NULL)
         g_object_unref(connman_iface_data.connman_manager_iface);
 
+    g_object_unref(login1_iface_data.login1_manager_iface);
+
     process_data.loop = NULL;
+}
+
+void dbus_lock_shutdown_sequence(const char *why)
+{
+    if(login1_iface_data.lock_fd >= 0)
+    {
+        BUG("D-Bus shutdown inhibitor lock already taken");
+        return;
+    }
+
+    GVariant *out_fd = NULL;
+    GUnixFDList *out_fd_list = NULL;
+    GError *error = NULL;
+
+    tdbus_logind_manager_call_inhibit_sync(dbus_get_logind_manager_iface(),
+        "shutdown", PACKAGE, why, "delay",
+        NULL, &out_fd, &out_fd_list, NULL, &error);
+
+    if(handle_dbus_error(&error) < 0)
+        return;
+
+    if(out_fd == NULL)
+        msg_error(EINVAL, LOG_ERR, "Got NULL lock fd");
+    else
+    {
+        if(!g_variant_is_of_type(out_fd, G_VARIANT_TYPE_HANDLE))
+            msg_error(EINVAL, LOG_ERR, "Unexpected lock fd type %s",
+                      g_variant_get_type_string(out_fd));
+        g_variant_unref(out_fd);
+    }
+
+    if(out_fd_list == NULL)
+        msg_error(EINVAL, LOG_ERR, "Got NULL lock fd list");
+    else
+    {
+        gint count = g_unix_fd_list_get_length(out_fd_list);
+
+        if(count != 1)
+            msg_error(EINVAL, LOG_ERR,
+                      "Unexpected lock fd list length %d", count);
+
+        if(count >= 1)
+        {
+            login1_iface_data.lock_fd =
+                g_unix_fd_list_get(out_fd_list, 0, &error);
+
+            if(handle_dbus_error(&error))
+                login1_iface_data.lock_fd = -1;
+        }
+
+        g_object_unref(out_fd_list);
+    }
+
+    if(login1_iface_data.lock_fd >= 0)
+        msg_info("D-Bus inhibitor lock fd is %d", login1_iface_data.lock_fd);
+    else
+        msg_error(0, LOG_CRIT, "Failed taking inhibitor lock");
+}
+
+void dbus_unlock_shutdown_sequence(void)
+{
+    if(login1_iface_data.lock_fd >= 0)
+    {
+        os_file_close(login1_iface_data.lock_fd);
+        login1_iface_data.lock_fd = -1;
+    }
 }
 
 tdbusdcpdPlayback *dbus_get_playback_iface(void)
@@ -333,4 +424,9 @@ tdbusFileTransfer *dbus_get_file_transfer_iface(void)
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)
 {
     return connman_iface_data.connman_manager_iface;
+}
+
+tdbuslogindManager *dbus_get_logind_manager_iface(void)
+{
+    return login1_iface_data.login1_manager_iface;
 }

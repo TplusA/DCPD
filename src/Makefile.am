@@ -50,7 +50,8 @@ noinst_LTLIBRARIES = \
     libdbus_handlers.la \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
-    libconnman_dbus.la
+    libconnman_dbus.la \
+    liblogind_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
@@ -81,6 +82,9 @@ libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 nodist_libconnman_dbus_la_SOURCES = connman_dbus.c connman_dbus.h
 libconnman_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
+nodist_liblogind_dbus_la_SOURCES = logind_dbus.c logind_dbus.h
+liblogind_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 nodist_libdbusdl_dbus_la_SOURCES = dbusdl_dbus.c dbusdl_dbus.h
 libdbusdl_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
@@ -114,7 +118,11 @@ BUILT_SOURCES = \
     $(nodist_libconnman_dbus_la_SOURCES) \
     net_connman.h \
     net_connman.md \
-    connman_dbus.stamp
+    connman_dbus.stamp \
+    $(nodist_liblogind_dbus_la_SOURCES) \
+    org_freedesktop_logind.h \
+    org_freedesktop_logind.md \
+    logind_dbus.stamp
 
 CLEANFILES = $(BUILT_SOURCES)
 
@@ -143,4 +151,13 @@ connman_dbus.h: connman_dbus.stamp
 connman_dbus.stamp: $(DBUS_IFACES)/net_connman.xml
 	$(GDBUS_CODEGEN) --generate-c-code=connman_dbus --c-namespace tdbus_connman --interface-prefix net.connman. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o net_connman.md -H net_connman.h -c tdbus_connman -s net.connman. -n "$(PACKAGE_NAME)"
+	touch $@
+
+org_freedesktop_logind.h: logind_dbus.stamp
+org_freedesktop_logind.md: logind_dbus.stamp
+logind_dbus.c: logind_dbus.stamp
+logind_dbus.h: logind_dbus.stamp
+logind_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_login1.xml
+	$(GDBUS_CODEGEN) --generate-c-code=logind_dbus --c-namespace tdbus_logind --interface-prefix org.freedesktop.login1. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_logind.md -H org_freedesktop_logind.h -c tdbus_logind -s org.freedesktop.login1. -n "$(PACKAGE_NAME)"
 	touch $@

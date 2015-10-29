@@ -22,6 +22,7 @@
 #include "dcpd_dbus.h"
 #include "dbusdl_dbus.h"
 #include "connman_dbus.h"
+#include "logind_dbus.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,8 @@ tdbusdcpdListItem *dbus_get_list_item_iface(void);
 tdbusFileTransfer *dbus_get_file_transfer_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
+
+tdbuslogindManager *dbus_get_logind_manager_iface(void);
 
 #ifdef __cplusplus
 }
