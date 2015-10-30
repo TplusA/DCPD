@@ -36,6 +36,7 @@
 #include "drcp.h"
 #include "dbus_iface.h"
 #include "registers.h"
+#include "dcpregs_status.h"
 #include "os.h"
 #include "versioninfo.h"
 
@@ -548,9 +549,7 @@ static void main_loop(struct files *files, int register_changed_fd)
     static struct dcp_over_tcp_data dot;
     (void)dot_init(&dot);
 
-    /* send device status register (17) and network status register (50) */
-    push_register_to_slave(17);
-    push_register_to_slave(50);
+    dcpregs_status_set_ready();
 
     msg_info("Ready for accepting traffic");
 

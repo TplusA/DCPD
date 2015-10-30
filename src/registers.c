@@ -34,17 +34,46 @@
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_tcptunnel.h"
+#include "dcpregs_status.h"
 #include "registers_priv.h"
+
+static struct
+{
+    uint8_t status_byte;
+}
+misc_registers_data;
+
+void dcpregs_status_set_ready(void)
+{
+    static const uint8_t status_ready = 0x21;
+
+    if(misc_registers_data.status_byte == status_ready)
+        return;
+
+    misc_registers_data.status_byte = status_ready;
+
+    /* send device status register (17) and network status register (50) */
+    const struct register_configuration_t *config = registers_get_data();
+    config->register_changed_notification_fn(17);
+    config->register_changed_notification_fn(50);
+}
+
+void dcpregs_status_set_reboot_required(void)
+{
+    static const uint8_t status_system_error = 0x24;
+
+    misc_registers_data.status_byte = status_system_error;
+
+    const struct register_configuration_t *config = registers_get_data();
+    config->register_changed_notification_fn(17);
+}
 
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
 {
     msg_info("read 17 handler %p %zu", response, length);
     log_assert(length == 2);
 
-    /*
-     * FIXME: Hard-coded, wrong status bits for testing purposes.
-     */
-    response[0] = 0x21;
+    response[0] = misc_registers_data.status_byte;
     response[1] = 0;
     return length;
 }
