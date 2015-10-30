@@ -96,6 +96,7 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
         if(!iface->is_inhibitor_lock_taken())
             msg_info("Shutting down, but having no inhibit lock");
 
+        dcpregs_filetransfer_prepare_for_shutdown();
         dcpregs_networkconfig_prepare_for_shutdown();
 
         if(!is_active)

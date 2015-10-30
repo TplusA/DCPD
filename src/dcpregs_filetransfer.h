@@ -69,6 +69,18 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
                                             enum DBusListsErrorCode error,
                                             const char *path);
 
+/*!
+ * Report system shutdown event.
+ *
+ * This function aborts an ongoing download and flushes all changes to storage.
+ * Further attempts to transfer files are blocked after this function has been
+ * called.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
+ */
+void dcpregs_filetransfer_prepare_for_shutdown(void);
+
 #ifdef __cplusplus
 }
 #endif

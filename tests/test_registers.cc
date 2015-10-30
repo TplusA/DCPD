@@ -571,6 +571,7 @@ void cut_setup(void)
     os_write_buffer.clear();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     register_init(ethernet_mac_address, wlan_mac_address, connman_config_path, NULL);
 }
 
@@ -632,6 +633,7 @@ void test_read_mac_address_default(void)
     register_deinit();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     register_init(NULL, NULL, NULL, NULL);
 
     auto *reg = lookup_register_expect_handlers(51,
@@ -2749,6 +2751,7 @@ void cut_setup(void)
     register_changed_notification_data.init();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     register_init(NULL, NULL, NULL, register_changed_notification);
 }
 
@@ -3087,6 +3090,7 @@ void cut_setup(void)
     mock_os_singleton = mock_os;
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     register_init(NULL, NULL, NULL, NULL);
 }
 

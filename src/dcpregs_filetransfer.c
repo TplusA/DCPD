@@ -31,6 +31,7 @@
 #include "dbus_iface_deep.h"
 #include "registers_priv.h"
 #include "xmodem.h"
+#include "shutdown_guard.h"
 
 /*! Sane limit on URL length to cap DC traffic. */
 #define MAXIMUM_URL_LENGTH 1024U
@@ -40,6 +41,8 @@
 
 struct FileTransferData
 {
+    struct ShutdownGuard *shutdown_guard;
+
     char url[MAXIMUM_URL_LENGTH + 1];
 
     struct
@@ -304,12 +307,19 @@ static int try_start_xmodem(void)
     return ret;
 }
 
-int dcpregs_write_40_download_control(const uint8_t *data, size_t length)
+/*!
+ * Start download from internet or XMODEM transfer from flash.
+ *
+ * \attention
+ *     Must be called with the #ShutdownGuard from #filetransfer_data locked.
+ */
+static int do_write_download_control(const uint8_t *data)
 {
-    msg_info("write 40 handler %p %zu", data, length);
-
-    if(data_length_is_unexpected(length, 2))
+    if(shutdown_guard_is_shutting_down_unlocked(filetransfer_data.shutdown_guard))
+    {
+        msg_info("Not transferring files during shutdown.");
         return -1;
+    }
 
     if(data[0] == HCR_COMMAND_CATEGORY_FILE_TRANSFER &&
        data[1] == HCR_COMMAND_FILE_TRANSFER_DOWNLOAD)
@@ -336,6 +346,20 @@ int dcpregs_write_40_download_control(const uint8_t *data, size_t length)
     msg_error(ENOSYS, LOG_ERR, "Unsupported command");
 
     return -1;
+}
+
+int dcpregs_write_40_download_control(const uint8_t *data, size_t length)
+{
+    msg_info("write 40 handler %p %zu", data, length);
+
+    if(data_length_is_unexpected(length, 2))
+        return -1;
+
+    shutdown_guard_lock(filetransfer_data.shutdown_guard);
+    int ret = do_write_download_control(data);
+    shutdown_guard_unlock(filetransfer_data.shutdown_guard);
+
+    return ret;
 }
 
 static void fill_download_status_from_download(uint8_t *response)
@@ -663,18 +687,26 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
     reset_xmodem_state(path, true);
 }
 
+void dcpregs_filetransfer_prepare_for_shutdown(void)
+{
+    if(shutdown_guard_down(filetransfer_data.shutdown_guard))
+        dcpregs_write_209_download_url(NULL, 0);
+}
+
 void dcpregs_filetransfer_init(void)
 {
     memset(&filetransfer_data, 0, sizeof(filetransfer_data));
     g_mutex_init(&filetransfer_data.download_status.lock);
     g_mutex_init(&filetransfer_data.xmodem_status.lock);
     filetransfer_data.xmodem_status.mapped_file.fd = -1;
+    filetransfer_data.shutdown_guard = shutdown_guard_alloc("filetransfer");
 }
 
 void dcpregs_filetransfer_deinit(void)
 {
     g_mutex_clear(&filetransfer_data.download_status.lock);
     g_mutex_clear(&filetransfer_data.xmodem_status.lock);
+    shutdown_guard_free(&filetransfer_data.shutdown_guard);
 
     if(filetransfer_data.xmodem_status.path != NULL)
         free(filetransfer_data.xmodem_status.path);
