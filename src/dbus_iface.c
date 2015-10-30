@@ -197,6 +197,17 @@ static void destroy_notification(gpointer data)
     msg_info("Bus destroyed.");
 }
 
+static bool is_shutdown_inhibited(void)
+{
+    return login1_iface_data.lock_fd >= 0;
+}
+
+static const struct dbussignal_shutdown_iface logind_shutdown_functions =
+{
+    .is_inhibitor_lock_taken = is_shutdown_inhibited,
+    .allow_shutdown = dbus_unlock_shutdown_sequence,
+};
+
 static struct dbus_process_data process_data;
 
 int dbus_setup(bool connect_to_session_bus, bool with_connman)
@@ -288,7 +299,8 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
 
     log_assert(login1_iface_data.login1_manager_iface != NULL);
     g_signal_connect(login1_iface_data.login1_manager_iface, "g-signal",
-                     G_CALLBACK(dbussignal_logind_manager), NULL);
+                     G_CALLBACK(dbussignal_logind_manager),
+                     (gpointer)&logind_shutdown_functions);
 
     process_data.thread = g_thread_new("D-Bus I/O", process_dbus, &process_data);
     if(process_data.thread == NULL)
@@ -332,7 +344,7 @@ void dbus_shutdown(void)
 
 void dbus_lock_shutdown_sequence(const char *why)
 {
-    if(login1_iface_data.lock_fd >= 0)
+    if(is_shutdown_inhibited())
     {
         BUG("D-Bus shutdown inhibitor lock already taken");
         return;
@@ -381,7 +393,7 @@ void dbus_lock_shutdown_sequence(const char *why)
         g_object_unref(out_fd_list);
     }
 
-    if(login1_iface_data.lock_fd >= 0)
+    if(is_shutdown_inhibited())
         msg_info("D-Bus inhibitor lock fd is %d", login1_iface_data.lock_fd);
     else
         msg_error(0, LOG_CRIT, "Failed taking inhibitor lock");
@@ -389,7 +401,7 @@ void dbus_lock_shutdown_sequence(const char *why)
 
 void dbus_unlock_shutdown_sequence(void)
 {
-    if(login1_iface_data.lock_fd >= 0)
+    if(is_shutdown_inhibited())
     {
         os_file_close(login1_iface_data.lock_fd);
         login1_iface_data.lock_fd = -1;

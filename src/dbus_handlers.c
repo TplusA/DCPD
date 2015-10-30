@@ -26,6 +26,7 @@
 #include "dbus_handlers.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
+#include "dcpregs_status.h"
 #include "messages.h"
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
@@ -81,6 +82,37 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
     static const char iface_name[] = "org.freedesktop.login1.Manager";
 
     msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
+
+    if(strcmp(signal_name, "PrepareForShutdown") == 0)
+    {
+        check_parameter_assertions(parameters, 1);
+
+        GVariant *val = g_variant_get_child_value(parameters, 0);
+        gboolean is_active = g_variant_get_boolean(val);
+        g_variant_unref(val);
+
+        const struct dbussignal_shutdown_iface *const iface = user_data;
+
+        if(!iface->is_inhibitor_lock_taken())
+            msg_info("Shutting down, but having no inhibit lock");
+
+        dcpregs_networkconfig_prepare_for_shutdown();
+
+        if(!is_active)
+        {
+            msg_error(0, LOG_NOTICE,
+                      "Funny PrepareForShutdown message, asking for restart");
+            dcpregs_status_set_reboot_required();
+        }
+
+        iface->allow_shutdown();
+    }
+    else if(strcmp(signal_name, "SeatNew") == 0)
+    {
+        /* actively ignore irrelevant known signals */
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
 }
 
 void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,

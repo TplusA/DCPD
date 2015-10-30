@@ -19,6 +19,7 @@
 #ifndef DBUS_HANDLERS_H
 #define DBUS_HANDLERS_H
 
+#include <stdbool.h>
 #include <gio/gio.h>
 
 /*!
@@ -26,6 +27,12 @@
  * \ingroup dbus
  */
 /*!@{*/
+
+struct dbussignal_shutdown_iface
+{
+    bool (*const is_inhibitor_lock_taken)(void);
+    void (*const allow_shutdown)(void);
+};
 
 #ifdef __cplusplus
 extern "C" {
