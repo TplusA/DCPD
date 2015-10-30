@@ -901,6 +901,7 @@ int main(int argc, char *argv[])
     shutdown(&files);
     dbus_unlock_shutdown_sequence();
     dbus_shutdown();
+    register_deinit();
 
     return EXIT_SUCCESS;
 }

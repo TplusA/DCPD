@@ -36,6 +36,11 @@ extern "C" {
  */
 void dcpregs_networkconfig_init(void);
 
+/*!
+ * Function required by unit tests.
+ */
+void dcpregs_networkconfig_deinit(void);
+
 ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length);
 
 ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length);
@@ -84,6 +89,19 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length);
  *     Called from D-Bus thread, not main context.
  */
 void dcpregs_networkconfig_interfaces_changed(void);
+
+/*!
+ * Report system shutdown event.
+ *
+ * This function blocks until a possibly ongoing rewrite of a configuration
+ * file completes and the file has been flushed to storage. Further attempts to
+ * update network configuration files are blocked after this function has been
+ * called.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
+ */
+void dcpregs_networkconfig_prepare_for_shutdown(void);
 
 #ifdef __cplusplus
 }

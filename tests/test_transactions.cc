@@ -448,6 +448,7 @@ static int read_answer(const void *src, size_t count, int fd)
  */
 void test_register_read_request_size_1_transaction(void)
 {
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere", NULL);
 
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
@@ -490,6 +491,8 @@ void test_register_read_request_size_1_transaction(void)
 
     transaction_free(&t);
     cppcut_assert_null(t);
+
+    register_deinit();
 }
 
 /*!\test
@@ -498,6 +501,7 @@ void test_register_read_request_size_1_transaction(void)
  */
 void test_register_read_request_size_16_transaction(void)
 {
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere", NULL);
 
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
@@ -543,6 +547,8 @@ void test_register_read_request_size_16_transaction(void)
 
     transaction_free(&t);
     cppcut_assert_null(t);
+
+    register_deinit();
 }
 
 /*!\test
@@ -550,6 +556,7 @@ void test_register_read_request_size_16_transaction(void)
  */
 void test_register_multi_step_read_request_transaction(void)
 {
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     register_init("12:34:56:78:9A:BC", NULL, NULL, NULL);
 
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
@@ -586,6 +593,8 @@ void test_register_multi_step_read_request_transaction(void)
 
     transaction_free(&t);
     cppcut_assert_null(t);
+
+    register_deinit();
 }
 
 /*!\test

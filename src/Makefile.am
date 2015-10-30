@@ -70,6 +70,7 @@ libregisters_la_SOURCES = \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
     dcpregs_status.h \
     dbusdl_dbus.h \
+    shutdown_guard.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \
     drcp_command_codes.h messages.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
@@ -77,7 +78,9 @@ libregisters_la_CFLAGS = $(AM_CFLAGS)
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
 
-libdbus_handlers_la_SOURCES = dbus_handlers.c dbus_handlers.h dcpregs_networkconfig.h
+libdbus_handlers_la_SOURCES = \
+    dbus_handlers.c dbus_handlers.h \
+    dcpregs_networkconfig.h dcpregs_status.h
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h

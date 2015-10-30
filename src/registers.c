@@ -389,6 +389,15 @@ void register_init(const char *ethernet_mac_address,
     config->active_interface = NULL;
     config->connman_config_path = connman_config_path;
     config->register_changed_notification_fn = register_changed_callback;
+
+    dcpregs_networkconfig_init();
+    dcpregs_filetransfer_init();
+}
+
+void register_deinit(void)
+{
+    dcpregs_networkconfig_deinit();
+    dcpregs_filetransfer_deinit();
 }
 
 const struct dcp_register_t *register_lookup(uint8_t register_number)

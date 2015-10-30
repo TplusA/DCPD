@@ -30,6 +30,7 @@
 #include "registers_priv.h"
 #include "inifile.h"
 #include "connman.h"
+#include "shutdown_guard.h"
 #include "messages.h"
 
 #define REQ_DHCP_MODE_55                ((uint32_t)(1U << 0))
@@ -134,6 +135,8 @@ nwconfig_write_data;
  */
 static struct
 {
+    struct ShutdownGuard *shutdown_guard;
+
     /*!
      * The status last communicated to the slave device.
      *
@@ -148,8 +151,14 @@ void dcpregs_networkconfig_init(void)
 {
     nwconfig_write_data.selected_interface = NULL;
 
+    nwstatus_data.shutdown_guard = shutdown_guard_alloc("networkconfig");
     nwstatus_data.previous_response[0] = UINT8_MAX;
     nwstatus_data.previous_response[1] = UINT8_MAX;
+}
+
+void dcpregs_networkconfig_deinit(void)
+{
+    shutdown_guard_free(&nwstatus_data.shutdown_guard);
 }
 
 struct config_filename_template
@@ -726,8 +735,20 @@ static int apply_changes_to_inifile(struct ini_file *ini,
     return 0;
 }
 
+/*!
+ * Write changes to file.
+ *
+ * \attention
+ *     Must be called with the #ShutdownGuard from #nwstatus_data locked.
+ */
 static int modify_network_configuration(const struct register_network_interface_t *selected)
 {
+    if(shutdown_guard_is_shutting_down_unlocked(nwstatus_data.shutdown_guard))
+    {
+        msg_info("Not writing network configuration during shutdown.");
+        return -1;
+    }
+
     char *filename =
         generate_network_config_file_name(selected, registers_get_data()->connman_config_path);
 
@@ -838,7 +859,11 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     msg_info("Writing new network configuration for MAC address %s",
              selected->mac_address_string);
 
-    return modify_network_configuration(selected);
+    shutdown_guard_lock(nwstatus_data.shutdown_guard);
+    int ret = modify_network_configuration(selected);
+    shutdown_guard_unlock(nwstatus_data.shutdown_guard);
+
+    return ret;
 }
 
 int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
@@ -1460,4 +1485,9 @@ void dcpregs_networkconfig_interfaces_changed(void)
 
     if(memcmp(nwstatus_data.previous_response, response, sizeof(response)) != 0)
         registers_get_data()->register_changed_notification_fn(50);
+}
+
+void dcpregs_networkconfig_prepare_for_shutdown(void)
+{
+    (void)shutdown_guard_down(nwstatus_data.shutdown_guard);
 }

@@ -570,12 +570,14 @@ void cut_setup(void)
 
     os_write_buffer.clear();
 
-    dcpregs_networkconfig_init();
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     register_init(ethernet_mac_address, wlan_mac_address, connman_config_path, NULL);
 }
 
 void cut_teardown(void)
 {
+    register_deinit();
+
     os_write_buffer.clear();
     os_write_buffer.shrink_to_fit();
 
@@ -627,6 +629,9 @@ void test_read_mac_address(void)
  */
 void test_read_mac_address_default(void)
 {
+    register_deinit();
+
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     register_init(NULL, NULL, NULL, NULL);
 
     auto *reg = lookup_register_expect_handlers(51,
@@ -2743,12 +2748,14 @@ void cut_setup(void)
 
     register_changed_notification_data.init();
 
-    dcpregs_filetransfer_init();
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     register_init(NULL, NULL, NULL, register_changed_notification);
 }
 
 void cut_teardown(void)
 {
+    register_deinit();
+
     register_changed_notification_data.check();
 
     mock_messages->check();
@@ -2770,8 +2777,6 @@ void cut_teardown(void)
     mock_os = nullptr;
     mock_file_transfer_dbus = nullptr;
     mock_dbus_iface = nullptr;
-
-    dcpregs_filetransfer_deinit();
 }
 
 /*!\test
@@ -3081,11 +3086,14 @@ void cut_setup(void)
     mock_os->init();
     mock_os_singleton = mock_os;
 
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     register_init(NULL, NULL, NULL, NULL);
 }
 
 void cut_teardown(void)
 {
+    register_deinit();
+
     mock_messages->check();
     mock_os->check();
 

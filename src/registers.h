@@ -57,11 +57,22 @@ extern "C" {
  *
  * Some registers return static content obtained from the command line or
  * configuration file. These data are passed here.
+ *
+ * \note
+ *     This function also calls the \c dcpregs_*_init() functions.
  */
 void register_init(const char *ethernet_mac_address,
                    const char *wlan_mac_address,
                    const char *connman_config_path,
                    void (*register_changed_callback)(uint8_t reg_number));
+
+/*!
+ * Free resources.
+ *
+ * \note
+ *     This function also calls the \c dcpregs_*_deinit() functions.
+ */
+void register_deinit(void);
 
 /*!
  * Find register structure by register number (address).
