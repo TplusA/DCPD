@@ -38,7 +38,10 @@ int os_write_from_buffer(const void *src, size_t count, int fd)
 
     while(count > 0)
     {
-        ssize_t len = os_write(fd, src_ptr, count);
+        ssize_t len;
+
+        while((len = os_write(fd, src_ptr, count)) == -1 && errno == EINTR)
+            ;
 
         if(len < 0)
         {
@@ -96,8 +99,12 @@ void os_abort(void)
 
 int os_file_new(const char *filename)
 {
-    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
-                  S_IRWXU | S_IRWXG | S_IRWXO);
+    int fd;
+
+    while((fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
+                     S_IRWXU | S_IRWXG | S_IRWXO)) == -1 &&
+          errno == EINTR)
+        ;
 
     if(fd < 0)
         msg_error(errno, LOG_ERR, "Failed to create file \"%s\"", filename);
@@ -140,7 +147,8 @@ int os_map_file_to_memory(struct os_mapped_file_data *mapped,
     log_assert(mapped != NULL);
     log_assert(filename != NULL);
 
-    mapped->fd = open(filename, O_RDONLY);
+    while((mapped->fd = open(filename, O_RDONLY)) == -1 && errno == EINTR)
+        ;
 
     if(mapped->fd < 0)
     {
