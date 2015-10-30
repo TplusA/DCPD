@@ -48,6 +48,7 @@ noinst_LTLIBRARIES = \
     libdrcpdcomm.la \
     libxmodem.la \
     libnetwork_dispatcher.la \
+    libshutdown_guard.la \
     libdbus_handlers.la \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
@@ -107,6 +108,11 @@ libnetwork_dispatcher_la_SOURCES = \
     network.c network.h \
     messages.h
 libnetwork_dispatcher_la_CFLAGS = $(AM_CFLAGS)
+
+libshutdown_guard_la_SOURCES = \
+    shutdown_guard.c shutdown_guard.h \
+    messages.h
+libshutdown_guard_la_CFLAGS = $(AM_CFLAGS)
 
 BUILT_SOURCES = \
     $(nodist_libdcpd_dbus_la_SOURCES) \
