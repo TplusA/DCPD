@@ -114,7 +114,8 @@ int os_file_new(const char *filename)
 
 static void safe_close_fd(int fd)
 {
-    (void)fsync(fd);
+    if(fsync(fd) < 0 && errno != EINVAL)
+        msg_error(errno, LOG_ERR, "fsync() fd %d", fd);
 
     int ret;
     while((ret = close(fd)) == -1 && errno == EINTR)
@@ -128,7 +129,7 @@ void os_file_close(int fd)
 {
     if(fd < 0)
         msg_error(EINVAL, LOG_ERR,
-                  "Passed invalid file descriptor to %s()", __func__);
+                  "Passed invalid file descriptor %d to %s()", fd, __func__);
     else
         safe_close_fd(fd);
 }
