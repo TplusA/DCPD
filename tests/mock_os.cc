@@ -33,6 +33,7 @@ enum class OsFn
     file_new,
     file_close,
     file_delete,
+    sync_dir,
     map_file_to_memory,
     unmap_file,
 
@@ -74,6 +75,10 @@ static std::ostream &operator<<(std::ostream &os, const OsFn id)
 
       case OsFn::file_delete:
         os << "file_delete";
+        break;
+
+      case OsFn::sync_dir:
+        os << "sync_dir";
         break;
 
       case OsFn::map_file_to_memory:
@@ -346,6 +351,11 @@ void MockOs::expect_os_file_delete(const char *filename)
     expectations_->add(Expectation(OsFn::file_delete, filename));
 }
 
+void MockOs::expect_os_sync_dir(const char *path)
+{
+    expectations_->add(Expectation(OsFn::sync_dir, path));
+}
+
 void MockOs::expect_os_map_file_to_memory(int ret, struct os_mapped_file_data *mapped,
                                           const char *filename)
 {
@@ -461,6 +471,14 @@ void os_file_delete(const char *filename)
 
     cppcut_assert_equal(expect.d.function_id_, OsFn::file_delete);
     cppcut_assert_equal(expect.d.arg_filename_, std::string(filename));
+}
+
+void os_sync_dir(const char *path)
+{
+    const auto &expect(mock_os_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, OsFn::sync_dir);
+    cppcut_assert_equal(expect.d.arg_filename_, std::string(path));
 }
 
 int os_map_file_to_memory(struct os_mapped_file_data *mapped,

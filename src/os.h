@@ -46,6 +46,11 @@ int os_file_new(const char *filename);
 void os_file_close(int fd);
 void os_file_delete(const char *filename);
 
+/*!
+ * Flush changes in a directory to storage.
+ */
+void os_sync_dir(const char *path);
+
 int os_map_file_to_memory(struct os_mapped_file_data *mapped,
                           const char *filename);
 void os_unmap_file(struct os_mapped_file_data *mapped);

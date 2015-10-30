@@ -202,3 +202,20 @@ void os_unmap_file(struct os_mapped_file_data *mapped)
     safe_close_fd(mapped->fd);
     mapped->fd = -1;
 }
+
+void os_sync_dir(const char *path)
+{
+    log_assert(path != NULL);
+
+    int fd;
+
+    while((fd = open(path, O_DIRECTORY | O_RDONLY)) == -1 && errno == EINTR)
+        ;
+
+
+    if(fd < 0)
+        msg_error(errno, LOG_ERR,
+                  "Failed to open directory \"%s\" for syncing", path);
+    else
+        safe_close_fd(fd);
+}
