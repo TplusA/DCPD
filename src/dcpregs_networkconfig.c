@@ -750,6 +750,8 @@ static int modify_network_configuration(const struct register_network_interface_
 
     ret = inifile_write_to_file(&ini, filename);
 
+    os_sync_dir(registers_get_data()->connman_config_path);
+
 exit_error_free_inifile:
     inifile_free(&ini);
 

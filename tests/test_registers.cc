@@ -518,6 +518,8 @@ static MockConnman *mock_connman;
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 
+static constexpr char connman_config_path[] = "/var/lib/connman";
+
 static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
 static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
 static constexpr char expected_ethernet_config_filename[] =
@@ -569,7 +571,7 @@ void cut_setup(void)
     os_write_buffer.clear();
 
     dcpregs_networkconfig_init();
-    register_init(ethernet_mac_address, wlan_mac_address, "/var/lib/connman", NULL);
+    register_init(ethernet_mac_address, wlan_mac_address, connman_config_path, NULL);
 }
 
 void cut_teardown(void)
@@ -704,6 +706,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -759,6 +762,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -900,6 +904,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface(void)
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1264,6 +1269,7 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1350,6 +1356,7 @@ void test_set_both_dns_servers(void)
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1472,6 +1479,7 @@ void test_replace_primary_dns_server_of_two_servers(void)
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1530,6 +1538,7 @@ void test_replace_secondary_dns_server_of_two_servers(void)
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1587,6 +1596,7 @@ void test_add_secondary_dns_server_to_primary_server(void)
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1631,6 +1641,7 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored(void)
     for(int i = 0; i < 2 * 3 + (2 + 2) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1704,6 +1715,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -1924,6 +1936,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -2225,6 +2238,7 @@ void test_set_simple_ascii_wlan_ssid(void)
     for(int i = 0; i < 2 * 3 + (2 + 5) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
@@ -2284,6 +2298,7 @@ void test_set_binary_wlan_ssid(void)
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(connman_config_path);
 
     commit_ipv4_config(false);
 
