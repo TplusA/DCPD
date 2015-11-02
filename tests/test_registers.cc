@@ -3079,6 +3079,9 @@ void test_cancel_download_resets_download_status()
                             buffer, sizeof(buffer));
 }
 
+/*!\test
+ * Rebooting the system via DCP command is possible.
+ */
 void test_send_reboot_request()
 {
     auto *reg =
