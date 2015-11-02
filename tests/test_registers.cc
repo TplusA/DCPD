@@ -186,6 +186,7 @@ namespace spi_registers_tests_drc
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 static MockDcpdDBus *mock_dcpd_dbus;
+static MockLogindManagerDBus *mock_logind_manager_dbus;
 static MockDBusIface *mock_dbus_iface;
 
 static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
@@ -199,6 +200,9 @@ static tdbusdcpdListNavigation *const dbus_dcpd_list_navigation_iface_dummy =
 
 static tdbusdcpdListItem *const dbus_dcpd_list_item_iface_dummy =
     reinterpret_cast<tdbusdcpdListItem *>(0x75318642);
+
+static tdbuslogindManager *const dbus_logind_manager_iface_dummy =
+    reinterpret_cast<tdbuslogindManager *>(0x35127956);
 
 void cut_setup(void)
 {
@@ -217,6 +221,11 @@ void cut_setup(void)
     mock_dcpd_dbus->init();
     mock_dcpd_dbus_singleton = mock_dcpd_dbus;
 
+    mock_logind_manager_dbus = new MockLogindManagerDBus();
+    cppcut_assert_not_null(mock_logind_manager_dbus);
+    mock_logind_manager_dbus->init();
+    mock_logind_manager_dbus_singleton = mock_logind_manager_dbus;
+
     mock_dbus_iface = new MockDBusIface;
     cppcut_assert_not_null(mock_dbus_iface);
     mock_dbus_iface->init();
@@ -228,21 +237,25 @@ void cut_teardown(void)
     mock_messages->check();
     mock_os->check();
     mock_dcpd_dbus->check();
+    mock_logind_manager_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
+    mock_logind_manager_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
     delete mock_dcpd_dbus;
+    delete mock_logind_manager_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_os = nullptr;
     mock_dcpd_dbus = nullptr;
+    mock_logind_manager_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
 
@@ -507,6 +520,19 @@ void test_slave_drc_list_item_add_to_favorites(void)
     mock_messages->expect_msg_info_formatted("DRC: command code 0x2d");
     mock_dbus_iface->expect_dbus_get_list_item_iface(dbus_dcpd_list_item_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_item_emit_add_to_list(dbus_dcpd_list_item_iface_dummy, "Favorites", 0);
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends DRC command for power off.
+ */
+void test_slave_drc_power_off(void)
+{
+    static const uint8_t buffer[] = { DRCP_POWER_OFF, 0x00 };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x03");
+    mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
+    mock_logind_manager_dbus->expect_tdbus_logind_manager_call_power_off_sync(true, dbus_logind_manager_iface_dummy, false);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 

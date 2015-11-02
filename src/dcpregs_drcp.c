@@ -145,6 +145,8 @@ enum dbus_interface_id
     DBUSIFACE_LIST_NAVIGATION_WITH_DATA,
     DBUSIFACE_LIST_ITEM,
     DBUSIFACE_LIST_ITEM_WITH_DATA,
+
+    DBUSIFACE_LOGIN1_MANAGER,
 };
 
 struct drc_command_t
@@ -163,6 +165,10 @@ struct drc_command_t
         int (*const list_navigation_d)(tdbusdcpdListNavigation *iface, const uint8_t *data, size_t length);
         void (*const list_item)(tdbusdcpdListItem *iface);
         int (*const list_item_d)(tdbusdcpdListItem *iface, const uint8_t *data, size_t length);
+
+        /* special case: handle power commands directly by calling logind
+         *               methods */
+        gboolean (*const login1_manager)(tdbuslogindManager *proxy, gboolean arg_interactive, GCancellable *cancellable, GError **error);
     }
     dbus_signal;
 };
@@ -174,6 +180,11 @@ struct drc_command_t
  */
 static const struct drc_command_t drc_commands[] =
 {
+    {
+        .code = DRCP_POWER_OFF,
+        .iface_id = DBUSIFACE_LOGIN1_MANAGER,
+        .dbus_signal.login1_manager = tdbus_logind_manager_call_power_off_sync,
+    },
     {
         .code = DRCP_PLAYBACK_PAUSE,
         .iface_id = DBUSIFACE_PLAYBACK,
@@ -375,6 +386,11 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
       case DBUSIFACE_LIST_ITEM_WITH_DATA:
         ret = command->dbus_signal.list_item_d(dbus_get_list_item_iface(),
                                                data + 1, length - 1);
+        break;
+
+      case DBUSIFACE_LOGIN1_MANAGER:
+        (void)command->dbus_signal.login1_manager(dbus_get_logind_manager_iface(),
+                                                  false, NULL, NULL);
         break;
     }
 

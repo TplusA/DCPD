@@ -27,9 +27,10 @@
 enum class LogindManagerFn
 {
     call_reboot_sync,
+    call_power_off_sync,
 
     first_valid_logind_manager_fn_id = call_reboot_sync,
-    last_valid_logind_manager_fn_id = call_reboot_sync,
+    last_valid_logind_manager_fn_id = call_power_off_sync,
 };
 
 static std::ostream &operator<<(std::ostream &os, const LogindManagerFn id)
@@ -45,6 +46,10 @@ static std::ostream &operator<<(std::ostream &os, const LogindManagerFn id)
     {
       case LogindManagerFn::call_reboot_sync:
         os << "call_reboot_sync";
+        break;
+
+      case LogindManagerFn::call_power_off_sync:
+        os << "call_power_off_sync";
         break;
     }
 
@@ -102,6 +107,11 @@ void MockLogindManagerDBus::expect_tdbus_logind_manager_call_reboot_sync(gboolea
     expectations_->add(Expectation(LogindManagerFn::call_reboot_sync, retval, object, interactive));
 }
 
+void MockLogindManagerDBus::expect_tdbus_logind_manager_call_power_off_sync(gboolean retval, tdbuslogindManager *object, gboolean interactive)
+{
+    expectations_->add(Expectation(LogindManagerFn::call_power_off_sync, retval, object, interactive));
+}
+
 
 MockLogindManagerDBus *mock_logind_manager_dbus_singleton = nullptr;
 
@@ -110,6 +120,20 @@ gboolean tdbus_logind_manager_call_reboot_sync(tdbuslogindManager *proxy, gboole
     const auto &expect(mock_logind_manager_dbus_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.function_id_, LogindManagerFn::call_reboot_sync);
+    cppcut_assert_equal(expect.dbus_object_, proxy);
+    cppcut_assert_equal(expect.arg_interactive_, arg_interactive);
+
+    if(error != nullptr)
+        *error = nullptr;
+
+    return expect.ret_bool_;
+}
+
+gboolean tdbus_logind_manager_call_power_off_sync(tdbuslogindManager *proxy, gboolean arg_interactive, GCancellable *cancellable, GError **error)
+{
+    const auto &expect(mock_logind_manager_dbus_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.function_id_, LogindManagerFn::call_power_off_sync);
     cppcut_assert_equal(expect.dbus_object_, proxy);
     cppcut_assert_equal(expect.arg_interactive_, arg_interactive);
 

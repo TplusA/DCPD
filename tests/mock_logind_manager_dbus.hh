@@ -39,6 +39,7 @@ class MockLogindManagerDBus
     void check() const;
 
     void expect_tdbus_logind_manager_call_reboot_sync(gboolean retval, tdbuslogindManager *object, gboolean interactive);
+    void expect_tdbus_logind_manager_call_power_off_sync(gboolean retval, tdbuslogindManager *object, gboolean interactive);
 };
 
 extern MockLogindManagerDBus *mock_logind_manager_dbus_singleton;
