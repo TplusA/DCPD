@@ -106,6 +106,17 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
             dcpregs_status_set_reboot_required();
         }
 
+        /*
+         * Tell the slave that we are about to shut down now. It will wait for
+         * a few seconds before really cutting the power.
+         */
+        dcpregs_status_set_ready_to_shutdown();
+
+        /*
+         * This must be last because the D-Bus inhibit lock is going to be
+         * released by this function. When this function returns, communication
+         * with dcpspi may not be possible anymore.
+         */
         iface->allow_shutdown();
     }
     else if(strcmp(signal_name, "SeatNew") == 0)

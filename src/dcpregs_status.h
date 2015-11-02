@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 void dcpregs_status_set_ready(void);
+void dcpregs_status_set_ready_to_shutdown(void);
 void dcpregs_status_set_reboot_required(void);
 
 #ifdef __cplusplus

@@ -37,35 +37,53 @@
 #include "dcpregs_status.h"
 #include "registers_priv.h"
 
+#define STATUS_REGISTER_READY                   ((uint8_t)0x21)
+#define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
+#define STATUS_REGISTER_READY_CODE_POWER_OFF    ((uint8_t)0x01)
+#define STATUS_REGISTER_SYSTEM_ERROR            ((uint8_t)0x24)
+
 static struct
 {
     uint8_t status_byte;
+    uint8_t status_code;
 }
 misc_registers_data;
 
+static bool update_status_register(uint8_t status, uint8_t code)
+{
+    if(misc_registers_data.status_byte == status &&
+       misc_registers_data.status_code == code)
+        return false;
+
+    misc_registers_data.status_byte = status;
+    misc_registers_data.status_code = code;
+
+    return true;
+}
+
 void dcpregs_status_set_ready(void)
 {
-    static const uint8_t status_ready = 0x21;
+    if(update_status_register(STATUS_REGISTER_READY,
+                              STATUS_REGISTER_READY_CODE_OK))
+    {
+        /* send device status register (17) and network status register (50) */
+        const struct register_configuration_t *config = registers_get_data();
+        config->register_changed_notification_fn(17);
+        config->register_changed_notification_fn(50);
+    }
+}
 
-    if(misc_registers_data.status_byte == status_ready)
-        return;
-
-    misc_registers_data.status_byte = status_ready;
-
-    /* send device status register (17) and network status register (50) */
-    const struct register_configuration_t *config = registers_get_data();
-    config->register_changed_notification_fn(17);
-    config->register_changed_notification_fn(50);
+void dcpregs_status_set_ready_to_shutdown(void)
+{
+    if(update_status_register(STATUS_REGISTER_READY,
+                              STATUS_REGISTER_READY_CODE_POWER_OFF))
+        registers_get_data()->register_changed_notification_fn(17);
 }
 
 void dcpregs_status_set_reboot_required(void)
 {
-    static const uint8_t status_system_error = 0x24;
-
-    misc_registers_data.status_byte = status_system_error;
-
-    const struct register_configuration_t *config = registers_get_data();
-    config->register_changed_notification_fn(17);
+    if(update_status_register(STATUS_REGISTER_SYSTEM_ERROR, 0))
+        registers_get_data()->register_changed_notification_fn(17);
 }
 
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
@@ -74,7 +92,8 @@ static ssize_t read_17_device_status(uint8_t *response, size_t length)
     log_assert(length == 2);
 
     response[0] = misc_registers_data.status_byte;
-    response[1] = 0;
+    response[1] = misc_registers_data.status_code;
+
     return length;
 }
 
