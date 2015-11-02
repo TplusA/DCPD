@@ -34,6 +34,7 @@
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_file_transfer_dbus.hh"
+#include "mock_logind_manager_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
 #include "mock_messages.hh"
@@ -2678,10 +2679,14 @@ namespace spi_registers_file_transfer
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 static MockFileTransferDBus *mock_file_transfer_dbus;
+static MockLogindManagerDBus *mock_logind_manager_dbus;
 static MockDBusIface *mock_dbus_iface;
 
 static tdbusFileTransfer *const dbus_dcpd_file_transfer_iface_dummy =
     reinterpret_cast<tdbusFileTransfer *>(0x55990011);
+
+static tdbuslogindManager *const dbus_logind_manager_iface_dummy =
+    reinterpret_cast<tdbuslogindManager *>(0x35790011);
 
 class RegisterChangedNotificationData
 {
@@ -2743,6 +2748,11 @@ void cut_setup(void)
     mock_file_transfer_dbus->init();
     mock_file_transfer_dbus_singleton = mock_file_transfer_dbus;
 
+    mock_logind_manager_dbus = new MockLogindManagerDBus;
+    cppcut_assert_not_null(mock_logind_manager_dbus);
+    mock_logind_manager_dbus->init();
+    mock_logind_manager_dbus_singleton = mock_logind_manager_dbus;
+
     mock_dbus_iface = new MockDBusIface;
     cppcut_assert_not_null(mock_dbus_iface);
     mock_dbus_iface->init();
@@ -2764,21 +2774,25 @@ void cut_teardown(void)
     mock_messages->check();
     mock_os->check();
     mock_file_transfer_dbus->check();
+    mock_logind_manager_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
     mock_file_transfer_dbus_singleton = nullptr;
+    mock_logind_manager_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
     delete mock_file_transfer_dbus;
+    delete mock_logind_manager_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_os = nullptr;
     mock_file_transfer_dbus = nullptr;
+    mock_logind_manager_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
 
@@ -3063,6 +3077,21 @@ void test_cancel_download_resets_download_status()
         { HCR_STATUS_CATEGORY_GENERIC, HCR_STATUS_GENERIC_OK };
     cut_assert_equal_memory(expected_answer_2, sizeof(expected_answer_2),
                             buffer, sizeof(buffer));
+}
+
+void test_send_reboot_request()
+{
+    auto *reg =
+        lookup_register_expect_handlers(40, NULL,
+                                        dcpregs_write_40_download_control);
+
+    static constexpr uint8_t hcr_command[] =
+        { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
+
+    mock_messages->expect_msg_info("write 40 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
+    mock_logind_manager_dbus->expect_tdbus_logind_manager_call_reboot_sync(true, dbus_logind_manager_iface_dummy, false);
+    cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
 }
 
 };

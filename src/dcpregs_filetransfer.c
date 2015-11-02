@@ -307,6 +307,20 @@ static int try_start_xmodem(void)
     return ret;
 }
 
+static int send_shutdown_request(void)
+{
+    GError *error = NULL;
+    tdbus_logind_manager_call_reboot_sync(dbus_get_logind_manager_iface(), false, NULL, &error);
+
+    if(error == NULL)
+        return 0;
+
+    msg_error(0, LOG_EMERG, "Failed sending reboot command: %s", error->message);
+    g_error_free(error);
+
+    return -1;
+}
+
 /*!
  * Start download from internet or XMODEM transfer from flash.
  *
@@ -341,6 +355,17 @@ static int do_write_download_control(const uint8_t *data)
             data[1] == HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD)
     {
         return try_start_download();
+    }
+    else if(data[0] == HCR_COMMAND_CATEGORY_RESET)
+    {
+        /*
+         * Serious question: What kind of stupid idiot has grouped these things
+         *                   with file transfer control?
+         */
+        if(data[1] == HCR_COMMAND_REBOOT_SYSTEM)
+            return send_shutdown_request();
+        else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
+            BUG("Restore to factory defaults not implemented");
     }
 
     msg_error(ENOSYS, LOG_ERR, "Unsupported command");

@@ -48,6 +48,7 @@ class MockDBusIface
     void expect_dbus_get_list_navigation_iface(tdbusdcpdListNavigation *);
     void expect_dbus_get_list_item_iface(tdbusdcpdListItem *);
     void expect_dbus_get_file_transfer_iface(tdbusFileTransfer *);
+    void expect_dbus_get_logind_manager_iface(tdbuslogindManager *);
 };
 
 extern MockDBusIface *mock_dbus_iface_singleton;
