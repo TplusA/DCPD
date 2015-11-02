@@ -2698,6 +2698,45 @@ void test_get_wpa_cipher_returns_aes(void)
     cppcut_assert_equal("AES", static_cast<const char *>(static_cast<const void *>(response)));
 }
 
+/*!
+ * Network configuration cannot be saved after shutdown.
+ */
+void test_configuration_update_is_blocked_after_shutdown()
+{
+    start_ipv4_config();
+
+    mock_messages->expect_msg_info_formatted("Shutdown guard \"networkconfig\" down");
+    dcpregs_networkconfig_prepare_for_shutdown();
+
+    /* in-memory edits are still working... */
+    auto *reg = lookup_register_expect_handlers(55,
+                                                dcpregs_read_55_dhcp_enabled,
+                                                dcpregs_write_55_dhcp_enabled);
+    static const uint8_t zero = 0;
+
+    mock_messages->expect_msg_info("write 55 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Disable DHCP");
+    cppcut_assert_equal(0, reg->write_handler(&zero, 1));
+
+    /* ...but writing to file is blocked */
+    mock_messages->expect_msg_info("write 53 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_info("Not writing network configuration during shutdown.");
+    commit_ipv4_config(false, -1);
+}
+
+/*!
+ * Attepting to shut down twice has no effect.
+ */
+void test_shutdown_can_be_called_only_once()
+{
+    mock_messages->expect_msg_info_formatted("Shutdown guard \"networkconfig\" down");
+    dcpregs_networkconfig_prepare_for_shutdown();
+
+    mock_messages->expect_msg_info_formatted("Shutdown guard \"networkconfig\" down");
+    dcpregs_networkconfig_prepare_for_shutdown();
+}
+
 };
 
 namespace spi_registers_file_transfer
@@ -2885,12 +2924,25 @@ static void start_download(const std::string &url, uint32_t download_id)
     reg = lookup_register_expect_handlers(40, NULL,
                                           dcpregs_write_40_download_control);
     mock_messages->expect_msg_info("write 40 handler %p %zu");
-    mock_messages->expect_msg_info("Download started, transfer ID %u");
-    mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
-    mock_file_transfer_dbus->expect_tdbus_file_transfer_call_download_sync(
-        TRUE, download_id, dbus_dcpd_file_transfer_iface_dummy, url.c_str(), 20);
 
-    cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
+    int expected_write_handler_retval;
+
+    if(download_id == 0)
+    {
+        mock_messages->expect_msg_info("Not transferring files during shutdown.");
+        expected_write_handler_retval = -1;
+    }
+    else
+    {
+        mock_messages->expect_msg_info("Download started, transfer ID %u");
+        mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
+        mock_file_transfer_dbus->expect_tdbus_file_transfer_call_download_sync(
+            TRUE, download_id, dbus_dcpd_file_transfer_iface_dummy, url.c_str(), 20);
+        expected_write_handler_retval = 0;
+    }
+
+    cppcut_assert_equal(expected_write_handler_retval,
+                        reg->write_handler(hcr_command, sizeof(hcr_command)));
 }
 
 static void cancel_download(uint32_t download_id)
@@ -3122,6 +3174,49 @@ void test_send_reboot_request()
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_reboot_sync(true, dbus_logind_manager_iface_dummy, false);
     cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
+}
+
+/*!
+ * Download is canceled on shutdown.
+ */
+void test_transfer_is_interrupted_on_shutdown()
+{
+    start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 99);
+
+    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info("Cleared URL");
+    mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
+    mock_file_transfer_dbus->expect_tdbus_file_transfer_call_cancel_sync(
+        TRUE, dbus_dcpd_file_transfer_iface_dummy, 99);
+    dcpregs_filetransfer_prepare_for_shutdown();
+}
+
+/*!
+ * Download cannot be started after shutdown.
+ */
+void test_new_transfer_is_blocked_after_shutdown()
+{
+    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info("Cleared URL");
+    dcpregs_filetransfer_prepare_for_shutdown();
+
+    start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 0);
+}
+
+/*!
+ * Attepting to shut down twice has no effect.
+ */
+void test_shutdown_can_be_called_only_once()
+{
+    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info("Cleared URL");
+    dcpregs_filetransfer_prepare_for_shutdown();
+
+    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
+    dcpregs_filetransfer_prepare_for_shutdown();
 }
 
 };
