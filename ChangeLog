@@ -1,3 +1,22 @@
+2015-11-02  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.4 released.
+
+	* System shutdown: Use systemd and logind to inhibit system shutdown
+	  until it is safe to do so. Files are closed when power off or reboot
+	  is due. Corresponding internal APIs do not allow opening any new
+	  files in this case.
+
+	* DCP system reboot: Sending code 0x24/0x20 to register 40 triggers a
+	  system reboot. This is implemented by sending a reboot request to
+	  systemd.
+
+	* DCP system power off: Sending DRC command for power off triggers a
+	  system power down. This is implemented by sending a power off
+	  request to systemd.
+
+	* DCP status: Register 17 isn't fake anymore.
+
 2015-09-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.3 released.
