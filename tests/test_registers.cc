@@ -30,6 +30,7 @@
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer_priv.h"
+#include "dcpregs_status.h"
 #include "drcp_command_codes.h"
 
 #include "mock_dcpd_dbus.hh"
@@ -3135,6 +3136,50 @@ static constexpr char expected_config_filename[] = "/etc/os-release";
 
 static constexpr int expected_os_map_file_to_memory_fd = 5;
 
+class RegisterChangedData
+{
+  private:
+    std::vector<uint8_t> changed_registers_;
+
+  public:
+    RegisterChangedData(const RegisterChangedData &) = delete;
+    RegisterChangedData &operator=(const RegisterChangedData &) = delete;
+
+    explicit RegisterChangedData() {}
+
+    void init() { changed_registers_.clear(); }
+    void append(uint8_t reg) { changed_registers_.push_back(reg); }
+
+    void check()
+    {
+        cut_assert_true(changed_registers_.empty());
+    }
+
+    void check(uint8_t expected_register)
+    {
+        cppcut_assert_equal(size_t(1), changed_registers_.size());
+        cppcut_assert_equal(expected_register, changed_registers_[0]);
+
+        changed_registers_.clear();
+    }
+
+    template <size_t N>
+    void check(const std::array<uint8_t, N> &expected_registers)
+    {
+        cut_assert_equal_memory(expected_registers.data(), N,
+                                changed_registers_.data(), changed_registers_.size());
+
+        changed_registers_.clear();
+    }
+};
+
+static RegisterChangedData register_changed_data;
+
+static void register_changed_callback(uint8_t reg_number)
+{
+    register_changed_data.append(reg_number);
+}
+
 void cut_setup(void)
 {
     mock_messages = new MockMessages;
@@ -3147,14 +3192,18 @@ void cut_setup(void)
     mock_os->init();
     mock_os_singleton = mock_os;
 
+    register_changed_data.init();
+
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    register_init(NULL, NULL, NULL, NULL);
+    register_init(NULL, NULL, NULL, register_changed_callback);
 }
 
 void cut_teardown(void)
 {
     register_deinit();
+
+    register_changed_data.check();
 
     mock_messages->check();
     mock_os->check();
@@ -3415,6 +3464,111 @@ void test_read_image_version_with_zero_size_buffer()
 
     do_test_read_image_version(config_file, 0, NULL, 0,
                                "Cannot copy build ID to zero length buffer");
+}
+
+/*!\test
+ * Status byte is invalid without explicit internal ready notification.
+ */
+void test_status_byte_without_ready_notification_is_all_zero()
+{
+    auto *reg = register_lookup(17);
+    uint8_t buffer[2];
+    mock_messages->expect_msg_info("read 17 handler %p %zu");
+    cppcut_assert_equal((ssize_t)sizeof(buffer),
+                        reg->read_handler(buffer, sizeof(buffer)));
+
+    static constexpr uint8_t expected_answer[2] = { 0x00, 0x00 };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            buffer, sizeof(buffer));
+}
+
+/*!\test
+ * Status byte OK after explicit internal ready notification.
+ */
+void test_status_byte_after_ready_notification()
+{
+    dcpregs_status_set_ready();
+
+    auto *reg = register_lookup(17);
+    uint8_t buffer[2];
+    mock_messages->expect_msg_info("read 17 handler %p %zu");
+    cppcut_assert_equal((ssize_t)sizeof(buffer),
+                        reg->read_handler(buffer, sizeof(buffer)));
+
+    static constexpr uint8_t expected_answer[2] = { 0x21, 0x00 };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            buffer, sizeof(buffer));
+
+    static constexpr std::array<uint8_t, 2> expected_registers = { 17, 50 };
+    register_changed_data.check(expected_registers);
+}
+
+/*!\test
+ * Status byte indicates power off state after explicit internal shutdown
+ * notification.
+ */
+void test_status_byte_after_shutdown_notification()
+{
+    dcpregs_status_set_ready_to_shutdown();
+
+    auto *reg = register_lookup(17);
+    uint8_t buffer[2];
+    mock_messages->expect_msg_info("read 17 handler %p %zu");
+    cppcut_assert_equal((ssize_t)sizeof(buffer),
+                        reg->read_handler(buffer, sizeof(buffer)));
+
+    static constexpr uint8_t expected_answer[2] = { 0x21, 0x01 };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            buffer, sizeof(buffer));
+
+    register_changed_data.check(17);
+}
+
+/*!\test
+ * Status byte indicates system error state after corresponding explicit
+ * internal notification.
+ */
+void test_status_byte_after_reboot_required_notification()
+{
+    dcpregs_status_set_reboot_required();
+
+    auto *reg = register_lookup(17);
+    uint8_t buffer[2];
+    mock_messages->expect_msg_info("read 17 handler %p %zu");
+    cppcut_assert_equal((ssize_t)sizeof(buffer),
+                        reg->read_handler(buffer, sizeof(buffer)));
+
+    static constexpr uint8_t expected_answer[2] = { 0x24, 0x00 };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            buffer, sizeof(buffer));
+
+    register_changed_data.check(17);
+}
+
+/*!\test
+ * Status byte changes are only pushed to the SPI slave if the corresponding
+ * bytes have changed.
+ */
+void test_status_byte_updates_are_only_sent_if_changed()
+{
+    dcpregs_status_set_ready();
+    static constexpr std::array<uint8_t, 2> expected_regs_for_ready = { 17, 50 };
+    register_changed_data.check(expected_regs_for_ready);
+
+    dcpregs_status_set_ready();
+    register_changed_data.check();
+
+    dcpregs_status_set_ready_to_shutdown();
+    register_changed_data.check(17);
+
+    dcpregs_status_set_ready_to_shutdown();
+    register_changed_data.check();
+
+    dcpregs_status_set_reboot_required();
+    register_changed_data.check(17);
+
+    dcpregs_status_set_reboot_required();
+    register_changed_data.check();
 }
 
 };

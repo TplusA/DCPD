@@ -383,6 +383,8 @@ void register_init(const char *ethernet_mac_address,
                    const char *connman_config_path,
                    void (*register_changed_callback)(uint8_t reg_number))
 {
+    memset(&misc_registers_data, 0, sizeof(misc_registers_data));
+
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
     const char *temp;
