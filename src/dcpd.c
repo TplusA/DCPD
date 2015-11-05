@@ -522,7 +522,7 @@ static void push_register_to_slave(uint8_t reg_number)
 {
     ssize_t ret;
 
-    while((ret = write(register_changed_write_fd, &reg_number, sizeof(reg_number))) < 0 && errno == EINTR)
+    while((ret = os_write(register_changed_write_fd, &reg_number, sizeof(reg_number))) < 0 && errno == EINTR)
         ;
 
     if(ret < 0)
