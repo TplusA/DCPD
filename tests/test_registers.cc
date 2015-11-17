@@ -2698,7 +2698,7 @@ void test_get_wpa_cipher_returns_aes(void)
     cppcut_assert_equal("AES", static_cast<const char *>(static_cast<const void *>(response)));
 }
 
-/*!
+/*!\test
  * Network configuration cannot be saved after shutdown.
  */
 void test_configuration_update_is_blocked_after_shutdown()
@@ -2725,7 +2725,7 @@ void test_configuration_update_is_blocked_after_shutdown()
     commit_ipv4_config(false, -1);
 }
 
-/*!
+/*!\test
  * Attepting to shut down twice has no effect.
  */
 void test_shutdown_can_be_called_only_once()
@@ -3176,7 +3176,7 @@ void test_send_reboot_request()
     cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
 }
 
-/*!
+/*!\test
  * Download is canceled on shutdown.
  */
 void test_transfer_is_interrupted_on_shutdown()
@@ -3192,7 +3192,7 @@ void test_transfer_is_interrupted_on_shutdown()
     dcpregs_filetransfer_prepare_for_shutdown();
 }
 
-/*!
+/*!\test
  * Download cannot be started after shutdown.
  */
 void test_new_transfer_is_blocked_after_shutdown()
@@ -3205,7 +3205,7 @@ void test_new_transfer_is_blocked_after_shutdown()
     start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 0);
 }
 
-/*!
+/*!\test
  * Attepting to shut down twice has no effect.
  */
 void test_shutdown_can_be_called_only_once()
