@@ -2726,7 +2726,7 @@ void test_configuration_update_is_blocked_after_shutdown()
 }
 
 /*!\test
- * Attepting to shut down twice has no effect.
+ * Attempting to shut down twice has no effect.
  */
 void test_shutdown_can_be_called_only_once()
 {
@@ -3206,7 +3206,7 @@ void test_new_transfer_is_blocked_after_shutdown()
 }
 
 /*!\test
- * Attepting to shut down twice has no effect.
+ * Attempting to shut down twice has no effect.
  */
 void test_shutdown_can_be_called_only_once()
 {
