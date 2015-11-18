@@ -644,6 +644,7 @@ struct parameters
 {
     bool run_in_foreground;
     bool connect_to_session_dbus;
+    bool with_connman;
     const char *ethernet_interface_mac_address;
     const char *wlan_interface_mac_address;
 };
@@ -743,6 +744,7 @@ static void usage(const char *program_name)
            "  --ospi  name   Name of the named pipe the DCPSPI daemon reads from.\n"
            "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
            "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n"
+           "  --no-connman   Disable use of Connman (no network support).\n"
            "  --session-dbus Connect to session D-Bus.\n"
            "  --system-dbus  Connect to system D-Bus.\n",
            program_name);
@@ -754,6 +756,7 @@ static int process_command_line(int argc, char *argv[],
 {
     parameters->run_in_foreground = false;
     parameters->connect_to_session_dbus = true;
+    parameters->with_connman = true;
 
     files->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
     files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
@@ -804,6 +807,8 @@ static int process_command_line(int argc, char *argv[],
             parameters->connect_to_session_dbus = true;
         else if(strcmp(argv[i], "--system-dbus") == 0)
             parameters->connect_to_session_dbus = false;
+        else if(strcmp(argv[i], "--no-connman") == 0)
+            parameters->with_connman = false;
         else if(strcmp(argv[i], "--ethernet-mac") == 0)
         {
             CHECK_ARGUMENT();
@@ -875,7 +880,8 @@ int main(int argc, char *argv[])
                   "/var/lib/connman",
                   push_register_to_slave);
 
-    if(dbus_setup(parameters.connect_to_session_dbus, true) < 0)
+    if(dbus_setup(parameters.connect_to_session_dbus,
+                  parameters.with_connman) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
