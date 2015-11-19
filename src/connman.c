@@ -20,25 +20,12 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <glib.h>
 #include <string.h>
-#include <strings.h>
 
 #include "connman.h"
 #include "dbus_iface_deep.h"
+#include "dbus_common.h"
 #include "messages.h"
-
-static int handle_dbus_error(GError **error)
-{
-    if(*error == NULL)
-        return 0;
-
-    msg_error(0, LOG_EMERG, "%s", (*error)->message);
-    g_error_free(*error);
-    *error = NULL;
-
-    return -1;
-}
 
 static GVariant *query_services(void)
 {
@@ -50,7 +37,7 @@ static GVariant *query_services(void)
         GError *error = NULL;
         tdbus_connman_manager_call_get_services_sync(iface,
                                                      &result, NULL, &error);
-        (void)handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error);
     }
 
     return result;

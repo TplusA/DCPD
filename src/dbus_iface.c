@@ -28,6 +28,7 @@
 #include "dbus_iface.h"
 #include "dbus_iface_deep.h"
 #include "dbus_handlers.h"
+#include "dbus_common.h"
 #include "dcpd_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
@@ -89,18 +90,6 @@ static gpointer process_dbus(gpointer user_data)
     return NULL;
 }
 
-static int handle_dbus_error(GError **error)
-{
-    if(*error == NULL)
-        return 0;
-
-    msg_error(0, LOG_EMERG, "%s", (*error)->message);
-    g_error_free(*error);
-    *error = NULL;
-
-    return -1;
-}
-
 static void try_export_iface(GDBusConnection *connection,
                              GDBusInterfaceSkeleton *iface)
 {
@@ -108,7 +97,7 @@ static void try_export_iface(GDBusConnection *connection,
 
     g_dbus_interface_skeleton_export(iface, connection, "/de/tahifi/Dcpd", &error);
 
-    (void)handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error);
 }
 
 static void bus_acquired(GDBusConnection *connection,
@@ -155,7 +144,7 @@ static void name_acquired(GDBusConnection *connection,
                                                G_DBUS_PROXY_FLAGS_NONE,
                                                "de.tahifi.DBusDL", "/de/tahifi/DBusDL",
                                                NULL, &error);
-        (void)handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error);
     }
 
     if(!is_session_bus)
@@ -170,7 +159,7 @@ static void name_acquired(GDBusConnection *connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      "net.connman", "/",
                                                      NULL, &error);
-            (void)handle_dbus_error(&error);
+            (void)dbus_common_handle_dbus_error(&error);
         }
 
         login1_iface_data.login1_manager_iface =
@@ -179,7 +168,7 @@ static void name_acquired(GDBusConnection *connection,
                                                 "org.freedesktop.login1",
                                                 "/org/freedesktop/login1",
                                                 NULL, &error);
-        (void)handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error);
     }
 }
 
@@ -358,7 +347,7 @@ void dbus_lock_shutdown_sequence(const char *why)
         "shutdown", PACKAGE, why, "delay",
         NULL, &out_fd, &out_fd_list, NULL, &error);
 
-    if(handle_dbus_error(&error) < 0)
+    if(dbus_common_handle_dbus_error(&error) < 0)
         return;
 
     if(out_fd == NULL)
@@ -386,7 +375,7 @@ void dbus_lock_shutdown_sequence(const char *why)
             login1_iface_data.lock_fd =
                 g_unix_fd_list_get(out_fd_list, 0, &error);
 
-            if(handle_dbus_error(&error))
+            if(dbus_common_handle_dbus_error(&error))
                 login1_iface_data.lock_fd = -1;
         }
 
