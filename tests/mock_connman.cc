@@ -37,9 +37,10 @@ enum class ConnmanFn
     get_wlan_security_type_string,
     get_wlan_ssid,
     free_interface_data,
+    start_wlan_site_survey,
 
     first_valid_connman_fn_id = find_interface,
-    last_valid_connman_fn_id = free_interface_data,
+    last_valid_connman_fn_id = start_wlan_site_survey,
 };
 
 static std::ostream &operator<<(std::ostream &os, const ConnmanFn id)
@@ -96,6 +97,10 @@ static std::ostream &operator<<(std::ostream &os, const ConnmanFn id)
       case ConnmanFn::free_interface_data:
         os << "free_interface_data";
         break;
+
+      case ConnmanFn::start_wlan_site_survey:
+        os << "start_wlan_site_survey";
+        break;
     }
 
     os << "()";
@@ -121,6 +126,8 @@ class MockConnman::Expectation
         std::string arg_wireless_mac_address_;
         bool arg_pointer_shall_be_null_;
         size_t arg_dest_size_;
+        SurveyCallbackInvocation callback_invocation_;
+        enum ConnmanSiteScanResult callback_result_;
 
         explicit Data(ConnmanFn fn):
             function_id_(fn),
@@ -130,7 +137,9 @@ class MockConnman::Expectation
             ret_data_(nullptr),
             arg_iface_data_(nullptr),
             arg_pointer_shall_be_null_(false),
-            arg_dest_size_(9876543)
+            arg_dest_size_(9876543),
+            callback_invocation_(nullptr),
+            callback_result_(ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1))
         {}
     };
 
@@ -168,6 +177,15 @@ class MockConnman::Expectation
     {
         data_.ret_bool_ = ret;
         data_.arg_iface_data_ = iface_data;
+    }
+
+    explicit Expectation(bool ret, SurveyCallbackInvocation invocation,
+                         enum ConnmanSiteScanResult callback_result):
+        d(ConnmanFn::start_wlan_site_survey)
+    {
+        data_.ret_bool_ = ret;
+        data_.callback_invocation_ = invocation;
+        data_.callback_result_ = callback_result;
     }
 
     explicit Expectation(struct ConnmanInterfaceData *iface_data):
@@ -293,6 +311,17 @@ void MockConnman::expect_get_wlan_ssid(const uint8_t *ret_bytes, size_t ret_byte
 void MockConnman::expect_free_interface_data(struct ConnmanInterfaceData *iface_data)
 {
     expectations_->add(Expectation(iface_data));
+}
+
+void MockConnman::expect_connman_start_wlan_site_survey(bool ret)
+{
+    expectations_->add(Expectation(ret, nullptr,
+                                   ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1)));
+}
+
+void MockConnman::expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, enum ConnmanSiteScanResult callback_result)
+{
+    expectations_->add(Expectation(ret, callback_invocation, callback_result));
 }
 
 
@@ -449,4 +478,17 @@ void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::free_interface_data);
     cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
+}
+
+bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::start_wlan_site_survey);
+    cppcut_assert_not_null(reinterpret_cast<void *>(callback));
+
+    if(expect.d.callback_invocation_ != nullptr)
+        expect.d.callback_invocation_(callback, expect.d.callback_result_);
+
+    return expect.d.ret_bool_;
 }

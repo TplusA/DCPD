@@ -38,6 +38,8 @@ class MockConnman
     void init();
     void check() const;
 
+    using SurveyCallbackInvocation = void (*)(ConnmanSurveyDoneFn, enum ConnmanSiteScanResult);
+
     void expect_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address);
     void expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address);
     void expect_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data);
@@ -49,6 +51,9 @@ class MockConnman
     void expect_get_wlan_security_type_string(bool ret, const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);
     void expect_get_wlan_ssid(const uint8_t *ret_bytes, size_t ret_bytes_size, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);
     void expect_free_interface_data(struct ConnmanInterfaceData *iface_data);
+
+    void expect_connman_start_wlan_site_survey(bool ret);
+    void expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, enum ConnmanSiteScanResult callback_result);
 };
 
 extern MockConnman *mock_connman_singleton;

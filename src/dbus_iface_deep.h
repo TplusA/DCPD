@@ -36,6 +36,7 @@ tdbusdcpdListItem *dbus_get_list_item_iface(void);
 tdbusFileTransfer *dbus_get_file_transfer_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
+tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path);
 
 tdbuslogindManager *dbus_get_logind_manager_iface(void);
 

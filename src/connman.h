@@ -39,6 +39,21 @@ enum ConnmanConnectionType
     CONNMAN_CONNECTION_TYPE_WLAN,
 };
 
+/*!
+ * WLAN site survey result.
+ */
+enum ConnmanSiteScanResult
+{
+    CONNMAN_SITE_SCAN_OK,
+    CONNMAN_SITE_SCAN_CONNMAN_ERROR,
+    CONNMAN_SITE_SCAN_DBUS_ERROR,
+    CONNMAN_SITE_SCAN_NO_HARDWARE,
+
+    CONNMAN_SITE_SCAN_RESULT_LAST = CONNMAN_SITE_SCAN_NO_HARDWARE,
+};
+
+typedef void (*ConnmanSurveyDoneFn)(enum ConnmanSiteScanResult result);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -67,6 +82,7 @@ bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_da
 size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,
                              uint8_t *dest, size_t dest_size);
 void connman_free_interface_data(struct ConnmanInterfaceData *iface_data);
+bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback);
 
 #ifdef __cplusplus
 }

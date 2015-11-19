@@ -427,6 +427,23 @@ tdbusconnmanManager *dbus_get_connman_manager_iface(void)
     return connman_iface_data.connman_manager_iface;
 }
 
+tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path)
+{
+    GDBusConnection *connection =
+        g_dbus_proxy_get_connection(G_DBUS_PROXY(dbus_get_connman_manager_iface()));
+
+    GError *error = NULL;
+
+    tdbusconnmanTechnology *proxy =
+        tdbus_connman_technology_proxy_new_sync(connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                "net.connman", strdup(path),
+                                                NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error);
+
+    return proxy;
+}
+
 tdbuslogindManager *dbus_get_logind_manager_iface(void)
 {
     return login1_iface_data.login1_manager_iface;
