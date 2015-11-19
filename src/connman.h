@@ -32,16 +32,16 @@
  */
 struct ConnmanInterfaceData;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 enum ConnmanConnectionType
 {
     CONNMAN_CONNECTION_TYPE_UNKNOWN,
     CONNMAN_CONNECTION_TYPE_ETHERNET,
     CONNMAN_CONNECTION_TYPE_WLAN,
 };
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ConnmanInterfaceData *connman_find_interface(const char *mac_address);
 
