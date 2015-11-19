@@ -31,6 +31,7 @@ dcpd_SOURCES = \
     dcpregs_tcptunnel.h \
     dcpregs_status.h \
     connman.c connman.h \
+    connman_common.c connman_common.h \
     dbus_common.c dbus_common.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h dbus_handlers.h
 

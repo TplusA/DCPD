@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "connman.h"
+#include "connman_common.h"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
 #include "messages.h"
@@ -41,24 +42,6 @@ static GVariant *query_services(void)
     }
 
     return result;
-}
-
-static void init_dict_from_temp_gvariant(GVariant *temp, GVariantDict *dict)
-{
-    log_assert(temp != NULL);
-    g_variant_dict_init(dict, temp);
-    g_variant_unref(temp);
-}
-
-static void init_subdict(GVariant *tuple,
-                         GVariantDict *subdict, const char *subdict_name)
-{
-    GVariantDict dict;
-    init_dict_from_temp_gvariant(g_variant_get_child_value(tuple, 1), &dict);
-    init_dict_from_temp_gvariant(g_variant_dict_lookup_value(&dict, subdict_name,
-                                                             G_VARIANT_TYPE_VARDICT),
-                                 subdict);
-    g_variant_dict_clear(&dict);
 }
 
 static int determine_service_rank(GVariant *state_variant)
@@ -105,7 +88,8 @@ struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
         log_assert(tuple != NULL);
 
         GVariantDict dict;
-        init_dict_from_temp_gvariant(g_variant_get_child_value(tuple, 1), &dict);
+        connman_common_init_dict_from_temp_gvariant(
+            g_variant_get_child_value(tuple, 1), &dict);
 
         int rank =
             determine_service_rank(g_variant_dict_lookup_value(&dict, "State",
@@ -114,9 +98,9 @@ struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
         if(rank > best_rank)
         {
             GVariantDict ethernet_dict;
-            init_dict_from_temp_gvariant(g_variant_dict_lookup_value(&dict, "Ethernet",
-                                                                     G_VARIANT_TYPE_VARDICT),
-                                         &ethernet_dict);
+            connman_common_init_dict_from_temp_gvariant(
+                g_variant_dict_lookup_value(&dict, "Ethernet", G_VARIANT_TYPE_VARDICT),
+                &ethernet_dict);
 
             GVariant *mac_address_variant =
                 g_variant_dict_lookup_value(&ethernet_dict, "Address", G_VARIANT_TYPE_STRING);
@@ -161,9 +145,9 @@ static void match_mac_addresses(GVariantDict *dict,
                                 struct match_mac_address_data *data)
 {
     GVariantDict ethernet_dict;
-    init_dict_from_temp_gvariant(g_variant_dict_lookup_value(dict, "Ethernet",
-                                                             G_VARIANT_TYPE_VARDICT),
-                                 &ethernet_dict);
+    connman_common_init_dict_from_temp_gvariant(
+        g_variant_dict_lookup_value(dict, "Ethernet", G_VARIANT_TYPE_VARDICT),
+        &ethernet_dict);
 
     GVariant *mac_address_variant =
         g_variant_dict_lookup_value(&ethernet_dict, "Address", G_VARIANT_TYPE_STRING);
@@ -204,7 +188,8 @@ connman_find_active_primary_interface(const char *default_mac_address,
         log_assert(tuple != NULL);
 
         GVariantDict dict;
-        init_dict_from_temp_gvariant(g_variant_get_child_value(tuple, 1), &dict);
+        connman_common_init_dict_from_temp_gvariant(
+            g_variant_get_child_value(tuple, 1), &dict);
 
         int rank =
             determine_service_rank(g_variant_dict_lookup_value(&dict, "State",
@@ -256,7 +241,7 @@ bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
     log_assert(iface_data != NULL);
 
     GVariantDict dict;
-    init_subdict((GVariant *)iface_data, &dict, "IPv4.Configuration");
+    connman_common_init_subdict((GVariant *)iface_data, &dict, "IPv4.Configuration");
 
     GVariant *method_variant =
         g_variant_dict_lookup_value(&dict, "Method", G_VARIANT_TYPE_STRING);
@@ -321,7 +306,7 @@ static void get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
     log_assert(dest_size > 0);
 
     GVariantDict dict;
-    init_subdict((GVariant *)iface_data, &dict, "IPv4");
+    connman_common_init_subdict((GVariant *)iface_data, &dict, "IPv4");
 
     GVariant *ipv4_parameter_variant =
         g_variant_dict_lookup_value(&dict, parameter_name, G_VARIANT_TYPE_STRING);
@@ -369,8 +354,8 @@ static void get_nameserver_string(struct ConnmanInterfaceData *iface_data,
     dest[0] = '\0';
 
     GVariantDict dict;
-    init_dict_from_temp_gvariant(g_variant_get_child_value((GVariant *)iface_data, 1),
-                                 &dict);
+    connman_common_init_dict_from_temp_gvariant(
+        g_variant_get_child_value((GVariant *)iface_data, 1), &dict);
 
     GVariant *dns_array = g_variant_dict_lookup_value(&dict, "Nameservers",
                                                       G_VARIANT_TYPE_ARRAY);
@@ -417,8 +402,8 @@ bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_da
 
     bool retval = false;
     GVariantDict dict;
-    init_dict_from_temp_gvariant(g_variant_get_child_value((GVariant *)iface_data, 1),
-                                 &dict);
+    connman_common_init_dict_from_temp_gvariant(
+        g_variant_get_child_value((GVariant *)iface_data, 1), &dict);
 
     GVariant *security_array =
         g_variant_dict_lookup_value(&dict, "Security", G_VARIANT_TYPE_ARRAY);
@@ -457,8 +442,8 @@ size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,
 
     size_t retval = 0;
     GVariantDict dict;
-    init_dict_from_temp_gvariant(g_variant_get_child_value((GVariant *)iface_data, 1),
-                                 &dict);
+    connman_common_init_dict_from_temp_gvariant(
+        g_variant_get_child_value((GVariant *)iface_data, 1), &dict);
 
     GVariant *ssid_string =
         g_variant_dict_lookup_value(&dict, "Name", G_VARIANT_TYPE_STRING);

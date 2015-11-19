@@ -21,6 +21,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <unistd.h>
 
 /*!
  * Internal type for Connman interface code for storing D-Bus results.
