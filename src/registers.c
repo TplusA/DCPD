@@ -32,6 +32,7 @@
 
 #include "dcpregs_drcp.h"
 #include "dcpregs_networkconfig.h"
+#include "dcpregs_wlansurvey.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_tcptunnel.h"
 #include "dcpregs_status.h"
@@ -327,6 +328,18 @@ static const struct dcp_register_t register_map[] =
         .read_handler = dcpregs_read_102_passphrase,
     },
     {
+        /* WLAN site survey request */
+        .address = 104,
+        .max_data_size = 1,
+        .write_handler = dcpregs_write_104_start_wlan_site_survey,
+    },
+    {
+        /* WLAN site survey results */
+        .address = 105,
+        .max_data_size = 2 * 4096,
+        .read_handler = dcpregs_read_105_wlan_site_survey_results,
+    },
+    {
         /* TCP tunnel control */
         .address = 119,
         .max_data_size = 3,
@@ -412,12 +425,14 @@ void register_init(const char *ethernet_mac_address,
     config->register_changed_notification_fn = register_changed_callback;
 
     dcpregs_networkconfig_init();
+    dcpregs_wlansurvey_init();
     dcpregs_filetransfer_init();
 }
 
 void register_deinit(void)
 {
     dcpregs_networkconfig_deinit();
+    dcpregs_wlansurvey_deinit();
     dcpregs_filetransfer_deinit();
 }
 

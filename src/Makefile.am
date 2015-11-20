@@ -26,7 +26,7 @@ dcpd_SOURCES = \
     network.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
-    dcpregs_drcp.h dcpregs_networkconfig.h \
+    dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.h \
     dcpregs_status.h \
@@ -68,6 +68,7 @@ libregisters_la_SOURCES = \
     registers.c registers.h registers_priv.h \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_networkconfig.c dcpregs_networkconfig.h \
+    dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
     dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
     dcpregs_status.h \
@@ -82,7 +83,10 @@ libinifile_la_CFLAGS = $(AM_CFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
-    dcpregs_networkconfig.h dcpregs_status.h
+    dcpregs_networkconfig.h \
+    dcpregs_wlansurvey.h \
+    dcpregs_filetransfer.h \
+    dcpregs_status.h
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h

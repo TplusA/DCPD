@@ -41,12 +41,16 @@ enum ConnmanConnectionType
 
 /*!
  * WLAN site survey result.
+ *
+ * \attention
+ *     This enumeration must match the array in #survey_result_to_string().
  */
 enum ConnmanSiteScanResult
 {
     CONNMAN_SITE_SCAN_OK,
     CONNMAN_SITE_SCAN_CONNMAN_ERROR,
     CONNMAN_SITE_SCAN_DBUS_ERROR,
+    CONNMAN_SITE_SCAN_OUT_OF_MEMORY,
     CONNMAN_SITE_SCAN_NO_HARDWARE,
 
     CONNMAN_SITE_SCAN_RESULT_LAST = CONNMAN_SITE_SCAN_NO_HARDWARE,
