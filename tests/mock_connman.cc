@@ -37,6 +37,17 @@ enum class ConnmanFn
     get_wlan_security_type_string,
     get_wlan_ssid,
     free_interface_data,
+    service_iterator_get,
+    service_iterator_rewind,
+    service_iterator_next,
+    service_iterator_free,
+    service_iterator_get_technology_type,
+    service_iterator_get_ssid,
+    service_iterator_get_strength,
+    service_iterator_get_security_iterator,
+    security_iterator_next,
+    security_iterator_free,
+    security_iterator_get_security,
     start_wlan_site_survey,
 
     first_valid_connman_fn_id = find_interface,
@@ -98,6 +109,50 @@ static std::ostream &operator<<(std::ostream &os, const ConnmanFn id)
         os << "free_interface_data";
         break;
 
+      case ConnmanFn::service_iterator_get:
+        os << "service_iterator_get";
+        break;
+
+      case ConnmanFn::service_iterator_rewind:
+        os << "service_iterator_rewind";
+        break;
+
+      case ConnmanFn::service_iterator_next:
+        os << "service_iterator_next";
+        break;
+
+      case ConnmanFn::service_iterator_free:
+        os << "service_iterator_free";
+        break;
+
+      case ConnmanFn::service_iterator_get_technology_type:
+        os << "service_iterator_get_technology_type";
+        break;
+
+      case ConnmanFn::service_iterator_get_ssid:
+        os << "service_iterator_get_ssid";
+        break;
+
+      case ConnmanFn::service_iterator_get_strength:
+        os << "service_iterator_get_strength";
+        break;
+
+      case ConnmanFn::service_iterator_get_security_iterator:
+        os << "service_iterator_get_security_iterator";
+        break;
+
+      case ConnmanFn::security_iterator_next:
+        os << "security_iterator_next";
+        break;
+
+      case ConnmanFn::security_iterator_free:
+        os << "security_iterator_free";
+        break;
+
+      case ConnmanFn::security_iterator_get_security:
+        os << "security_iterator_get_security";
+        break;
+
       case ConnmanFn::start_wlan_site_survey:
         os << "start_wlan_site_survey";
         break;
@@ -128,6 +183,7 @@ class MockConnman::Expectation
         size_t arg_dest_size_;
         SurveyCallbackInvocation callback_invocation_;
         enum ConnmanSiteScanResult callback_result_;
+        struct ConnmanServiceIterator *service_iterator_;
 
         explicit Data(ConnmanFn fn):
             function_id_(fn),
@@ -139,7 +195,8 @@ class MockConnman::Expectation
             arg_pointer_shall_be_null_(false),
             arg_dest_size_(9876543),
             callback_invocation_(nullptr),
-            callback_result_(ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1))
+            callback_result_(ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1)),
+            service_iterator_(nullptr)
         {}
     };
 
@@ -192,6 +249,19 @@ class MockConnman::Expectation
         d(ConnmanFn::free_interface_data)
     {
         data_.arg_iface_data_ = iface_data;
+    }
+
+    explicit Expectation(ConnmanFn fn, struct ConnmanServiceIterator *iter):
+        d(fn)
+    {
+        data_.service_iterator_ = iter;
+    }
+
+    explicit Expectation(ConnmanFn fn, bool ret, struct ConnmanServiceIterator *iter):
+        d(fn)
+    {
+        data_.ret_bool_ = ret;
+        data_.service_iterator_ = iter;
     }
 
     explicit Expectation(ConnmanFn fn, const char *ret_string,
@@ -312,6 +382,36 @@ void MockConnman::expect_free_interface_data(struct ConnmanInterfaceData *iface_
 {
     expectations_->add(Expectation(iface_data));
 }
+
+void MockConnman::expect_connman_service_iterator_get(struct ConnmanServiceIterator *ret)
+{
+    expectations_->add(Expectation(ConnmanFn::service_iterator_get, ret));
+}
+
+void MockConnman::expect_connman_service_iterator_rewind(struct ConnmanServiceIterator *iter)
+{
+    expectations_->add(Expectation(ConnmanFn::service_iterator_rewind, iter));
+}
+
+void MockConnman::expect_connman_service_iterator_next(bool ret, struct ConnmanServiceIterator *iter)
+{
+    expectations_->add(Expectation(ConnmanFn::service_iterator_next, ret, iter));
+}
+
+void MockConnman::expect_connman_service_iterator_free(struct ConnmanServiceIterator *iter)
+{
+    expectations_->add(Expectation(ConnmanFn::service_iterator_free, iter));
+}
+
+/*
+void MockConnman::expect_connman_service_iterator_get_technology_type(const char *ret, struct ConnmanServiceIterator *iter);
+void MockConnman::expect_connman_service_iterator_get_ssid(const char *ret, struct ConnmanServiceIterator *iter);
+void MockConnman::expect_connman_service_iterator_get_strength(int ret, struct ConnmanServiceIterator *iter);
+void MockConnman::expect_connman_service_iterator_get_security_iterator(struct ConnmanServiceSecurityIterator *ret, struct ConnmanServiceIterator *iter, size_t *count);
+void MockConnman::expect_connman_security_iterator_next(bool ret, struct ConnmanServiceSecurityIterator *iter);
+void MockConnman::expect_connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter);
+void MockConnman::expect_connman_security_iterator_get_security(const char *ret, struct ConnmanServiceSecurityIterator *iter);
+*/
 
 void MockConnman::expect_connman_start_wlan_site_survey(bool ret)
 {
@@ -478,6 +578,78 @@ void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::free_interface_data);
     cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
+}
+
+struct ConnmanServiceIterator *connman_service_iterator_get(void)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_get);
+
+    return expect.d.service_iterator_;
+}
+
+void connman_service_iterator_rewind(struct ConnmanServiceIterator *iter)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_rewind);
+    cppcut_assert_equal(expect.d.service_iterator_, iter);
+}
+
+bool connman_service_iterator_next(struct ConnmanServiceIterator *iter)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_next);
+    cppcut_assert_equal(expect.d.service_iterator_, iter);
+
+    return expect.d.ret_bool_;
+}
+
+void connman_service_iterator_free(struct ConnmanServiceIterator *iter)
+{
+    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_free);
+    cppcut_assert_equal(expect.d.service_iterator_, iter);
+}
+
+const char *connman_service_iterator_get_ssid(struct ConnmanServiceIterator *iter)
+{
+    cut_fail("not implemented");
+    return NULL;
+}
+
+int connman_service_iterator_get_strength(struct ConnmanServiceIterator *iter)
+{
+    cut_fail("not implemented");
+    return -1;
+}
+
+struct ConnmanServiceSecurityIterator *
+connman_service_iterator_get_security_iterator(struct ConnmanServiceIterator *iter,
+                                               size_t *count)
+{
+    cut_fail("not implemented");
+    return NULL;
+}
+
+bool connman_security_iterator_next(struct ConnmanServiceSecurityIterator *iter)
+{
+    cut_fail("not implemented");
+    return false;
+}
+
+void connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter)
+{
+    cut_fail("not implemented");
+}
+
+const char *connman_security_iterator_get_security(struct ConnmanServiceSecurityIterator *iter)
+{
+    cut_fail("not implemented");
+    return NULL;
 }
 
 bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)

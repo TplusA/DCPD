@@ -21,7 +21,21 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "connman_common.h"
+#include "dbus_common.h"
 #include "messages.h"
+
+GVariant *connman_common_query_services(tdbusconnmanManager *iface)
+{
+    if(iface == NULL)
+        return NULL;
+
+    GVariant *result = NULL;
+    GError *error = NULL;
+    tdbus_connman_manager_call_get_services_sync(iface, &result, NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error);
+
+    return result;
+}
 
 void connman_common_init_dict_from_temp_gvariant(GVariant *temp,
                                                  GVariantDict *dict)

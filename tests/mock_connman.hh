@@ -52,6 +52,18 @@ class MockConnman
     void expect_get_wlan_ssid(const uint8_t *ret_bytes, size_t ret_bytes_size, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);
     void expect_free_interface_data(struct ConnmanInterfaceData *iface_data);
 
+    void expect_connman_service_iterator_get(struct ConnmanServiceIterator *ret);
+    void expect_connman_service_iterator_rewind(struct ConnmanServiceIterator *iter);
+    void expect_connman_service_iterator_next(bool ret, struct ConnmanServiceIterator *iter);
+    void expect_connman_service_iterator_free(struct ConnmanServiceIterator *iter);
+    void expect_connman_service_iterator_get_technology_type(const char *ret, struct ConnmanServiceIterator *iter);
+    void expect_connman_service_iterator_get_ssid(const char *ret, struct ConnmanServiceIterator *iter);
+    void expect_connman_service_iterator_get_strength(int ret, struct ConnmanServiceIterator *iter);
+    void expect_connman_service_iterator_get_security_iterator(struct ConnmanServiceSecurityIterator *ret, struct ConnmanServiceIterator *iter, size_t *count);
+    void expect_connman_security_iterator_next(bool ret, struct ConnmanServiceSecurityIterator *iter);
+    void expect_connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter);
+    void expect_connman_security_iterator_get_security(const char *ret, struct ConnmanServiceSecurityIterator *iter);
+
     void expect_connman_start_wlan_site_survey(bool ret);
     void expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, enum ConnmanSiteScanResult callback_result);
 };

@@ -28,22 +28,6 @@
 #include "dbus_common.h"
 #include "messages.h"
 
-static GVariant *query_services(void)
-{
-    GVariant *result = NULL;
-    tdbusconnmanManager *iface = dbus_get_connman_manager_iface();
-
-    if(iface != NULL)
-    {
-        GError *error = NULL;
-        tdbus_connman_manager_call_get_services_sync(iface,
-                                                     &result, NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
-    }
-
-    return result;
-}
-
 static int determine_service_rank(GVariant *state_variant)
 {
     log_assert(state_variant != NULL);
@@ -74,7 +58,7 @@ static bool match_mac_address(const char *mac_address, const char *needle,
 
 struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
 {
-    GVariant *services = query_services();
+    GVariant *services = connman_common_query_services(dbus_get_connman_manager_iface());
     if(services == NULL)
         return NULL;
 
@@ -175,7 +159,7 @@ connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wired_mac_address,
                                       const char *wireless_mac_address)
 {
-    GVariant *services = query_services();
+    GVariant *services = connman_common_query_services(dbus_get_connman_manager_iface());
     if(services == NULL)
         return NULL;
 

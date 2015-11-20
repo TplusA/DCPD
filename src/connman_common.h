@@ -19,8 +19,9 @@
 #ifndef CONNMAN_COMMON_H
 #define CONNMAN_COMMON_H
 
-#include <glib.h>
+#include "connman_dbus.h"
 
+GVariant *connman_common_query_services(tdbusconnmanManager *iface);
 void connman_common_init_dict_from_temp_gvariant(GVariant *temp,
                                                  GVariantDict *dict);
 void connman_common_init_subdict(GVariant *tuple, GVariantDict *subdict,
