@@ -68,17 +68,41 @@ void dynamic_buffer_clear(struct dynamic_buffer *buffer)
     buffer->pos = 0;
 }
 
+static inline size_t get_space_increment(void)
+{
+    static size_t add_space;
+
+    if(add_space != 0)
+        return add_space;
+
+    add_space = getpagesize();
+
+    if(add_space == 0)
+        add_space = 4096;
+
+    return add_space;
+}
+
 bool dynamic_buffer_check_space(struct dynamic_buffer *buffer)
 {
     if(buffer->pos < buffer->size)
         return true;
 
-    static size_t add_space;
+    return dynamic_buffer_resize(buffer, buffer->size + get_space_increment());
+}
 
-    if(add_space == 0)
-        add_space = getpagesize();
+bool dynamic_buffer_ensure_space(struct dynamic_buffer *buffer, size_t size)
+{
+    const size_t required_size = buffer->pos + size;
 
-    return dynamic_buffer_resize(buffer, buffer->size + add_space);
+    if(required_size <= buffer->size)
+        return true;
+
+    const size_t inc = get_space_increment();
+    const size_t new_size =
+        (required_size / inc + ((required_size % inc == 0) ? 0 : 1)) * inc;
+
+    return dynamic_buffer_resize(buffer, new_size);
 }
 
 bool dynamic_buffer_is_allocated(const struct dynamic_buffer *buffer)

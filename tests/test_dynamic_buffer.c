@@ -36,9 +36,14 @@
 
 static struct dynamic_buffer buffer;
 
+static size_t assumed_page_size;
+
 void cut_setup(void)
 {
     dynamic_buffer_init(&buffer);
+
+    assumed_page_size = getpagesize();
+    cut_assert(assumed_page_size > 0);
 }
 
 void cut_teardown(void)
@@ -194,6 +199,88 @@ void test_cleared_buffer_properties(void)
     dynamic_buffer_clear(&buffer);
     cut_assert_true(dynamic_buffer_is_empty(&buffer));
     cut_assert_equal_size(0, buffer.pos);
+}
+
+/*!\test
+ * Ensuring a buffer size of 1 byte allocates one page on an empty buffer.
+ */
+void test_ensure_1_byte_on_empty_buffer_allocates_page(void);
+void test_ensure_1_byte_on_empty_buffer_allocates_page(void)
+{
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, 1));
+    cut_assert_equal_size(assumed_page_size, buffer.size);
+}
+
+/*!\test
+ * Ensuring a buffer of exactly page size allocates one page on an empty
+ * buffer.
+ */
+void test_ensure_1_page_on_empty_buffer_allocates_page(void);
+void test_ensure_1_page_on_empty_buffer_allocates_page(void)
+{
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, assumed_page_size));
+    cut_assert_equal_size(assumed_page_size, buffer.size);
+}
+
+/*!\test
+ * Ensuring a buffer of exactly twice the page size allocates two pages on an
+ * empty buffer.
+ */
+void test_ensure_2_pages_on_empty_buffer_allocates_page(void);
+void test_ensure_2_pages_on_empty_buffer_allocates_page(void)
+{
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, 2 * assumed_page_size));
+    cut_assert_equal_size(2 * assumed_page_size, buffer.size);
+}
+
+/*!\test
+ * Ensuring a buffer of one byte more than twice the page size allocates three
+ * pages on an empty buffer.
+ */
+void test_ensure_2_pages_plus_1_on_empty_buffer_allocates_page(void);
+void test_ensure_2_pages_plus_1_on_empty_buffer_allocates_page(void)
+{
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, 2 * assumed_page_size + 1));
+    cut_assert_equal_size(3 * assumed_page_size, buffer.size);
+}
+
+/*!\test
+ * Ensuring 0 bytes of more space is a NOP on an empty buffer.
+ */
+void test_ensure_0_bytes_on_empty_buffer_does_nothing(void);
+void test_ensure_0_bytes_on_empty_buffer_does_nothing(void)
+{
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, 0));
+    cut_assert_equal_size(0, buffer.size);
+}
+
+/*!\test
+ * Ensuring 0 bytes of more space is a NOP.
+ */
+void test_ensure_0_bytes_does_nothing(void);
+void test_ensure_0_bytes_does_nothing(void)
+{
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, assumed_page_size));
+    cut_assert_equal_size(assumed_page_size, buffer.size);
+
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, 0));
+    cut_assert_equal_size(assumed_page_size, buffer.size);
+}
+
+/*!\test
+ * Ensuring bytes one byte on full buffer with size multiple of page size
+ * allocates another page.
+ */
+void test_ensure_1_byte_in_full_buffer(void);
+void test_ensure_1_byte_in_full_buffer(void)
+{
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, assumed_page_size));
+    cut_assert_equal_size(assumed_page_size, buffer.size);
+
+    buffer.pos += assumed_page_size;
+
+    cut_assert_true(dynamic_buffer_ensure_space(&buffer, 1));
+    cut_assert_equal_size(2 * assumed_page_size, buffer.size);
 }
 
 /*!@}*/
