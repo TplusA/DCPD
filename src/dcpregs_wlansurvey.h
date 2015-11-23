@@ -21,6 +21,8 @@
 
 #include <inttypes.h>
 
+#include "dynamic_buffer.h"
+
 /*!
  * \addtogroup registers
  */
@@ -34,7 +36,7 @@ void dcpregs_wlansurvey_init(void);
 void dcpregs_wlansurvey_deinit(void);
 
 int dcpregs_write_104_start_wlan_site_survey(const uint8_t *data, size_t length);
-ssize_t dcpregs_read_105_wlan_site_survey_results(uint8_t *response, size_t length);
+bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer);
 
 #ifdef __cplusplus
 }

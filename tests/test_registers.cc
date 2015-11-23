@@ -2978,12 +2978,16 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
                                           dcpregs_read_105_wlan_site_survey_results,
                                           NULL);
 
-    uint8_t buffer[128];
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"network\"/>";
-    const ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
 
-    cppcut_assert_operator(ssize_t(0), <, bytes);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1, buffer, bytes);
+    cppcut_assert_operator(size_t(0), <, buffer.pos);
+    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
 }
 
 /*!\test
@@ -3005,12 +3009,16 @@ void test_start_wlan_site_survey_fails_on_dbus_failure()
                                           dcpregs_read_105_wlan_site_survey_results,
                                           NULL);
 
-    uint8_t buffer[128];
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"internal\"/>";
-    const ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
 
-    cppcut_assert_operator(ssize_t(0), <, bytes);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1, buffer, bytes);
+    cppcut_assert_operator(size_t(0), <, buffer.pos);
+    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
 }
 
 /*!\test
@@ -3033,12 +3041,16 @@ void test_start_wlan_site_survey_fails_if_no_hardware_available()
                                           dcpregs_read_105_wlan_site_survey_results,
                                           NULL);
 
-    uint8_t buffer[128];
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"hardware\"/>";
-    const ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
 
-    cppcut_assert_operator(ssize_t(0), <, bytes);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1, buffer, bytes);
+    cppcut_assert_operator(size_t(0), <, buffer.pos);
+    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
 }
 
 /*!\test
@@ -3058,12 +3070,16 @@ void test_reading_out_ssids_without_scan_returns_empty_list()
     mock_connman->expect_connman_service_iterator_get(NULL);
     mock_connman->expect_connman_service_iterator_free(NULL);
 
-    uint8_t buffer[128];
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"0\"/>";
-    const ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(expected_xml) - 1), bytes);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1, buffer, bytes);
+    cppcut_assert_operator(size_t(0), <, buffer.pos);
+    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
 }
 
 };

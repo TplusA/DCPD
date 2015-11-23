@@ -41,8 +41,6 @@ static struct
      * its called from another context */
     GRecMutex lock;
 
-    struct dynamic_buffer xml_buffer;
-
     bool survey_in_progress;
     enum ConnmanSiteScanResult last_result;
 }
@@ -52,13 +50,11 @@ void dcpregs_wlansurvey_init(void)
 {
     memset(&nwwlan_survey_data, 0, sizeof(nwwlan_survey_data));
     g_rec_mutex_init(&nwwlan_survey_data.lock);
-    dynamic_buffer_init(&nwwlan_survey_data.xml_buffer);
 }
 
 void dcpregs_wlansurvey_deinit(void)
 {
     g_rec_mutex_clear(&nwwlan_survey_data.lock);
-    dynamic_buffer_free(&nwwlan_survey_data.xml_buffer);
 }
 
 static void survey_done(enum ConnmanSiteScanResult result)
@@ -310,35 +306,25 @@ static const char *survey_result_to_string(enum ConnmanSiteScanResult result)
         return "bug";
 }
 
-/*!
- * \bug This does not work for "big" data.
- */
-ssize_t dcpregs_read_105_wlan_site_survey_results(uint8_t *response, size_t length)
+bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer)
 {
+    log_assert(dynamic_buffer_is_empty(buffer));
+
     g_rec_mutex_lock(&nwwlan_survey_data.lock);
 
-    ssize_t retval = -1;
+    bool retval = false;
 
     switch(nwwlan_survey_data.last_result)
     {
       case CONNMAN_SITE_SCAN_OK:
-        if(!fill_buffer_with_services(&nwwlan_survey_data.xml_buffer))
-            nwwlan_survey_data.last_result = CONNMAN_SITE_SCAN_OUT_OF_MEMORY;
-        else
+        if(fill_buffer_with_services(buffer))
         {
-            if(nwwlan_survey_data.xml_buffer.pos > length)
-                msg_error(0, LOG_CRIT,
-                          "XML data too large to send "
-                          "(XML data %zu bytes, send buffer %zu bytes)",
-                          nwwlan_survey_data.xml_buffer.pos, length);
-            else
-            {
-                retval = nwwlan_survey_data.xml_buffer.pos;
-                memcpy(response, nwwlan_survey_data.xml_buffer.data, retval);
-            }
-
+            retval = true;
             break;
         }
+
+        dynamic_buffer_clear(buffer);
+        nwwlan_survey_data.last_result = CONNMAN_SITE_SCAN_OUT_OF_MEMORY;
 
         /* fall-through */
 
@@ -346,18 +332,14 @@ ssize_t dcpregs_read_105_wlan_site_survey_results(uint8_t *response, size_t leng
       case CONNMAN_SITE_SCAN_DBUS_ERROR:
       case CONNMAN_SITE_SCAN_OUT_OF_MEMORY:
       case CONNMAN_SITE_SCAN_NO_HARDWARE:
-        retval =
-            snprintf((char *)response, length,
-                     "<bss_list count=\"-1\" error=\"%s\"/>",
-                     survey_result_to_string(nwwlan_survey_data.last_result));
+        retval = true;
 
-        if(retval > (ssize_t)length)
-        {
-            /* come on... */
-            msg_error(0, LOG_CRIT,
-                      "Send buffer size is tiny, cannot send anything");
-            retval = -1;
-        }
+        TRY_EMIT(buffer, /* nothing */,
+                 "<bss_list count=\"-1\" error=\"%s\"/>",
+                 survey_result_to_string(nwwlan_survey_data.last_result));
+
+        if(buffer->pos > 0)
+            retval = true;
 
         break;
     }

@@ -336,8 +336,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* WLAN site survey results */
         .address = 105,
-        .max_data_size = 2 * 4096,
-        .read_handler = dcpregs_read_105_wlan_site_survey_results,
+        .read_handler_dynamic = dcpregs_read_105_wlan_site_survey_results,
     },
     {
         /* TCP tunnel control */
