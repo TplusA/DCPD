@@ -148,31 +148,32 @@ void transaction_reset_for_slave(struct transaction *t)
     transaction_init(t, true, t->channel, t->is_pinned);
 }
 
-/*!
- * Look up register by address, associate transaction with it.
- *
- * This function must be called for each transaction before attempting to
- * process them.
- */
-static bool transaction_set_register_struct(struct transaction *t,
-                                            uint8_t register_address,
-                                            bool master_not_slave)
+static const struct dcp_register_t *
+lookup_register_for_transaction(uint8_t register_address,
+                                bool master_not_slave)
 {
     const struct dcp_register_t *reg = register_lookup(register_address);
 
     if(reg == NULL)
-    {
         msg_error(0, LOG_NOTICE,
                   "%s requested unsupported register 0x%02x",
                   master_not_slave ? "Master" : "Slave", register_address);
-        return false;
-    }
 
-    log_assert(reg->address == register_address);
+    return reg;
+}
 
+/*!
+ * Associate transaction with register and command.
+ *
+ * This function must be called for each transaction before attempting to
+ * process them.
+ */
+static void transaction_bind(struct transaction *t,
+                             const struct dcp_register_t *reg, uint8_t command)
+{
+    log_assert(reg != NULL);
     t->reg = reg;
-
-    return true;
+    t->command = command;
 }
 
 /*!
@@ -183,10 +184,12 @@ static bool transaction_set_register_struct(struct transaction *t,
 bool transaction_set_address_for_master(struct transaction *t,
                                         uint8_t register_address)
 {
-    if(!transaction_set_register_struct(t, register_address, true))
+    const struct dcp_register_t *reg = lookup_register_for_transaction(register_address, true);
+
+    if(reg == NULL)
         return false;
 
-    t->command = DCP_COMMAND_MULTI_WRITE_REGISTER;
+    transaction_bind(t, reg, DCP_COMMAND_MULTI_WRITE_REGISTER);
 
     t->request_header[0] = t->command;
     t->request_header[1] = register_address;
@@ -302,10 +305,12 @@ static bool fill_request_header(struct transaction *t, const int fd)
     if((t->request_header[0] & 0xf0) != 0)
         goto error_invalid_header;
 
-    t->command = t->request_header[0] & 0x0f;
+    const struct dcp_register_t *reg = lookup_register_for_transaction(t->request_header[1], false);
 
-    if(!transaction_set_register_struct(t, t->request_header[1], false))
+    if(reg == NULL)
         return false;
+
+    transaction_bind(t, reg, t->request_header[0] & 0x0f);
 
     switch(t->command)
     {
