@@ -2924,6 +2924,65 @@ void test_start_wlan_site_survey()
 }
 
 /*!\test
+ * XML with list of networks is sent if WLAN site survey was successful.
+ */
+void test_wlan_site_survey_returns_list_of_wlan_networks()
+{
+    test_start_wlan_site_survey();
+
+    auto *reg = lookup_register_expect_handlers(105,
+                                                dcpregs_read_105_wlan_site_survey_results,
+                                                NULL);
+
+    static constexpr const std::array<const MockConnman::ServiceIterData, 5> services_data =
+    {
+        MockConnman::ServiceIterData("wifi",  "First WLAN",         100, MockConnman::sec_psk_wsp),
+        MockConnman::ServiceIterData("wired", "Some ethernet NIC",  100, MockConnman::sec_none),
+        MockConnman::ServiceIterData("wifi",  "Not the Internet",    78, MockConnman::sec_none),
+        MockConnman::ServiceIterData("wifi",  "Last on the list",    56, MockConnman::sec_psk),
+        MockConnman::ServiceIterData("wired", "Ethernet adapter 2",  10, MockConnman::sec_none),
+    };
+
+    mock_connman->set_connman_service_iterator_data(*services_data.data(), services_data.size());
+
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
+    static constexpr char expected_xml[] =
+        "<bss_list count=\"3\">"
+        "<bss index=\"0\">"
+        "<ssid>First WLAN</ssid>"
+        "<quality>100</quality>"
+        "<security_list count=\"2\">"
+        "<security index=\"0\">psk</security>"
+        "<security index=\"1\">wsp</security>"
+        "</security_list>"
+        "</bss>"
+        "<bss index=\"1\">"
+        "<ssid>Not the Internet</ssid>"
+        "<quality>78</quality>"
+        "<security_list count=\"1\">"
+        "<security index=\"0\">none</security>"
+        "</security_list>"
+        "</bss>"
+        "<bss index=\"2\">"
+        "<ssid>Last on the list</ssid>"
+        "<quality>56</quality>"
+        "<security_list count=\"1\">"
+        "<security index=\"0\">psk</security>"
+        "</security_list>"
+        "</bss>"
+        "</bss_list>";
+
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
+
+    cppcut_assert_operator(size_t(0), <, buffer.pos);
+    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
+}
+
+/*!\test
  * WLAN site survey request does not accept data.
  */
 void test_start_wlan_site_survey_command_has_no_data_bytes()
