@@ -577,13 +577,6 @@ static struct transaction *mk_push_transaction(struct transaction **head,
     return t;
 }
 
-static struct transaction *mk_master_transaction(struct transaction **head,
-                                                 uint8_t register_address,
-                                                 enum transaction_channel channel)
-{
-    return mk_push_transaction(head, register_address, false, channel);
-}
-
 struct transaction *
 transaction_fragments_from_data(const uint8_t *const data, const size_t length,
                                 uint8_t register_address,
@@ -598,7 +591,7 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
     while(i < length)
     {
         struct transaction *t =
-            mk_master_transaction(&head, register_address, channel);
+            mk_push_transaction(&head, register_address, false, channel);
 
         if(t == NULL)
             break;
