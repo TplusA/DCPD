@@ -298,9 +298,61 @@ class MockConnman::Expectation
 };
 
 
+/*
+ * Internal iterator implementation for mock.
+ */
+struct ConnmanServiceSecurityIterator
+{
+    MockConnman::AnyIter<MockConnman::SecurityIterData> data;
+
+    explicit ConnmanServiceSecurityIterator(const MockConnman::SecurityIterData *const entries,
+                                            size_t num_of_entries):
+        data(entries, num_of_entries)
+    {}
+
+    void rewind() { data.rewind(); }
+    bool next()   { return data.next(); }
+
+
+    const char *get_security() { return data.get().security_; }
+};
+
+/*
+ * Internal iterator implementation for mock.
+ */
+struct ConnmanServiceIterator
+{
+    MockConnman::AnyIter<MockConnman::ServiceIterData> data;
+
+    explicit ConnmanServiceIterator(const MockConnman::ServiceIterData *const entries,
+                                    size_t num_of_entries):
+        data(entries, num_of_entries)
+    {}
+
+    void rewind() { data.rewind(); }
+    bool next()   { return data.next(); }
+
+    const char *get_technology_type() { return data.get().technology_type_; }
+    const char *get_ssid() { return data.get().ssid_; }
+    int get_strength() { return data.get().quality_; }
+
+    struct ConnmanServiceSecurityIterator *get_security_iterator(size_t &count)
+    {
+        const MockConnman::ServiceIterData &d(data.get());
+
+        count = d.security_data_count_;
+
+        return new ConnmanServiceSecurityIterator(d.security_data_,
+                                                  d.security_data_count_);
+    }
+};
+
 MockConnman::MockConnman()
 {
     expectations_ = new MockExpectations();
+
+    iter_data_ = nullptr;
+    iter_data_count_ = 0;
 }
 
 MockConnman::~MockConnman()
@@ -383,6 +435,21 @@ void MockConnman::expect_free_interface_data(struct ConnmanInterfaceData *iface_
     expectations_->add(Expectation(iface_data));
 }
 
+void MockConnman::set_connman_service_iterator_data(const MockConnman::ServiceIterData &iter_data,
+                                                    size_t number_of_services)
+{
+    cppcut_assert_null(iter_data_);
+
+    iter_data_ = &iter_data;
+    iter_data_count_ = number_of_services;
+}
+
+struct ConnmanServiceIterator *MockConnman::do_service_iterator_get()
+{
+    cppcut_assert_not_null(iter_data_);
+    return new ConnmanServiceIterator(iter_data_, iter_data_count_);
+}
+
 void MockConnman::expect_connman_service_iterator_get(struct ConnmanServiceIterator *ret)
 {
     expectations_->add(Expectation(ConnmanFn::service_iterator_get, ret));
@@ -426,6 +493,16 @@ void MockConnman::expect_connman_start_wlan_site_survey(bool ret, SurveyCallback
 
 
 MockConnman *mock_connman_singleton = nullptr;
+
+const MockConnman::SecurityIterData MockConnman::sec_psk_wsp[] =
+{
+    MockConnman::SecurityIterData("psk"),
+    MockConnman::SecurityIterData("wsp"),
+};
+
+const MockConnman::SecurityIterData MockConnman::sec_none("none");
+
+const MockConnman::SecurityIterData MockConnman::sec_psk("psk");
 
 struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
 {
@@ -582,6 +659,9 @@ void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
 
 struct ConnmanServiceIterator *connman_service_iterator_get(void)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return mock_connman_singleton->do_service_iterator_get();
+
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_get);
@@ -591,6 +671,9 @@ struct ConnmanServiceIterator *connman_service_iterator_get(void)
 
 void connman_service_iterator_rewind(struct ConnmanServiceIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return iter->rewind();
+
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_rewind);
@@ -599,6 +682,9 @@ void connman_service_iterator_rewind(struct ConnmanServiceIterator *iter)
 
 bool connman_service_iterator_next(struct ConnmanServiceIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return iter->next();
+
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_next);
@@ -609,20 +695,42 @@ bool connman_service_iterator_next(struct ConnmanServiceIterator *iter)
 
 void connman_service_iterator_free(struct ConnmanServiceIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+    {
+        cppcut_assert_not_null(iter);
+        delete iter;
+        return;
+    }
+
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::service_iterator_free);
     cppcut_assert_equal(expect.d.service_iterator_, iter);
 }
 
+const char *connman_service_iterator_get_technology_type(struct ConnmanServiceIterator *iter)
+{
+    if(mock_connman_singleton->have_iter_data())
+        return iter->get_technology_type();
+
+    cut_fail("not implemented");
+    return NULL;
+}
+
 const char *connman_service_iterator_get_ssid(struct ConnmanServiceIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return iter->get_ssid();
+
     cut_fail("not implemented");
     return NULL;
 }
 
 int connman_service_iterator_get_strength(struct ConnmanServiceIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return iter->get_strength();
+
     cut_fail("not implemented");
     return -1;
 }
@@ -631,23 +739,39 @@ struct ConnmanServiceSecurityIterator *
 connman_service_iterator_get_security_iterator(struct ConnmanServiceIterator *iter,
                                                size_t *count)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return iter->get_security_iterator(*count);
+
     cut_fail("not implemented");
     return NULL;
 }
 
 bool connman_security_iterator_next(struct ConnmanServiceSecurityIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return iter->next();
+
     cut_fail("not implemented");
     return false;
 }
 
 void connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+    {
+        cppcut_assert_not_null(iter);
+        delete iter;
+        return;
+    }
+
     cut_fail("not implemented");
 }
 
 const char *connman_security_iterator_get_security(struct ConnmanServiceSecurityIterator *iter)
 {
+    if(mock_connman_singleton->have_iter_data())
+        return iter->get_security();
+
     cut_fail("not implemented");
     return NULL;
 }
