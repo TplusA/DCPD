@@ -19,6 +19,8 @@
 #ifndef REGISTERS_H
 #define REGISTERS_H
 
+#include "dynamic_buffer.h"
+
 /*!
  * \addtogroup registers SPI registers definitions
  *
@@ -38,9 +40,14 @@ struct dcp_register_t
     uint16_t max_data_size;  /*!< Maximum size for variable size. */
 
     /*!
-     * How to handle incoming read requests.
+     * How to handle incoming read requests (registers with static size).
      */
     ssize_t (*read_handler)(uint8_t *response, size_t length);
+
+    /*!
+     * How to handle incoming read requests (registers with dynamic size).
+     */
+    bool (*read_handler_dynamic)(struct dynamic_buffer *buffer);
 
     /*!
      * How to handle incoming write requests.
@@ -78,6 +85,17 @@ void register_deinit(void);
  * Find register structure by register number (address).
  */
 const struct dcp_register_t *register_lookup(uint8_t register_number);
+
+/*!
+ * Whether or not the register has static size.
+ *
+ * In case of static size, the #dcp_register_t::read_handler() function must be
+ * called with a preallocated buffer large enough to store at least
+ * #dcp_register_t::max_data_size bytes to read out the register. Otherwise, in
+ * case on dynamic size, the #dcp_register_t::read_handler_dynamic() function
+ * must be called with an empty #dynamic_buffer.
+ */
+bool register_is_static_size(const struct dcp_register_t *reg);
 
 #ifdef __cplusplus
 }

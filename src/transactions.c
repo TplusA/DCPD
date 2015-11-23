@@ -360,9 +360,48 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
 
 static bool allocate_payload_buffer(struct transaction *t)
 {
-    log_assert(t->reg->max_data_size > 0);
+    if(register_is_static_size(t->reg))
+        return dynamic_buffer_resize(&t->payload, t->reg->max_data_size);
 
-    return dynamic_buffer_resize(&t->payload, t->reg->max_data_size);
+    dynamic_buffer_clear(&t->payload);
+
+    return true;
+}
+
+static bool do_read_register(struct transaction *t)
+{
+    if(register_is_static_size(t->reg))
+    {
+        if(t->reg->read_handler == NULL)
+        {
+            msg_error(ENOSYS, LOG_ERR,
+                      "No read handler defined for register %u",
+                      t->reg->address);
+            return false;
+        }
+
+        const size_t read_result =
+            t->reg->read_handler(t->payload.data, t->payload.size);
+
+        if(read_result < 0)
+            return false;
+
+        t->payload.pos = read_result;
+
+        return true;
+    }
+    else
+    {
+        if(t->reg->read_handler_dynamic == NULL)
+        {
+            msg_error(ENOSYS, LOG_ERR,
+                      "No dynamic read handler defined for register %u",
+                      t->reg->address);
+            return false;
+        }
+
+        return t->reg->read_handler_dynamic(&t->payload);
+    }
 }
 
 enum transaction_process_status transaction_process(struct transaction *t,
@@ -409,24 +448,12 @@ enum transaction_process_status transaction_process(struct transaction *t,
         /* fall-through */
 
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
-        if(t->reg->read_handler == NULL)
-        {
-            msg_error(ENOSYS, LOG_ERR,
-                      "No read handler defined for register %u",
-                      t->reg->address);
-            break;
-        }
-
-        const ssize_t read_result = t->reg->read_handler(t->payload.data,
-                                                         t->payload.size);
-
-        if(read_result < 0)
+        if(!do_read_register(t))
             break;
 
         if(t->command == DCP_COMMAND_READ_REGISTER)
             t->request_header[0] = DCP_COMMAND_MULTI_READ_REGISTER;
 
-        t->payload.pos = read_result;
         dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
                             t->payload.pos);
 

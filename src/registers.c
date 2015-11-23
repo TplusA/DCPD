@@ -447,6 +447,12 @@ const struct dcp_register_t *register_lookup(uint8_t register_number)
                    sizeof(register_map[0]), compare_register_address);
 }
 
+bool register_is_static_size(const struct dcp_register_t *reg)
+{
+    log_assert(reg != NULL);
+    return reg->max_data_size > 0;
+}
+
 static struct register_configuration_t config;
 
 const struct register_configuration_t *registers_get_data(void)

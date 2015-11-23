@@ -65,18 +65,59 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 ssize_t (*os_read)(int fd, void *dest, size_t count) = test_os_read;
 ssize_t (*os_write)(int fd, const void *buf, size_t count) = test_os_write;
 
-static const struct dcp_register_t *
-lookup_register_expect_handlers(uint8_t register_number,
-                                ssize_t (*const expected_read_handler)(uint8_t *, size_t),
-                                int (*const expected_write_handler)(const uint8_t *, size_t))
+static const struct dcp_register_t *lookup_register_expect_handlers_full(
+    uint8_t register_number,
+    ssize_t (*const expected_read_handler)(uint8_t *, size_t),
+    bool (*const expected_read_handler_dynamic)(struct dynamic_buffer *buffer),
+    int (*const expected_write_handler)(const uint8_t *, size_t))
 {
     const struct dcp_register_t *reg = register_lookup(register_number);
     cppcut_assert_not_null(reg);
 
     cut_assert(reg->read_handler == expected_read_handler);
     cut_assert(reg->write_handler == expected_write_handler);
+    cut_assert(reg->read_handler_dynamic == expected_read_handler_dynamic);
+    cut_assert(!(reg->read_handler != nullptr && reg->read_handler_dynamic != nullptr));
 
     return reg;
+}
+
+/*
+ * For write-only registers.
+ */
+static const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                nullptr, nullptr,
+                                                expected_write_handler);
+}
+
+/*
+ * For readable registers with static size.
+ */
+static const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    ssize_t (*const expected_read_handler)(uint8_t *, size_t),
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                expected_read_handler, nullptr,
+                                                expected_write_handler);
+}
+
+/*
+ * For readable registers with dynamic size.
+ */
+static const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                nullptr, expected_read_handler,
+                                                expected_write_handler);
 }
 
 class RegisterChangedNotificationData
@@ -279,7 +320,7 @@ void test_lookup_all_existing_registers(void)
 
         cppcut_assert_not_null(reg);
         cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cppcut_assert_operator(0, <, reg->max_data_size);
+        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
     }
 }
 
@@ -807,7 +848,6 @@ void test_read_mac_address_default(void)
 static void start_ipv4_config()
 {
     auto *reg = lookup_register_expect_handlers(54,
-                                                NULL,
                                                 dcpregs_write_54_selected_ip_profile);
 
     mock_messages->expect_msg_info("write 54 handler %p %zu");
@@ -820,7 +860,6 @@ static void commit_ipv4_config(bool add_message_expectation,
                                int expected_return_value = 0)
 {
     auto *reg = lookup_register_expect_handlers(53,
-                                                NULL,
                                                 dcpregs_write_53_active_ip_profile);
 
     if(add_message_expectation)
@@ -2871,7 +2910,6 @@ void test_shutdown_can_be_called_only_once()
 void test_start_wlan_site_survey()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                NULL,
                                                 dcpregs_write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info("WLAN site survey started");
@@ -2891,7 +2929,6 @@ void test_start_wlan_site_survey()
 void test_start_wlan_site_survey_command_has_no_data_bytes()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                NULL,
                                                 dcpregs_write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
@@ -2907,7 +2944,6 @@ void test_start_wlan_site_survey_command_has_no_data_bytes()
 void test_start_wlan_site_survey_has_no_effect_if_survey_is_active()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                NULL,
                                                 dcpregs_write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info("WLAN site survey started");
@@ -2927,7 +2963,6 @@ void test_start_wlan_site_survey_has_no_effect_if_survey_is_active()
 void test_start_wlan_site_survey_fails_on_connman_failure()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                NULL,
                                                 dcpregs_write_104_start_wlan_site_survey);
 
     mock_connman->expect_connman_start_wlan_site_survey(
@@ -2957,7 +2992,6 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
 void test_start_wlan_site_survey_fails_on_dbus_failure()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                NULL,
                                                 dcpregs_write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (2)");
@@ -2986,7 +3020,6 @@ void test_start_wlan_site_survey_fails_on_dbus_failure()
 void test_start_wlan_site_survey_fails_if_no_hardware_available()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                NULL,
                                                 dcpregs_write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (4)");
@@ -3121,8 +3154,7 @@ void cut_teardown(void)
 void test_download_url_length_restrictions()
 {
     auto *reg =
-        lookup_register_expect_handlers(209, NULL,
-                                        dcpregs_write_209_download_url);
+        lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
 
     uint8_t url_buffer[8 + 1024 + 1];
 
@@ -3164,8 +3196,7 @@ static void start_download(const std::string &url, uint32_t download_id)
     memcpy(url_buffer + 8, url.c_str(), url.length());
 
     auto *reg =
-        lookup_register_expect_handlers(209, NULL,
-                                        dcpregs_write_209_download_url);
+        lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
     mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_info("Set URL \"%s\"");
 
@@ -3174,8 +3205,7 @@ static void start_download(const std::string &url, uint32_t download_id)
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD };
 
-    reg = lookup_register_expect_handlers(40, NULL,
-                                          dcpregs_write_40_download_control);
+    reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
     mock_messages->expect_msg_info("write 40 handler %p %zu");
 
     int expected_write_handler_retval;
@@ -3201,8 +3231,7 @@ static void start_download(const std::string &url, uint32_t download_id)
 static void cancel_download(uint32_t download_id)
 {
     auto *reg =
-        lookup_register_expect_handlers(209, NULL,
-                                        dcpregs_write_209_download_url);
+        lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
     mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_info("Cleared URL");
     mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
@@ -3233,8 +3262,7 @@ void test_download_without_url_returns_error()
     };
 
     auto *reg =
-        lookup_register_expect_handlers(40, NULL,
-                                        dcpregs_write_40_download_control);
+        lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
 
     mock_messages->expect_msg_info("write 40 handler %p %zu");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE,
@@ -3417,8 +3445,7 @@ void test_cancel_download_resets_download_status()
 void test_send_reboot_request()
 {
     auto *reg =
-        lookup_register_expect_handlers(40, NULL,
-                                        dcpregs_write_40_download_control);
+        lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
