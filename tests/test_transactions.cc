@@ -633,18 +633,19 @@ void test_register_multi_read_not_supported(void)
  */
 void test_small_master_transaction(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
-
-    /* register 71 is DRCP, variable length */
-    cut_assert_true(transaction_set_address_for_master(t, 71));
-
     static const uint8_t xml_data[] =
         "<view name=\"welcome\"><icon id=\"welcome\" text=\"Profile 1\">welcome</icon></view>";
+    struct transaction *head =
+        transaction_fragments_from_data(xml_data, sizeof(xml_data) - 1U, 71,
+                                        TRANSACTION_CHANNEL_SPI);
+    cppcut_assert_not_null(head);
 
-    const size_t max_size = transaction_get_max_data_size(t);
-    cppcut_assert_operator(sizeof(xml_data) - 1U, <, max_size);
-    cut_assert_true(transaction_set_payload(t, xml_data, sizeof(xml_data) - 1U));
+    const size_t max_data_size = transaction_get_max_data_size(head);
+    cppcut_assert_operator(sizeof(xml_data) - 1U, <, max_data_size);
+
+    struct transaction *t = transaction_queue_remove(&head);
+    cppcut_assert_null(head);
+    cppcut_assert_not_null(t);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
@@ -655,18 +656,22 @@ void test_small_master_transaction(void)
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
-    static const uint8_t expected_header[] = { 0x02, 71, sizeof(xml_data) - 1U, 0x00 };
+    /* check emitted DCP data */
+    static const uint8_t expected_header[] =
+    {
+        0x02, 71,
+        sizeof(xml_data) - 1U,
+        0x00,
+    };
+
     cppcut_assert_equal(sizeof(expected_header) + sizeof(xml_data) - 1U,
                         answer_written_to_fifo->size());
+
     cut_assert_equal_memory(expected_header, sizeof(expected_header),
                             answer_written_to_fifo->data(), sizeof(expected_header));
     cut_assert_equal_memory(xml_data, sizeof(xml_data) - 1U,
                             answer_written_to_fifo->data() + sizeof(expected_header),
                             sizeof(xml_data) - 1U);
-
-    struct transaction *temp = t;
-    t = transaction_queue_remove(&temp);
-    cppcut_assert_null(temp);
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -760,9 +765,10 @@ void test_big_master_transaction(void)
 }
 
 /*!\test
- * Accesses to unsupported registers are intercepted.
+ * Accesses to unsupported registers are intercepted when pushing registers to
+ * slave.
  */
-void test_bad_register_addresses_are_handled_in_master_transactions(void)
+void test_bad_register_addresses_are_handled_in_push_transactions(void)
 {
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -770,7 +776,9 @@ void test_bad_register_addresses_are_handled_in_master_transactions(void)
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Master requested unsupported register 0x2a");
 
-    cut_assert_false(transaction_set_address_for_master(t, 42));
+    cut_assert_false(transaction_push_register_to_slave(&t, 42, TRANSACTION_CHANNEL_SPI));
+
+    transaction_free(&t);
 }
 
 /*!\test
@@ -788,6 +796,8 @@ void test_bad_register_addresses_are_handled_in_fragmented_transactions(void)
     static const uint8_t dummy = 23U;
     cppcut_assert_null(transaction_fragments_from_data(&dummy, sizeof(dummy), 42,
                                                        TRANSACTION_CHANNEL_SPI));
+
+    transaction_free(&t);
 }
 
 };

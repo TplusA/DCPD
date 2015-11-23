@@ -79,12 +79,6 @@ void transaction_free(struct transaction **head);
 void transaction_reset_for_slave(struct transaction *t);
 
 /*!
- * Set DCP register address for master transaction.
- */
-bool transaction_set_address_for_master(struct transaction *t,
-                                        uint8_t register_address);
-
-/*!
  * Add queue \p t to end of given queue.
  *
  * \param head Pointer to a pointer of the first element of a queue. If it

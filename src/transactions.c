@@ -176,28 +176,6 @@ static void transaction_bind(struct transaction *t,
     t->command = command;
 }
 
-/*!
- * Prepare transaction header according to address.
- *
- * The size, if any, is inserted later.
- */
-bool transaction_set_address_for_master(struct transaction *t,
-                                        uint8_t register_address)
-{
-    const struct dcp_register_t *reg = lookup_register_for_transaction(register_address, true);
-
-    if(reg == NULL)
-        return false;
-
-    transaction_bind(t, reg, DCP_COMMAND_MULTI_WRITE_REGISTER);
-
-    t->request_header[0] = t->command;
-    t->request_header[1] = register_address;
-    dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET, 0);
-
-    return true;
-}
-
 void transaction_queue_add(struct transaction **head, struct transaction *t)
 {
     log_assert(head != NULL);
@@ -552,11 +530,29 @@ bool transaction_set_payload(struct transaction *t,
     return true;
 }
 
+/*!
+ * Prepare transaction header according to address.
+ *
+ * This function sets the DCP register address for master transactions.
+ * The size, if any, is inserted later.
+ */
+static void set_address_for_master(struct transaction *t,
+                                   const struct dcp_register_t *reg)
+{
+    transaction_bind(t, reg, DCP_COMMAND_MULTI_WRITE_REGISTER);
+
+    t->request_header[0] = t->command;
+    t->request_header[1] = reg->address;
+    dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET, 0);
+}
+
 static struct transaction *mk_push_transaction(struct transaction **head,
-                                               uint8_t register_address,
+                                               const struct dcp_register_t *reg,
                                                bool is_pure_push,
                                                enum transaction_channel channel)
 {
+    log_assert(reg != NULL);
+
     struct transaction *t = transaction_alloc(is_pure_push, channel, false);
 
     if(t == NULL)
@@ -566,18 +562,15 @@ static struct transaction *mk_push_transaction(struct transaction **head,
     }
 
     /* fill in request header */
-    if(transaction_set_address_for_master(t, register_address))
-    {
-        if(is_pure_push)
-        {
-            /* simulate slave request, bypass reading command from slave fd */
-            t->state = TRANSACTION_STATE_PUSH_TO_SLAVE;
-        }
+    set_address_for_master(t, reg);
 
-        transaction_queue_add(head, t);
+    if(is_pure_push)
+    {
+        /* simulate slave request, bypass reading command from slave fd */
+        t->state = TRANSACTION_STATE_PUSH_TO_SLAVE;
     }
-    else
-        transaction_free(&t);
+
+    transaction_queue_add(head, t);
 
     return t;
 }
@@ -590,13 +583,19 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
     log_assert(data != NULL);
     log_assert(length > 0);
 
+    const struct dcp_register_t *reg =
+        lookup_register_for_transaction(register_address, true);
+
+    if(reg == NULL)
+        return NULL;
+
     struct transaction *head = NULL;
     size_t i = 0;
 
     while(i < length)
     {
         struct transaction *t =
-            mk_push_transaction(&head, register_address, false, channel);
+            mk_push_transaction(&head, reg, false, channel);
 
         if(t == NULL)
             break;
@@ -624,5 +623,11 @@ bool transaction_push_register_to_slave(struct transaction **head,
                                         uint8_t register_address,
                                         enum transaction_channel channel)
 {
-    return (mk_push_transaction(head, register_address, true, channel) != NULL);
+    const struct dcp_register_t *reg =
+        lookup_register_for_transaction(register_address, true);
+
+    if(reg == NULL)
+        return false;
+
+    return mk_push_transaction(head, reg, true, channel) != NULL;
 }
