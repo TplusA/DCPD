@@ -181,13 +181,13 @@ static unsigned int handle_dcp_fifo_in_events(int fd, short revents,
 
     if(revents & POLLHUP)
     {
-        msg_error(EPIPE, LOG_ERR, "DCP daemon died, need to reopen");
+        msg_error(EPIPE, LOG_ERR, "DCPSPI daemon died, need to reopen");
         result |= WAITEVENT_DCP_CONNECTION_DIED;
     }
 
     if(revents & ~(POLLIN | POLLHUP))
         msg_error(EINVAL, LOG_WARNING,
-                  "Unexpected poll() events on DCP fifo %d: %04x",
+                  "Unexpected poll() events on DCPSPI fifo %d: %04x",
                   fd, revents);
 
     return result;
