@@ -121,9 +121,6 @@ bool transaction_is_input_required(const struct transaction *t);
 
 uint16_t transaction_get_max_data_size(const struct transaction *t);
 
-bool transaction_set_payload(struct transaction *t,
-                             const uint8_t *src, size_t length);
-
 struct transaction *
 transaction_fragments_from_data(const uint8_t *data, size_t length,
                                 uint8_t register_address,

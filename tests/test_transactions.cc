@@ -98,11 +98,12 @@ void test_allocation_and_deallocation_of_single_transaction_object_inet(void)
  */
 void test_deallocation_frees_payload_buffer(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
-
     static const uint8_t payload_data[] = "test payload data";
-    cut_assert_true(transaction_set_payload(t, payload_data, sizeof(payload_data)));
+
+    struct transaction *t =
+        transaction_fragments_from_data(payload_data, sizeof(payload_data),
+                                        71, TRANSACTION_CHANNEL_SPI);
+    cppcut_assert_not_null(t);
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -787,17 +788,12 @@ void test_bad_register_addresses_are_handled_in_push_transactions(void)
  */
 void test_bad_register_addresses_are_handled_in_fragmented_transactions(void)
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
-
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Master requested unsupported register 0x2a");
 
     static const uint8_t dummy = 23U;
     cppcut_assert_null(transaction_fragments_from_data(&dummy, sizeof(dummy), 42,
                                                        TRANSACTION_CHANNEL_SPI));
-
-    transaction_free(&t);
 }
 
 };

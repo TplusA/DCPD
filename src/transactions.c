@@ -514,22 +514,6 @@ uint16_t transaction_get_max_data_size(const struct transaction *t)
     return t->reg->max_data_size;
 }
 
-bool transaction_set_payload(struct transaction *t,
-                             const uint8_t *src, size_t length)
-{
-    log_assert(t != NULL);
-    log_assert(t->payload.data == NULL);
-    log_assert(src != NULL);
-
-    if(!dynamic_buffer_resize(&t->payload, length))
-        return false;
-
-    memcpy(t->payload.data, src, length);
-    t->payload.pos = length;
-
-    return true;
-}
-
 /*!
  * Prepare transaction header according to address.
  *
@@ -573,6 +557,22 @@ static struct transaction *mk_push_transaction(struct transaction **head,
     transaction_queue_add(head, t);
 
     return t;
+}
+
+static bool transaction_set_payload(struct transaction *t,
+                                    const uint8_t *src, size_t length)
+{
+    log_assert(t != NULL);
+    log_assert(t->payload.data == NULL);
+    log_assert(src != NULL);
+
+    if(!dynamic_buffer_resize(&t->payload, length))
+        return false;
+
+    memcpy(t->payload.data, src, length);
+    t->payload.pos = length;
+
+    return true;
 }
 
 struct transaction *
