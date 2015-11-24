@@ -46,6 +46,7 @@ namespace dcp_transaction_tests_queue
 
 void cut_setup(void)
 {
+    register_zero_for_unit_tests = NULL;
     transaction_init_allocator();
 }
 
@@ -350,6 +351,8 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_connman);
     mock_connman->init();
     mock_connman_singleton = mock_connman;
+
+    register_zero_for_unit_tests = NULL;
 
     read_data = new read_data_t;
     cppcut_assert_not_null(read_data);
@@ -758,6 +761,134 @@ void test_big_master_transaction(void)
 
     cppcut_assert_null(head);
     cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
+}
+
+static constexpr const uint8_t big_data[] =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+static bool return_big_data(struct dynamic_buffer *buffer)
+{
+    cut_assert(dynamic_buffer_is_empty(buffer));
+    cut_assert(dynamic_buffer_resize(buffer, sizeof(big_data)));
+
+    memcpy(buffer->data, big_data, sizeof(big_data));
+    buffer->pos = sizeof(big_data);
+
+    return true;
+}
+
+/*!\test
+ * Reading a dynamically-size, big register by slave results in fragments being
+ * generated on-the-fly.
+ */
+void test_big_data_is_sent_to_slave_in_fragments()
+{
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    register_init("00:11:ff:ee:22:dd", "dd:22:ee:ff:11:00", "/somewhere", NULL);
+
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(t);
+
+    struct transaction *head = t;
+
+    /* append another transaction to the end to check if the fragmentation code
+     * accidently cuts off the end of the queue */
+    struct transaction *tail = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(tail);
+    transaction_queue_add(&head, tail);
+
+    static const struct dcp_register_t big_register =
+    {
+        .address = 0,
+        .flags = 0,
+        .max_data_size = 0,
+        .read_handler = NULL,
+        .read_handler_dynamic = return_big_data,
+        .write_handler = NULL,
+    };
+
+    register_zero_for_unit_tests = &big_register;
+
+    static const uint8_t read_test_register[] = { 0x01, 0x00, 0x00, 0x00, };
+
+    read_data->set(read_test_register);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd));
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd));
+
+    /* the big transaction has been scattered over multiple transactions, head
+     * element has been reused so that it contains the first fragment now */
+    cppcut_assert_equal(head, t);
+    cppcut_assert_not_equal(head, tail);
+
+    size_t bytes_left = sizeof(big_data);
+    cppcut_assert_operator(size_t(DCP_PACKET_MAX_PAYLOAD_SIZE), <, bytes_left);
+
+    while(bytes_left > 0)
+    {
+        answer_written_to_fifo->clear();
+        mock_os->expect_os_write_from_buffer_callback(read_answer);
+        mock_os->expect_os_write_from_buffer_callback(read_answer);
+
+        const enum transaction_process_status status =
+            transaction_process(head, expected_from_slave_fd, expected_to_slave_fd);
+
+        const size_t expected_data_size = (bytes_left <= DCP_PACKET_MAX_PAYLOAD_SIZE
+                                           ? bytes_left
+                                           : DCP_PACKET_MAX_PAYLOAD_SIZE);
+        const uint8_t expected_header[] =
+        {
+            0x03, 0x00,
+            static_cast<uint8_t>(expected_data_size & 0xff),
+            static_cast<uint8_t>(expected_data_size >> 8)
+        };
+
+        cppcut_assert_operator(sizeof(expected_header), <=, answer_written_to_fifo->size());
+        cut_assert_equal_memory(expected_header, sizeof(expected_header),
+                                answer_written_to_fifo->data(), sizeof(expected_header));
+
+        cut_assert_equal_memory(big_data + (sizeof(big_data) - bytes_left),
+                                expected_data_size,
+                                answer_written_to_fifo->data() + sizeof(expected_header),
+                                answer_written_to_fifo->size() - sizeof(expected_header));
+
+        if(expected_data_size < DCP_PACKET_MAX_PAYLOAD_SIZE)
+        {
+            cppcut_assert_equal(TRANSACTION_FINISHED, status);
+
+            t = transaction_queue_remove(&head);
+            cppcut_assert_not_null(t);
+            cppcut_assert_not_null(head);
+            cppcut_assert_not_equal(t, tail);
+            transaction_free(&t);
+        }
+        else
+            cppcut_assert_equal(TRANSACTION_IN_PROGRESS, status);
+
+        bytes_left -= expected_data_size;
+    }
+
+    cppcut_assert_equal(head, tail);
+
+    t = transaction_queue_remove(&head);
+    cppcut_assert_null(head);
+    cppcut_assert_equal(t, tail);
+    transaction_free(&t);
+
+    register_deinit();
 }
 
 /*!\test

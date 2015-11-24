@@ -61,6 +61,7 @@ struct transaction
 
     enum transaction_channel channel;
     struct dynamic_buffer payload;
+    size_t current_fragment_offset;
 };
 
 static struct transaction transactions_container[100];
@@ -99,6 +100,7 @@ static void transaction_init(struct transaction *t, bool is_slave_request,
     t->is_pinned = is_pinned;
     t->reg = NULL;
     t->channel = channel;
+    t->current_fragment_offset = 0;
     memset(t->request_header, UINT8_MAX, sizeof(t->request_header));
     dynamic_buffer_init(&t->payload);
 }
@@ -404,6 +406,29 @@ static bool do_read_register(struct transaction *t)
     }
 }
 
+static inline size_t get_remaining_fragment_size(const struct transaction *t)
+{
+    return t->payload.pos - t->current_fragment_offset;
+}
+
+static size_t get_current_fragment_size(const struct transaction *t)
+{
+    log_assert((t->current_fragment_offset < t->payload.pos) ||
+               (t->current_fragment_offset == 0 && t->payload.pos == 0));
+
+    const size_t temp = get_remaining_fragment_size(t);
+
+    if(temp <= DCP_PACKET_MAX_PAYLOAD_SIZE)
+        return temp;
+    else
+        return DCP_PACKET_MAX_PAYLOAD_SIZE;
+}
+
+static bool is_last_fragment(struct transaction *t)
+{
+    return get_remaining_fragment_size(t) <= DCP_PACKET_MAX_PAYLOAD_SIZE;
+}
+
 enum transaction_process_status transaction_process(struct transaction *t,
                                                     int from_slave_fd,
                                                     int to_slave_fd)
@@ -489,16 +514,26 @@ enum transaction_process_status transaction_process(struct transaction *t,
         /* fall-through */
 
       case TRANSACTION_STATE_SEND_TO_SLAVE:
-        dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
-                            t->payload.pos);
+        {
+            const size_t fragsize = get_current_fragment_size(t);
 
-        if(os_write_from_buffer(t->request_header, sizeof(t->request_header),
-                                to_slave_fd) < 0 ||
-           os_write_from_buffer(t->payload.data, t->payload.pos,
-                                to_slave_fd) < 0)
-            break;
+            dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
+                                fragsize);
 
-        return TRANSACTION_FINISHED;
+            if(os_write_from_buffer(t->request_header, sizeof(t->request_header),
+                                    to_slave_fd) < 0 ||
+               os_write_from_buffer(t->payload.data + t->current_fragment_offset,
+                                    fragsize, to_slave_fd) < 0)
+                break;
+        }
+
+        if(is_last_fragment(t))
+            return TRANSACTION_FINISHED;
+
+        t->current_fragment_offset += DCP_PACKET_MAX_PAYLOAD_SIZE;
+        log_assert(t->current_fragment_offset < t->payload.pos);
+
+        return TRANSACTION_IN_PROGRESS;
     }
 
     msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d", t, t->state);
