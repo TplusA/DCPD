@@ -55,6 +55,30 @@ struct dcp_register_t
     int (*write_handler)(const uint8_t *data, size_t length);
 };
 
+/*!
+ * Evil global variable: For unit tests, must not be used in production code.
+ *
+ * While this pointer contains a non-NULL value, it is possible to look up
+ * register 0 using #register_lookup(). The function will then return this
+ * pointer. This is only useful for unit tests, e.g., to inject specific read
+ * or write handlers.
+ *
+ * Special care must be taken when using this pointer in unit tests.
+ * - In any test suite that sets this pointer, it is mandatory to reset this
+ *   pointer back to \c NULL in the test harness setup. The #register_init()
+ *   function does this as well, so it is not required to set the pointer
+ *   directly if that function is called anyway during setup.
+ * - Because this is a simple pointer, there is no protection against
+ *   concurrent access. If tests are to be run in parallel, the test suite
+ *   needs to make sure it will work correctly by locking or excluding specific
+ *   tests from parallel execution.
+ *
+ * \attention
+ *     Do not---NEVER EVER---write to this pointer in production.
+ *     All hell will break loose.
+ */
+extern const struct dcp_register_t *register_zero_for_unit_tests;
+
 #ifdef __cplusplus
 extern "C" {
 #endif

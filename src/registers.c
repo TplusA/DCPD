@@ -44,6 +44,8 @@
 #define STATUS_REGISTER_READY_CODE_POWER_OFF    ((uint8_t)0x01)
 #define STATUS_REGISTER_SYSTEM_ERROR            ((uint8_t)0x24)
 
+const struct dcp_register_t *register_zero_for_unit_tests = NULL;
+
 static struct
 {
     uint8_t status_byte;
@@ -424,6 +426,8 @@ void register_init(const char *ethernet_mac_address,
     config->connman_config_path = connman_config_path;
     config->register_changed_notification_fn = register_changed_callback;
 
+    register_zero_for_unit_tests = NULL;
+
     dcpregs_networkconfig_init();
     dcpregs_wlansurvey_init();
     dcpregs_filetransfer_init();
@@ -438,6 +442,9 @@ void register_deinit(void)
 
 const struct dcp_register_t *register_lookup(uint8_t register_number)
 {
+    if(register_number == 0 && register_zero_for_unit_tests != NULL)
+        return register_zero_for_unit_tests;
+
     static struct dcp_register_t key;
 
     key.address = register_number;
