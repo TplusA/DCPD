@@ -26,6 +26,8 @@
  */
 /*!@{*/
 
+#define DCP_PACKET_MAX_PAYLOAD_SIZE  256U
+
 #define DCP_HEADER_SIZE        4
 #define DCP_HEADER_DATA_OFFSET 2
 

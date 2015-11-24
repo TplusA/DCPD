@@ -30,6 +30,7 @@
 #include "registers.h"
 #include "messages.h"
 
+#include "dcpdefs.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
@@ -284,7 +285,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* DRC protocol */
         .address = 71,
-        .max_data_size = 256,
+        .max_data_size = DCP_PACKET_MAX_PAYLOAD_SIZE,
     },
     {
         /* DRC command */
@@ -347,13 +348,13 @@ static const struct dcp_register_t register_map[] =
     {
         /* TCP tunnel: receive data from peer */
         .address = 120,
-        .max_data_size = 256,
+        .max_data_size = DCP_PACKET_MAX_PAYLOAD_SIZE,
         .read_handler = dcpregs_read_120_tcp_tunnel_read,
     },
     {
         /* TCP tunnel: send data to peer */
         .address = 121,
-        .max_data_size = 256,
+        .max_data_size = DCP_PACKET_MAX_PAYLOAD_SIZE,
         .write_handler = dcpregs_write_121_tcp_tunnel_write,
     },
     {
