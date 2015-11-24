@@ -26,6 +26,7 @@
 
 #include "transactions.h"
 #include "registers.h"
+#include "dcpdefs.h"
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_connman.hh"
@@ -397,9 +398,9 @@ void test_register_write_request_transaction(void)
     cppcut_assert_not_null(t);
 
     static const uint8_t write_reg_54_selected_ip_profile[] = { 0x02, 0x36, 0x01, 0x00, 0x00 };
-    read_data->set(write_reg_54_selected_ip_profile, 4);
-    read_data->set(write_reg_54_selected_ip_profile + 4,
-                   sizeof(write_reg_54_selected_ip_profile) - 4);
+    read_data->set(write_reg_54_selected_ip_profile, DCP_HEADER_SIZE);
+    read_data->set(write_reg_54_selected_ip_profile + DCP_HEADER_SIZE,
+                   sizeof(write_reg_54_selected_ip_profile) - DCP_HEADER_SIZE);
 
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
