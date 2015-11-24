@@ -454,9 +454,6 @@ enum transaction_process_status transaction_process(struct transaction *t,
         if(t->command == DCP_COMMAND_READ_REGISTER)
             t->request_header[0] = DCP_COMMAND_MULTI_READ_REGISTER;
 
-        dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
-                            t->payload.pos);
-
         t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
 
         return TRANSACTION_IN_PROGRESS;
@@ -481,10 +478,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         return TRANSACTION_FINISHED;
 
       case TRANSACTION_STATE_MASTER_PREPARE:
-        if(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER)
-            dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
-                                t->payload.pos);
-        else
+        if(t->command != DCP_COMMAND_MULTI_WRITE_REGISTER)
         {
             log_assert(t->command == DCP_COMMAND_READ_REGISTER);
             log_assert(t->payload.data == NULL);
@@ -492,9 +486,12 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
         t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
 
-        return TRANSACTION_IN_PROGRESS;
+        /* fall-through */
 
       case TRANSACTION_STATE_SEND_TO_SLAVE:
+        dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
+                            t->payload.pos);
+
         if(os_write_from_buffer(t->request_header, sizeof(t->request_header),
                                 to_slave_fd) < 0 ||
            os_write_from_buffer(t->payload.data, t->payload.pos,

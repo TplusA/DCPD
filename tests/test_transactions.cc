@@ -649,9 +649,6 @@ void test_small_master_transaction(void)
     cppcut_assert_null(head);
     cppcut_assert_not_null(t);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
-
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
@@ -723,9 +720,6 @@ void test_big_master_transaction(void)
         /* take next transaction of fragmented DRCP packet */
         struct transaction *t = transaction_queue_remove(&head);
         cppcut_assert_not_null(t);
-
-        cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
 
         mock_os->expect_os_write_from_buffer_callback(read_answer);
         mock_os->expect_os_write_from_buffer_callback(read_answer);
