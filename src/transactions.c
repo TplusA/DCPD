@@ -536,7 +536,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         return TRANSACTION_IN_PROGRESS;
     }
 
-    msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d", t, t->state);
+    msg_error(0, LOG_ERR, "Transaction %p failed in state %d", t, t->state);
     t->state = TRANSACTION_STATE_ERROR;
 
     return TRANSACTION_ERROR;

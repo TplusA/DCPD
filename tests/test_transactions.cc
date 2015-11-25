@@ -431,7 +431,7 @@ void test_register_simple_write_not_supported(void)
     read_data->set(oldstyle_write_reg_55_enable_dhcp);
 
     mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Simple write command not supported");
-    mock_messages->expect_msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d");
+    mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
 
     cppcut_assert_equal(TRANSACTION_ERROR,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
@@ -619,7 +619,7 @@ void test_register_multi_read_not_supported(void)
     read_data->set(oldstyle_read_reg_51_mac_address);
 
     mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Multiple read command not supported");
-    mock_messages->expect_msg_error(EIO, LOG_NOTICE, "Transaction %p failed in state %d");
+    mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
 
     cppcut_assert_equal(TRANSACTION_ERROR,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
