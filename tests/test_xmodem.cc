@@ -25,8 +25,6 @@
 #include "xmodem.h"
 #include "crc16.h"
 
-#include "mock_os.hh"
-
 /*!
  * \addtogroup xmodem_protocol_tests Unit tests
  * \ingroup xmodem_protocol

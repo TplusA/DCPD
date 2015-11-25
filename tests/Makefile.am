@@ -107,7 +107,6 @@ test_inifile_la_CXXFLAGS = $(AM_CXXFLAGS)
 test_xmodem_la_SOURCES = \
     test_xmodem.cc \
     ../src/xmodem.h ../src/crc16.h \
-    mock_os.hh mock_os.cc \
     mock_expectation.hh
 test_xmodem_la_LIBADD = $(top_builddir)/src/libxmodem.la
 test_xmodem_la_CFLAGS = $(AM_CFLAGS)
