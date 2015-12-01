@@ -1,3 +1,12 @@
+2015-12-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.5 released.
+
+	* Networking: WLAN site survey can be started by SPI slave, list of
+	  discovered WLAN networks can be read out when done.
+
+	* Misc: Several internal optimizations and improvements.
+
 2015-11-02  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.4 released.
