@@ -195,26 +195,43 @@ static const struct config_filename_template *get_filename_template(bool is_buil
 static char *generate_network_config_file_name(const struct register_network_interface_t *iface,
                                                const char *connman_config_path)
 {
+    /*
+     * Single configuration for all WLAN devices.
+     * This is a quick hack that is likely going to be reverted anyway once
+     * people understand what kind of mess this approach actually creates...
+     * See #131 and #132 for rationale.
+     */
+    static const char fixed_name_for_wlan_config[] = "wlan_device.config";
+
     const struct config_filename_template *const cfg_template =
         get_filename_template(iface->is_builtin);
     const size_t prefix_length = strlen(connman_config_path);
     const size_t total_length =
-        prefix_length + 1 + cfg_template->size_including_zero_terminator;
+        prefix_length + 1 + (iface->is_wired
+                             ? cfg_template->size_including_zero_terminator
+                             : sizeof(fixed_name_for_wlan_config));
 
     char *filename = malloc(total_length);
 
     if(filename == NULL)
     {
-        msg_error(errno, LOG_ERR,
-                  "Failed to allocate %zu bytes for network configuration filename",
-                  total_length);
+        msg_out_of_memory("network configuration filename");
         return NULL;
     }
 
     memcpy(filename, connman_config_path, prefix_length);
     filename[prefix_length] = '/';
-    memcpy(filename + prefix_length + 1, cfg_template->template,
-           cfg_template->size_including_zero_terminator);
+
+    if(iface->is_wired)
+        memcpy(filename + prefix_length + 1, cfg_template->template,
+               cfg_template->size_including_zero_terminator);
+    else
+    {
+        memcpy(filename + prefix_length + 1, fixed_name_for_wlan_config,
+               sizeof(fixed_name_for_wlan_config));
+
+        return filename;
+    }
 
     char *const dest =
         filename + prefix_length + 1 + cfg_template->replacement_start_offset;

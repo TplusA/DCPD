@@ -715,7 +715,7 @@ static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
 static constexpr char expected_ethernet_config_filename[] =
     "/var/lib/connman/builtin_decafdeadbad.config";
 static constexpr char expected_wlan_config_filename[] =
-    "/var/lib/connman/builtin_baddeadbeef1.config";
+    "/var/lib/connman/wlan_device.config";
 static struct ConnmanInterfaceData *const dummy_connman_iface =
     reinterpret_cast<struct ConnmanInterfaceData *>(0xbeefbeef);
 
