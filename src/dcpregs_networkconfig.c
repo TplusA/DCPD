@@ -266,7 +266,8 @@ static int complement_inifile_with_boilerplate(struct ini_file *ini,
     if(section == NULL)
         return -1;
 
-    if(inifile_section_store_value(section, "MAC", 3, iface->mac_address_string, 0) == NULL)
+    if(iface->is_wired &&
+       inifile_section_store_value(section, "MAC", 3, iface->mac_address_string, 0) == NULL)
         return -1;
 
     if(iface->is_builtin &&

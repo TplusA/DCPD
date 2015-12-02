@@ -1914,7 +1914,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
     mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+    for(int i = 0; i < 2 * 3 + (2 + 2) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(connman_config_path);
@@ -1926,14 +1926,12 @@ static void set_wlan_security_mode(const char *requested_security_mode,
         "Name = StrBo\n"
         "Description = StrBo-managed built-in wireless interface\n"
         "[service_config]\n"
-        "MAC = %s\n"
         "Type = wifi\n"
         "Security = %s\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format,
-             wlan_mac_address, expected_out_security_mode);
+             expected_config_file_format, expected_out_security_mode);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2135,7 +2133,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
     mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
+    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(connman_config_path);
@@ -2147,15 +2145,13 @@ static void set_passphrase_with_security_mode(const char *passphrase,
         "Name = StrBo\n"
         "Description = StrBo-managed built-in wireless interface\n"
         "[service_config]\n"
-        "MAC = %s\n"
         "Type = wifi\n"
         "Security = %s\n"
         "Passphrase = %s\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format,
-             wlan_mac_address, connman_security_mode, passphrase);
+             expected_config_file_format, connman_security_mode, passphrase);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2437,7 +2433,7 @@ void test_set_simple_ascii_wlan_ssid(void)
     mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 5) * 4; ++i)
+    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(connman_config_path);
@@ -2449,7 +2445,6 @@ void test_set_simple_ascii_wlan_ssid(void)
         "Name = StrBo\n"
         "Description = StrBo-managed built-in wireless interface\n"
         "[service_config]\n"
-        "MAC = %s\n"
         "Type = wifi\n"
         "Security = none\n"
         "Name = %s\n"
@@ -2457,8 +2452,7 @@ void test_set_simple_ascii_wlan_ssid(void)
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format,
-             wlan_mac_address, ssid, ssid_as_hex_string);
+             expected_config_file_format, ssid, ssid_as_hex_string);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2497,7 +2491,7 @@ void test_set_binary_wlan_ssid(void)
     mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
+    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(connman_config_path);
@@ -2509,15 +2503,13 @@ void test_set_binary_wlan_ssid(void)
         "Name = StrBo\n"
         "Description = StrBo-managed built-in wireless interface\n"
         "[service_config]\n"
-        "MAC = %s\n"
         "Type = wifi\n"
         "Security = none\n"
         "SSID = %s\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format,
-             wlan_mac_address, ssid_as_hex_string);
+             expected_config_file_format, ssid_as_hex_string);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
