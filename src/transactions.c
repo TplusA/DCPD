@@ -382,7 +382,7 @@ static bool do_read_register(struct transaction *t)
             return false;
         }
 
-        const size_t read_result =
+        const ssize_t read_result =
             t->reg->read_handler(t->payload.data, t->payload.size);
 
         if(read_result < 0)
