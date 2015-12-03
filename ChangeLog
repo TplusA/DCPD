@@ -1,3 +1,16 @@
+2015-12-08  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.6 released.
+
+	* Networking: WLAN configuration is global and not bound to specific
+	  interfaces. Swapping WLAN adapters while the system is running or
+	  plugging in more than one adapter leads to undefined system
+	  behavior.
+
+	* Updates: System update can be started by SPI slave.
+
+	* Bug fix: Fixed a crash.
+
 2015-12-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.5 released.
