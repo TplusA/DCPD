@@ -42,7 +42,6 @@ check_LTLIBRARIES = \
     test_registers.la \
     test_drcpdcomm.la \
     test_transactions.la \
-    test_inifile.la \
     test_xmodem.la \
     test_network_dispatcher.la
 
@@ -95,15 +94,6 @@ test_transactions_la_LIBADD = \
 test_transactions_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 test_transactions_la_CXXFLAGS = $(AM_CXXFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
-test_inifile_la_SOURCES = \
-    test_inifile.cc \
-    mock_os.hh mock_os.cc \
-    mock_messages.hh mock_messages.cc \
-    mock_expectation.hh
-test_inifile_la_LIBADD = $(top_builddir)/src/libinifile.la
-test_inifile_la_CFLAGS = $(AM_CFLAGS)
-test_inifile_la_CXXFLAGS = $(AM_CXXFLAGS)
-
 test_xmodem_la_SOURCES = \
     test_xmodem.cc \
     ../src/xmodem.h ../src/crc16.h \
@@ -125,7 +115,7 @@ test_network_dispatcher_la_CXXFLAGS = $(AM_CXXFLAGS)
 CLEANFILES = test_report.xml test_report_junit.xml valgrind.xml
 
 EXTRA_DIST = cutter2junit.xslt
-EXTRA_DIST += cutter-1_2_4.supp cutter-children-1_2_4.supp
+EXTRA_DIST += cutter-1_2_4.supp
 
 check-local: check-TESTS
 	@if $(GREP) -w cutter $(TEST_LOGS); then \
