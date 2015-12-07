@@ -32,6 +32,9 @@
 #define HCR_COMMAND_REBOOT_SYSTEM               0x20
 #define HCR_COMMAND_RESTORE_FACTORY_DEFAULTS    0x21
 
+#define HCR_COMMAND_CATEGORY_UPDATE_FROM_INET   0x27
+#define HCR_COMMAND_UPDATE_MAIN_SYSTEM          0x20
+
 /*
  * Definitions for HCR status register (41)
  */

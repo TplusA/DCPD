@@ -321,6 +321,63 @@ static int send_shutdown_request(void)
     return -1;
 }
 
+static int try_start_system_update(void)
+{
+    msg_info("Attempting to START SYSTEM UPDATE");
+
+    static const char shell_script_file[] = "/tmp/do_update.sh";
+    int fd = -1;
+
+    switch(os_path_get_type(shell_script_file))
+    {
+      case OS_PATH_TYPE_IO_ERROR:
+        /* Good. */
+        fd = os_file_new(shell_script_file);
+        break;
+
+      case OS_PATH_TYPE_FILE:
+        msg_info("Update in progress, not starting again");
+        break;
+
+      case OS_PATH_TYPE_DIRECTORY:
+      case OS_PATH_TYPE_OTHER:
+        BUG("Update script exists, but is not a file");
+        break;
+    }
+
+    if(fd < 0)
+        return -1;
+
+    static const char shell_script_content[] =
+        "#! /bin/sh\n"
+        "LOG='/usr/bin/systemd-cat'\n"
+        "$LOG /usr/bin/sudo /usr/bin/opkg update && $LOG /usr/bin/sudo /usr/bin/opkg upgrade && "
+        "$LOG /usr/bin/dbus-send --system --print-reply --dest=org.freedesktop.login1 "
+        "/org/freedesktop/login1 org.freedesktop.login1.Manager.Reboot "
+        "boolean:false\n"
+        "test $? -eq 0 || $LOG /bin/rm $0";
+
+    static const char poor_mans_daemonize[] =
+        "/bin/sh -c 'exec /bin/sh %s </dev/null >/dev/null 2>/dev/null &'";
+
+    const bool success =
+        (os_write_from_buffer(shell_script_content,
+                              sizeof(shell_script_content) - 1, fd) == 0);
+
+    os_file_close(fd);
+
+    if(success &&
+       os_system_formatted(poor_mans_daemonize, shell_script_file) == 0)
+    {
+        /* keep file around, used as a lock */
+        return 0;
+    }
+
+    os_file_delete(shell_script_file);
+
+    return -1;
+}
+
 /*!
  * Start download from internet or XMODEM transfer from flash.
  *
@@ -366,6 +423,11 @@ static int do_write_download_control(const uint8_t *data)
             return send_shutdown_request();
         else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
             BUG("Restore to factory defaults not implemented");
+    }
+    else if(data[0] == HCR_COMMAND_CATEGORY_UPDATE_FROM_INET &&
+            data[1] == HCR_COMMAND_UPDATE_MAIN_SYSTEM)
+    {
+        return try_start_system_update();
     }
 
     msg_error(ENOSYS, LOG_ERR, "Unsupported command");
