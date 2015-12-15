@@ -59,8 +59,6 @@ noinst_LTLIBRARIES = \
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
-dcpd_LDFLAGS = $(LTLIBINTL)
-
 libdynamic_buffer_la_SOURCES = dynamic_buffer.c dynamic_buffer.h
 libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 
