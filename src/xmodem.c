@@ -96,7 +96,7 @@ static enum XModemResult fill_buffer_from_file(struct XModemBufferData *data)
     }
 
     const uint16_t crc =
-        crc16_compute(data->tx_buffer, sizeof(data->tx_buffer) - 2);
+        crc16_compute(data->tx_buffer + 3, sizeof(data->tx_buffer) - 5);
 
     data->tx_buffer[sizeof(data->tx_buffer) - 2] = crc >> 8;
     data->tx_buffer[sizeof(data->tx_buffer) - 1] = crc & 0xff;

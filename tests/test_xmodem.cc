@@ -79,7 +79,7 @@ static void compute_expected_block_crc()
 {
     /* we may use the #crc16_compute() function here in tests because we have
      * explicit unit tests for it as well */
-    auto crc16 = crc16_compute(expected_block, sizeof(expected_block) - 2);
+    auto crc16 = crc16_compute(expected_block + 3, sizeof(expected_block) - 5);
 
     expected_block[sizeof(expected_block) - 2] = crc16 >> 8;
     expected_block[sizeof(expected_block) - 1] = crc16 & 0xff;
