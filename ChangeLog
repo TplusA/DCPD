@@ -1,3 +1,10 @@
+2015-12-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.7 released.
+
+	* XMODEM: Fix CRC-16 computation; checksum is to be computed only for
+	  the payload itself, not for the command header.
+
 2015-12-08  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.6 released.
