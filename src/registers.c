@@ -298,7 +298,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* Wireless security setting */
         .address = 92,
-        .max_data_size = 8,
+        .max_data_size = 12,
         .write_handler = dcpregs_write_92_wlan_security,
         .read_handler = dcpregs_read_92_wlan_security,
     },

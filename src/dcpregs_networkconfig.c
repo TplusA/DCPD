@@ -59,7 +59,7 @@ static const uint32_t req_wireless_only_parameters =
     REQ_WLAN_WPA_PASSPHRASE_102;
 
 #define SIZE_OF_IPV4_ADDRESS_STRING     (4U * 3U + 3U + 1U)
-#define SIZE_OF_WLAN_SECURITY_MODE      8U
+#define SIZE_OF_WLAN_SECURITY_MODE      12U
 
 /*!
  * Minimum size of an IPv4 address in bytes, not including zero-terminator.
@@ -623,6 +623,26 @@ static bool is_wlan_ssid_simple_ascii(const uint8_t *ssid, size_t len)
     return true;
 }
 
+static bool is_known_security_mode_name(const char *name)
+{
+    static const char *const names[] =
+    {
+        "none",
+        "psk",
+        "ieee8021x",
+        "wps",
+        "wep",
+    };
+
+    for(size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
+    {
+        if(strcmp(name, names[i]) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 static int handle_set_wireless_config(struct ini_section *section,
                                       const struct register_network_interface_t *selected)
 {
@@ -635,21 +655,20 @@ static int handle_set_wireless_config(struct ini_section *section,
         return 0;
     }
 
-    char security_type[16];
-    security_type[0] = '\0';
-
     if(IS_REQUESTED(REQ_WLAN_SECURITY_MODE_92))
     {
-        if(strcmp(nwconfig_write_data.wlan_security_mode, "NONE") == 0)
-            strcpy(security_type, "none");
-        else if(strcmp(nwconfig_write_data.wlan_security_mode, "WPAPSK") == 0 ||
-                strcmp(nwconfig_write_data.wlan_security_mode, "WPA2PSK") == 0)
-            strcpy(security_type, "psk");
-        else if(strcmp(nwconfig_write_data.wlan_security_mode, "WEP") == 0)
-            BUG("Support for insecure WLAN mode \"WEP\" not implemented yet");
-        else
+        if(!is_known_security_mode_name(nwconfig_write_data.wlan_security_mode))
+        {
             msg_error(EINVAL, LOG_ERR, "Invalid WLAN security mode \"%s\"",
                       nwconfig_write_data.wlan_security_mode);
+            nwconfig_write_data.wlan_security_mode[0] = '\0';
+        }
+
+        if(strcmp(nwconfig_write_data.wlan_security_mode, "wep") == 0)
+        {
+            BUG("Support for insecure WLAN mode \"WEP\" not implemented yet");
+            nwconfig_write_data.wlan_security_mode[0] = '\0';
+        }
     }
     else
     {
@@ -657,13 +676,14 @@ static int handle_set_wireless_config(struct ini_section *section,
 
         if(iface_data != NULL)
         {
-            connman_get_wlan_security_type_string(iface_data, security_type,
-                                                  sizeof(security_type));
+            connman_get_wlan_security_type_string(iface_data,
+                                                  nwconfig_write_data.wlan_security_mode,
+                                                  sizeof(nwconfig_write_data.wlan_security_mode));
             connman_free_interface_data(iface_data);
         }
     }
 
-    if(security_type[0] == '\0')
+    if(nwconfig_write_data.wlan_security_mode[0] == '\0')
     {
         msg_error(EINVAL, LOG_ERR,
                   "Cannot set WLAN parameters, security mode missing");
@@ -671,7 +691,7 @@ static int handle_set_wireless_config(struct ini_section *section,
     }
 
     if(inifile_section_store_value(section, "Security", 0,
-                                   security_type, 0) == NULL)
+                                   nwconfig_write_data.wlan_security_mode, 0) == NULL)
         return -1;
 
     if(IS_REQUESTED(REQ_WLAN_SSID_94) &&
@@ -1231,24 +1251,9 @@ ssize_t dcpregs_read_92_wlan_security(uint8_t *response, size_t length)
 
         if(iface_data != NULL)
         {
-            char buffer[12];
-
-            if(connman_get_wlan_security_type_string(iface_data, buffer, sizeof(buffer)))
-            {
-                if(strcmp(buffer, "none") == 0)
-                    strcpy((char *)response, "NONE");
-                else if(strcmp(buffer, "psk") == 0)
-                    strcpy((char *)response, "WPA2PSK");
-                else if(strcmp(buffer, "wep") == 0)
-                    strcpy((char *)response, "WEP");
-                else
-                    msg_error(0, LOG_ERR,
-                              "Cannot convert Connman security type \"%s\" to DCP",
-                              buffer);
-            }
-            else
-                failed = true;
-
+            failed = !connman_get_wlan_security_type_string(iface_data,
+                                                            (char *)response,
+                                                            length);
             connman_free_interface_data(iface_data);
         }
         else

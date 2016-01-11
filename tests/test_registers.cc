@@ -1833,7 +1833,7 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored(void)
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("NONE")), 4));
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("none")), 4));
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
@@ -1881,7 +1881,7 @@ void test_get_wlan_security_mode_for_ethernet_returns_error(void)
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(false, "", dummy_connman_iface, false, 12);
+    mock_connman->expect_get_wlan_security_type_string(false, "", dummy_connman_iface, false, sizeof(buffer));
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "No Connman security type set for active interface");
     mock_connman->expect_free_interface_data(dummy_connman_iface);
@@ -1898,8 +1898,7 @@ static void assume_wlan_interface_is_active(void)
     config->active_interface = &config->builtin_wlan_interface;
 }
 
-static void set_wlan_security_mode(const char *requested_security_mode,
-                                   const char *expected_out_security_mode)
+static void set_wlan_security_mode(const char *requested_security_mode)
 {
     assume_wlan_interface_is_active();
 
@@ -1931,7 +1930,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, expected_out_security_mode);
+             expected_config_file_format, requested_security_mode);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -1944,7 +1943,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
  */
 void test_set_wlan_security_mode_none(void)
 {
-    set_wlan_security_mode("NONE", "none");
+    set_wlan_security_mode("none");
 }
 
 /*!\test
@@ -1952,15 +1951,23 @@ void test_set_wlan_security_mode_none(void)
  */
 void test_set_wlan_security_mode_wpa_psk(void)
 {
-    set_wlan_security_mode("WPAPSK", "psk");
+    set_wlan_security_mode("psk");
 }
 
 /*!\test
- * Set WLAN security mode to WPA2/PSK.
+ * Set WLAN security mode to WPA EAP mode ("WPA Enterprise").
  */
-void test_set_wlan_security_mode_wpa2_psk(void)
+void test_set_wlan_security_mode_wpa_eap(void)
 {
-    set_wlan_security_mode("WPA2PSK", "psk");
+    set_wlan_security_mode("ieee8021x");
+}
+
+/*!\test
+ * Set WLAN security mode to WPS.
+ */
+void test_set_wlan_security_mode_wps(void)
+{
+    set_wlan_security_mode("wps");
 }
 
 /*!\test
@@ -1975,7 +1982,7 @@ void test_set_wlan_security_mode_wep(void)
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("WEP")), 3));
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("wep")), 3));
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
@@ -2015,8 +2022,7 @@ void test_set_invalid_wlan_security_mode(void)
     commit_ipv4_config(false, -1);
 }
 
-static void get_wlan_security_mode(const char *expected_security_mode,
-                                   const char *assumed_connman_security_mode,
+static void get_wlan_security_mode(const char *assumed_connman_security_mode,
                                    const char *expected_error_message = nullptr)
 {
     assume_wlan_interface_is_active();
@@ -2029,6 +2035,8 @@ static void get_wlan_security_mode(const char *expected_security_mode,
 
     uint8_t buffer[32];
     memset(buffer, UINT8_MAX, sizeof(buffer));
+
+    static constexpr const size_t read_size = sizeof(buffer) - 2 * sizeof(redzone_content);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
@@ -2046,15 +2054,14 @@ static void get_wlan_security_mode(const char *expected_security_mode,
     mock_connman->expect_get_wlan_security_type_string(true,
                                                        assumed_connman_security_mode,
                                                        dummy_connman_iface,
-                                                       false, 12);
+                                                       false, read_size);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
-    const ssize_t mode_length =
-        reg->read_handler(dest, sizeof(buffer) - 2 * sizeof(redzone_content));
+    const ssize_t mode_length = reg->read_handler(dest, read_size);
 
     cppcut_assert_operator(ssize_t(0), <, mode_length);
     cppcut_assert_equal('\0', static_cast<char>(dest[mode_length - 1]));
-    cppcut_assert_equal(expected_security_mode,
+    cppcut_assert_equal(assumed_connman_security_mode,
                         static_cast<char *>(static_cast<void *>(dest)));
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
                             buffer, sizeof(redzone_content));
@@ -2068,7 +2075,7 @@ static void get_wlan_security_mode(const char *expected_security_mode,
  */
 void test_get_wlan_security_mode_assume_none(void)
 {
-    get_wlan_security_mode("NONE", "none");
+    get_wlan_security_mode("none");
 }
 
 /*!\test
@@ -2076,43 +2083,38 @@ void test_get_wlan_security_mode_assume_none(void)
  */
 void test_get_wlan_security_mode_assume_wep(void)
 {
-    get_wlan_security_mode("WEP", "wep");
+    get_wlan_security_mode("wep");
 }
 
 /*!\test
  * Read out WLAN security mode in WPA/WPA2 PSK mode.
- *
- * Connman does not distinguish between WPA and WPA2, so its answer is always
- * "psk", which, in turn, we always translate to DCP string "WPA2PSK"
  */
 void test_get_wlan_security_mode_assume_psk(void)
 {
-    get_wlan_security_mode("WPA2PSK", "psk");
+    get_wlan_security_mode("psk");
 }
 
 /*!\test
  * Read out WLAN security mode in WPA EAP mode ("WPA Enterprise").
- *
- * This is not supported by DCP, so we return nothing for now.
  */
 void test_get_wlan_security_mode_assume_wpa_eap(void)
 {
-    get_wlan_security_mode("", "ieee8021x",
-                          "Cannot convert Connman security type \"ieee8021x\" to DCP");
+    get_wlan_security_mode("ieee8021x");
 }
 
 /*!\test
  * Read out WLAN security mode in some unknown future mode.
+ *
+ * This test shows that we are simply passing through any mode name that is
+ * currently configured into Connman configuration.
  */
 void test_get_wlan_security_mode_assume_unknown_mode(void)
 {
-    get_wlan_security_mode("", "fortknox",
-                           "Cannot convert Connman security type \"fortknox\" to DCP");
+    get_wlan_security_mode("fortknox");
 }
 
 static void set_passphrase_with_security_mode(const char *passphrase,
                                               size_t passphrase_size,
-                                              const char *dcp_security_mode,
                                               const char *connman_security_mode)
 {
     assume_wlan_interface_is_active();
@@ -2127,7 +2129,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     reg = lookup_register_expect_handlers(92,
                                           dcpregs_read_92_wlan_security,
                                           dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(dcp_security_mode)), strlen(dcp_security_mode)));
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(connman_security_mode)), strlen(connman_security_mode)));
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
@@ -2168,7 +2170,7 @@ void test_set_ascii_passphrase_with_psk_security_mode(void)
 
     cppcut_assert_operator(size_t(64), >, sizeof(ascii_passphrase) - 1);
     set_passphrase_with_security_mode(ascii_passphrase, sizeof(ascii_passphrase) - 1,
-                                      "WPA2PSK", "psk");
+                                      "psk");
 }
 
 /*!\test
@@ -2184,7 +2186,7 @@ void test_set_hex_passphrase_with_psk_security_mode(void)
 
     cppcut_assert_equal(size_t(64), sizeof(hex_passphrase) - 1);
     set_passphrase_with_security_mode(hex_passphrase, sizeof(hex_passphrase) - 1,
-                                      "WPA2PSK", "psk");
+                                      "psk");
 }
 
 /*!\test
@@ -2279,7 +2281,7 @@ void test_set_passphrase_with_security_mode_none_does_not_work(void)
 
     cppcut_assert_operator(size_t(64), >, sizeof(ascii_passphrase) - 1);
     set_passphrase_with_security_mode(ascii_passphrase, sizeof(ascii_passphrase) - 1,
-                                      "NONE", "none");
+                                      "none");
 }
 
 /*!\test
@@ -2304,7 +2306,7 @@ void test_set_passphrase_without_security_mode_does_not_work(void)
                                                        wlan_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(true, "", dummy_connman_iface, false, 16);
+    mock_connman->expect_get_wlan_security_type_string(true, "", dummy_connman_iface, false, 12);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
@@ -2430,7 +2432,7 @@ void test_set_simple_ascii_wlan_ssid(void)
     mock_connman->expect_find_active_primary_interface(
         dummy_connman_iface,
         wlan_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 16);
+    mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 12);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
@@ -2488,7 +2490,7 @@ void test_set_binary_wlan_ssid(void)
     mock_connman->expect_find_active_primary_interface(
         dummy_connman_iface,
         wlan_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 16);
+    mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 12);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
     for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
