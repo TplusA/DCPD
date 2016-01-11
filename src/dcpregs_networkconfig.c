@@ -319,7 +319,8 @@ static struct ConnmanInterfaceData *get_connman_iface_data(void)
         return connman_find_active_primary_interface(
                    get_network_iface_data(config)->mac_address_string,
                    config->builtin_ethernet_interface.mac_address_string,
-                   config->builtin_wlan_interface.mac_address_string);
+                   config->builtin_wlan_interface.mac_address_string,
+                   NULL);
 
 }
 
@@ -925,38 +926,55 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
 
 static void fill_network_status_register_response(uint8_t response[static 2])
 {
-    const struct register_configuration_t *config = registers_get_data();
-    struct ConnmanInterfaceData *iface_data =
-        connman_find_active_primary_interface(
-            get_network_iface_data(config)->mac_address_string,
-            config->builtin_ethernet_interface.mac_address_string,
-            config->builtin_wlan_interface.mac_address_string);
+    struct register_configuration_t *config = registers_get_nonconst_data();
+
+    config->active_interface = NULL;
 
     response[0] = 0x00;
     response[1] = 0x00;
 
-    if(iface_data == NULL)
-        return;
+    struct ConnmanInterfaceData *fallback_iface_data;
+    struct ConnmanInterfaceData *iface_data =
+        connman_find_active_primary_interface(
+            get_network_iface_data(config)->mac_address_string,
+            config->builtin_ethernet_interface.mac_address_string,
+            config->builtin_wlan_interface.mac_address_string,
+            &fallback_iface_data);
 
-    char result[2];
-
-    connman_get_ipv4_address_string(iface_data, result, sizeof(result));
-
-    if(result[0] != '\0')
-        response[0] = connman_get_dhcp_mode(iface_data) ? 0x02 : 0x01;
-
-    const enum ConnmanConnectionType ctype = connman_get_connection_type(iface_data);
-
-    switch(ctype)
+    if(iface_data != NULL)
     {
-      case CONNMAN_CONNECTION_TYPE_UNKNOWN:
-      case CONNMAN_CONNECTION_TYPE_ETHERNET:
-        response[1] = 0x01;
-        break;
+        log_assert(fallback_iface_data == NULL);
 
-      case CONNMAN_CONNECTION_TYPE_WLAN:
-        response[1] = 0x02;
-        break;
+        char result[2];
+
+        connman_get_ipv4_address_string(iface_data, result, sizeof(result));
+
+        if(result[0] != '\0')
+            response[0] = connman_get_dhcp_mode(iface_data) ? 0x02 : 0x01;
+    }
+    else if(fallback_iface_data != NULL)
+    {
+        iface_data = fallback_iface_data;
+        fallback_iface_data = NULL;
+    }
+
+    if(iface_data != NULL)
+    {
+        const enum ConnmanConnectionType ctype = connman_get_connection_type(iface_data);
+
+        switch(ctype)
+        {
+          case CONNMAN_CONNECTION_TYPE_UNKNOWN:
+          case CONNMAN_CONNECTION_TYPE_ETHERNET:
+            response[1] = 0x01;
+            config->active_interface = &config->builtin_ethernet_interface;
+            break;
+
+          case CONNMAN_CONNECTION_TYPE_WLAN:
+            response[1] = 0x02;
+            config->active_interface = &config->builtin_wlan_interface;
+            break;
+        }
     }
 
     connman_free_interface_data(iface_data);

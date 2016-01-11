@@ -175,6 +175,7 @@ class MockConnman::Expectation
         const uint8_t *ret_bytes_;
         size_t ret_bytes_size_;
         struct ConnmanInterfaceData *ret_data_;
+        struct ConnmanInterfaceData *ret_fallback_data_;
         struct ConnmanInterfaceData *arg_iface_data_;
         std::string arg_mac_address_;
         std::string arg_wired_mac_address_;
@@ -191,6 +192,7 @@ class MockConnman::Expectation
             ret_bytes_(nullptr),
             ret_bytes_size_(123456),
             ret_data_(nullptr),
+            ret_fallback_data_(nullptr),
             arg_iface_data_(nullptr),
             arg_pointer_shall_be_null_(false),
             arg_dest_size_(9876543),
@@ -220,13 +222,15 @@ class MockConnman::Expectation
     explicit Expectation(struct ConnmanInterfaceData *ret,
                          const char *default_mac_address,
                          const char *wired_mac_address,
-                         const char *wireless_mac_address):
+                         const char *wireless_mac_address,
+                         struct ConnmanInterfaceData *ret_fallback):
         d(ConnmanFn::find_active_primary_interface)
     {
         data_.ret_data_ = ret;
         data_.arg_mac_address_ = default_mac_address;
         data_.arg_wired_mac_address_ = wired_mac_address;
         data_.arg_wireless_mac_address_ = wireless_mac_address;
+        data_.ret_fallback_data_ = ret_fallback;
     }
 
     explicit Expectation(bool ret, struct ConnmanInterfaceData *iface_data):
@@ -377,9 +381,10 @@ void MockConnman::expect_find_interface(struct ConnmanInterfaceData *ret, const 
     expectations_->add(Expectation(ret, mac_address));
 }
 
-void MockConnman::expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address)
+void MockConnman::expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address, struct ConnmanInterfaceData *ret_fallback)
 {
-    expectations_->add(Expectation(ret, default_mac_address, wired_mac_address, wireless_mac_address));
+    cut_assert(ret == nullptr || ret_fallback == nullptr);
+    expectations_->add(Expectation(ret, default_mac_address, wired_mac_address, wireless_mac_address, ret_fallback));
 }
 
 void MockConnman::expect_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data)
@@ -517,7 +522,8 @@ struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
 struct ConnmanInterfaceData *
 connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wired_mac_address,
-                                      const char *wireless_mac_address)
+                                      const char *wireless_mac_address,
+                                      struct ConnmanInterfaceData **fallback)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
@@ -525,6 +531,11 @@ connman_find_active_primary_interface(const char *default_mac_address,
     cppcut_assert_equal(expect.d.arg_mac_address_, std::string(default_mac_address));
     cppcut_assert_equal(expect.d.arg_wired_mac_address_, std::string(wired_mac_address));
     cppcut_assert_equal(expect.d.arg_wireless_mac_address_, std::string(wireless_mac_address));
+
+    if(fallback == NULL)
+        cppcut_assert_null(expect.d.ret_fallback_data_);
+    else
+        *fallback = expect.d.ret_fallback_data_;
 
     return expect.d.ret_data_;
 }

@@ -44,16 +44,25 @@ static int determine_service_rank(GVariant *state_variant)
     return rank;
 }
 
-static bool match_mac_address(const char *mac_address, const char *needle,
-                              GVariant **found, GVariant *tuple)
+static bool match_mac_address(const char *needle, const char *mac_address,
+                              int rank, GVariant **found, GVariant **fallback,
+                              GVariant *tuple)
 {
     if(*found != NULL || strcasecmp(mac_address, needle) != 0)
         return false;
 
-    *found = tuple;
-    g_variant_ref(tuple);
+    if(rank > 0)
+    {
+        *found = tuple;
+        g_variant_ref(tuple);
+    }
+    else if(fallback != NULL && *fallback == NULL)
+    {
+        *fallback = tuple;
+        g_variant_ref(tuple);
+    }
 
-    return true;
+    return *found != NULL;
 }
 
 struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
@@ -117,6 +126,7 @@ struct match_mac_address_data
     GVariant *active_default;
     GVariant *active_wired;
     GVariant *active_wireless;
+    GVariant *fallback_iface;
     int wired_rank;
     int wireless_rank;
 };
@@ -140,14 +150,16 @@ static void match_mac_addresses(GVariantDict *dict,
     const char *mac_address = g_variant_get_string(mac_address_variant, NULL);
 
     (void)match_mac_address(mac_address, default_mac_address,
-                            &data->active_default, tuple);
+                            rank, &data->active_default, NULL, tuple);
 
     if(match_mac_address(mac_address, wired_mac_address,
-                         &data->active_wired, tuple))
+                         rank, &data->active_wired,
+                         &data->fallback_iface, tuple))
         data->wired_rank = rank;
 
     if(match_mac_address(mac_address, wireless_mac_address,
-                         &data->active_wireless, tuple))
+                         rank, &data->active_wireless,
+                         &data->fallback_iface, tuple))
         data->wireless_rank = rank;
 
     g_variant_unref(mac_address_variant);
@@ -157,8 +169,12 @@ static void match_mac_addresses(GVariantDict *dict,
 struct ConnmanInterfaceData *
 connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wired_mac_address,
-                                      const char *wireless_mac_address)
+                                      const char *wireless_mac_address,
+                                      struct ConnmanInterfaceData **fallback)
 {
+    if(fallback != NULL)
+        *fallback = NULL;
+
     GVariant *services = connman_common_query_services(dbus_get_connman_manager_iface());
     if(services == NULL)
         return NULL;
@@ -179,9 +195,8 @@ connman_find_active_primary_interface(const char *default_mac_address,
             determine_service_rank(g_variant_dict_lookup_value(&dict, "State",
                                                                G_VARIANT_TYPE_STRING));
 
-        if(rank > 0)
-            match_mac_addresses(&dict, default_mac_address, wired_mac_address,
-                                wireless_mac_address, tuple, rank, &match);
+        match_mac_addresses(&dict, default_mac_address, wired_mac_address,
+                            wireless_mac_address, tuple, rank, &match);
 
         g_variant_dict_clear(&dict);
         g_variant_unref(tuple);
@@ -207,6 +222,14 @@ connman_find_active_primary_interface(const char *default_mac_address,
 
     if(found != NULL)
         g_variant_ref(found);
+
+    if(match.fallback_iface != NULL)
+    {
+        if(found == NULL && fallback != NULL)
+            *fallback = (struct ConnmanInterfaceData *)match.fallback_iface;
+        else
+            g_variant_unref(match.fallback_iface);
+    }
 
     if(match.active_default != NULL)
         g_variant_unref(match.active_default);

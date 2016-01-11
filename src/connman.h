@@ -70,7 +70,8 @@ struct ConnmanInterfaceData *connman_find_interface(const char *mac_address);
 struct ConnmanInterfaceData *
 connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wired_mac_address,
-                                      const char *wireless_mac_address);
+                                      const char *wireless_mac_address,
+                                      struct ConnmanInterfaceData **fallback);
 
 bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data);
 enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
