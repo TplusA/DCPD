@@ -1,3 +1,11 @@
+2016-01-12  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.8 released.
+
+	* WLAN: Attempt switching to WLAN mode when removing Ethernet cable.
+
+	* Network configuration: Improve interoperability with SPI slave.
+
 2015-12-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.7 released.
@@ -92,4 +100,4 @@
 	* First release for testing.
 
 
-Copyright 2015 T+A elektroakustik GmbH & Co. KG
+Copyright 2015, 2016 T+A elektroakustik GmbH & Co. KG
