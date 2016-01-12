@@ -1166,8 +1166,8 @@ static size_t trim_trailing_zero_padding(const uint8_t *data, size_t length)
     return length;
 }
 
-static int copy_ipv4_address(char *dest, const uint32_t requested_change,
-                             const uint8_t *data, size_t length,
+static int copy_ipv4_address(char *const dest, const uint32_t requested_change,
+                             const uint8_t *const data, size_t length,
                              bool is_empty_ok)
 {
     length = trim_trailing_zero_padding(data, length);
@@ -1181,10 +1181,22 @@ static int copy_ipv4_address(char *dest, const uint32_t requested_change,
             length > SIZE_OF_IPV4_ADDRESS_STRING - 1)
         return -1;
 
-    if(length > 0)
-        memcpy(dest, data, length);
+    size_t i = 0;
+    size_t j = 0;
 
-    dest[length] = '\0';
+    while(i < length)
+    {
+        while(i < length && data[i] == '0')
+            ++i;
+
+        if(i >= length || data[i] == '.')
+            dest[j++] = '0';
+
+        while(i < length && (dest[j++] = data[i++]) != '.')
+            ;
+    }
+
+    dest[j] = '\0';
 
     if(!is_valid_ip_address_string(dest, is_empty_ok))
         return -1;

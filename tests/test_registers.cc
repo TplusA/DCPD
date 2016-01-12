@@ -999,6 +999,42 @@ void test_set_initial_static_ipv4_configuration(void)
 }
 
 /*!\test
+ * Addresses such as "192.168.060.000" are converted to "192.168.60.0".
+ *
+ * Connman (and most other software) doesn't like leading zeros in IP addresses
+ * because they look like octal numbers. In fact, \c inet_pton(3) also chokes
+ * on those.
+ */
+void test_leading_zeros_are_removed_from_ipv4_addresses(void)
+{
+    start_ipv4_config();
+
+    auto *reg = lookup_register_expect_handlers(56,
+                                                dcpregs_read_56_ipv4_address,
+                                                dcpregs_write_56_ipv4_address);
+
+    static const std::array<std::pair<const char *, const char *>, 3> addresses_with_zeros =
+    {
+        std::make_pair("123.045.006.100", "123.45.6.100"),
+        std::make_pair("135.07.80.010",   "135.7.80.10"),
+        std::make_pair("009.000.00.0",    "9.0.0.0"),
+    };
+
+    for(const auto &p : addresses_with_zeros)
+    {
+        cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(p.first)), strlen(p.first)));
+
+        mock_messages->expect_msg_info("read 56 handler %p %zu");
+
+        uint8_t buffer[32];
+        const ssize_t len = reg->read_handler(buffer, sizeof(buffer));
+        buffer[sizeof(buffer) - 1] = '\0';
+        cppcut_assert_equal(p.second, static_cast<const char *>(static_cast<const void *>(buffer)));
+        cppcut_assert_equal(ssize_t(strlen(p.second) + 1), len);
+    }
+}
+
+/*!\test
  * Initial enabling of DHCPv4 generates a Connman configuration file.
  */
 void test_set_initial_dhcp_ipv4_configuration(void)
