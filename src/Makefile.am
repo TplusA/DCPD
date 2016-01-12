@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -28,8 +28,7 @@ dcpd_SOURCES = \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.h \
-    dcpregs_status.h \
+    dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_status.h \
     connman.c connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
     dbus_common.c dbus_common.h \
@@ -69,6 +68,7 @@ libregisters_la_SOURCES = \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
     dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
+    dcpregs_playstream.c dcpregs_playstream.h \
     dcpregs_status.h \
     dbusdl_dbus.h \
     shutdown_guard.h \
@@ -84,6 +84,7 @@ libdbus_handlers_la_SOURCES = \
     dcpregs_networkconfig.h \
     dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h \
+    dcpregs_playstream.h \
     dcpregs_status.h
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 

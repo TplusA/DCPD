@@ -36,6 +36,7 @@
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_tcptunnel.h"
+#include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
 #include "registers_priv.h"
 
@@ -296,6 +297,19 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_drcp_command,
     },
     {
+        /* Play stream with this title (fallback title) */
+        .address = 78,
+        .max_data_size = 128,
+        .write_handler = dcpregs_write_78_start_play_stream_title,
+    },
+    {
+        /* Play stream found under this URL */
+        .address = 79,
+        .max_data_size = 512,
+        .read_handler = dcpregs_read_79_start_play_stream_url,
+        .write_handler = dcpregs_write_79_start_play_stream_url,
+    },
+    {
         /* Wireless security setting */
         .address = 92,
         .max_data_size = 12,
@@ -364,6 +378,19 @@ static const struct dcp_register_t register_map[] =
         .address = 209,
         .max_data_size = 8 + 1024,
         .write_handler = dcpregs_write_209_download_url,
+    },
+    {
+        /* Continue playing, next stream has this title (fallback title) */
+        .address = 238,
+        .max_data_size = 128,
+        .write_handler = dcpregs_write_238_next_stream_title,
+    },
+    {
+        /* Continue playing, next stream found under this URL */
+        .address = 239,
+        .max_data_size = 512,
+        .read_handler = dcpregs_read_239_next_stream_url,
+        .write_handler = dcpregs_write_239_next_stream_url,
     },
 };
 
