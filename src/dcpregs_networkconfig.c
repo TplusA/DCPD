@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
+#include <arpa/inet.h>
 
 #include "dcpregs_networkconfig.h"
 #include "registers_priv.h"
@@ -325,11 +326,25 @@ static struct ConnmanInterfaceData *get_connman_iface_data(void)
 }
 
 /*!
- * \todo Not implemented
+ * Validate IPv4 address string.
  */
 static bool is_valid_ip_address_string(const char *string, bool is_empty_ok)
 {
-    return true;
+    if(string[0] == '\0')
+        return is_empty_ok;
+
+    uint8_t dummy[sizeof(struct in_addr)];
+    int result = inet_pton(AF_INET, string, dummy);
+
+    if(result > 0)
+        return true;
+
+    if(result == 0)
+        errno = 0;
+
+    msg_error(errno, LOG_WARNING, "Failed parsing IPv4 address %s", string);
+
+    return false;
 }
 
 static int fill_in_missing_ipv4_config_requests(void)
