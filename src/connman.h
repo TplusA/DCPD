@@ -105,6 +105,7 @@ bool connman_security_iterator_next(struct ConnmanServiceSecurityIterator *iter)
 void connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter);
 const char *connman_security_iterator_get_security(struct ConnmanServiceSecurityIterator *iter);
 
+void connman_wlan_power_on(void);
 bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback);
 
 #ifdef __cplusplus

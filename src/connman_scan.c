@@ -191,7 +191,7 @@ static bool check_if_powered(GVariantDict *dict)
     return is_powered;
 }
 
-bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)
+static bool site_survey_or_just_power_on(ConnmanSurveyDoneFn site_survey_callback)
 {
     tdbusconnmanManager *iface = dbus_get_connman_manager_iface();
 
@@ -201,7 +201,10 @@ bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)
     if(entry == NULL)
     {
         msg_error(0, LOG_NOTICE, "No WLAN adapter connected");
-        callback(CONNMAN_SITE_SCAN_NO_HARDWARE);
+
+        if(site_survey_callback != NULL)
+            site_survey_callback(CONNMAN_SITE_SCAN_NO_HARDWARE);
+
         return false;
     }
 
@@ -210,13 +213,39 @@ bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)
     GVariant *tech_path_variant = g_variant_get_child_value(entry, 0);
     log_assert(tech_path_variant != NULL);
 
-    static struct wifi_scan_data scan_data;
-    scan_wifi(&scan_data, g_variant_get_string(tech_path_variant, NULL),
-              is_powered, callback);
+    const char *object_path = g_variant_get_string(tech_path_variant, NULL);
+
+    if(site_survey_callback != NULL)
+    {
+        static struct wifi_scan_data scan_data;
+        scan_wifi(&scan_data, object_path, is_powered, site_survey_callback);
+    }
+    else
+    {
+        tdbusconnmanTechnology *const proxy =
+            dbus_get_connman_technology_proxy_for_object_path(object_path);
+
+        if(proxy != NULL)
+        {
+            (void)enable_wifi_if_necessary(proxy, is_powered);
+            g_object_unref(proxy);
+        }
+    }
 
     g_variant_unref(tech_path_variant);
     g_variant_unref(entry);
     g_variant_dict_clear(&dict);
 
     return true;
+}
+
+void connman_wlan_power_on(void)
+{
+    (void)site_survey_or_just_power_on(NULL);
+}
+
+bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)
+{
+    log_assert(callback != NULL);
+    return site_survey_or_just_power_on(callback);
 }
