@@ -37,6 +37,7 @@
 #include "dbus_iface.h"
 #include "registers.h"
 #include "dcpregs_status.h"
+#include "connman.h"
 #include "os.h"
 #include "versioninfo.h"
 
@@ -898,6 +899,10 @@ int main(int argc, char *argv[])
     sigaction(SIGTERM, &action, NULL);
 
     transaction_init_allocator();
+
+    if(parameters.with_connman)
+        connman_wlan_power_on();
+
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
     main_loop(&files, register_changed_fd);

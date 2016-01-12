@@ -1549,6 +1549,7 @@ void dcpregs_networkconfig_interfaces_changed(void)
 {
     uint8_t response[sizeof(nwstatus_data.previous_response)];
 
+    connman_wlan_power_on();
     fill_network_status_register_response(response);
 
     if(memcmp(nwstatus_data.previous_response, response, sizeof(response)) != 0)
