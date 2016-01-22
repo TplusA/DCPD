@@ -3654,15 +3654,17 @@ class RegisterChangedData
     }
 };
 
-static RegisterChangedData register_changed_data;
+static RegisterChangedData *register_changed_data;
 
 static void register_changed_callback(uint8_t reg_number)
 {
-    register_changed_data.append(reg_number);
+    register_changed_data->append(reg_number);
 }
 
 void cut_setup(void)
 {
+    register_changed_data = new RegisterChangedData;
+
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
@@ -3673,7 +3675,7 @@ void cut_setup(void)
     mock_os->init();
     mock_os_singleton = mock_os;
 
-    register_changed_data.init();
+    register_changed_data->init();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
@@ -3684,7 +3686,10 @@ void cut_teardown(void)
 {
     register_deinit();
 
-    register_changed_data.check();
+    register_changed_data->check();
+
+    delete register_changed_data;
+    register_changed_data = nullptr;
 
     mock_messages->check();
     mock_os->check();
@@ -3981,7 +3986,7 @@ void test_status_byte_after_ready_notification()
                             buffer, sizeof(buffer));
 
     static constexpr std::array<uint8_t, 2> expected_registers = { 17, 50 };
-    register_changed_data.check(expected_registers);
+    register_changed_data->check(expected_registers);
 }
 
 /*!\test
@@ -4002,7 +4007,7 @@ void test_status_byte_after_shutdown_notification()
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             buffer, sizeof(buffer));
 
-    register_changed_data.check(17);
+    register_changed_data->check(17);
 }
 
 /*!\test
@@ -4023,7 +4028,7 @@ void test_status_byte_after_reboot_required_notification()
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             buffer, sizeof(buffer));
 
-    register_changed_data.check(17);
+    register_changed_data->check(17);
 }
 
 /*!\test
@@ -4034,22 +4039,22 @@ void test_status_byte_updates_are_only_sent_if_changed()
 {
     dcpregs_status_set_ready();
     static constexpr std::array<uint8_t, 2> expected_regs_for_ready = { 17, 50 };
-    register_changed_data.check(expected_regs_for_ready);
+    register_changed_data->check(expected_regs_for_ready);
 
     dcpregs_status_set_ready();
-    register_changed_data.check();
+    register_changed_data->check();
 
     dcpregs_status_set_ready_to_shutdown();
-    register_changed_data.check(17);
+    register_changed_data->check(17);
 
     dcpregs_status_set_ready_to_shutdown();
-    register_changed_data.check();
+    register_changed_data->check();
 
     dcpregs_status_set_reboot_required();
-    register_changed_data.check(17);
+    register_changed_data->check(17);
 
     dcpregs_status_set_reboot_required();
-    register_changed_data.check();
+    register_changed_data->check();
 }
 
 };
