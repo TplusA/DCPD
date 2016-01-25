@@ -58,3 +58,13 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
     msg_info("read 239 handler %p %zu", response, length);
     return -1;
 }
+
+void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
+{
+    msg_info("Stream %u has started playing", raw_stream_id);
+}
+
+void dcpregs_playstream_stop_notification(void)
+{
+    msg_info("Streamplayer has stopped");
+}

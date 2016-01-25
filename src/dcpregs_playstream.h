@@ -22,6 +22,8 @@
 #include <stdint.h>
 #include <unistd.h>
 
+#include "stream_id.h"
+
 /*!
  * \addtogroup registers
  */
@@ -47,6 +49,9 @@ ssize_t dcpregs_read_79_start_play_stream_url(uint8_t *response, size_t length);
 int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length);
 int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length);
+
+void dcpregs_playstream_start_notification(stream_id_t raw_stream_id);
+void dcpregs_playstream_stop_notification(void);
 
 #ifdef __cplusplus
 }
