@@ -53,6 +53,7 @@ noinst_LTLIBRARIES = \
     libdbus_handlers.la \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
+    libstreamplayer_dbus.la \
     libconnman_dbus.la \
     liblogind_dbus.la
 
@@ -101,6 +102,9 @@ liblogind_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libdbusdl_dbus_la_SOURCES = dbusdl_dbus.c dbusdl_dbus.h
 libdbusdl_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libstreamplayer_dbus_la_SOURCES = streamplayer_dbus.c streamplayer_dbus.h
+libstreamplayer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 libdrcpdcomm_la_SOURCES = drcp.c drcp.h named_pipe.h dynamic_buffer.h messages.h
 libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 
@@ -132,6 +136,10 @@ BUILT_SOURCES = \
     de_tahifi_dbusdl.h \
     de_tahifi_dbusdl.md \
     dbusdl_dbus.stamp \
+    $(nodist_libstreamplayer_dbus_la_SOURCES) \
+    de_tahifi_streamplayer.h \
+    de_tahifi_streamplayer.md \
+    streamplayer_dbus.stamp \
     $(nodist_libconnman_dbus_la_SOURCES) \
     net_connman.h \
     net_connman.md \
@@ -159,6 +167,15 @@ dbusdl_dbus.h: dbusdl_dbus.stamp
 dbusdl_dbus.stamp: $(DBUS_IFACES)/de_tahifi_filetransfer.xml
 	$(GDBUS_CODEGEN) --generate-c-code=dbusdl_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dbusdl.md -H de_tahifi_dbusdl.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME)"
+	touch $@
+
+de_tahifi_streamplayer.h: streamplayer_dbus.stamp
+de_tahifi_streamplayer.md: streamplayer_dbus.stamp
+streamplayer_dbus.c: streamplayer_dbus.stamp
+streamplayer_dbus.h: streamplayer_dbus.stamp
+streamplayer_dbus.stamp: $(DBUS_IFACES)/de_tahifi_streamplayer.xml
+	$(GDBUS_CODEGEN) --generate-c-code=streamplayer_dbus --c-namespace tdbus_splay --interface-prefix de.tahifi.Streamplayer. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_streamplayer.md -H de_tahifi_streamplayer.h -c tdbus_splay -s de.tahifi.Streamplayer. -n 'Streamplayer'
 	touch $@
 
 net_connman.h: connman_dbus.stamp

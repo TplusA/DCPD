@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -31,6 +31,7 @@ EXTRA_DIST += \
     dbus_interfaces/extract_documentation.py \
     dbus_interfaces/de_tahifi_dcpd.xml \
     dbus_interfaces/de_tahifi_filetransfer.xml \
+    dbus_interfaces/de_tahifi_streamplayer.xml \
     dbus_interfaces/net_connman.xml \
     dbus_interfaces/org_freedesktop_login1.xml
 
