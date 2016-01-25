@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -26,7 +26,9 @@
 #include "dbus_handlers.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_filetransfer.h"
+#include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
+#include "stream_id.h"
 #include "messages.h"
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
@@ -178,6 +180,41 @@ void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
                                                path_length > 0 ? path : NULL);
 
         g_variant_unref(val);
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
+}
+
+void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
+                               const gchar *signal_name, GVariant *parameters,
+                               gpointer user_data)
+{
+    static const char iface_name[] = "de.tahifi.Streamplayer.Playback";
+
+    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
+
+    if(strcmp(signal_name, "NowPlaying") == 0)
+    {
+        /* some stream started or continued playing---is it ours? */
+        check_parameter_assertions(parameters, 4);
+
+        GVariant *val = g_variant_get_child_value(parameters, 0);
+        uint16_t stream_id = g_variant_get_uint16(val);
+        g_variant_unref(val);
+
+        dcpregs_playstream_start_notification(stream_id);
+    }
+    else if(strcmp(signal_name, "Stopped") == 0)
+    {
+        /* stream stopped playing */
+        dcpregs_playstream_stop_notification();
+    }
+    else if(strcmp(signal_name, "MetaDataChanged") == 0 ||
+            strcmp(signal_name, "PositionChanged") == 0 ||
+            strcmp(signal_name, "SpeedChanged") == 0 ||
+            strcmp(signal_name, "Paused") == 0)
+    {
+        /* ignore */
     }
     else
         unknown_signal(iface_name, signal_name, sender_name);

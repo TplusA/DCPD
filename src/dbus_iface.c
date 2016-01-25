@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,7 @@
 #include "dbus_handlers.h"
 #include "dbus_common.h"
 #include "dcpd_dbus.h"
+#include "streamplayer_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
 #include "messages.h"
@@ -65,6 +66,14 @@ static struct
     tdbusFileTransfer *iface;
 }
 filetransfer_iface_data;
+
+static struct
+{
+    bool connect_to_session_bus;
+    tdbussplayPlayback *playback_iface;
+    tdbussplayURLFIFO *urlfifo_iface;
+}
+streamplayer_iface_data;
 
 static struct
 {
@@ -145,6 +154,22 @@ static void name_acquired(GDBusConnection *connection,
                                                "de.tahifi.DBusDL", "/de/tahifi/DBusDL",
                                                NULL, &error);
         (void)dbus_common_handle_dbus_error(&error);
+
+        streamplayer_iface_data.playback_iface =
+            tdbus_splay_playback_proxy_new_sync(connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                "de.tahifi.Streamplayer",
+                                                "/de/tahifi/Streamplayer",
+                                                NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error);
+
+        streamplayer_iface_data.urlfifo_iface =
+            tdbus_splay_urlfifo_proxy_new_sync(connection,
+                                               G_DBUS_PROXY_FLAGS_NONE,
+                                               "de.tahifi.Streamplayer",
+                                               "/de/tahifi/Streamplayer",
+                                               NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error);
     }
 
     if(!is_session_bus)
@@ -209,6 +234,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     memset(&dbus_data_session_bus, 0, sizeof(dbus_data_session_bus));
     memset(&dcpd_iface_data, 0, sizeof(dcpd_iface_data));
     memset(&filetransfer_iface_data, 0, sizeof(filetransfer_iface_data));
+    memset(&streamplayer_iface_data, 0, sizeof(streamplayer_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&login1_iface_data, 0, sizeof(login1_iface_data));
     memset(&process_data, 0, sizeof(process_data));
@@ -225,6 +251,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
 
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
+    streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
@@ -274,9 +301,14 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     log_assert(dcpd_iface_data.list_navigation_iface != NULL);
     log_assert(dcpd_iface_data.list_item_iface != NULL);
     log_assert(filetransfer_iface_data.iface != NULL);
+    log_assert(streamplayer_iface_data.playback_iface != NULL);
+    log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
 
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
                      G_CALLBACK(dbussignal_file_transfer), NULL);
+
+    g_signal_connect(streamplayer_iface_data.playback_iface, "g-signal",
+                     G_CALLBACK(dbussignal_splay_playback), NULL);
 
     if(connman_iface_data.is_enabled)
     {
@@ -322,6 +354,8 @@ void dbus_shutdown(void)
     g_object_unref(dcpd_iface_data.list_item_iface);
 
     g_object_unref(filetransfer_iface_data.iface);
+    g_object_unref(streamplayer_iface_data.playback_iface);
+    g_object_unref(streamplayer_iface_data.urlfifo_iface);
 
     if(connman_iface_data.connman_manager_iface != NULL)
         g_object_unref(connman_iface_data.connman_manager_iface);
@@ -420,6 +454,16 @@ tdbusdcpdListItem *dbus_get_list_item_iface(void)
 tdbusFileTransfer *dbus_get_file_transfer_iface(void)
 {
     return filetransfer_iface_data.iface;
+}
+
+tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void)
+{
+    return streamplayer_iface_data.playback_iface;
+}
+
+tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void)
+{
+    return streamplayer_iface_data.urlfifo_iface;
 }
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)

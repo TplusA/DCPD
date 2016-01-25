@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,6 +21,7 @@
 
 #include "dcpd_dbus.h"
 #include "dbusdl_dbus.h"
+#include "streamplayer_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
 
@@ -34,6 +35,9 @@ tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void);
 tdbusdcpdListItem *dbus_get_list_item_iface(void);
 
 tdbusFileTransfer *dbus_get_file_transfer_iface(void);
+
+tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void);
+tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
 tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path);

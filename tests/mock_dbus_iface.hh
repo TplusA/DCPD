@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -48,6 +48,8 @@ class MockDBusIface
     void expect_dbus_get_list_navigation_iface(tdbusdcpdListNavigation *);
     void expect_dbus_get_list_item_iface(tdbusdcpdListItem *);
     void expect_dbus_get_file_transfer_iface(tdbusFileTransfer *);
+    void expect_dbus_get_streamplayer_urlfifo_iface(tdbussplayURLFIFO *);
+    void expect_dbus_get_streamplayer_playback_iface(tdbussplayPlayback *);
     void expect_dbus_get_logind_manager_iface(tdbuslogindManager *);
 };
 

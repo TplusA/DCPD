@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -41,6 +41,9 @@ extern "C" {
 void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                                 const gchar *signal_name, GVariant *parameters,
                                 gpointer user_data);
+void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
+                               const gchar *signal_name, GVariant *parameters,
+                               gpointer user_data);
 void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
                                const gchar *signal_name, GVariant *parameters,
                                gpointer user_data);
