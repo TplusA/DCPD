@@ -31,11 +31,14 @@
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer_priv.h"
+#include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
 #include "drcp_command_codes.h"
+#include "stream_id.hh"
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_file_transfer_dbus.hh"
+#include "mock_streamplayer_dbus.hh"
 #include "mock_logind_manager_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
@@ -146,7 +149,7 @@ class RegisterChangedNotificationData
     {
         was_called_ = true;
         cut_assert_true(is_expected_);
-        cppcut_assert_equal(expected_register_, reg_number);
+        cppcut_assert_equal(uint16_t(expected_register_), uint16_t(reg_number));
     }
 
     void check()
@@ -3603,6 +3606,452 @@ void test_shutdown_can_be_called_only_once()
 
     mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
     dcpregs_filetransfer_prepare_for_shutdown();
+}
+
+};
+
+namespace spi_registers_play_app_stream
+{
+
+static MockMessages *mock_messages;
+static MockStreamplayerDBus *mock_streamplayer_dbus;
+static MockDBusIface *mock_dbus_iface;
+
+static tdbussplayURLFIFO *const dbus_streamplayer_urlfifo_iface_dummy =
+    reinterpret_cast<tdbussplayURLFIFO *>(0xd71b32aa);
+
+static tdbussplayPlayback *const dbus_streamplayer_playback_iface_dummy =
+    reinterpret_cast<tdbussplayPlayback *>(0xc9a018b0);
+
+using OurStream = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
+
+void cut_setup(void)
+{
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_streamplayer_dbus = new MockStreamplayerDBus;
+    cppcut_assert_not_null(mock_streamplayer_dbus);
+    mock_streamplayer_dbus->init();
+    mock_streamplayer_dbus_singleton = mock_streamplayer_dbus;
+
+    mock_dbus_iface = new MockDBusIface;
+    cppcut_assert_not_null(mock_dbus_iface);
+    mock_dbus_iface->init();
+    mock_dbus_iface_singleton = mock_dbus_iface;
+
+    register_changed_notification_data.init();
+
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    register_init(NULL, NULL, NULL, register_changed_notification);
+
+    dcpregs_playstream_init();
+}
+
+void cut_teardown(void)
+{
+    dcpregs_playstream_deinit();
+    register_deinit();
+
+    register_changed_notification_data.check();
+
+    mock_messages->check();
+    mock_streamplayer_dbus->check();
+    mock_dbus_iface->check();
+
+    mock_messages_singleton = nullptr;
+    mock_streamplayer_dbus_singleton = nullptr;
+    mock_dbus_iface_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_streamplayer_dbus;
+    delete mock_dbus_iface;
+
+    mock_messages = nullptr;
+    mock_streamplayer_dbus = nullptr;
+    mock_dbus_iface = nullptr;
+}
+
+static void set_start_title(const std::string title)
+{
+    const auto *const reg = register_lookup(78);
+
+    mock_messages->expect_msg_info("write 78 handler %p %zu");
+
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
+}
+
+static void set_next_title(const std::string title)
+{
+    const auto *const reg = register_lookup(238);
+
+    mock_messages->expect_msg_info("write 238 handler %p %zu");
+
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
+}
+
+static void set_start_url(const std::string url, const OurStream stream_id,
+                          bool assume_already_playing)
+{
+    const auto *const reg = register_lookup(79);
+
+    mock_messages->expect_msg_info("write 79 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
+    mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
+        TRUE, dbus_streamplayer_urlfifo_iface_dummy,
+        stream_id.get().get_raw_id(), url.c_str(),
+        0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
+
+    if(!assume_already_playing)
+    {
+        mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
+        mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+    }
+
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
+
+    uint8_t buffer[8];
+    mock_messages->expect_msg_info("read 79 handler %p %zu");
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+}
+
+static void set_next_url(const std::string url, const OurStream stream_id,
+                         bool assume_is_app_mode, bool assume_already_playing)
+{
+    const auto *const reg = register_lookup(239);
+
+    mock_messages->expect_msg_info("write 239 handler %p %zu");
+
+    if(assume_is_app_mode)
+    {
+        mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
+        mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
+            TRUE, dbus_streamplayer_urlfifo_iface_dummy,
+            stream_id.get().get_raw_id(), url.c_str(),
+            0, "ms", 0, "ms", 0, FALSE, assume_already_playing);
+    }
+    else
+        mock_messages->expect_msg_error(0, LOG_ERR, "Can't queue next stream, didn't receive a start stream");
+
+    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
+}
+
+static void stop_stream(void)
+{
+    const auto *const reg = register_lookup(79);
+
+    mock_messages->expect_msg_info("write 79 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
+    mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+
+    static const uint8_t zero = 0;
+    cppcut_assert_equal(0, reg->write_handler(&zero, sizeof(zero)));
+}
+
+/*!\test
+ * App starts single stream.
+ */
+void test_start_stream()
+{
+    set_start_title("Test stream");
+    set_start_url("http://app-provided.url.org/stream.flac", OurStream::make(), false);
+}
+
+/*!\test
+ * App starts single stream, then skips to another stream.
+ */
+void test_start_stream_then_start_another_stream()
+{
+    auto next_stream_id(OurStream::make());
+
+    const auto stream_id_first(next_stream_id);
+    set_start_title("First");
+    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_notification_data.check();
+
+    const auto stream_id_second(++next_stream_id);
+    set_start_title("Second");
+    set_start_url("http://app-provided.url.org/second.flac", stream_id_second, true);
+
+    mock_messages->expect_msg_info_formatted("Next app stream 258");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    register_changed_notification_data.check();
+}
+
+/*!\test
+ * App starts single stream, then quickly skips to another stream.
+ */
+void test_start_stream_then_quickly_start_another_stream()
+{
+    auto next_stream_id(OurStream::make());
+
+    const auto stream_id_first(next_stream_id);
+    set_start_title("First");
+    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+
+    const auto stream_id_second(++next_stream_id);
+    set_start_title("Second");
+    set_start_url("http://app-provided.url.org/second.flac", stream_id_second, false);
+
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+                                              "Got start notification for unknown app stream ID 257");
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    register_changed_notification_data.check();
+}
+
+/*!\test
+ * App starts stream while another source is playing.
+ */
+void test_app_can_start_stream_while_other_source_is_playing()
+{
+    dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id());
+
+    const auto stream_id(OurStream::make());
+    set_start_title("Stream");
+    set_start_url("http://app-provided.url.org/stream.flac", stream_id, true);
+
+    mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+    register_changed_notification_data.check();
+}
+
+/*!\test
+ * App mode is left ends when a non-app source such as the remote control
+ * starts playing.
+ */
+void test_app_mode_ends_when_another_source_starts_playing()
+{
+    const auto stream_id(OurStream::make());
+    set_start_title("Stream");
+    set_start_url("http://app-provided.url.org/stream.flac", stream_id, false);
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+    register_changed_notification_data.check();
+
+    /* NOTE: In real life, there should have been a stop notification before
+     *       this start notification, so this test stretches beyond spec; hence
+     *       the harsh log message. */
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+        "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
+    register_changed_notification_data.expect(79);
+    dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id());
+    register_changed_notification_data.check();
+}
+
+static void start_stop_single_stream(bool with_notifications)
+{
+    const auto stream_id(OurStream::make());
+    set_start_title("Stream");
+    set_start_url("http://app-provided.url.org/stream.flac", stream_id, false);
+
+    if(with_notifications)
+    {
+        mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+        register_changed_notification_data.expect(239);
+        dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+        register_changed_notification_data.check();
+    }
+
+    stop_stream();
+
+    if(with_notifications)
+    {
+        mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+        register_changed_notification_data.expect(79);
+        dcpregs_playstream_stop_notification();
+        register_changed_notification_data.check();
+    }
+}
+
+/*!\test
+ * App starts single stream and stops it again.
+ */
+void test_start_stop_single_stream()
+{
+    start_stop_single_stream(true);
+}
+
+/*!\test
+ * App starts single stream and stops it again very quickly.
+ *
+ * In case the app manages to send start and stop commands before the stream
+ * player can react to them, the late stream player reactions are still
+ * forwarded.
+ */
+void test_quick_start_stop_single_stream()
+{
+    start_stop_single_stream(false);
+
+    /* late D-Bus signals are ignored */
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+                                              "Unexpected start of app stream 257");
+    dcpregs_playstream_start_notification(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN);
+    dcpregs_playstream_stop_notification();
+}
+
+/*!\test
+ * App starts stream and then sends another stream to play after the first one.
+ *
+ * The second stream is not played immediately.
+ */
+void test_start_stream_and_queue_next()
+{
+    auto next_stream_id(OurStream::make());
+
+    const auto stream_id_first(next_stream_id);
+    set_start_title("First FLAC");
+    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_notification_data.check();
+
+    const auto stream_id_second(++next_stream_id);
+    set_next_title("Second FLAC");
+    set_next_url("http://app-provided.url.org/second.flac", stream_id_second, true, true);
+
+    mock_messages->expect_msg_info_formatted("Next app stream 258");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    register_changed_notification_data.check();
+
+    /* after a while, the stream may finish */
+    mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    register_changed_notification_data.expect(79);
+    dcpregs_playstream_stop_notification();
+    register_changed_notification_data.check();
+}
+
+/*!\test
+ * App starts stream and then quickly sends another stream to play after the
+ * first one.
+ *
+ * This situation is slightly out of spec. The SPI slave should wait for empty
+ * register 239 before queuing the second stream. We'll handle it gracefully
+ * regardless, so the second stream is queued and not played immediately.
+ */
+void test_start_stream_and_quickly_queue_next()
+{
+    auto next_stream_id(OurStream::make());
+
+    const auto stream_id_first(next_stream_id);
+    set_start_title("First FLAC");
+    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+
+    const auto stream_id_second(++next_stream_id);
+    set_next_title("Second FLAC");
+    set_next_url("http://app-provided.url.org/second.flac", stream_id_second, true, true);
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_notification_data.check();
+
+    mock_messages->expect_msg_info_formatted("Next app stream 258");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    register_changed_notification_data.check();
+}
+
+/*!\test
+ * App starts stream and tries to queue another stream just after the first
+ * stream ended.
+ *
+ * The second stream is not played at all.
+ */
+void test_queue_next_after_stop_notification_is_ignored()
+{
+    auto next_stream_id(OurStream::make());
+
+    const auto stream_id_first(next_stream_id);
+    set_start_title("First FLAC");
+    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_notification_data.check();
+
+    /* the stream finishes... */
+    mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    register_changed_notification_data.expect(79);
+    dcpregs_playstream_stop_notification();
+    register_changed_notification_data.check();
+
+    /* ...but the slave sends another stream just in that moment */
+    const auto stream_id_second(++next_stream_id);
+    set_next_title("Second FLAC");
+    set_next_url("http://app-provided.url.org/second.flac", stream_id_second, false, false);
+}
+
+/*!\test
+ * App must start first stream before trying to queue next.
+ */
+void test_queue_next_with_prior_start_is_ignored()
+{
+    set_next_title("Stream");
+    set_next_url("http://app-provided.url.org/stream.flac", OurStream::make(), false, false);
+}
+
+/*!\test
+ * App must start first stream before trying to queue next also if streamplayer
+ * is already playing.
+ */
+void test_queue_next_with_prior_start_by_us_is_ignored()
+{
+    set_next_title("Stream");
+    set_next_url("http://app-provided.url.org/stream.flac", OurStream::make(), false, true);
+}
+
+/*!\test
+ * SPI slave may send registers 238 and 239 as often as it likes; last stream
+ * counts.
+ */
+void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
+{
+    auto next_stream_id(OurStream::make());
+
+    const auto stream_id_first(next_stream_id);
+    set_start_title("Playing stream");
+    set_start_url("http://app-provided.url.org/first.mp3", stream_id_first, false);
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_notification_data.check();
+
+    const auto stream_id_second(++next_stream_id);
+    set_next_title("Stream 2");
+    set_next_url("http://app-provided.url.org/2.mp3", stream_id_second, true, true);
+
+    const auto stream_id_third(++next_stream_id);
+    set_next_title("Stream 3");
+    set_next_url("http://app-provided.url.org/3.mp3", stream_id_third, true, true);
+
+    const auto stream_id_fourth(++next_stream_id);
+    set_next_title("Stream 4");
+    set_next_url("http://app-provided.url.org/4.mp3", stream_id_fourth, true, true);
+
+    mock_messages->expect_msg_info_formatted("Next app stream 260");
+    register_changed_notification_data.expect(239);
+    dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id());
+    register_changed_notification_data.check();
 }
 
 };
