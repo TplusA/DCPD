@@ -291,17 +291,19 @@ exit_free_service_iter:
 
 static const char *survey_result_to_string(enum ConnmanSiteScanResult result)
 {
-    static const char *strings[CONNMAN_SITE_SCAN_RESULT_LAST + 1] =
-    {
-        "ok",
-        "network",
-        "internal",
-        "oom",
-        "hardware",
-    };
-
     if(result >= 0 && result <= CONNMAN_SITE_SCAN_RESULT_LAST)
+    {
+        static const char *strings[CONNMAN_SITE_SCAN_RESULT_LAST + 1] =
+        {
+            "ok",
+            "network",
+            "internal",
+            "oom",
+            "hardware",
+        };
+
         return strings[result];
+    }
     else
         return "bug";
 }
