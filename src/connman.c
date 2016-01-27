@@ -166,6 +166,23 @@ static void match_mac_addresses(GVariantDict *dict,
     g_variant_dict_clear(&ethernet_dict);
 }
 
+static GVariant *
+extract_result_from_match_data(const struct match_mac_address_data *const match)
+{
+    if(match->active_wired != NULL && match->active_wireless != NULL)
+        return ((match->wired_rank == match->wireless_rank)
+                ? match->active_default
+                : ((match->wired_rank > match->wireless_rank)
+                   ? match->active_wired
+                   : match->active_wireless));
+    else if(match->active_wired != NULL)
+        return match->active_wired;
+    else if(match->active_wireless != NULL)
+        return match->active_wireless;
+    else
+        return match->active_default;
+}
+
 struct ConnmanInterfaceData *
 connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wired_mac_address,
@@ -204,21 +221,7 @@ connman_find_active_primary_interface(const char *default_mac_address,
 
     g_variant_unref(services);
 
-    GVariant *found = NULL;
-
-    if(match.active_wired == NULL && match.active_wireless == NULL)
-        found = match.active_default;
-    else if(match.active_wired != NULL)
-    {
-        if(match.active_wireless == NULL)
-            found = match.active_wired;
-        else
-            found = ((match.wired_rank == match.wireless_rank)
-                     ? match.active_default
-                     : ((match.wired_rank > match.wireless_rank)
-                        ? match.active_wired
-                        : match.active_wireless));
-    }
+    GVariant *const found = extract_result_from_match_data(&match);
 
     if(found != NULL)
         g_variant_ref(found);
