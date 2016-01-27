@@ -65,8 +65,22 @@ struct ConnmanServiceSecurityIterator;
 extern "C" {
 #endif
 
+/*!
+ * Find information about NIC with given MAC address, regardless of state.
+ */
 struct ConnmanInterfaceData *connman_find_interface(const char *mac_address);
 
+/*!
+ * Find active NIC with MAC address matching one of the given ones.
+ *
+ * In case both, the wired and the wireless, NICs are found and both are
+ * active, then the NIC with the MAC address given in \p default_mac_address is
+ * returned (making it a tiebreaker).
+ *
+ * In case any of the NICs is found, but all of them are in inactive
+ * (unconfigured) state, then (and only then) the first discovered device will
+ * be returned in \p fallback.
+ */
 struct ConnmanInterfaceData *
 connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wired_mac_address,
