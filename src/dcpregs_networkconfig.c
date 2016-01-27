@@ -113,18 +113,10 @@ static struct
     char ipv4_dns_server1[SIZE_OF_IPV4_ADDRESS_STRING];
     char ipv4_dns_server2[SIZE_OF_IPV4_ADDRESS_STRING];
 
-    bool proxy_mode;
-    char *proxy_server_name;
-    uint16_t proxy_server_port;
-
     char wlan_security_mode[SIZE_OF_WLAN_SECURITY_MODE];
 
     size_t wlan_ssid_length;
     uint8_t wlan_ssid[32];
-
-    bool wlan_wep_mode_is_open;
-    uint8_t wlan_wep_key_index;
-    uint8_t wlan_wep_keys[4][28];
 
     bool wlan_wpa_passphrase_is_ascii;
     uint8_t wlan_wpa_passphrase[64];
