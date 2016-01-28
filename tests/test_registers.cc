@@ -139,13 +139,13 @@ class RegisterChangedData
 
     void check()
     {
-        cut_assert_true(changed_registers_.empty());
+        cppcut_assert_equal(size_t(0), changed_registers_.size());
     }
 
     void check(uint8_t expected_register)
     {
         cppcut_assert_equal(size_t(1), changed_registers_.size());
-        cppcut_assert_equal(expected_register, changed_registers_[0]);
+        cppcut_assert_equal(uint16_t(expected_register), uint16_t(changed_registers_[0]));
 
         changed_registers_.clear();
     }
