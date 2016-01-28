@@ -219,3 +219,44 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
     else
         unknown_signal(iface_name, signal_name, sender_name);
 }
+
+static void enter_dcpd_playback_handler(GDBusMethodInvocation *invocation)
+{
+    static const char iface_name[] = "de.tahifi.Dcpd.Playback";
+
+    msg_info("%s method invocation from '%s': %s",
+             iface_name, g_dbus_method_invocation_get_sender(invocation),
+             g_dbus_method_invocation_get_method_name(invocation));
+}
+
+gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
+                                    GDBusMethodInvocation *invocation,
+                                    guint16 raw_stream_id,
+                                    const gchar *title, const gchar *url)
+{
+    enter_dcpd_playback_handler(invocation);
+
+    if((raw_stream_id & STREAM_ID_SOURCE_MASK) == STREAM_ID_SOURCE_INVALID)
+    {
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                                              "Invalid source in stream ID");
+        return TRUE;
+    }
+
+    const bool clear_info =
+        ((raw_stream_id & STREAM_ID_COOKIE_MASK) == STREAM_ID_COOKIE_INVALID ||
+         url[0] == '\0');
+
+    if(clear_info)
+    {
+        raw_stream_id &= STREAM_ID_SOURCE_MASK;
+        raw_stream_id |= STREAM_ID_COOKIE_INVALID;
+    }
+
+    dcpregs_playstream_set_title_and_url(raw_stream_id, title, url);
+
+    tdbus_dcpd_playback_complete_set_stream_info(object, invocation);
+
+    return TRUE;
+}

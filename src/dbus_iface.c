@@ -126,6 +126,9 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
         dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
 
+        g_signal_connect(dcpd_iface_data.playback_iface, "handle-set-stream-info",
+                         G_CALLBACK(dbusmethod_set_stream_info), NULL);
+
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.playback_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.views_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
