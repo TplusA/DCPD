@@ -153,8 +153,8 @@ static inline void notify_ready_for_next_stream_from_slave(void)
     registers_get_data()->register_changed_notification_fn(239);
 }
 
-static inline void app_stream_started_playing(struct PlayAppStreamData *data,
-                                              enum StreamIdType stype)
+static void app_stream_started_playing(struct PlayAppStreamData *data,
+                                       enum StreamIdType stype)
 {
     log_assert(stype == STREAM_ID_TYPE_APP_CURRENT ||
                stype == STREAM_ID_TYPE_APP_NEXT);
