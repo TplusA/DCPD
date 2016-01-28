@@ -123,48 +123,42 @@ static const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
-class RegisterChangedNotificationData
+class RegisterChangedData
 {
   private:
-    bool was_called_;
-    bool is_expected_;
-    uint8_t expected_register_;
+    std::vector<uint8_t> changed_registers_;
 
   public:
-    RegisterChangedNotificationData(const RegisterChangedNotificationData &) = delete;
-    RegisterChangedNotificationData &operator=(const RegisterChangedNotificationData &) = delete;
+    RegisterChangedData(const RegisterChangedData &) = delete;
+    RegisterChangedData &operator=(const RegisterChangedData &) = delete;
 
-    explicit RegisterChangedNotificationData() { init(); }
+    explicit RegisterChangedData() {}
 
-    void init() { expect(0); }
-
-    void expect(uint8_t reg_number)
-    {
-        was_called_ = false;
-        is_expected_ = (reg_number > 0);
-        expected_register_ = reg_number;
-    }
-
-    void check(uint8_t reg_number)
-    {
-        was_called_ = true;
-        cut_assert_true(is_expected_);
-        cppcut_assert_equal(uint16_t(expected_register_), uint16_t(reg_number));
-    }
+    void init() { changed_registers_.clear(); }
+    void append(uint8_t reg) { changed_registers_.push_back(reg); }
 
     void check()
     {
-        cppcut_assert_equal(is_expected_, was_called_);
-        init();
+        cut_assert_true(changed_registers_.empty());
+    }
+
+    void check(uint8_t expected_register)
+    {
+        cppcut_assert_equal(size_t(1), changed_registers_.size());
+        cppcut_assert_equal(expected_register, changed_registers_[0]);
+
+        changed_registers_.clear();
+    }
+
+    template <size_t N>
+    void check(const std::array<uint8_t, N> &expected_registers)
+    {
+        cut_assert_equal_memory(expected_registers.data(), N,
+                                changed_registers_.data(), changed_registers_.size());
+
+        changed_registers_.clear();
     }
 };
-
-static RegisterChangedNotificationData register_changed_notification_data;
-
-static void register_changed_notification(uint8_t reg_number)
-{
-    register_changed_notification_data.check(reg_number);
-}
 
 class SurveyCompleteNotificationData
 {
@@ -745,8 +739,17 @@ static int write_from_buffer_callback(const void *src, size_t count, int fd)
     return 0;
 }
 
+static RegisterChangedData *register_changed_data;
+
+static void register_changed_callback(uint8_t reg_number)
+{
+    register_changed_data->append(reg_number);
+}
+
 void cut_setup(void)
 {
+    register_changed_data = new RegisterChangedData;
+
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
@@ -765,20 +768,24 @@ void cut_setup(void)
     os_write_buffer.clear();
 
     survey_complete_notification_data.init();
-    register_changed_notification_data.init();
+    register_changed_data->init();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     register_init(ethernet_mac_address, wlan_mac_address, connman_config_path,
-                  register_changed_notification);
+                  register_changed_callback);
 }
 
 void cut_teardown(void)
 {
     register_deinit();
 
+    register_changed_data->check();
+
+    delete register_changed_data;
+    register_changed_data = nullptr;
+
     survey_complete_notification_data.check();
-    register_changed_notification_data.check();
 
     os_write_buffer.clear();
     os_write_buffer.shrink_to_fit();
@@ -2953,8 +2960,8 @@ void test_start_wlan_site_survey()
     cppcut_assert_equal(0, reg->write_handler(NULL, 0));
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, succeeded (0)");
-    register_changed_notification_data.expect(105);
     survey_complete_notification_data();
+    register_changed_data->check(105);
 }
 
 /*!\test
@@ -3064,8 +3071,8 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
     cppcut_assert_equal(0, reg->write_handler(NULL, 0));
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (1)");
-    register_changed_notification_data.expect(105);
     survey_complete_notification_data();
+    register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
                                           dcpregs_read_105_wlan_site_survey_results,
@@ -3095,8 +3102,8 @@ void test_start_wlan_site_survey_fails_on_dbus_failure()
     mock_connman->expect_connman_start_wlan_site_survey(
         false, survey_complete, CONNMAN_SITE_SCAN_DBUS_ERROR);
     survey_complete_notification_data.expect(true);
-    register_changed_notification_data.expect(105);
     cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
                                           dcpregs_read_105_wlan_site_survey_results,
@@ -3127,8 +3134,8 @@ void test_start_wlan_site_survey_fails_if_no_hardware_available()
     mock_connman->expect_connman_start_wlan_site_survey(
         false, survey_complete, CONNMAN_SITE_SCAN_NO_HARDWARE);
     survey_complete_notification_data.expect(true);
-    register_changed_notification_data.expect(105);
     cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
                                           dcpregs_read_105_wlan_site_survey_results,
@@ -3192,8 +3199,17 @@ static tdbusFileTransfer *const dbus_dcpd_file_transfer_iface_dummy =
 static tdbuslogindManager *const dbus_logind_manager_iface_dummy =
     reinterpret_cast<tdbuslogindManager *>(0x35790011);
 
+static RegisterChangedData *register_changed_data;
+
+static void register_changed_callback(uint8_t reg_number)
+{
+    register_changed_data->append(reg_number);
+}
+
 void cut_setup(void)
 {
+    register_changed_data = new RegisterChangedData;
+
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
@@ -3219,18 +3235,21 @@ void cut_setup(void)
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
 
-    register_changed_notification_data.init();
+    register_changed_data->init();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    register_init(NULL, NULL, NULL, register_changed_notification);
+    register_init(NULL, NULL, NULL, register_changed_callback);
 }
 
 void cut_teardown(void)
 {
     register_deinit();
 
-    register_changed_notification_data.check();
+    register_changed_data->check();
+
+    delete register_changed_data;
+    register_changed_data = nullptr;
 
     mock_messages->check();
     mock_os->check();
@@ -3423,9 +3442,8 @@ void test_download_status_during_download_is_percentage()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL progress report */
-    register_changed_notification_data.expect(41);
     dcpregs_filetransfer_progress_notification(xfer_id, 10, 20);
-    register_changed_notification_data.check();
+    register_changed_data->check(41);
 
     get_download_status(buffer);
 
@@ -3453,9 +3471,8 @@ void test_download_status_after_successful_download_is_status_code()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL progress report */
-    register_changed_notification_data.expect(41);
     dcpregs_filetransfer_progress_notification(xfer_id, 100, 100);
-    register_changed_notification_data.check();
+    register_changed_data->check(41);
 
     /* progress 100% */
     get_download_status(buffer);
@@ -3466,10 +3483,9 @@ void test_download_status_after_successful_download_is_status_code()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL done report */
-    register_changed_notification_data.expect(41);
     dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_OK,
                                            "/some/path/0000000007.dbusdl");
-    register_changed_notification_data.check();
+    register_changed_data->check(41);
 
     /* Download OK status */
     get_download_status(buffer);
@@ -3503,9 +3519,8 @@ void test_download_status_after_failed_download_is_status_code()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL done report with error */
-    register_changed_notification_data.expect(41);
     dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_NET_IO, NULL);
-    register_changed_notification_data.check();
+    register_changed_data->check(41);
 
     /* No network connection status */
     get_download_status(buffer);
@@ -3625,8 +3640,17 @@ static tdbussplayPlayback *const dbus_streamplayer_playback_iface_dummy =
 
 using OurStream = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
 
+static RegisterChangedData *register_changed_data;
+
+static void register_changed_callback(uint8_t reg_number)
+{
+    register_changed_data->append(reg_number);
+}
+
 void cut_setup(void)
 {
+    register_changed_data = new RegisterChangedData;
+
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
@@ -3642,11 +3666,11 @@ void cut_setup(void)
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
 
-    register_changed_notification_data.init();
+    register_changed_data->init();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    register_init(NULL, NULL, NULL, register_changed_notification);
+    register_init(NULL, NULL, NULL, register_changed_callback);
 
     dcpregs_playstream_init();
 }
@@ -3656,7 +3680,10 @@ void cut_teardown(void)
     dcpregs_playstream_deinit();
     register_deinit();
 
-    register_changed_notification_data.check();
+    register_changed_data->check();
+
+    delete register_changed_data;
+    register_changed_data = nullptr;
 
     mock_messages->check();
     mock_streamplayer_dbus->check();
@@ -3772,18 +3799,16 @@ void test_start_stream_then_start_another_stream()
     set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 
     const auto stream_id_second(++next_stream_id);
     set_start_title("Second");
     set_start_url("http://app-provided.url.org/second.flac", stream_id_second, true);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 }
 
 /*!\test
@@ -3806,9 +3831,8 @@ void test_start_stream_then_quickly_start_another_stream()
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 }
 
 /*!\test
@@ -3823,9 +3847,8 @@ void test_app_can_start_stream_while_other_source_is_playing()
     set_start_url("http://app-provided.url.org/stream.flac", stream_id, true);
 
     mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 }
 
 /*!\test
@@ -3839,18 +3862,16 @@ void test_app_mode_ends_when_another_source_starts_playing()
     set_start_url("http://app-provided.url.org/stream.flac", stream_id, false);
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 
     /* NOTE: In real life, there should have been a stop notification before
      *       this start notification, so this test stretches beyond spec; hence
      *       the harsh log message. */
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
-    register_changed_notification_data.expect(79);
     dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(79);
 }
 
 static void start_stop_single_stream(bool with_notifications)
@@ -3862,9 +3883,8 @@ static void start_stop_single_stream(bool with_notifications)
     if(with_notifications)
     {
         mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
-        register_changed_notification_data.expect(239);
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
-        register_changed_notification_data.check();
+        register_changed_data->check(239);
     }
 
     stop_stream();
@@ -3872,9 +3892,8 @@ static void start_stop_single_stream(bool with_notifications)
     if(with_notifications)
     {
         mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
-        register_changed_notification_data.expect(79);
         dcpregs_playstream_stop_notification();
-        register_changed_notification_data.check();
+        register_changed_data->check(79);
     }
 }
 
@@ -3918,24 +3937,21 @@ void test_start_stream_and_queue_next()
     set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 
     const auto stream_id_second(++next_stream_id);
     set_next_title("Second FLAC");
     set_next_url("http://app-provided.url.org/second.flac", stream_id_second, true, true);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 
     /* after a while, the stream may finish */
     mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
-    register_changed_notification_data.expect(79);
     dcpregs_playstream_stop_notification();
-    register_changed_notification_data.check();
+    register_changed_data->check(79);
 }
 
 /*!\test
@@ -3959,14 +3975,12 @@ void test_start_stream_and_quickly_queue_next()
     set_next_url("http://app-provided.url.org/second.flac", stream_id_second, true, true);
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 }
 
 /*!\test
@@ -3984,15 +3998,13 @@ void test_queue_next_after_stop_notification_is_ignored()
     set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 
     /* the stream finishes... */
     mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
-    register_changed_notification_data.expect(79);
     dcpregs_playstream_stop_notification();
-    register_changed_notification_data.check();
+    register_changed_data->check(79);
 
     /* ...but the slave sends another stream just in that moment */
     const auto stream_id_second(++next_stream_id);
@@ -4032,9 +4044,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     set_start_url("http://app-provided.url.org/first.mp3", stream_id_first, false);
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 
     const auto stream_id_second(++next_stream_id);
     set_next_title("Stream 2");
@@ -4049,9 +4060,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     set_next_url("http://app-provided.url.org/4.mp3", stream_id_fourth, true, true);
 
     mock_messages->expect_msg_info_formatted("Next app stream 260");
-    register_changed_notification_data.expect(239);
     dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id());
-    register_changed_notification_data.check();
+    register_changed_data->check(239);
 }
 
 };
@@ -4065,43 +4075,6 @@ static MockOs *mock_os;
 static constexpr char expected_config_filename[] = "/etc/os-release";
 
 static constexpr int expected_os_map_file_to_memory_fd = 5;
-
-class RegisterChangedData
-{
-  private:
-    std::vector<uint8_t> changed_registers_;
-
-  public:
-    RegisterChangedData(const RegisterChangedData &) = delete;
-    RegisterChangedData &operator=(const RegisterChangedData &) = delete;
-
-    explicit RegisterChangedData() {}
-
-    void init() { changed_registers_.clear(); }
-    void append(uint8_t reg) { changed_registers_.push_back(reg); }
-
-    void check()
-    {
-        cut_assert_true(changed_registers_.empty());
-    }
-
-    void check(uint8_t expected_register)
-    {
-        cppcut_assert_equal(size_t(1), changed_registers_.size());
-        cppcut_assert_equal(expected_register, changed_registers_[0]);
-
-        changed_registers_.clear();
-    }
-
-    template <size_t N>
-    void check(const std::array<uint8_t, N> &expected_registers)
-    {
-        cut_assert_equal_memory(expected_registers.data(), N,
-                                changed_registers_.data(), changed_registers_.size());
-
-        changed_registers_.clear();
-    }
-};
 
 static RegisterChangedData *register_changed_data;
 
