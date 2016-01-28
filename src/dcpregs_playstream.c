@@ -74,6 +74,11 @@ struct PlayAppStreamData
     stream_id_t next_stream_id;
 
     /*!
+     * Stream last pushed to streamplayer.
+     */
+    stream_id_t last_pushed_stream_id;
+
+    /*!
      * Write buffer for registers 78 and 79.
      */
     struct SimplifiedStreamInfo inbuffer_new_stream;
@@ -84,9 +89,74 @@ struct PlayAppStreamData
     struct SimplifiedStreamInfo inbuffer_next_stream;
 };
 
+struct PlayAnyStreamData
+{
+    /*!
+     * The ID that arrived in through start/stop notifications.
+     */
+    stream_id_t currently_playing_stream;
+
+    /*!
+     * Register values in #PlayAnyStreamData::pending_data are for this ID.
+     */
+    stream_id_t pending_stream_id;
+
+    /*!
+     * Pending stream ID overwritten by new, also pending stream.
+     *
+     * There can, in fact, be two pending streams if the SPI slave is queuing
+     * streams very quickly.
+     */
+    stream_id_t overwritten_pending_stream_id;
+
+    /*!
+     * Buffered information for registers 75 and 76.
+     *
+     * These information are used when the registers are read out.
+     */
+    struct SimplifiedStreamInfo current_stream_information;
+
+    /*!
+     * Write buffer for changes to registers 75 and 76.
+     */
+    struct SimplifiedStreamInfo pending_data;
+
+    /*!
+     * Buffer for changes to registers 75 and 76 while changes are pending.
+     */
+    struct SimplifiedStreamInfo overwritten_pending_data;
+};
+
 static inline bool is_our_stream(const stream_id_t raw_stream_id)
 {
     return (raw_stream_id & STREAM_ID_SOURCE_MASK) == STREAM_ID_SOURCE_APP;
+}
+
+static inline bool is_stream_with_valid_source(const stream_id_t raw_stream_id)
+{
+    return (raw_stream_id & STREAM_ID_SOURCE_MASK) != STREAM_ID_SOURCE_INVALID;
+}
+
+static inline bool is_our_stream_and_valid(stream_id_t raw_stream_id)
+{
+    if(!is_our_stream(raw_stream_id))
+        return false;
+
+    raw_stream_id &= STREAM_ID_COOKIE_MASK;
+
+    return (raw_stream_id >= STREAM_ID_COOKIE_MIN &&
+            raw_stream_id <= STREAM_ID_COOKIE_MAX);
+}
+
+static inline bool is_valid_stream(stream_id_t raw_stream_id)
+{
+    if(!is_stream_with_valid_source(raw_stream_id))
+        return false;
+
+    raw_stream_id &= STREAM_ID_COOKIE_MASK;
+
+    return (raw_stream_id >= STREAM_ID_COOKIE_MIN &&
+            raw_stream_id <= STREAM_ID_COOKIE_MAX);
 }
 
 static inline bool is_app_mode(const enum DevicePlaymode mode)
@@ -153,6 +223,36 @@ static inline void notify_ready_for_next_stream_from_slave(void)
     registers_get_data()->register_changed_notification_fn(239);
 }
 
+static void do_notify_stream_info(struct PlayAnyStreamData *data,
+                                  bool use_pending_data,
+                                  bool use_overwritten_pending_data)
+{
+    log_assert(!(use_pending_data && use_overwritten_pending_data));
+
+    if(use_pending_data)
+        data->current_stream_information = data->pending_data;
+    else if(use_overwritten_pending_data)
+        data->current_stream_information = data->overwritten_pending_data;
+    else
+        clear_stream_info(&data->current_stream_information);
+
+    if(use_overwritten_pending_data)
+    {
+        clear_stream_info(&data->overwritten_pending_data);
+        data->overwritten_pending_stream_id =
+            STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+    }
+    else
+    {
+        clear_stream_info(&data->pending_data);
+        data->pending_stream_id =
+            STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+    }
+
+    registers_get_data()->register_changed_notification_fn(75);
+    registers_get_data()->register_changed_notification_fn(76);
+}
+
 static void app_stream_started_playing(struct PlayAppStreamData *data,
                                        enum StreamIdType stype)
 {
@@ -205,11 +305,15 @@ static bool copy_string_data(char *dest, size_t dest_size,
     return dest[0] != '\0';
 }
 
+static void strncpy_terminated(char *dest, const char *src, size_t n)
+{
+    strncpy(dest, src, n);
+    dest[n - 1] = '\0';
+}
+
 static stream_id_t get_next_stream_id(stream_id_t *const next_free_id)
 {
-    log_assert((*next_free_id & STREAM_ID_SOURCE_MASK) == STREAM_ID_SOURCE_APP);
-    log_assert((*next_free_id & STREAM_ID_COOKIE_MASK) >= STREAM_ID_COOKIE_MIN);
-    log_assert((*next_free_id & STREAM_ID_COOKIE_MASK) <= STREAM_ID_COOKIE_MAX);
+    log_assert(is_our_stream_and_valid(*next_free_id));
 
     const stream_id_t ret = *next_free_id;
 
@@ -223,7 +327,49 @@ static stream_id_t get_next_stream_id(stream_id_t *const next_free_id)
     return ret;
 }
 
+static void unchecked_set_title_and_url(const stream_id_t raw_stream_id,
+                                        const char *title, const char *url,
+                                        struct PlayAnyStreamData *any_stream_data)
+{
+    struct SimplifiedStreamInfo *const dest_info =
+        (raw_stream_id == any_stream_data->currently_playing_stream
+         ? &any_stream_data->current_stream_information
+         : &any_stream_data->pending_data);
+
+    any_stream_data->pending_stream_id =
+        ((dest_info == &any_stream_data->pending_data)
+         ? raw_stream_id
+         : STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID);
+
+    if((raw_stream_id & STREAM_ID_COOKIE_MASK) == STREAM_ID_COOKIE_INVALID)
+        clear_stream_info(dest_info);
+    else
+    {
+        strncpy_terminated(dest_info->title, title, sizeof(dest_info->title));
+        strncpy_terminated(dest_info->url,   url,   sizeof(dest_info->url));
+    }
+
+    /* direct update */
+    if(!is_stream_with_valid_source(any_stream_data->pending_stream_id))
+        do_notify_stream_info(any_stream_data, false, false);
+}
+
+static void try_notify_pending_stream_info(struct PlayAnyStreamData *data)
+{
+    if(is_stream_with_valid_source(data->pending_stream_id) &&
+       data->currently_playing_stream == data->pending_stream_id)
+    {
+        do_notify_stream_info(data, true, false);
+    }
+    else if(is_stream_with_valid_source(data->overwritten_pending_stream_id) &&
+       data->currently_playing_stream == data->overwritten_pending_stream_id)
+    {
+        do_notify_stream_info(data, false, true);
+    }
+}
+
 static void try_start_stream(struct PlayAppStreamData *const data,
+                             struct PlayAnyStreamData *any_stream_data,
                              bool is_restart)
 {
     stream_id_t stream_id;
@@ -238,6 +384,9 @@ static void try_start_stream(struct PlayAppStreamData *const data,
     gboolean fifo_overflow;
     gboolean is_playing;
 
+    const char *const title = (is_restart
+                               ? data->inbuffer_new_stream.title
+                               : data->inbuffer_next_stream.title);
     const char *const url = (is_restart
                              ? data->inbuffer_new_stream.url
                              : data->inbuffer_next_stream.url);
@@ -255,6 +404,19 @@ static void try_start_stream(struct PlayAppStreamData *const data,
         BUG("Pushed stream with clear request, got FIFO overflow");
         return;
     }
+
+    if(is_our_stream_and_valid(any_stream_data->pending_stream_id) &&
+       any_stream_data->pending_stream_id == data->last_pushed_stream_id)
+    {
+        /* slave sent the next stream very quickly after the first stream,
+         * didn't receive any start notification from streamplayer yet */
+        any_stream_data->overwritten_pending_stream_id = any_stream_data->pending_stream_id;
+        any_stream_data->overwritten_pending_data = any_stream_data->pending_data;
+    }
+
+    data->last_pushed_stream_id = stream_id;
+
+    unchecked_set_title_and_url(stream_id, title, url, any_stream_data);
 
     if(!is_playing &&
        !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
@@ -289,9 +451,12 @@ static struct PlayAppStreamData play_app_stream_data =
     .next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
 };
 
+static struct PlayAnyStreamData play_any_stream_data;
+
 void dcpregs_playstream_init(void)
 {
     memset(&play_app_stream_data, 0, sizeof(play_app_stream_data));
+    memset(&play_any_stream_data, 0, sizeof(play_any_stream_data));
     play_app_stream_data.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
 }
 
@@ -318,7 +483,8 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
     {
         /* maybe start playing */
         if(play_app_stream_data.inbuffer_new_stream.title[0] != '\0')
-            try_start_stream(&play_app_stream_data, true);
+            try_start_stream(&play_app_stream_data, &play_any_stream_data,
+                             true);
         else
             msg_error(0, LOG_ERR, "Not starting stream, register 78 still unset");
     }
@@ -375,7 +541,8 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
             /* maybe send to streamplayer queue */
             if(play_app_stream_data.inbuffer_next_stream.title[0] != '\0')
-                try_start_stream(&play_app_stream_data, false);
+                try_start_stream(&play_app_stream_data, &play_any_stream_data,
+                                 false);
             else
                 msg_error(0, LOG_ERR,
                           "Not starting stream, register 238 still unset");
@@ -399,10 +566,32 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
     return -1;
 }
 
+void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
+                                          const char *title, const char *url)
+{
+    log_assert((raw_stream_id & STREAM_ID_SOURCE_MASK) != STREAM_ID_SOURCE_INVALID);
+    log_assert(title != NULL);
+    log_assert(url != NULL);
+
+    if(!is_our_stream(raw_stream_id))
+    {
+        unchecked_set_title_and_url(raw_stream_id, title, url,
+                                    &play_any_stream_data);
+        return;
+    }
+
+    BUG("Got title and URL information for app stream ID %u",
+        raw_stream_id);
+    BUG("+   Title: \"%s\"", title);
+    BUG("+   URL  : \"%s\"", url);
+}
+
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 {
     const enum StreamIdType stream_id_type =
         determine_stream_id_type(raw_stream_id, &play_app_stream_data);
+
+    play_any_stream_data.currently_playing_stream = raw_stream_id;
 
     switch(stream_id_type)
     {
@@ -467,6 +656,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 
         break;
     }
+
+    try_notify_pending_stream_info(&play_any_stream_data);
 }
 
 void dcpregs_playstream_stop_notification(void)
@@ -478,4 +669,11 @@ void dcpregs_playstream_stop_notification(void)
     }
 
     play_app_stream_data.device_playmode = DEVICE_PLAYMODE_IDLE;
+    play_app_stream_data.last_pushed_stream_id =
+        STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+
+    play_any_stream_data.currently_playing_stream =
+        STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+
+    do_notify_stream_info(&play_any_stream_data, false, false);
 }

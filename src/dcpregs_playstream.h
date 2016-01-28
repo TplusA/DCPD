@@ -50,6 +50,8 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length);
 int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length);
 
+void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
+                                          const char *title, const char *url);
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id);
 void dcpregs_playstream_stop_notification(void);
 
