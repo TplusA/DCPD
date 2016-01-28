@@ -46,30 +46,42 @@ enum StreamIdType
     STREAM_ID_TYPE_APP_UNKNOWN,
 };
 
-struct AppStreamInfo
+struct SimplifiedStreamInfo
 {
     char title[129];
     char url[513];
 };
 
-struct PlayStreamData
+struct PlayAppStreamData
 {
     enum DevicePlaymode device_playmode;
 
-    /* keep track of IDs */
+    /*!
+     * Keep track of IDs of streams started by app.
+     */
     stream_id_t next_free_stream_id;
 
-    /* currently playing stream, set when new stream is sent to streamplayer */
+    /*!
+     * Currently playing app stream.
+     *
+     * Set when a new stream is sent to streamplayer.
+     */
     stream_id_t current_stream_id;
 
-    /* next stream already pushed to streamplayer FIFO */
+    /*!
+     * Next app stream already pushed to streamplayer FIFO.
+     */
     stream_id_t next_stream_id;
 
-    /* write buffer for registers 78 and 79 */
-    struct AppStreamInfo inbuffer_new_app_stream;
+    /*!
+     * Write buffer for registers 78 and 79.
+     */
+    struct SimplifiedStreamInfo inbuffer_new_stream;
 
-    /* write buffer for registers 238 and 239, next queued stream */
-    struct AppStreamInfo inbuffer_next_app_stream;
+    /*!
+     * Write buffer for registers 238 and 239, next queued app stream.
+     */
+    struct SimplifiedStreamInfo inbuffer_next_stream;
 };
 
 static inline bool is_our_stream(const stream_id_t raw_stream_id)
@@ -100,7 +112,7 @@ static inline bool is_app_mode_and_playing(const enum DevicePlaymode mode)
 }
 
 static enum StreamIdType determine_stream_id_type(const stream_id_t raw_stream_id,
-                                                  const struct PlayStreamData *data)
+                                                  const struct PlayAppStreamData *data)
 {
     const stream_id_t source_id = (raw_stream_id & STREAM_ID_SOURCE_MASK);
 
@@ -118,13 +130,13 @@ static enum StreamIdType determine_stream_id_type(const stream_id_t raw_stream_i
         return STREAM_ID_TYPE_APP_UNKNOWN;
 }
 
-static inline void clear_app_stream_info(struct AppStreamInfo *info)
+static inline void clear_stream_info(struct SimplifiedStreamInfo *info)
 {
     info->title[0] = '\0';
     info->url[0] = '\0';
 }
 
-static inline void reset_to_idle_mode(struct PlayStreamData *data)
+static inline void reset_to_idle_mode(struct PlayAppStreamData *data)
 {
     data->device_playmode = DEVICE_PLAYMODE_IDLE;
     data->current_stream_id = 0;
@@ -141,7 +153,7 @@ static inline void notify_ready_for_next_stream_from_slave(void)
     registers_get_data()->register_changed_notification_fn(239);
 }
 
-static inline void app_stream_started_playing(struct PlayStreamData *data,
+static inline void app_stream_started_playing(struct PlayAppStreamData *data,
                                               enum StreamIdType stype)
 {
     log_assert(stype == STREAM_ID_TYPE_APP_CURRENT ||
@@ -166,13 +178,13 @@ static inline void app_stream_started_playing(struct PlayStreamData *data,
     {
         data->current_stream_id = data->next_stream_id;
         data->next_stream_id = 0;
-        clear_app_stream_info(&data->inbuffer_next_app_stream);
+        clear_stream_info(&data->inbuffer_next_stream);
     }
 
     notify_ready_for_next_stream_from_slave();
 }
 
-static inline void other_stream_started_playing(struct PlayStreamData *data)
+static inline void other_stream_started_playing(struct PlayAppStreamData *data)
 {
     data->device_playmode = DEVICE_PLAYMODE_OTHER_IS_PLAYING;
     data->current_stream_id = 0;
@@ -211,7 +223,7 @@ static stream_id_t get_next_stream_id(stream_id_t *const next_free_id)
     return ret;
 }
 
-static void try_start_stream(struct PlayStreamData *const data,
+static void try_start_stream(struct PlayAppStreamData *const data,
                              bool is_restart)
 {
     stream_id_t stream_id;
@@ -227,8 +239,8 @@ static void try_start_stream(struct PlayStreamData *const data,
     gboolean is_playing;
 
     const char *const url = (is_restart
-                             ? data->inbuffer_new_app_stream.url
-                             : data->inbuffer_next_app_stream.url);
+                             ? data->inbuffer_new_stream.url
+                             : data->inbuffer_next_stream.url);
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
                                            stream_id, url,
@@ -272,15 +284,15 @@ static void try_start_stream(struct PlayStreamData *const data,
     }
 }
 
-static struct PlayStreamData play_stream_data =
+static struct PlayAppStreamData play_app_stream_data =
 {
     .next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
 };
 
 void dcpregs_playstream_init(void)
 {
-    memset(&play_stream_data, 0, sizeof(play_stream_data));
-    play_stream_data.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
+    memset(&play_app_stream_data, 0, sizeof(play_app_stream_data));
+    play_app_stream_data.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
 }
 
 void dcpregs_playstream_deinit(void) {}
@@ -289,8 +301,8 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 {
     msg_info("write 78 handler %p %zu", data, length);
 
-    (void)copy_string_data(play_stream_data.inbuffer_new_app_stream.title,
-                           sizeof(play_stream_data.inbuffer_new_app_stream.title),
+    (void)copy_string_data(play_app_stream_data.inbuffer_new_stream.title,
+                           sizeof(play_app_stream_data.inbuffer_new_stream.title),
                            data, length);
 
     return 0;
@@ -300,27 +312,27 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
 {
     msg_info("write 79 handler %p %zu", data, length);
 
-    if(copy_string_data(play_stream_data.inbuffer_new_app_stream.url,
-                        sizeof(play_stream_data.inbuffer_new_app_stream.url),
+    if(copy_string_data(play_app_stream_data.inbuffer_new_stream.url,
+                        sizeof(play_app_stream_data.inbuffer_new_stream.url),
                         data, length))
     {
         /* maybe start playing */
-        if(play_stream_data.inbuffer_new_app_stream.title[0] != '\0')
-            try_start_stream(&play_stream_data, true);
+        if(play_app_stream_data.inbuffer_new_stream.title[0] != '\0')
+            try_start_stream(&play_app_stream_data, true);
         else
             msg_error(0, LOG_ERR, "Not starting stream, register 78 still unset");
     }
-    else if(is_app_mode(play_stream_data.device_playmode))
+    else if(is_app_mode(play_app_stream_data.device_playmode))
     {
         /* stop command */
-        play_stream_data.device_playmode = DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION;
+        play_app_stream_data.device_playmode = DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION;
 
         if(!tdbus_splay_playback_call_stop_sync(dbus_get_streamplayer_playback_iface(),
                                                 NULL, NULL))
-            reset_to_idle_mode(&play_stream_data);
+            reset_to_idle_mode(&play_app_stream_data);
     }
 
-    clear_app_stream_info(&play_stream_data.inbuffer_new_app_stream);
+    clear_stream_info(&play_app_stream_data.inbuffer_new_stream);
 
     return 0;
 }
@@ -335,8 +347,8 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 {
     msg_info("write 238 handler %p %zu", data, length);
 
-    (void)copy_string_data(play_stream_data.inbuffer_next_app_stream.title,
-                           sizeof(play_stream_data.inbuffer_next_app_stream.title),
+    (void)copy_string_data(play_app_stream_data.inbuffer_next_stream.title,
+                           sizeof(play_app_stream_data.inbuffer_next_stream.title),
                            data, length);
 
     return 0;
@@ -346,11 +358,11 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
 {
     msg_info("write 239 handler %p %zu", data, length);
 
-    if(copy_string_data(play_stream_data.inbuffer_next_app_stream.url,
-                        sizeof(play_stream_data.inbuffer_next_app_stream.url),
+    if(copy_string_data(play_app_stream_data.inbuffer_next_stream.url,
+                        sizeof(play_app_stream_data.inbuffer_next_stream.url),
                         data, length))
     {
-        switch(play_stream_data.device_playmode)
+        switch(play_app_stream_data.device_playmode)
         {
           case DEVICE_PLAYMODE_IDLE:
           case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION:
@@ -362,8 +374,8 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
           case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
             /* maybe send to streamplayer queue */
-            if(play_stream_data.inbuffer_next_app_stream.title[0] != '\0')
-                try_start_stream(&play_stream_data, false);
+            if(play_app_stream_data.inbuffer_next_stream.title[0] != '\0')
+                try_start_stream(&play_app_stream_data, false);
             else
                 msg_error(0, LOG_ERR,
                           "Not starting stream, register 238 still unset");
@@ -376,7 +388,7 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
         /* ignore funny writes */
     }
 
-    clear_app_stream_info(&play_stream_data.inbuffer_next_app_stream);
+    clear_stream_info(&play_app_stream_data.inbuffer_next_stream);
 
     return 0;
 }
@@ -390,7 +402,7 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 {
     const enum StreamIdType stream_id_type =
-        determine_stream_id_type(raw_stream_id, &play_stream_data);
+        determine_stream_id_type(raw_stream_id, &play_app_stream_data);
 
     switch(stream_id_type)
     {
@@ -399,33 +411,33 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
         break;
 
       case STREAM_ID_TYPE_APP_UNKNOWN:
-        if(is_app_mode_and_playing(play_stream_data.device_playmode))
+        if(is_app_mode_and_playing(play_app_stream_data.device_playmode))
             msg_error(0, LOG_NOTICE,
                       "Got start notification for unknown app stream ID %u",
                       raw_stream_id);
         else
-            other_stream_started_playing(&play_stream_data);
+            other_stream_started_playing(&play_app_stream_data);
 
         break;
 
       case STREAM_ID_TYPE_APP_CURRENT:
       case STREAM_ID_TYPE_APP_NEXT:
-        switch(play_stream_data.device_playmode)
+        switch(play_app_stream_data.device_playmode)
         {
           case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
             msg_info("Enter app mode: started stream %u", raw_stream_id);
-            app_stream_started_playing(&play_stream_data, stream_id_type);
+            app_stream_started_playing(&play_app_stream_data, stream_id_type);
             break;
 
           case DEVICE_PLAYMODE_OTHER_IS_PLAYING:
             msg_info("Switch to app mode: continue with stream %u",
                      raw_stream_id);
-            app_stream_started_playing(&play_stream_data, stream_id_type);
+            app_stream_started_playing(&play_app_stream_data, stream_id_type);
             break;
 
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
             msg_info("Next app stream %u", raw_stream_id);
-            app_stream_started_playing(&play_stream_data, stream_id_type);
+            app_stream_started_playing(&play_app_stream_data, stream_id_type);
             break;
 
           case DEVICE_PLAYMODE_IDLE:
@@ -433,25 +445,25 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
             msg_error(0, LOG_NOTICE,
                       "Unexpected start of app stream %u", raw_stream_id);
 
-            other_stream_started_playing(&play_stream_data);
+            other_stream_started_playing(&play_app_stream_data);
             break;
         }
 
         break;
 
       case STREAM_ID_TYPE_NON_APP:
-        if(is_app_mode(play_stream_data.device_playmode))
+        if(is_app_mode(play_app_stream_data.device_playmode))
         {
             msg_error(0, LOG_NOTICE,
                       "Leave app mode: unexpected start of non-app stream %u "
                       "(expected next %u or new %u)",
                       raw_stream_id,
-                      play_stream_data.next_stream_id,
-                      play_stream_data.current_stream_id);
+                      play_app_stream_data.next_stream_id,
+                      play_app_stream_data.current_stream_id);
             notify_leave_app_mode();
         }
 
-        other_stream_started_playing(&play_stream_data);
+        other_stream_started_playing(&play_app_stream_data);
 
         break;
     }
@@ -459,11 +471,11 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 
 void dcpregs_playstream_stop_notification(void)
 {
-    if(is_app_mode(play_stream_data.device_playmode))
+    if(is_app_mode(play_app_stream_data.device_playmode))
     {
         msg_info("Leave app mode: streamplayer has stopped");
         notify_leave_app_mode();
     }
 
-    play_stream_data.device_playmode = DEVICE_PLAYMODE_IDLE;
+    play_app_stream_data.device_playmode = DEVICE_PLAYMODE_IDLE;
 }
