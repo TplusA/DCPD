@@ -297,6 +297,18 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_drcp_command,
     },
     {
+        /* Title of currently playing stream, if any. */
+        .address = 75,
+        .max_data_size = 128,
+        .read_handler = dcpregs_read_75_current_stream_title,
+    },
+    {
+        /* URL of currently playing stream, if any. */
+        .address = 76,
+        .max_data_size = 512,
+        .read_handler = dcpregs_read_76_current_stream_url,
+    },
+    {
         /* Play stream with this title (fallback title) */
         .address = 78,
         .max_data_size = 128,

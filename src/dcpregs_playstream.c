@@ -291,6 +291,21 @@ static inline void other_stream_started_playing(struct PlayAppStreamData *data)
     data->next_stream_id = 0;
 }
 
+static size_t copy_string_to_slave(const char *const restrict src,
+                                   char *const restrict dest, size_t dest_size)
+{
+    if(dest_size == 0)
+        return 0;
+
+    const size_t len = strlen(src);
+    const size_t count = len < dest_size ? len : dest_size;
+
+    if(count > 0)
+        memcpy(dest, src, count);
+
+    return count;
+}
+
 static bool copy_string_data(char *dest, size_t dest_size,
                              const uint8_t *src, size_t src_size)
 {
@@ -461,6 +476,22 @@ void dcpregs_playstream_init(void)
 }
 
 void dcpregs_playstream_deinit(void) {}
+
+ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length)
+{
+    msg_info("read 75 handler %p %zu", response, length);
+
+    return copy_string_to_slave(play_any_stream_data.current_stream_information.title,
+                                (char *)response, length);
+}
+
+ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length)
+{
+    msg_info("read 76 handler %p %zu", response, length);
+
+    return copy_string_to_slave(play_any_stream_data.current_stream_information.url,
+                                (char *)response, length);
+}
 
 int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 {

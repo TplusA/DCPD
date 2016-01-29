@@ -43,6 +43,8 @@ void dcpregs_playstream_init(void);
  */
 void dcpregs_playstream_deinit(void);
 
+ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length);
+ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length);
 int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length);
 int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_79_start_play_stream_url(uint8_t *response, size_t length);
