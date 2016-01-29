@@ -46,6 +46,14 @@ enum StreamIdType
     STREAM_ID_TYPE_APP_UNKNOWN,
 };
 
+enum NotifyStreamInfo
+{
+    NOTIFY_STREAM_INFO_UNMODIFIED,
+    NOTIFY_STREAM_INFO_PENDING,
+    NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING,
+    NOTIFY_STREAM_INFO_DEV_NULL,
+};
+
 struct SimplifiedStreamInfo
 {
     char title[129];
@@ -224,19 +232,27 @@ static inline void notify_ready_for_next_stream_from_slave(void)
 }
 
 static void do_notify_stream_info(struct PlayAnyStreamData *data,
-                                  bool use_pending_data,
-                                  bool use_overwritten_pending_data)
+                                  const enum NotifyStreamInfo which)
 {
-    log_assert(!(use_pending_data && use_overwritten_pending_data));
+    switch(which)
+    {
+      case NOTIFY_STREAM_INFO_UNMODIFIED:
+        break;
 
-    if(use_pending_data)
+      case NOTIFY_STREAM_INFO_PENDING:
         data->current_stream_information = data->pending_data;
-    else if(use_overwritten_pending_data)
-        data->current_stream_information = data->overwritten_pending_data;
-    else
-        clear_stream_info(&data->current_stream_information);
+        break;
 
-    if(use_overwritten_pending_data)
+      case NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING:
+        data->current_stream_information = data->overwritten_pending_data;
+        break;
+
+      case NOTIFY_STREAM_INFO_DEV_NULL:
+        clear_stream_info(&data->current_stream_information);
+        break;
+    }
+
+    if(which == NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING)
     {
         clear_stream_info(&data->overwritten_pending_data);
         data->overwritten_pending_stream_id =
@@ -284,8 +300,13 @@ static void app_stream_started_playing(struct PlayAppStreamData *data,
     notify_ready_for_next_stream_from_slave();
 }
 
-static inline void other_stream_started_playing(struct PlayAppStreamData *data)
+static inline void other_stream_started_playing(struct PlayAppStreamData *data,
+                                                bool *switched_to_nonapp_mode)
 {
+    if(data->device_playmode != DEVICE_PLAYMODE_IDLE &&
+       data->device_playmode != DEVICE_PLAYMODE_OTHER_IS_PLAYING)
+        *switched_to_nonapp_mode = true;
+
     data->device_playmode = DEVICE_PLAYMODE_OTHER_IS_PLAYING;
     data->current_stream_id = 0;
     data->next_stream_id = 0;
@@ -356,30 +377,45 @@ static void unchecked_set_title_and_url(const stream_id_t raw_stream_id,
          ? raw_stream_id
          : STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID);
 
+    enum NotifyStreamInfo which;
+
     if((raw_stream_id & STREAM_ID_COOKIE_MASK) == STREAM_ID_COOKIE_INVALID)
+    {
         clear_stream_info(dest_info);
+        which = NOTIFY_STREAM_INFO_DEV_NULL;
+    }
     else
     {
         strncpy_terminated(dest_info->title, title, sizeof(dest_info->title));
         strncpy_terminated(dest_info->url,   url,   sizeof(dest_info->url));
+        which = NOTIFY_STREAM_INFO_UNMODIFIED;
     }
 
     /* direct update */
     if(!is_stream_with_valid_source(any_stream_data->pending_stream_id))
-        do_notify_stream_info(any_stream_data, false, false);
+        do_notify_stream_info(any_stream_data, which);
 }
 
-static void try_notify_pending_stream_info(struct PlayAnyStreamData *data)
+static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
+                                           bool switched_to_nonapp_mode)
 {
     if(is_stream_with_valid_source(data->pending_stream_id) &&
        data->currently_playing_stream == data->pending_stream_id)
     {
-        do_notify_stream_info(data, true, false);
+        do_notify_stream_info(data, NOTIFY_STREAM_INFO_PENDING);
     }
     else if(is_stream_with_valid_source(data->overwritten_pending_stream_id) &&
        data->currently_playing_stream == data->overwritten_pending_stream_id)
     {
-        do_notify_stream_info(data, false, true);
+        do_notify_stream_info(data, NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING);
+    }
+    else if(switched_to_nonapp_mode)
+    {
+        /* In case the mode switched to non-app mode, but the external source
+         * has failed to deliver title and URL up to this point, then we need
+         * to wipe out the currently stored, outdated information. The external
+         * source may send the missing information later in this case. */
+        do_notify_stream_info(data, NOTIFY_STREAM_INFO_DEV_NULL);
     }
 }
 
@@ -624,6 +660,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 
     play_any_stream_data.currently_playing_stream = raw_stream_id;
 
+    bool switched_to_nonapp_mode = false;
+
     switch(stream_id_type)
     {
       case STREAM_ID_TYPE_INVALID:
@@ -636,7 +674,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
                       "Got start notification for unknown app stream ID %u",
                       raw_stream_id);
         else
-            other_stream_started_playing(&play_app_stream_data);
+            other_stream_started_playing(&play_app_stream_data,
+                                         &switched_to_nonapp_mode);
 
         break;
 
@@ -665,7 +704,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
             msg_error(0, LOG_NOTICE,
                       "Unexpected start of app stream %u", raw_stream_id);
 
-            other_stream_started_playing(&play_app_stream_data);
+            other_stream_started_playing(&play_app_stream_data,
+                                         &switched_to_nonapp_mode);
             break;
         }
 
@@ -683,12 +723,14 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
             notify_leave_app_mode();
         }
 
-        other_stream_started_playing(&play_app_stream_data);
+        other_stream_started_playing(&play_app_stream_data,
+                                     &switched_to_nonapp_mode);
 
         break;
     }
 
-    try_notify_pending_stream_info(&play_any_stream_data);
+    try_notify_pending_stream_info(&play_any_stream_data,
+                                   switched_to_nonapp_mode);
 }
 
 void dcpregs_playstream_stop_notification(void)
@@ -706,5 +748,5 @@ void dcpregs_playstream_stop_notification(void)
     play_any_stream_data.currently_playing_stream =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
 
-    do_notify_stream_info(&play_any_stream_data, false, false);
+    do_notify_stream_info(&play_any_stream_data, NOTIFY_STREAM_INFO_DEV_NULL);
 }

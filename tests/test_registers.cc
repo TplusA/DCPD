@@ -3766,6 +3766,55 @@ static void set_next_url(const std::string url, const OurStream stream_id,
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
 }
 
+static void expect_current_title(const std::string &expected_title)
+{
+    const auto *const reg = register_lookup(75);
+
+    mock_messages->expect_msg_info("read 75 handler %p %zu");
+
+    char buffer[150];
+    const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
+    cppcut_assert_operator(ssize_t(sizeof(buffer)), >, len);
+    buffer[len] = '\0';
+
+    cppcut_assert_equal(expected_title.c_str(), buffer);
+}
+
+static void expect_current_url(const std::string &expected_url)
+{
+    const auto *const reg = register_lookup(76);
+
+    mock_messages->expect_msg_info("read 76 handler %p %zu");
+
+    char buffer[600];
+    const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
+    cppcut_assert_operator(ssize_t(sizeof(buffer)), >, len);
+    buffer[len] = '\0';
+
+    cppcut_assert_equal(expected_url.c_str(), buffer);
+}
+
+static void expect_current_title_and_url(const std::string &expected_title,
+                                         const std::string &expected_url)
+{
+    expect_current_title(expected_title);
+    expect_current_url(expected_url);
+}
+
+static void send_title_and_url(const ID::Stream stream_id,
+                               const char *expected_title,
+                               const char *expected_url)
+{
+    if(expected_title == NULL)
+        expected_title = "";
+
+    if(expected_url == NULL)
+        expected_url = "";
+
+    dcpregs_playstream_set_title_and_url(stream_id.get_raw_id(),
+                                         expected_title, expected_url);
+}
+
 static void stop_stream(void)
 {
     const auto *const reg = register_lookup(79);
@@ -3785,6 +3834,8 @@ void test_start_stream()
 {
     set_start_title("Test stream");
     set_start_url("http://app-provided.url.org/stream.flac", OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
 }
 
 /*!\test
@@ -3802,15 +3853,18 @@ void test_start_stream_then_start_another_stream()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
     set_start_title("Second");
     set_start_url("http://app-provided.url.org/second.flac", stream_id_second, true);
     register_changed_data->check();
+    expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
 }
 
 /*!\test
@@ -3829,15 +3883,18 @@ void test_start_stream_then_quickly_start_another_stream()
     set_start_title("Second");
     set_start_url("http://app-provided.url.org/second.flac", stream_id_second, false);
     register_changed_data->check();
+    expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Got start notification for unknown app stream ID 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
 }
 
 /*!\test
@@ -3846,6 +3903,7 @@ void test_start_stream_then_quickly_start_another_stream()
 void test_app_can_start_stream_while_other_source_is_playing()
 {
     dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id());
+    expect_current_title_and_url("", "");
 
     const auto stream_id(OurStream::make());
     set_start_title("Stream");
@@ -3855,13 +3913,18 @@ void test_app_can_start_stream_while_other_source_is_playing()
     mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 }
 
 /*!\test
- * App mode is left ends when a non-app source such as the remote control
- * starts playing.
+ * App mode ends when a non-app source such as the remote control starts
+ * playing.
+ *
+ * UI sends title and URL after start notification in this test case. This
+ * leads to a short glitch which could only be avoided by keeping outdated
+ * information in registers 75/76. We chose not to.
  */
-void test_app_mode_ends_when_another_source_starts_playing()
+void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 {
     const auto stream_id(OurStream::make());
     set_start_title("Stream");
@@ -3871,14 +3934,54 @@ void test_app_mode_ends_when_another_source_starts_playing()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
     /* NOTE: In real life, there should have been a stop notification before
      *       this start notification, so this test stretches beyond spec; hence
      *       the harsh log message. */
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
-    dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id());
-    register_changed_data->check(79);
+    const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
+    dcpregs_playstream_start_notification(ui_stream_id.get_raw_id());
+    register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+    expect_current_title_and_url("", "");
+
+    send_title_and_url(ui_stream_id, "UI stream", "http://ui-provided.url.org/loud.flac");
+    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
+}
+
+/*!\test
+ * App mode ends when a non-app source such as the remote control starts
+ * playing.
+ *
+ * UI sends title and URL before start notification in this test case.
+ */
+void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
+{
+    const auto stream_id(OurStream::make());
+    set_start_title("Stream");
+    set_start_url("http://app-provided.url.org/stream.flac", stream_id, false);
+    register_changed_data->check();
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
+
+    const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
+
+    send_title_and_url(ui_stream_id, "UI stream", "http://ui-provided.url.org/loud.flac");
+    register_changed_data->check();
+
+    /* NOTE: In real life, there should have been a stop notification before
+     *       this start notification, so this test stretches beyond spec; hence
+     *       the harsh log message. */
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+        "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
+    dcpregs_playstream_start_notification(ui_stream_id.get_raw_id());
+    register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+    expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
 }
 
 static void start_stop_single_stream(bool with_notifications)
@@ -3893,6 +3996,7 @@ static void start_stop_single_stream(bool with_notifications)
         mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
         register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+        expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
     }
 
     stop_stream();
@@ -3902,6 +4006,7 @@ static void start_stop_single_stream(bool with_notifications)
         mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
         dcpregs_playstream_stop_notification();
         register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+        expect_current_title_and_url("", "");
     }
 }
 
@@ -3928,10 +4033,14 @@ void test_quick_start_stop_single_stream()
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Unexpected start of app stream 257");
     register_changed_data->check();
+
     dcpregs_playstream_start_notification(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN);
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
+
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    expect_current_title_and_url("", "");
 }
 
 /*!\test
@@ -3947,10 +4056,12 @@ void test_start_stream_and_queue_next()
     set_start_title("First FLAC");
     set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
+    expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
     set_next_title("Second FLAC");
@@ -3959,11 +4070,13 @@ void test_start_stream_and_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 
     /* after a while, the stream may finish */
     mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+    expect_current_title_and_url("", "");
 }
 
 /*!\test
@@ -3982,19 +4095,23 @@ void test_start_stream_and_quickly_queue_next()
     set_start_title("First FLAC");
     set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
+    expect_current_title_and_url("", "");
 
     const auto stream_id_second(++next_stream_id);
     set_next_title("Second FLAC");
     set_next_url("http://app-provided.url.org/second.flac", stream_id_second, true, true);
     register_changed_data->check();
+    expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 }
 
 /*!\test
@@ -4011,20 +4128,24 @@ void test_queue_next_after_stop_notification_is_ignored()
     set_start_title("First FLAC");
     set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
+    expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* the stream finishes... */
     mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+    expect_current_title_and_url("", "");
 
     /* ...but the slave sends another stream just in that moment */
     const auto stream_id_second(++next_stream_id);
     set_next_title("Second FLAC");
     set_next_url("http://app-provided.url.org/second.flac", stream_id_second, false, false);
+    expect_current_title_and_url("", "");
 }
 
 /*!\test
@@ -4034,6 +4155,7 @@ void test_queue_next_with_prior_start_is_ignored()
 {
     set_next_title("Stream");
     set_next_url("http://app-provided.url.org/stream.flac", OurStream::make(), false, false);
+    expect_current_title_and_url("", "");
 }
 
 /*!\test
@@ -4044,6 +4166,7 @@ void test_queue_next_with_prior_start_by_us_is_ignored()
 {
     set_next_title("Stream");
     set_next_url("http://app-provided.url.org/stream.flac", OurStream::make(), false, true);
+    expect_current_title_and_url("", "");
 }
 
 /*!\test
@@ -4058,29 +4181,35 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     set_start_title("Playing stream");
     set_start_url("http://app-provided.url.org/first.mp3", stream_id_first, false);
     register_changed_data->check();
+    expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_second(++next_stream_id);
     set_next_title("Stream 2");
     set_next_url("http://app-provided.url.org/2.mp3", stream_id_second, true, true);
     register_changed_data->check();
+    expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_third(++next_stream_id);
     set_next_title("Stream 3");
     set_next_url("http://app-provided.url.org/3.mp3", stream_id_third, true, true);
     register_changed_data->check();
+    expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_fourth(++next_stream_id);
     set_next_title("Stream 4");
     set_next_url("http://app-provided.url.org/4.mp3", stream_id_fourth, true, true);
     register_changed_data->check();
+    expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     mock_messages->expect_msg_info_formatted("Next app stream 260");
     dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3");
 }
 
 };
