@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,7 +24,7 @@
 /*!
  * A DCP over TCP connection.
  *
- * This is basicaaly a pair of socket file descriptors, one for the server
+ * This is basically a pair of socket file descriptors, one for the server
  * side, and one for the single supported peer. Multiple simultaneous
  * connections are not supported.
  */
