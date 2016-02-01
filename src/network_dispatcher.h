@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -36,7 +36,7 @@
  * is small, otherwise a hash table or other kind of dictionary would be
  * required.
  */
-#define NWDISPATCH_MAX_CONNECTIONS      5U
+#define NWDISPATCH_MAX_CONNECTIONS      6U
 
 /*!
  * How to handle registered file descriptors.

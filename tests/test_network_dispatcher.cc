@@ -215,10 +215,11 @@ void test_number_of_connections_is_limited()
     cppcut_assert_equal(0, nwdispatch_register(30, &dispatch_fd, NULL));
     cppcut_assert_equal(0, nwdispatch_register(40, &dispatch_fd, NULL));
     cppcut_assert_equal(0, nwdispatch_register(50, &dispatch_fd, NULL));
+    cppcut_assert_equal(0, nwdispatch_register(60, &dispatch_fd, NULL));
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Maximum number of connections exceeded");
-    cppcut_assert_equal(-1, nwdispatch_register(60, &dispatch_fd, NULL));
+    cppcut_assert_equal(-1, nwdispatch_register(70, &dispatch_fd, NULL));
 }
 
 /*!\test
@@ -290,6 +291,7 @@ void test_unregister_from_center_of_full_fd_registry()
     cppcut_assert_equal(0, nwdispatch_register(35, &dispatch_fd, NULL));
     cppcut_assert_equal(0, nwdispatch_register(45, &dispatch_fd, NULL));
     cppcut_assert_equal(0, nwdispatch_register(55, &dispatch_fd, NULL));
+    cppcut_assert_equal(0, nwdispatch_register(65, &dispatch_fd, NULL));
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Maximum number of connections exceeded");
@@ -299,13 +301,14 @@ void test_unregister_from_center_of_full_fd_registry()
     cppcut_assert_equal(0, nwdispatch_unregister_and_close(35));
 
     struct pollfd fds[8];
-    cppcut_assert_equal(size_t(4), nwdispatch_scatter_fds(fds, 8, POLLIN));
+    cppcut_assert_equal(size_t(5), nwdispatch_scatter_fds(fds, 8, POLLIN));
 
     cppcut_assert_equal(15, fds[0].fd);
     cppcut_assert_equal(25, fds[1].fd);
     cppcut_assert_equal(45, fds[2].fd);
     cppcut_assert_equal(55, fds[3].fd);
-    cppcut_assert_equal(-1, fds[4].fd);
+    cppcut_assert_equal(65, fds[4].fd);
+    cppcut_assert_equal(-1, fds[5].fd);
 }
 
 /*!\test

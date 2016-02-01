@@ -29,6 +29,7 @@
 
 #include "named_pipe.h"
 #include "dcp_over_tcp.h"
+#include "smartphone_app.h"
 #include "network_dispatcher.h"
 #include "messages.h"
 #include "transactions.h"
@@ -52,13 +53,18 @@
 #define WAITEVENT_DCP_CONNECTION_DIED                   (1U << 4)
 #define WAITEVENT_DRCP_CONNECTION_DIED                  (1U << 5)
 
-/* socket events */
+/* socket events on DCP over TCP/IP connection */
 #define WAITEVENT_CAN_READ_FROM_SERVER_SOCKET           (1U << 6)
 #define WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET         (1U << 7)
 #define WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED       (1U << 8)
 
+/* socket events on smartphone app TCP/IP connection */
+#define WAITEVENT_CAN_READ_FROM_SMARTPHONE_SOCKET       (1U << 9)
+#define WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET       (1U << 10)
+#define WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED           (1U << 11)
+
 /* internal events */
-#define WAITEVENT_REGISTER_CHANGED                      (1U << 9)
+#define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
 
 /*!
  * Global state of the DCP machinery.
@@ -231,7 +237,7 @@ static unsigned int handle_register_events(int fd, short revents)
     return result;
 }
 
-static unsigned int handle_network_server_events(int fd, short revents)
+static unsigned int handle_dcp_server_events(int fd, short revents)
 {
     unsigned int result = 0;
 
@@ -246,8 +252,8 @@ static unsigned int handle_network_server_events(int fd, short revents)
     return result;
 }
 
-static unsigned int handle_network_peer_events(int fd, short revents,
-                                               struct state *state)
+static unsigned int handle_dcp_peer_events(int fd, short revents,
+                                           struct state *state)
 {
     unsigned int result = 0;
 
@@ -271,18 +277,64 @@ static unsigned int handle_network_peer_events(int fd, short revents,
     return result;
 }
 
+static unsigned int handle_app_server_events(int fd, short revents)
+{
+    unsigned int result = 0;
+
+    if(revents & POLLIN)
+        result |= WAITEVENT_CAN_READ_FROM_SMARTPHONE_SOCKET;
+
+    if(revents & ~POLLIN)
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on smartphone app server socket fd %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
+static unsigned int handle_app_peer_events(int fd, short revents)
+{
+    unsigned int result = 0;
+
+    if(revents & POLLIN)
+    {
+        if(network_have_data(fd))
+            result |= WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET;
+        else
+        {
+            msg_error(EPIPE, LOG_INFO, "Smartphone app peer connection closed");
+            result |= WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED;
+        }
+    }
+
+    if(revents & POLLHUP)
+    {
+        msg_error(EPIPE, LOG_INFO, "Smartphone app peer connection died, need to close");
+        result |= WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED;
+    }
+
+    if(revents & ~(POLLIN | POLLHUP))
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on smartphone app peer socket fd %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
 static unsigned int wait_for_events(struct state *state,
                                     const int drcp_fifo_in_fd,
                                     const int dcpspi_fifo_in_fd,
-                                    const int server_socket_fd,
-                                    const int peer_socket_fd,
+                                    const int dcp_server_socket_fd,
+                                    const int dcp_peer_socket_fd,
+                                    const int app_server_socket_fd,
+                                    const int app_peer_socket_fd,
                                     const int register_changed_fd,
                                     bool do_block)
 {
     /*
      * Local define for array layout below.
      */
-#define FIRST_NWDISPATCH_INDEX  5U
+#define FIRST_NWDISPATCH_INDEX  7U
 
     /*
      * File descriptor breakdown:
@@ -307,11 +359,19 @@ static unsigned int wait_for_events(struct state *state,
             .events = POLLIN,
         },
         {
-            .fd = server_socket_fd,
+            .fd = dcp_server_socket_fd,
             .events = POLLIN,
         },
         {
-            .fd = peer_socket_fd,
+            .fd = dcp_peer_socket_fd,
+            .events = POLLIN,
+        },
+        {
+            .fd = app_server_socket_fd,
+            .events = POLLIN,
+        },
+        {
+            .fd = app_peer_socket_fd,
             .events = POLLIN,
         },
         {
@@ -343,9 +403,11 @@ static unsigned int wait_for_events(struct state *state,
 
     return_value |= handle_dcp_fifo_in_events(dcpspi_fifo_in_fd,   fds[0].revents, state);
     return_value |= handle_dcp_fifo_out_events(drcp_fifo_in_fd,    fds[1].revents);
-    return_value |= handle_network_server_events(server_socket_fd, fds[2].revents);
-    return_value |= handle_network_peer_events(peer_socket_fd,     fds[3].revents, state);
-    return_value |= handle_register_events(register_changed_fd,    fds[4].revents);
+    return_value |= handle_dcp_server_events(dcp_server_socket_fd, fds[2].revents);
+    return_value |= handle_dcp_peer_events(dcp_peer_socket_fd,     fds[3].revents, state);
+    return_value |= handle_app_server_events(app_server_socket_fd, fds[4].revents);
+    return_value |= handle_app_peer_events(app_peer_socket_fd,     fds[5].revents);
+    return_value |= handle_register_events(register_changed_fd,    fds[6].revents);
 
     return return_value;
 
@@ -551,6 +613,9 @@ static void main_loop(struct files *files, int register_changed_fd)
     static struct dcp_over_tcp_data dot;
     (void)dot_init(&dot);
 
+    static struct smartphone_app_connection_data appconn;
+    (void)appconn_init(&appconn);
+
     dcpregs_status_set_ready();
 
     msg_info("Ready for accepting traffic");
@@ -561,6 +626,7 @@ static void main_loop(struct files *files, int register_changed_fd)
             wait_for_events(&state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             dot.server_fd, dot.peer_fd,
+                            appconn.server_fd, appconn.peer_fd,
                             register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
 
@@ -604,6 +670,13 @@ static void main_loop(struct files *files, int register_changed_fd)
                             (wait_result & WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET) != 0,
                             (wait_result & WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED) != 0);
 
+        if((wait_result & WAITEVENT_CAN_READ_FROM_SMARTPHONE_SOCKET) != 0)
+            appconn_handle_incoming(&appconn);
+
+        appconn_handle_outgoing(&appconn,
+                                (wait_result & WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET) != 0,
+                                (wait_result & WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED) != 0);
+
         try_dequeue_next_transaction(&state);
 
         if(state.active_transaction == NULL)
@@ -642,6 +715,7 @@ static void main_loop(struct files *files, int register_changed_fd)
     transaction_free(&state.preallocated_inet_slave_transaction);
 
     dot_close(&dot);
+    appconn_close(&appconn);
 }
 
 struct parameters
