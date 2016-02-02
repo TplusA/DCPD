@@ -59,7 +59,9 @@ noinst_LTLIBRARIES = \
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
-libdynamic_buffer_la_SOURCES = dynamic_buffer.c dynamic_buffer.h
+libdynamic_buffer_la_SOURCES = \
+    dynamic_buffer.c dynamic_buffer.h \
+    dynamic_buffer_util.c dynamic_buffer_util.h
 libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 
 libregisters_la_SOURCES = \
@@ -105,7 +107,11 @@ libdbusdl_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libstreamplayer_dbus_la_SOURCES = streamplayer_dbus.c streamplayer_dbus.h
 libstreamplayer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-libdrcpdcomm_la_SOURCES = drcp.c drcp.h named_pipe.h dynamic_buffer.h messages.h
+libdrcpdcomm_la_SOURCES = \
+    drcp.c drcp.h \
+    named_pipe.h \
+    dynamic_buffer.h dynamic_buffer_util.h \
+    messages.h
 libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 
 libtransactions_la_SOURCES = \

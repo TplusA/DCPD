@@ -33,6 +33,7 @@
 #include "messages.h"
 #include "transactions.h"
 #include "dynamic_buffer.h"
+#include "dynamic_buffer_util.h"
 #include "drcp.h"
 #include "dbus_iface.h"
 #include "registers.h"
@@ -569,7 +570,9 @@ static void main_loop(struct files *files, int register_changed_fd)
         if((wait_result & WAITEVENT_CAN_READ_DRCP) != 0)
         {
             if(try_preallocate_buffer(&state.drcp_buffer, &files->drcp_fifo) &&
-               drcp_fill_buffer(&state.drcp_buffer, files->drcp_fifo.in_fd))
+               dynamic_buffer_fill_from_fd(&state.drcp_buffer,
+                                           files->drcp_fifo.in_fd,
+                                           "DRCP data"))
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
                 {

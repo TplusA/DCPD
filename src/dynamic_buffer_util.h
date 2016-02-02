@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,13 +16,15 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DRCP_H
-#define DRCP_H
+#ifndef DYNAMIC_BUFFER_UTIL_H
+#define DYNAMIC_BUFFER_UTIL_H
+
+#include <stdbool.h>
 
 #include "dynamic_buffer.h"
 
 /*!
- * \addtogroup drcp Communication with DRCPD
+ * \addtogroup dynbuffer
  */
 /*!@{*/
 
@@ -30,9 +32,8 @@
 extern "C" {
 #endif
 
-bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
-                            size_t *expected_size, size_t *payload_offset);
-void drcp_finish_request(bool is_ok, int out_fd);
+bool dynamic_buffer_fill_from_fd(struct dynamic_buffer *buffer, int in_fd,
+                                 const char *what);
 
 #ifdef __cplusplus
 }
@@ -40,4 +41,5 @@ void drcp_finish_request(bool is_ok, int out_fd);
 
 /*!@}*/
 
-#endif /* !DRCP_H */
+
+#endif /* !DYNAMIC_BUFFER_UTIL_H */

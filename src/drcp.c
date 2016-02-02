@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,28 +28,6 @@
 #include "drcp.h"
 #include "messages.h"
 #include "os.h"
-
-bool drcp_fill_buffer(struct dynamic_buffer *buffer, int in_fd)
-{
-    log_assert(buffer != NULL);
-
-    while(buffer->pos < buffer->size)
-    {
-        int ret = os_try_read_to_buffer(buffer->data, buffer->size,
-                                        &buffer->pos, in_fd);
-
-        if(ret == 0)
-            return true;
-
-        if(ret < 0)
-        {
-            msg_error(errno, LOG_CRIT, "Failed reading DRCP data from fd %d", in_fd);
-            return false;
-        }
-    }
-
-    return true;
-}
 
 bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
                             size_t *expected_size, size_t *payload_offset)

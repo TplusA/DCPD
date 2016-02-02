@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,6 +25,7 @@
 
 #include "named_pipe.h"
 #include "drcp.h"
+#include "dynamic_buffer_util.h"
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
@@ -351,7 +352,8 @@ void test_read_drcp_data(void)
         "Here is some test data\nread straight from the guts of\na MOCK!";
     fill_buffer_data->set(input_string, 0, 0);
 
-    cut_assert_true(drcp_fill_buffer(&buffer, fds.in_fd));
+    cut_assert_true(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
+                                                "test data"));
     cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
                             buffer.data, buffer.pos);
 }
@@ -374,7 +376,8 @@ void test_read_drcp_data_from_infinite_size_input(void)
     for(size_t i = 0; i < buffer.size / (sizeof(input_string) - 1); ++i)
         mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
-    cut_assert_true(drcp_fill_buffer(&buffer, fds.in_fd));
+    cut_assert_true(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
+                                                "test data"));
 
     cppcut_assert_equal(buffer.size, buffer.pos);
     for(size_t i = 0; i < buffer.pos; i += sizeof(input_string) - 1)
@@ -398,7 +401,8 @@ void test_read_drcp_data_from_broken_file_descriptor(void)
 
     mock_messages->expect_msg_error_formatted(EBADF, LOG_CRIT, "Failed reading DRCP data from fd 10 (Bad file descriptor)");
 
-    cut_assert_false(drcp_fill_buffer(&buffer, fds.in_fd));
+    cut_assert_false(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
+                                                 "DRCP data"));
     cppcut_assert_equal(size_t(0), buffer.pos);
 }
 
