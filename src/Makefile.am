@@ -47,6 +47,7 @@ noinst_LTLIBRARIES = \
     libdynamic_buffer.la \
     libregisters.la \
     libinifile.la \
+    libapplink.la \
     libdrcpdcomm.la \
     libxmodem.la \
     libnetwork_dispatcher.la \
@@ -83,6 +84,12 @@ libregisters_la_CFLAGS = $(AM_CFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
+
+libapplink_la_SOURCES = \
+    applink.c applink.h \
+    applink_variables.c applink_variables.h \
+    dynamic_buffer.h dynamic_buffer_util.h
+libapplink_la_CFLAGS = $(AM_CFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
