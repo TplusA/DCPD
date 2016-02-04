@@ -31,6 +31,7 @@
 #include "dbus_common.h"
 #include "dcpd_dbus.h"
 #include "streamplayer_dbus.h"
+#include "airable_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
 #include "messages.h"
@@ -74,6 +75,13 @@ static struct
     tdbussplayURLFIFO *urlfifo_iface;
 }
 streamplayer_iface_data;
+
+static struct
+{
+    bool connect_to_session_bus;
+    tdbusAirable *airable_sec_iface;
+}
+airable_iface_data;
 
 static struct
 {
@@ -157,6 +165,11 @@ static void name_acquired(GDBusConnection *connection,
                                                "de.tahifi.DBusDL", "/de/tahifi/DBusDL",
                                                NULL, &error);
         (void)dbus_common_handle_dbus_error(&error);
+    }
+
+    if(is_session_bus == streamplayer_iface_data.connect_to_session_bus)
+    {
+        GError *error = NULL;
 
         streamplayer_iface_data.playback_iface =
             tdbus_splay_playback_proxy_new_sync(connection,
@@ -172,6 +185,19 @@ static void name_acquired(GDBusConnection *connection,
                                                "de.tahifi.Streamplayer",
                                                "/de/tahifi/Streamplayer",
                                                NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error);
+    }
+
+    if(is_session_bus == airable_iface_data.connect_to_session_bus)
+    {
+        GError *error = NULL;
+
+        airable_iface_data.airable_sec_iface =
+            tdbus_airable_proxy_new_sync(connection,
+                                         G_DBUS_PROXY_FLAGS_NONE,
+                                         "de.tahifi.TuneInBroker",
+                                         "/de/tahifi/TuneInBroker",
+                                         NULL, &error);
         (void)dbus_common_handle_dbus_error(&error);
     }
 
@@ -238,6 +264,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     memset(&dcpd_iface_data, 0, sizeof(dcpd_iface_data));
     memset(&filetransfer_iface_data, 0, sizeof(filetransfer_iface_data));
     memset(&streamplayer_iface_data, 0, sizeof(streamplayer_iface_data));
+    memset(&airable_iface_data, 0, sizeof(airable_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&login1_iface_data, 0, sizeof(login1_iface_data));
     memset(&process_data, 0, sizeof(process_data));
@@ -255,6 +282,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
+    airable_iface_data.connect_to_session_bus = connect_to_session_bus;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
@@ -306,6 +334,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     log_assert(filetransfer_iface_data.iface != NULL);
     log_assert(streamplayer_iface_data.playback_iface != NULL);
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
+    log_assert(airable_iface_data.airable_sec_iface != NULL);
 
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
                      G_CALLBACK(dbussignal_file_transfer), NULL);
@@ -359,6 +388,7 @@ void dbus_shutdown(void)
     g_object_unref(filetransfer_iface_data.iface);
     g_object_unref(streamplayer_iface_data.playback_iface);
     g_object_unref(streamplayer_iface_data.urlfifo_iface);
+    g_object_unref(airable_iface_data.airable_sec_iface);
 
     if(connman_iface_data.connman_manager_iface != NULL)
         g_object_unref(connman_iface_data.connman_manager_iface);
@@ -467,6 +497,11 @@ tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void)
 tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void)
 {
     return streamplayer_iface_data.urlfifo_iface;
+}
+
+tdbusAirable *dbus_get_airable_sec_iface(void)
+{
+    return airable_iface_data.airable_sec_iface;
 }
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)
