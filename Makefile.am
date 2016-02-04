@@ -33,6 +33,7 @@ EXTRA_DIST += \
     dbus_interfaces/de_tahifi_filetransfer.xml \
     dbus_interfaces/de_tahifi_streamplayer.xml \
     dbus_interfaces/de_tahifi_airable.xml \
+    dbus_interfaces/de_tahifi_credentials.xml \
     dbus_interfaces/net_connman.xml \
     dbus_interfaces/org_freedesktop_login1.xml
 

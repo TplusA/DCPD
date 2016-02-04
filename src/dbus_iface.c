@@ -32,6 +32,7 @@
 #include "dcpd_dbus.h"
 #include "streamplayer_dbus.h"
 #include "airable_dbus.h"
+#include "credentials_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
 #include "messages.h"
@@ -82,6 +83,13 @@ static struct
     tdbusAirable *airable_sec_iface;
 }
 airable_iface_data;
+
+static struct
+{
+    bool connect_to_session_bus;
+    tdbuscredentialsRead *cred_read_iface;
+}
+credentials_iface_data;
 
 static struct
 {
@@ -201,6 +209,19 @@ static void name_acquired(GDBusConnection *connection,
         (void)dbus_common_handle_dbus_error(&error);
     }
 
+    if(is_session_bus == credentials_iface_data.connect_to_session_bus)
+    {
+        GError *error = NULL;
+
+        credentials_iface_data.cred_read_iface =
+            tdbus_credentials_read_proxy_new_sync(connection,
+                                                  G_DBUS_PROXY_FLAGS_NONE,
+                                                  "de.tahifi.TuneInBroker",
+                                                  "/de/tahifi/TuneInBroker",
+                                                  NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error);
+    }
+
     if(!is_session_bus)
     {
         /* Connman and logind are always on system bus */
@@ -265,6 +286,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     memset(&filetransfer_iface_data, 0, sizeof(filetransfer_iface_data));
     memset(&streamplayer_iface_data, 0, sizeof(streamplayer_iface_data));
     memset(&airable_iface_data, 0, sizeof(airable_iface_data));
+    memset(&credentials_iface_data, 0, sizeof(credentials_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&login1_iface_data, 0, sizeof(login1_iface_data));
     memset(&process_data, 0, sizeof(process_data));
@@ -283,6 +305,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.connect_to_session_bus = connect_to_session_bus;
+    credentials_iface_data.connect_to_session_bus = connect_to_session_bus;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 
@@ -335,6 +358,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     log_assert(streamplayer_iface_data.playback_iface != NULL);
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
     log_assert(airable_iface_data.airable_sec_iface != NULL);
+    log_assert(credentials_iface_data.cred_read_iface != NULL);
 
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
                      G_CALLBACK(dbussignal_file_transfer), NULL);
@@ -389,6 +413,7 @@ void dbus_shutdown(void)
     g_object_unref(streamplayer_iface_data.playback_iface);
     g_object_unref(streamplayer_iface_data.urlfifo_iface);
     g_object_unref(airable_iface_data.airable_sec_iface);
+    g_object_unref(credentials_iface_data.cred_read_iface);
 
     if(connman_iface_data.connman_manager_iface != NULL)
         g_object_unref(connman_iface_data.connman_manager_iface);
@@ -502,6 +527,11 @@ tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void)
 tdbusAirable *dbus_get_airable_sec_iface(void)
 {
     return airable_iface_data.airable_sec_iface;
+}
+
+tdbuscredentialsRead *dbus_get_credentials_read_iface(void)
+{
+    return credentials_iface_data.cred_read_iface;
 }
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)

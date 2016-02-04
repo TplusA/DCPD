@@ -57,6 +57,7 @@ noinst_LTLIBRARIES = \
     libdbusdl_dbus.la \
     libstreamplayer_dbus.la \
     libairable_dbus.la \
+    libcredentials_dbus.la \
     libconnman_dbus.la \
     liblogind_dbus.la
 
@@ -119,6 +120,9 @@ libstreamplayer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libairable_dbus_la_SOURCES = airable_dbus.c airable_dbus.h
 libairable_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libcredentials_dbus_la_SOURCES = credentials_dbus.c credentials_dbus.h
+libcredentials_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 libdrcpdcomm_la_SOURCES = \
     drcp.c drcp.h \
     named_pipe.h \
@@ -162,6 +166,10 @@ BUILT_SOURCES = \
     de_tahifi_airable.h \
     de_tahifi_airable.md \
     airable_dbus.stamp \
+    $(nodist_libcredentials_dbus_la_SOURCES) \
+    de_tahifi_credentials.h \
+    de_tahifi_credentials.md \
+    credentials_dbus.stamp \
     $(nodist_libconnman_dbus_la_SOURCES) \
     net_connman.h \
     net_connman.md \
@@ -207,6 +215,15 @@ airable_dbus.h: airable_dbus.stamp
 airable_dbus.stamp: $(DBUS_IFACES)/de_tahifi_airable.xml
 	$(GDBUS_CODEGEN) --generate-c-code=airable_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_airable.md -H de_tahifi_airable.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (Airable HTTP session security)"
+	touch $@
+
+de_tahifi_credentials.h: credentials_dbus.stamp
+de_tahifi_credentials.md: credentials_dbus.stamp
+credentials_dbus.c: credentials_dbus.stamp
+credentials_dbus.h: credentials_dbus.stamp
+credentials_dbus.stamp: $(DBUS_IFACES)/de_tahifi_credentials.xml
+	$(GDBUS_CODEGEN) --generate-c-code=credentials_dbus --c-namespace tdbus_credentials --interface-prefix de.tahifi.Credentials. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_credentials.md -H de_tahifi_credentials.h -c tdbus_credentials -s de.tahifi.Credentials. -n "$(PACKAGE_NAME) (passing credentials around)"
 	touch $@
 
 net_connman.h: connman_dbus.stamp
