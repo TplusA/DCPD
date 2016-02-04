@@ -296,13 +296,14 @@ void test_generate_answer_line_for_named_variable()
     ssize_t len = applink_make_answer_for_name(buffer, sizeof(buffer),
                                                "SERVICE_CREDENTIALS",
                                                "service",
+                                               "known",
                                                "here is the login",
                                                "and here is the password");
 
     cppcut_assert_operator(ssize_t(0), <, len);
 
     static const char expected_line[] =
-        "SERVICE_CREDENTIALS: service here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
+        "SERVICE_CREDENTIALS: service known here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
     cut_assert_equal_memory(expected_line, sizeof(expected_line) - 1,
                             buffer, len);
 }
@@ -319,13 +320,14 @@ void test_generate_answer_line_for_variable()
     ssize_t len = applink_make_answer_for_var(buffer, sizeof(buffer),
                                               variable,
                                               "service",
+                                               "known",
                                               "here is the login",
                                               "and here is the password");
 
     cppcut_assert_operator(ssize_t(0), <, len);
 
     static const char expected_line[] =
-        "SERVICE_CREDENTIALS: service here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
+        "SERVICE_CREDENTIALS: service known here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
     cut_assert_equal_memory(expected_line, sizeof(expected_line) - 1,
                             buffer, len);
 }
