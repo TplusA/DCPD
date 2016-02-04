@@ -102,7 +102,7 @@ void cut_teardown(void)
  * Local mock implementation of #os_try_read_to_buffer().
  */
 static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
-                       int fd)
+                       int fd, bool suppress_error_on_eagain)
 {
     uint8_t *dest_ptr = static_cast<uint8_t *>(dest);
 
@@ -110,6 +110,7 @@ static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
     cppcut_assert_equal(buffer.size, count);
     cppcut_assert_not_null(add_bytes_read);
     cppcut_assert_equal(fds.in_fd, fd);
+    cut_assert_false(suppress_error_on_eagain);
 
     const size_t n = std::min(count, fill_buffer_data->data_.length());
     std::copy_n(fill_buffer_data->data_.begin(), n, dest_ptr + *add_bytes_read);
@@ -353,7 +354,7 @@ void test_read_drcp_data(void)
     fill_buffer_data->set(input_string, 0, 0);
 
     cut_assert_true(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
-                                                "test data"));
+                                                false, "test data"));
     cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
                             buffer.data, buffer.pos);
 }
@@ -377,7 +378,7 @@ void test_read_drcp_data_from_infinite_size_input(void)
         mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     cut_assert_true(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
-                                                "test data"));
+                                                false, "test data"));
 
     cppcut_assert_equal(buffer.size, buffer.pos);
     for(size_t i = 0; i < buffer.pos; i += sizeof(input_string) - 1)
@@ -402,7 +403,7 @@ void test_read_drcp_data_from_broken_file_descriptor(void)
     mock_messages->expect_msg_error_formatted(EBADF, LOG_CRIT, "Failed reading DRCP data from fd 10 (Bad file descriptor)");
 
     cut_assert_false(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
-                                                 "DRCP data"));
+                                                 false, "DRCP data"));
     cppcut_assert_equal(size_t(0), buffer.pos);
 }
 

@@ -26,14 +26,14 @@
 #include "messages.h"
 
 bool dynamic_buffer_fill_from_fd(struct dynamic_buffer *buffer, int in_fd,
-                                 const char *what)
+                                 bool suppress_warning, const char *what)
 {
     log_assert(buffer != NULL);
 
     while(buffer->pos < buffer->size)
     {
         int ret = os_try_read_to_buffer(buffer->data, buffer->size,
-                                        &buffer->pos, in_fd);
+                                        &buffer->pos, in_fd, suppress_warning);
 
         if(ret == 0)
             return true;

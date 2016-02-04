@@ -33,7 +33,7 @@ extern "C" {
 #endif
 
 bool dynamic_buffer_fill_from_fd(struct dynamic_buffer *buffer, int in_fd,
-                                 const char *what);
+                                 bool suppress_warning, const char *what);
 
 #ifdef __cplusplus
 }

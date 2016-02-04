@@ -47,7 +47,7 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
     usleep(50U * 1000U);
 
     if(os_try_read_to_buffer(buffer->data, buffer->size,
-                             &buffer->pos, in_fd) < 0)
+                             &buffer->pos, in_fd, false) < 0)
     {
         msg_error(errno, LOG_CRIT, "Reading XML size failed");
         return false;
