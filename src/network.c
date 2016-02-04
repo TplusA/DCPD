@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2015  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
+#include <fcntl.h>
 #include <errno.h>
 
 #include "network.h"
@@ -70,7 +71,7 @@ int network_create_socket(uint16_t port, int backlog)
     return fd;
 }
 
-int network_accept_peer_connection(int server_fd)
+int network_accept_peer_connection(int server_fd, bool non_blocking)
 {
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
@@ -91,6 +92,12 @@ int network_accept_peer_connection(int server_fd)
         msg_error(errno, LOG_ERR, "Failed to determine peer IP address");
         network_close(&peer_fd);
         return -1;
+    }
+
+    if(non_blocking)
+    {
+        int flags = fcntl(peer_fd, F_GETFL, 0);
+        fcntl(peer_fd, F_SETFL, flags | O_NONBLOCK);
     }
 
     msg_info("Accepted connection from %s", addr_string);

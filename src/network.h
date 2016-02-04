@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -44,7 +44,7 @@ int network_create_socket(uint16_t port, int backlog);
 /*!
  * Accept incoming connection.
  */
-int network_accept_peer_connection(int server_fd);
+int network_accept_peer_connection(int server_fd, bool non_blocking);
 
 /*!
  * Check if there is any incoming data on the socket.
