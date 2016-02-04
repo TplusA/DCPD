@@ -416,6 +416,9 @@ static ssize_t make_answer(char *buffer, size_t buffer_size,
                            const struct ApplinkVariable *const variable,
                            va_list ap)
 {
+    log_assert(buffer != NULL);
+    log_assert(buffer_size > 0);
+
     ssize_t pos = (ssize_t)snprintf(buffer, buffer_size, "%s:", variable->name);
 
     if(pos < 0 || (size_t)pos >= buffer_size)
@@ -439,11 +442,9 @@ static ssize_t make_answer(char *buffer, size_t buffer_size,
     return pos;
 }
 
-ssize_t applink_make_answer(char *buffer, size_t buffer_size,
-                            const char *variable_name, ...)
+ssize_t applink_make_answer_for_name(char *buffer, size_t buffer_size,
+                                     const char *variable_name, ...)
 {
-    log_assert(buffer != NULL);
-    log_assert(buffer_size > 0);
     log_assert(variable_name != NULL);
 
     const struct ApplinkVariable *const variable =
@@ -454,6 +455,25 @@ ssize_t applink_make_answer(char *buffer, size_t buffer_size,
 
     va_list ap;
     va_start(ap, variable_name);
+
+    int retval = make_answer(buffer, buffer_size, variable, ap);
+
+    va_end(ap);
+
+    if(retval < 0)
+        msg_error(ENOMEM, LOG_ERR, "Applink answer buffer too small");
+
+    return retval;
+}
+
+ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
+                                    const struct ApplinkVariable *variable,
+                                    ...)
+{
+    log_assert(variable != NULL);
+
+    va_list ap;
+    va_start(ap, variable);
 
     int retval = make_answer(buffer, buffer_size, variable, ap);
 

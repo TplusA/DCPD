@@ -288,16 +288,39 @@ void test_read_garbage_command()
 }
 
 /*!\test
- * Construct an answer.
+ * Construct an answer for a named variable.
  */
-void test_generate_answer_line()
+void test_generate_answer_line_for_named_variable()
 {
     char buffer[512];
-    ssize_t len = applink_make_answer(buffer, sizeof(buffer),
-                                      "SERVICE_CREDENTIALS",
-                                      "service",
-                                      "here is the login",
-                                      "and here is the password");
+    ssize_t len = applink_make_answer_for_name(buffer, sizeof(buffer),
+                                               "SERVICE_CREDENTIALS",
+                                               "service",
+                                               "here is the login",
+                                               "and here is the password");
+
+    cppcut_assert_operator(ssize_t(0), <, len);
+
+    static const char expected_line[] =
+        "SERVICE_CREDENTIALS: service here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
+    cut_assert_equal_memory(expected_line, sizeof(expected_line) - 1,
+                            buffer, len);
+}
+
+/*!\test
+ * Construct an answer for a variable structure.
+ */
+void test_generate_answer_line_for_variable()
+{
+    const auto *const variable = applink_lookup("SERVICE_CREDENTIALS", 0);
+    cppcut_assert_not_null(variable);
+
+    char buffer[512];
+    ssize_t len = applink_make_answer_for_var(buffer, sizeof(buffer),
+                                              variable,
+                                              "service",
+                                              "here is the login",
+                                              "and here is the password");
 
     cppcut_assert_operator(ssize_t(0), <, len);
 

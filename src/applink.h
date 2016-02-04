@@ -99,8 +99,11 @@ enum ApplinkResult applink_get_next_command(struct ApplinkConnection *conn,
                                             struct ApplinkCommand *command);
 void applink_command_get_parameter(const struct ApplinkCommand *command,
                                    size_t n, char *buffer, size_t buffer_size);
-ssize_t applink_make_answer(char *buffer, size_t buffer_size,
-                            const char *variable_name, ...);
+ssize_t applink_make_answer_for_name(char *buffer, size_t buffer_size,
+                                     const char *variable_name, ...);
+ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
+                                    const struct ApplinkVariable *variable,
+                                    ...);
 
 #ifdef __cplusplus
 }
