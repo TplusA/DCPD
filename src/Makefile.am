@@ -24,6 +24,7 @@ dcpd_SOURCES = \
     dcpd.c os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
     dcp_over_tcp.c dcp_over_tcp.h \
     smartphone_app.c smartphone_app.h \
+    applink.h applink_variables.h \
     network.h \
     transactions.h dcpdefs.h messages.c messages.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \

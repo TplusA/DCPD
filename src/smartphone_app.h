@@ -20,6 +20,7 @@
 #define SMARTPHONE_APP_H
 
 #include "network.h"
+#include "applink.h"
 
 /*!
  * A TCP/IP connection to a smartphone.
@@ -33,6 +34,9 @@ struct smartphone_app_connection_data
 {
     int server_fd;
     int peer_fd;
+
+    struct ApplinkConnection connection;
+    struct ApplinkCommand command;
 };
 
 #ifdef __cplusplus
