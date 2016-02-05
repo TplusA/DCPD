@@ -44,6 +44,7 @@ tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void);
 tdbusAirable *dbus_get_airable_sec_iface(void);
 
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void);
+tdbuscredentialsWrite *dbus_get_credentials_write_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
 tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path);

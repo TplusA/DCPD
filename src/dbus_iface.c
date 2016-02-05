@@ -88,6 +88,7 @@ static struct
 {
     bool connect_to_session_bus;
     tdbuscredentialsRead *cred_read_iface;
+    tdbuscredentialsWrite *cred_write_iface;
 }
 credentials_iface_data;
 
@@ -219,6 +220,14 @@ static void name_acquired(GDBusConnection *connection,
                                                   "de.tahifi.TuneInBroker",
                                                   "/de/tahifi/TuneInBroker",
                                                   NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error);
+
+        credentials_iface_data.cred_write_iface =
+            tdbus_credentials_write_proxy_new_sync(connection,
+                                                   G_DBUS_PROXY_FLAGS_NONE,
+                                                   "de.tahifi.TuneInBroker",
+                                                   "/de/tahifi/TuneInBroker",
+                                                   NULL, &error);
         (void)dbus_common_handle_dbus_error(&error);
     }
 
@@ -359,6 +368,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
     log_assert(airable_iface_data.airable_sec_iface != NULL);
     log_assert(credentials_iface_data.cred_read_iface != NULL);
+    log_assert(credentials_iface_data.cred_write_iface != NULL);
 
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
                      G_CALLBACK(dbussignal_file_transfer), NULL);
@@ -414,6 +424,7 @@ void dbus_shutdown(void)
     g_object_unref(streamplayer_iface_data.urlfifo_iface);
     g_object_unref(airable_iface_data.airable_sec_iface);
     g_object_unref(credentials_iface_data.cred_read_iface);
+    g_object_unref(credentials_iface_data.cred_write_iface);
 
     if(connman_iface_data.connman_manager_iface != NULL)
         g_object_unref(connman_iface_data.connman_manager_iface);
@@ -532,6 +543,11 @@ tdbusAirable *dbus_get_airable_sec_iface(void)
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void)
 {
     return credentials_iface_data.cred_read_iface;
+}
+
+tdbuscredentialsWrite *dbus_get_credentials_write_iface(void)
+{
+    return credentials_iface_data.cred_write_iface;
 }
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)
