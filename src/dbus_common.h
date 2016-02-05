@@ -21,6 +21,14 @@
 
 #include <glib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int dbus_common_handle_dbus_error(GError **error);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !DBUS_COMMON_H */
