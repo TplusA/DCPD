@@ -20,6 +20,8 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <errno.h>
 
 #include "dynamic_buffer_util.h"
@@ -48,3 +50,29 @@ bool dynamic_buffer_fill_from_fd(struct dynamic_buffer *buffer, int in_fd,
 
     return true;
 }
+
+bool dynamic_buffer_printf(struct dynamic_buffer *buffer,
+                           const char *format_string, ...)
+{
+    va_list va;
+
+    va_start(va, format_string);
+    const size_t characters_to_write = vsnprintf(NULL, 0, format_string, va);
+    va_end(va);
+
+    if(!dynamic_buffer_ensure_space(buffer, characters_to_write + 1))
+        return false;
+
+    va_start(va, format_string);
+    const size_t written = vsnprintf((char *)buffer->data + buffer->pos,
+                                     buffer->size - buffer->pos,
+                                     format_string, va);
+    va_end(va);
+
+    log_assert(written == characters_to_write);
+
+    buffer->pos += written;
+
+    return true;
+}
+

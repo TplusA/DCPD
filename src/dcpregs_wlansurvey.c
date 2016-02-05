@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -31,7 +31,7 @@
 #include "dcpregs_wlansurvey.h"
 #include "registers_priv.h"
 #include "connman.h"
-#include "dynamic_buffer.h"
+#include "dynamic_buffer_util.h"
 #include "messages.h"
 
 static struct
@@ -130,41 +130,13 @@ static size_t limit_number_of_services(size_t n)
 #define TRY_EMIT(BUF, FAILCODE, ...) \
     do \
     { \
-        if(retval && !print_to_buffer((BUF), __VA_ARGS__)) \
+        if(retval && !dynamic_buffer_printf((BUF), __VA_ARGS__)) \
         { \
             retval = false; \
             FAILCODE \
         } \
     }\
     while(0)
-
-static bool print_to_buffer(struct dynamic_buffer *buffer,
-                            const char *format_string, ...)
-    __attribute__ ((format (printf, 2, 3)));
-static bool print_to_buffer(struct dynamic_buffer *buffer,
-                            const char *format_string, ...)
-{
-    va_list va;
-
-    va_start(va, format_string);
-    const size_t characters_to_write = vsnprintf(NULL, 0, format_string, va);
-    va_end(va);
-
-    if(!dynamic_buffer_ensure_space(buffer, characters_to_write + 1))
-        return false;
-
-    va_start(va, format_string);
-    const size_t written = vsnprintf((char *)buffer->data + buffer->pos,
-                                     buffer->size - buffer->pos,
-                                     format_string, va);
-    va_end(va);
-
-    log_assert(written == characters_to_write);
-
-    buffer->pos += written;
-
-    return true;
-}
 
 static bool
 fill_buffer_with_security_entries(struct dynamic_buffer *const buffer,

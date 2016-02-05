@@ -34,6 +34,9 @@ extern "C" {
 
 bool dynamic_buffer_fill_from_fd(struct dynamic_buffer *buffer, int in_fd,
                                  bool suppress_warning, const char *what);
+bool dynamic_buffer_printf(struct dynamic_buffer *buffer,
+                           const char *format_string, ...)
+    __attribute__ ((format (printf, 2, 3)));
 
 #ifdef __cplusplus
 }
