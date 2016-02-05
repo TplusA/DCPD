@@ -3801,6 +3801,23 @@ static void expect_current_title_and_url(const std::string &expected_title,
     expect_current_url(expected_url);
 }
 
+static void expect_next_url_empty()
+{
+    const auto *const reg = register_lookup(239);
+
+    mock_messages->expect_msg_info("read 239 handler %p %zu");
+
+    uint8_t buffer[16];
+    memset(buffer, UINT8_MAX, sizeof(buffer));
+    const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
+    cppcut_assert_equal(ssize_t(0), len);
+
+    uint8_t expected_url[sizeof(buffer)];
+    memset(expected_url, UINT8_MAX, sizeof(expected_url));
+    cut_assert_equal_memory(expected_url, sizeof(expected_url),
+                            buffer, sizeof(buffer));
+}
+
 static void send_title_and_url(const ID::Stream stream_id,
                                const char *expected_title,
                                const char *expected_url)
@@ -3853,6 +3870,7 @@ void test_start_stream_then_start_another_stream()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
@@ -3864,6 +3882,7 @@ void test_start_stream_then_start_another_stream()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
 }
 
@@ -3894,6 +3913,7 @@ void test_start_stream_then_quickly_start_another_stream()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
 }
 
@@ -3913,6 +3933,7 @@ void test_app_can_start_stream_while_other_source_is_playing()
     mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 }
 
@@ -3934,6 +3955,7 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
     /* NOTE: In real life, there should have been a stop notification before
@@ -3967,6 +3989,7 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
     const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
@@ -3996,6 +4019,7 @@ static void start_stop_single_stream(bool with_notifications)
         mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
         register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+        expect_next_url_empty();
         expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
     }
 
@@ -4061,6 +4085,7 @@ void test_start_stream_and_queue_next()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
@@ -4070,6 +4095,7 @@ void test_start_stream_and_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 
     /* after a while, the stream may finish */
@@ -4106,6 +4132,7 @@ void test_play_multiple_tracks_in_a_row()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url(title_and_url[0].first, title_and_url[0].second);
 
     for(size_t i = 1; i < title_and_url.size(); ++i)
@@ -4125,6 +4152,7 @@ void test_play_multiple_tracks_in_a_row()
         mock_messages->expect_msg_info_formatted(buffer);
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
         register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+        expect_next_url_empty();
         expect_current_title_and_url(pair.first, pair.second);
     }
 
@@ -4162,11 +4190,13 @@ void test_start_stream_and_quickly_queue_next()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 }
 
@@ -4189,6 +4219,7 @@ void test_queue_next_after_stop_notification_is_ignored()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* the stream finishes... */
@@ -4242,6 +4273,7 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_second(++next_stream_id);
@@ -4265,6 +4297,7 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     mock_messages->expect_msg_info_formatted("Next app stream 260");
     dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
     expect_current_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3");
 }
 

@@ -630,7 +630,7 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
 ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
 {
     msg_info("read 239 handler %p %zu", response, length);
-    return -1;
+    return 0;
 }
 
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
