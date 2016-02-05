@@ -4080,6 +4080,62 @@ void test_start_stream_and_queue_next()
 }
 
 /*!\test
+ * App plays 5 tracks in a row.
+ */
+void test_play_multiple_tracks_in_a_row()
+{
+    auto next_stream_id(OurStream::make());
+
+    static const std::array<std::pair<const char *, const char *>, 5> title_and_url =
+    {
+        std::make_pair("First (FLAC)", "http://app-provided.url.org/stream.flac"),
+        std::make_pair("Second (mp3)", "http://app-provided.url.org/stream.mp3"),
+        std::make_pair("Third (wav)",  "http://app-provided.url.org/stream.wav"),
+        std::make_pair("Fourth (ogg)", "http://app-provided.url.org/stream.ogg"),
+        std::make_pair("Fifth (mp4)",  "http://app-provided.url.org/stream.mp4"),
+    };
+
+    /* queue first track */
+    const auto stream_id_first(next_stream_id);
+    set_start_title(title_and_url[0].first);
+    set_start_url(title_and_url[0].second, stream_id_first, false);
+    register_changed_data->check();
+    expect_current_title_and_url("", "");
+
+    /* first track starts playing */
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_current_title_and_url(title_and_url[0].first, title_and_url[0].second);
+
+    for(size_t i = 1; i < title_and_url.size(); ++i)
+    {
+        const std::pair<const char *, const char *> &pair(title_and_url[i]);
+
+        /* queue next track */
+        const auto stream_id(++next_stream_id);
+        set_next_title(pair.first);
+        set_next_url(pair.second, stream_id, true, true);
+        register_changed_data->check();
+
+        /* next track starts playing */
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer),
+                 "Next app stream %u", stream_id.get().get_raw_id());
+        mock_messages->expect_msg_info_formatted(buffer);
+        dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+        register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+        expect_current_title_and_url(pair.first, pair.second);
+    }
+
+    /* after a while, the last stream finishes playing */
+    mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    dcpregs_playstream_stop_notification();
+    register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
  * App starts stream and then quickly sends another stream to play after the
  * first one.
  *
