@@ -54,31 +54,31 @@ static std::ostream &operator<<(std::ostream &os, const StreamplayerFn id)
     switch(id)
     {
       case StreamplayerFn::urlfifo_call_clear:
-        os<< "urlfifo_call_clear";
+        os << "urlfifo_call_clear";
         break;
 
       case StreamplayerFn::urlfifo_call_next:
-        os<< "urlfifo_call_next";
+        os << "urlfifo_call_next";
         break;
 
       case StreamplayerFn::urlfifo_call_push:
-        os<< "urlfifo_call_push";
+        os << "urlfifo_call_push";
         break;
 
       case StreamplayerFn::playback_call_start:
-        os<< "playback_call_start";
+        os << "playback_call_start";
         break;
 
       case StreamplayerFn::playback_call_stop:
-        os<< "playback_call_stop";
+        os << "playback_call_stop";
         break;
 
       case StreamplayerFn::playback_call_pause:
-        os<< "playback_call_pause";
+        os << "playback_call_pause";
         break;
 
       case StreamplayerFn::playback_call_seek:
-        os<< "playback_call_seek";
+        os << "playback_call_seek";
         break;
     }
 
