@@ -182,7 +182,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                 break;
 
             const char *const is_known =
-                (answer[0] != '\0' && password != '\0')
+                (answer[0] != '\0' && password[0] != '\0')
                 ? "known"
                 : "unknown";
 
