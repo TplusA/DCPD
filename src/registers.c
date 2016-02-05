@@ -37,6 +37,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_tcptunnel.h"
 #include "dcpregs_playstream.h"
+#include "dcpregs_mediaservices.h"
 #include "dcpregs_status.h"
 #include "registers_priv.h"
 
@@ -366,6 +367,12 @@ static const struct dcp_register_t register_map[] =
         /* WLAN site survey results */
         .address = 105,
         .read_handler_dynamic = dcpregs_read_105_wlan_site_survey_results,
+    },
+    {
+        /* Query media services and set credentials */
+        .address = 106,
+        .read_handler_dynamic = dcpregs_read_106_media_service_list,
+        .write_handler = dcpregs_write_106_media_service_list,
     },
     {
         /* TCP tunnel control */

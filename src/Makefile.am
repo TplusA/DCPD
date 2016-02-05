@@ -77,6 +77,7 @@ libregisters_la_SOURCES = \
     dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
     dcpregs_playstream.c dcpregs_playstream.h \
+    dcpregs_mediaservices.c dcpregs_mediaservices.h \
     dcpregs_status.h \
     dbusdl_dbus.h \
     stream_id.h \

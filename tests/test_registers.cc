@@ -32,6 +32,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_playstream.h"
+#include "dcpregs_mediaservices.h"
 #include "dcpregs_status.h"
 #include "drcp_command_codes.h"
 #include "stream_id.hh"
@@ -39,11 +40,24 @@
 #include "mock_dcpd_dbus.hh"
 #include "mock_file_transfer_dbus.hh"
 #include "mock_streamplayer_dbus.hh"
+#include "mock_credentials_dbus.hh"
 #include "mock_logind_manager_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
 #include "mock_messages.hh"
 #include "mock_os.hh"
+
+/*
+ * Here. Here it is, right down there.
+ *
+ * It is a stupid hack to speed up development. Instead of putting this little
+ * fellow into a libtool convenience library like a good developer would
+ * usually do, we are simply including that little C file. It will stay that
+ * little, right?
+ *
+ * Watch it fail later.
+ */
+#include "dbus_common.c"
 
 /*!
  * \addtogroup registers_tests Unit tests
@@ -242,7 +256,7 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 35> existing_registers =
+static const std::array<uint8_t, 36> existing_registers =
 {
     17,
     37,
@@ -251,7 +265,7 @@ static const std::array<uint8_t, 35> existing_registers =
     62, 63,
     71, 72, 75, 76, 78, 79,
     92, 93, 94,
-    101, 102, 104, 105,
+    101, 102, 104, 105, 106,
     119,
     120, 121,
     209,
@@ -4299,6 +4313,317 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3");
+}
+
+};
+
+namespace spi_registers_media_services
+{
+
+static tdbuscredentialsRead *const dbus_cred_read_iface_dummy =
+    reinterpret_cast<tdbuscredentialsRead *>(0xf017bc12);
+
+static tdbuscredentialsWrite *const dbus_cred_write_iface_dummy =
+    reinterpret_cast<tdbuscredentialsWrite *>(0xf127ac82);
+
+static MockMessages *mock_messages;
+static MockCredentialsDBus *mock_credentials_dbus = nullptr;
+static MockDBusIface *mock_dbus_iface;
+
+static RegisterChangedData *register_changed_data;
+
+static void register_changed_callback(uint8_t reg_number)
+{
+    register_changed_data->append(reg_number);
+}
+
+void cut_setup(void)
+{
+    register_changed_data = new RegisterChangedData;
+
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_credentials_dbus = new MockCredentialsDBus;
+    cppcut_assert_not_null(mock_credentials_dbus);
+    mock_credentials_dbus->init();
+    mock_credentials_dbus_singleton = mock_credentials_dbus;
+
+    mock_dbus_iface = new MockDBusIface;
+    cppcut_assert_not_null(mock_dbus_iface);
+    mock_dbus_iface->init();
+    mock_dbus_iface_singleton = mock_dbus_iface;
+
+    register_changed_data->init();
+
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    register_init(NULL, NULL, NULL, register_changed_callback);
+}
+
+void cut_teardown(void)
+{
+    register_deinit();
+
+    register_changed_data->check();
+
+    delete register_changed_data;
+    register_changed_data = nullptr;
+
+    mock_messages->check();
+    mock_credentials_dbus->check();
+    mock_dbus_iface->check();
+
+    mock_messages_singleton = nullptr;
+    mock_credentials_dbus_singleton = nullptr;
+    mock_dbus_iface_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_credentials_dbus;
+    delete mock_dbus_iface;
+
+    mock_messages = nullptr;
+    mock_credentials_dbus = nullptr;
+    mock_dbus_iface = nullptr;
+}
+
+/*!\test
+ * In case no services are known, an XML indication so is returned.
+ */
+void test_read_out_empty_external_media_services()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
+
+    const MockCredentialsDBus::ReadGetKnownCategoriesData categories;
+
+    mock_messages->expect_msg_info("read 106 handler");
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
+
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
+
+    const std::string expected_answer = "<services count=\"0\"/>";
+    cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
+}
+
+/*!\test
+ * Read out the whole set of media services and credentials.
+ */
+void test_read_out_external_media_services()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
+
+    const MockCredentialsDBus::ReadGetKnownCategoriesData categories =
+    {
+        std::make_pair("tidal",  "TIDAL"),
+        std::make_pair("qobuz",  "Qobuz"),
+        std::make_pair("deezer", "Deezer"),
+        std::make_pair("funny",  "Service w/o default user"),
+    };
+
+    const MockCredentialsDBus::ReadGetCredentialsData accounts_tidal =
+    {
+        std::make_pair("tidal.user@somewhere.com", "1234qwerasdf"),
+    };
+
+    const MockCredentialsDBus::ReadGetCredentialsData accounts_qobuz =
+    {
+        std::make_pair("Some guy", "secret"),
+        std::make_pair("qobuz.user@somewhere.com", "abcdef"),
+        std::make_pair("Someone else", "password"),
+    };
+
+    const MockCredentialsDBus::ReadGetCredentialsData accounts_deezer;
+
+    const MockCredentialsDBus::ReadGetCredentialsData accounts_funny =
+    {
+        std::make_pair("Not the default", "funny&\"42>"),
+    };
+
+    mock_messages->expect_msg_info("read 106 handler");
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_credentials_sync(
+        TRUE, dbus_cred_read_iface_dummy,
+        accounts_tidal, accounts_tidal[0].first);
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_credentials_sync(
+        TRUE, dbus_cred_read_iface_dummy,
+        accounts_qobuz, accounts_qobuz[1].first);
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_credentials_sync(
+        TRUE, dbus_cred_read_iface_dummy,
+        accounts_deezer, "");
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_credentials_sync(
+        TRUE, dbus_cred_read_iface_dummy,
+        accounts_funny, "Does not exist");
+
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
+
+    const std::string expected_answer =
+        "<services count=\"4\">"
+        "<service id=\"tidal\" name=\"TIDAL\">"
+        "<account login=\"tidal.user@somewhere.com\" password=\"1234qwerasdf\" default=\"true\"/>"
+        "</service>"
+        "<service id=\"qobuz\" name=\"Qobuz\">"
+        "<account login=\"Some guy\" password=\"secret\"/>"
+        "<account login=\"qobuz.user@somewhere.com\" password=\"abcdef\" default=\"true\"/>"
+        "<account login=\"Someone else\" password=\"password\"/>"
+        "</service>"
+        "<service id=\"deezer\" name=\"Deezer\"/>"
+        "<service id=\"funny\" name=\"Service w/o default user\">"
+        "<account login=\"Not the default\" password=\"funny&amp;&quot;42&gt;\"/>"
+        "</service>"
+        "</services>";
+    cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
+}
+
+/*!\test
+ * Writing nothing to the register triggers a meda services survey.
+ */
+void test_trigger_media_services_survey()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+
+    static const uint8_t dummy = 0;
+    cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
+
+    register_changed_data->check(106);
+}
+
+/*!\test
+ * Write single user credentials for specific service.
+ */
+void test_set_service_credentials()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    static const uint8_t data[] = "tidal\0login email\0my password";
+
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
+    mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
+        TRUE, dbus_cred_write_iface_dummy,
+        "tidal", "", "");
+    mock_credentials_dbus->expect_tdbus_credentials_write_call_set_credentials_sync(
+        TRUE, dbus_cred_write_iface_dummy,
+        "tidal", "login email", "my password", TRUE);
+
+    cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
+}
+
+/*!\test
+ * Password may be zero-terminated.
+ */
+void test_password_may_be_zero_terminated()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    static const uint8_t data[] = "deezer\0login\0password\0";
+
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
+    mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
+        TRUE, dbus_cred_write_iface_dummy,
+        "deezer", "", "");
+    mock_credentials_dbus->expect_tdbus_credentials_write_call_set_credentials_sync(
+        TRUE, dbus_cred_write_iface_dummy,
+        "deezer", "login", "password", TRUE);
+
+    cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
+}
+
+/*!\test
+ * The service ID must always be set when writing credentials.
+ */
+void test_set_service_credentials_requires_service_id()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    static const uint8_t data[] = "\0login email\0my password";
+
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+    mock_messages->expect_msg_error(0, EINVAL, "Empty service ID sent to register 106");
+
+    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+}
+
+/*!\test
+ * If there is a password, then there must also be a login.
+ */
+void test_set_service_credentials_requires_login_for_password()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    static const uint8_t data[] = "tidal\0\0my password";
+
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+    mock_messages->expect_msg_error(0, EINVAL, "Empty login sent to register 106");
+
+    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+}
+
+/*!\test
+ * If there is a login, then there must also be a password.
+ */
+void test_set_service_credentials_requires_password_for_login()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    static const uint8_t data[] = "tidal\0login\0";
+
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+    mock_messages->expect_msg_error(0, EINVAL, "Empty password sent to register 106");
+
+    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+}
+
+/*!\test
+ * There must be no junk after a zero-terminated password.
+ */
+void test_no_junk_after_password_allowed()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    static const uint8_t data[] = "tidal\0login\0password\0\0";
+
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+    mock_messages->expect_msg_error(0, EINVAL, "Malformed data written to register 106");
+
+    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
 
 };
