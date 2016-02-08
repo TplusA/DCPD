@@ -154,6 +154,16 @@ class MockCredentialsDBus::Expectation
         data_.arg_bool_ = is_default;
     }
 
+    explicit Expectation(gboolean retval, tdbuscredentialsWrite *object,
+                         const char *category, const char *username,
+                         const char *default_user):
+        Expectation(CredentialsFn::write_delete_credentials, retval, object)
+    {
+        data_.arg_category_ = category;
+        data_.arg_username_ = username;
+        data_.ret_string_ = default_user;
+    }
+
     Expectation(Expectation &&) = default;
 };
 
@@ -194,6 +204,10 @@ void MockCredentialsDBus::expect_tdbus_credentials_write_call_set_credentials_sy
     expectations_->add(Expectation(retval, object, category, username, password, is_default));
 }
 
+void MockCredentialsDBus::expect_tdbus_credentials_write_call_delete_credentials_sync(gboolean retval, tdbuscredentialsWrite *object, const char *category, const char *username, const char *default_user)
+{
+    expectations_->add(Expectation(retval, object, category, username, default_user));
+}
 
 MockCredentialsDBus *mock_credentials_dbus_singleton = nullptr;
 
@@ -312,8 +326,14 @@ gboolean tdbus_credentials_write_call_delete_credentials_sync(tdbuscredentialsWr
 
     cppcut_assert_equal(expect.d.function_id_, CredentialsFn::write_delete_credentials);
     cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
+    cppcut_assert_not_null(arg_category);
+    cppcut_assert_not_null(arg_username);
+    cppcut_assert_not_null(out_default_user);
 
-    cut_fail("%s(): mock not implemented", __func__);
+    cppcut_assert_equal(expect.d.arg_category_.c_str(), arg_category);
+    cppcut_assert_equal(expect.d.arg_username_.c_str(), arg_username);
+
+    *out_default_user = g_strdup(expect.d.ret_string_.c_str());
 
     if(error != NULL)
         *error = NULL;

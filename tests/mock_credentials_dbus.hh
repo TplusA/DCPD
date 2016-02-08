@@ -45,6 +45,8 @@ class MockCredentialsDBus
     void expect_tdbus_credentials_read_call_get_credentials_sync(gboolean retval, tdbuscredentialsRead *object, const ReadGetCredentialsData &credentials, const std::string &default_user);
 
     void expect_tdbus_credentials_write_call_set_credentials_sync(gboolean retval, tdbuscredentialsWrite *proxy, const char *category, const char *username, const char *password, gboolean is_default);
+
+    void expect_tdbus_credentials_write_call_delete_credentials_sync(gboolean retval, tdbuscredentialsWrite *proxy, const char *category, const char *username, const char *default_user);
 };
 
 extern MockCredentialsDBus *mock_credentials_dbus_singleton;
