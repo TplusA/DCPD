@@ -340,7 +340,8 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
     if(size == 0)
         return true;
 
-    if(!dynamic_buffer_is_allocated(&t->payload))
+    if(!dynamic_buffer_is_allocated(&t->payload) &&
+       !dynamic_buffer_resize(&t->payload, size))
         return false;
 
     if(t->payload.size < size)
