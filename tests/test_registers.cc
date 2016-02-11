@@ -4425,6 +4425,15 @@ void test_read_out_external_media_services()
                                                 dcpregs_read_106_media_service_list,
                                                 dcpregs_write_106_media_service_list);
 
+    /* survey */
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+
+    static const uint8_t dummy = 0;
+    cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
+
+    register_changed_data->check(106);
+
+    /* read out */
     struct dynamic_buffer buffer;
     dynamic_buffer_init(&buffer);
 
