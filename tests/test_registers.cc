@@ -4505,6 +4505,59 @@ void test_read_out_external_media_services()
 }
 
 /*!\test
+ * Read out the whole set of unconfigured media services.
+ */
+void test_read_out_unconfigured_external_media_services()
+{
+    auto *reg = lookup_register_expect_handlers(106,
+                                                dcpregs_read_106_media_service_list,
+                                                dcpregs_write_106_media_service_list);
+
+    /* survey */
+    mock_messages->expect_msg_info("write 106 handler %p %zu");
+
+    static const uint8_t dummy = 0;
+    cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
+
+    register_changed_data->check(106);
+
+    /* read out */
+    struct dynamic_buffer buffer;
+    dynamic_buffer_init(&buffer);
+
+    const MockCredentialsDBus::ReadGetKnownCategoriesData categories =
+    {
+        std::make_pair("tidal",  "TIDAL"),
+        std::make_pair("deezer", "Deezer"),
+    };
+
+    const MockCredentialsDBus::ReadGetCredentialsData no_accounts;
+
+    mock_messages->expect_msg_info("read 106 handler");
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_credentials_sync(
+        TRUE, dbus_cred_read_iface_dummy,
+        no_accounts, "");
+    mock_credentials_dbus->expect_tdbus_credentials_read_call_get_credentials_sync(
+        TRUE, dbus_cred_read_iface_dummy,
+        no_accounts, "");
+
+    cut_assert_true(reg->read_handler_dynamic(&buffer));
+
+    const std::string expected_answer =
+        "<services count=\"2\">"
+        "<service id=\"tidal\" name=\"TIDAL\"/>"
+        "<service id=\"deezer\" name=\"Deezer\"/>"
+        "</services>";
+    cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
+                            buffer.data, buffer.pos);
+
+    dynamic_buffer_free(&buffer);
+}
+
+/*!\test
  * Writing nothing to the register triggers a meda services survey.
  */
 void test_trigger_media_services_survey()
