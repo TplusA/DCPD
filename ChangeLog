@@ -1,3 +1,12 @@
+2016-02-12  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.11 released.
+
+	* Airable services: Fix bug that prevented the SPI slave to send
+	  service credentials for external services.
+
+	* Bug fix: Avoid log disruption by very long messages.
+
 2016-02-08  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.10 released.
