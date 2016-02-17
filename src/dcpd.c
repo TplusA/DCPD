@@ -563,7 +563,7 @@ static void handle_register_change(unsigned int wait_result, int fd,
     ssize_t ret;
     uint8_t reg_number;
 
-    while((ret = read(fd, &reg_number, sizeof(reg_number))) < 0 && errno == EINTR)
+    while((ret = os_read(fd, &reg_number, sizeof(reg_number))) < 0 && errno == EINTR)
         ;
 
     if(ret < 0)
