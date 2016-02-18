@@ -900,8 +900,8 @@ void test_bad_register_addresses_are_handled_in_push_transactions(void)
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-                                              "Master requested unsupported register 0x2a");
+    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
+                                              "BUG: Master requested register 0x2a, but is not implemented");
 
     cut_assert_false(transaction_push_register_to_slave(&t, 42, TRANSACTION_CHANNEL_SPI));
 
@@ -914,8 +914,8 @@ void test_bad_register_addresses_are_handled_in_push_transactions(void)
  */
 void test_bad_register_addresses_are_handled_in_fragmented_transactions(void)
 {
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-                                              "Master requested unsupported register 0x2a");
+    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
+                                              "BUG: Master requested register 0x2a, but is not implemented");
 
     static const uint8_t dummy = 23U;
     cppcut_assert_null(transaction_fragments_from_data(&dummy, sizeof(dummy), 42,

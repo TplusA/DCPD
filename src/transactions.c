@@ -157,9 +157,8 @@ lookup_register_for_transaction(uint8_t register_address,
     const struct dcp_register_t *reg = register_lookup(register_address);
 
     if(reg == NULL)
-        msg_error(0, LOG_NOTICE,
-                  "%s requested unsupported register 0x%02x",
-                  master_not_slave ? "Master" : "Slave", register_address);
+        BUG("%s requested register 0x%02x, but is not implemented",
+            master_not_slave ? "Master" : "Slave", register_address);
 
     return reg;
 }
