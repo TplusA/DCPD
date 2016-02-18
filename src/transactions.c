@@ -251,7 +251,8 @@ request_command_matches_register_definition(uint8_t command,
     return false;
 }
 
-static int read_to_buffer(uint8_t *dest, size_t count, int fd)
+static int read_to_buffer(uint8_t *dest, size_t count, int fd,
+                          const char *what)
 {
     while(count > 0)
     {
@@ -265,7 +266,7 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd)
 
         if(len < 0)
         {
-            msg_error(errno, LOG_ERR, "Failed reading from fd %d", fd);
+            msg_error(errno, LOG_ERR, "Failed reading DCP %s from fd %d", what, fd);
             return -1;
         }
 
@@ -278,7 +279,8 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd)
 
 static bool fill_request_header(struct transaction *t, const int fd)
 {
-    if(read_to_buffer(t->request_header, sizeof(t->request_header), fd) < 0)
+    if(read_to_buffer(t->request_header, sizeof(t->request_header),
+                      fd, "header") < 0)
         return false;
 
     if((t->request_header[0] & 0xf0) != 0)
@@ -352,7 +354,7 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
         return false;
     }
 
-    if(read_to_buffer(t->payload.data, size, fd) < 0)
+    if(read_to_buffer(t->payload.data, size, fd, "payload") < 0)
         return false;
 
     t->payload.pos = size;
