@@ -280,6 +280,23 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd,
     return 0;
 }
 
+static void skip_transaction_payload(struct transaction *t, const int fd)
+{
+    uint8_t dummy[64];
+    uint16_t skipped_bytes;
+
+    for(uint16_t count = dcp_read_header_data(t->request_header +
+                                              DCP_HEADER_DATA_OFFSET);
+        count > 0;
+        count -= skipped_bytes)
+    {
+        skipped_bytes = (count >= sizeof(dummy)) ? sizeof(dummy) : count;
+
+        if(read_to_buffer(dummy, skipped_bytes, fd, "unprocessed payload") < 0)
+            break;
+    }
+}
+
 static bool fill_request_header(struct transaction *t, const int fd)
 {
     if(read_to_buffer(t->request_header, sizeof(t->request_header),
@@ -292,7 +309,10 @@ static bool fill_request_header(struct transaction *t, const int fd)
     const struct dcp_register_t *reg = lookup_register_for_transaction(t->request_header[1], false);
 
     if(reg == NULL)
+    {
+        skip_transaction_payload(t, fd);
         return false;
+    }
 
     transaction_bind(t, reg, t->request_header[0] & 0x0f);
 
@@ -311,6 +331,7 @@ static bool fill_request_header(struct transaction *t, const int fd)
             msg_error(EINVAL, LOG_ERR,
                       "Register 0x%02x requested using wrong command",
                       t->request_header[1]);
+            skip_transaction_payload(t, fd);
             break;
         }
 
@@ -354,6 +375,7 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
                   "DCP payload too large for register %u, "
                   "expecting no more than %zu bytes of data",
                   t->reg->address, t->payload.size);
+        skip_transaction_payload(t, fd);
         return false;
     }
 

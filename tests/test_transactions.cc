@@ -892,6 +892,78 @@ void test_big_data_is_sent_to_slave_in_fragments()
 }
 
 /*!\test
+ * In case the slave sends a write command for an unsupported register, the
+ * command is ignored and skipped.
+ */
+void test_bad_register_addresses_are_handled_in_slave_write_transactions(void)
+{
+    struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(t);
+
+    static const uint8_t write_unknown_data[] =
+    {
+        0x90, 0x10, 0xab, 0x7f, 0x00, 0x00, 0xff, 0xff,
+        0x50, 0xcf, 0xaa, 0x8e, 0x41, 0x77, 0x18, 0x2e,
+        0x91, 0x10, 0xab, 0x7f, 0x01, 0x00, 0xff, 0xff,
+        0x51, 0xcf, 0xaa, 0x8e, 0x42, 0x77, 0x18, 0x2e,
+        0x92, 0x10, 0xab, 0x7f, 0x02, 0x00, 0xff, 0xff,
+        0x52, 0xcf, 0xaa, 0x8e, 0x43, 0x77, 0x18, 0x2e,
+        0x93, 0x10, 0xab, 0x7f, 0x03, 0x00, 0xff, 0xff,
+        0x53, 0xcf, 0xaa, 0x8e, 0x44, 0x77, 0x18, 0x2e,
+        0x94, 0x10, 0xab, 0x7f, 0x04, 0x00, 0xff, 0xff,
+        0x54, 0xcf, 0xaa, 0x8e, 0x45, 0x77, 0x18, 0x2e,
+        0x95, 0x10, 0xab, 0x7f, 0x05, 0x00, 0xff, 0xff,
+        0x55, 0xcf, 0xaa, 0x8e,
+    };
+    static const uint8_t write_unsupported_register[] = { 0x02, 0x01, sizeof(write_unknown_data), 0x00, };
+    static constexpr const size_t internal_skip_command_size = 64;
+
+    read_data->set(write_unsupported_register, DCP_HEADER_SIZE);
+    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
+                                              "BUG: Slave requested register 0x01, but is not implemented");
+    mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
+    read_data->set(write_unknown_data, internal_skip_command_size);
+    read_data->set(write_unknown_data, sizeof(write_unknown_data) - internal_skip_command_size);
+
+    cppcut_assert_equal(TRANSACTION_ERROR,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    /* next transaction from slave is processed, indicating that the data from
+     * the previously rejected command has indeed been skipped */
+    transaction_reset_for_slave(t);
+
+    static const uint8_t read_device_status[] = { 0x01, 0x11, 0x00, 0x00, };
+    read_data->set(read_device_status);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_messages->expect_msg_info("read 17 handler %p %zu");
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(read_answer);
+
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd));
+
+    static const uint8_t expected_answer[] =
+    {
+        /* command header, payload size is 2 byte */
+        0x03, 0x11, 0x02, 0x00,
+
+        /* device status all zero */
+        0x00, 0x00,
+    };
+    cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
+                            answer_written_to_fifo->data(), answer_written_to_fifo->size());
+
+    transaction_free(&t);
+}
+
+/*!\test
  * Accesses to unsupported registers are intercepted when pushing registers to
  * slave.
  */
