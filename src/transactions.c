@@ -266,6 +266,9 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd,
 
         if(len < 0)
         {
+            if(errno == EINTR)
+                continue;
+
             msg_error(errno, LOG_ERR, "Failed reading DCP %s from fd %d", what, fd);
             return -1;
         }
