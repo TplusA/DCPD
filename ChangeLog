@@ -1,3 +1,11 @@
+2016-02-18  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.12 released.
+
+	* DCP protocol: Fix handling of unsupported registers.
+
+	* DCP protocol: Fix spurious loss of protocol synchronization.
+
 2016-02-12  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.11 released.
