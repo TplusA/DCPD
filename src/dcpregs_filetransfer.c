@@ -729,6 +729,8 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
 
           case LIST_ERROR_AUTHENTICATION:
           case LIST_ERROR_PROTOCOL:
+          case LIST_ERROR_INCONSISTENT:
+          case LIST_ERROR_NOT_SUPPORTED:
             filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_CRC_ERROR;
             break;
 
@@ -737,12 +739,16 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
             break;
 
           case LIST_ERROR_INVALID_ID:
+          case LIST_ERROR_PERMISSION_DENIED:
             filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_FILE_NOT_FOUND;
             break;
 
           case LIST_ERROR_INTERNAL:
-          case LIST_ERROR_PHYSICAL_MEDIA_IO:
             filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_OUT_OF_MEMORY;
+            break;
+
+          case LIST_ERROR_PHYSICAL_MEDIA_IO:
+            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_USB_MEDIA_ERROR;
             break;
         }
 
