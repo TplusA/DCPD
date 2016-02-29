@@ -110,6 +110,7 @@ static size_t skip_to_eol(const char *str, size_t len, size_t offset)
 
     return offset;
 }
+
 static ssize_t read_37_image_version(uint8_t *response, size_t length)
 {
     msg_info("read 37 handler %p %zu", response, length);
