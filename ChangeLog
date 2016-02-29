@@ -1,3 +1,16 @@
+2016-03-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.13 released.
+
+	* DCP protocol: Support search queries through register 74.
+
+	* DCP protocol: URL registers are 1024 bytes now (were 512 bytes in
+	  previous versions). This allows the SPI slave to process very long
+	  URLs.
+
+	* TA Control: Fix processing of Airable authentication URL requests.
+	  Locale and IP address parameters were confused.
+
 2016-02-18  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.12 released.
