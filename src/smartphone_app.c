@@ -105,18 +105,18 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
     {
       case VAR_AIRABLE_AUTH_URL:
         {
-            char encoding_buffer[16];
+            char locale_buffer[16];
             char ipaddress_buffer[64];
 
-            applink_command_get_parameter(command, 0, encoding_buffer, sizeof(encoding_buffer));
+            applink_command_get_parameter(command, 0, locale_buffer, sizeof(locale_buffer));
             applink_command_get_parameter(command, 1, ipaddress_buffer, sizeof(ipaddress_buffer));
 
-            if(encoding_buffer[0] == '\0' || ipaddress_buffer[0] == '\0')
+            if(locale_buffer[0] == '\0' || ipaddress_buffer[0] == '\0')
                 break;
 
             tdbus_airable_call_generate_authentication_url_sync(dbus_get_airable_sec_iface(),
                                                                 ipaddress_buffer,
-                                                                encoding_buffer,
+                                                                locale_buffer,
                                                                 &answer,
                                                                 NULL, &error);
             if(dbus_common_handle_dbus_error(&error) < 0)
