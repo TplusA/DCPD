@@ -115,8 +115,8 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                 break;
 
             tdbus_airable_call_generate_authentication_url_sync(dbus_get_airable_sec_iface(),
-                                                                encoding_buffer,
                                                                 ipaddress_buffer,
+                                                                encoding_buffer,
                                                                 &answer,
                                                                 NULL, &error);
             if(dbus_common_handle_dbus_error(&error) < 0)
