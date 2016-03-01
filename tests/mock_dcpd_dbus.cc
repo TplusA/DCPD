@@ -501,6 +501,8 @@ void tdbus_dcpd_views_emit_search_parameters(tdbusdcpdViews *object, const gchar
         cppcut_assert_null(expect.d.key_value_table_[i]);
         cppcut_assert_equal(i, number_of_parameters * 2);
     }
+
+    g_variant_unref(arg_query);
 }
 
 

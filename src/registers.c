@@ -38,6 +38,7 @@
 #include "dcpregs_tcptunnel.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_mediaservices.h"
+#include "dcpregs_searchparameters.h"
 #include "dcpregs_status.h"
 #include "registers_priv.h"
 
@@ -297,6 +298,12 @@ static const struct dcp_register_t register_map[] =
         .address = 72,
         .max_data_size = 3,
         .write_handler = dcpregs_write_drcp_command,
+    },
+    {
+        /* Search parameters */
+        .address =74,
+        .max_data_size = 256,
+        .write_handler = dcpregs_write_74_search_parameters,
     },
     {
         /* Title of currently playing stream, if any. */

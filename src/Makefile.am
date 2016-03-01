@@ -31,6 +31,7 @@ dcpd_SOURCES = \
     dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_status.h \
+    dcpregs_searchparameters.h \
     connman.c connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
     dbus_common.c dbus_common.h \
@@ -78,6 +79,7 @@ libregisters_la_SOURCES = \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
     dcpregs_playstream.c dcpregs_playstream.h \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \
+    dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
     dbusdl_dbus.h \
     stream_id.h \

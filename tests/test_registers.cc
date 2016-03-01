@@ -33,6 +33,7 @@
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_mediaservices.h"
+#include "dcpregs_searchparameters.h"
 #include "dcpregs_status.h"
 #include "drcp_command_codes.h"
 #include "stream_id.hh"
@@ -256,14 +257,14 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 36> existing_registers =
+static const std::array<uint8_t, 37> existing_registers =
 {
     17,
     37,
     40, 41, 44, 45,
     50, 51, 53, 54, 55, 56, 57, 58,
     62, 63,
-    71, 72, 75, 76, 78, 79,
+    71, 72, 74, 75, 76, 78, 79,
     92, 93, 94,
     101, 102, 104, 105, 106,
     119,
@@ -4686,6 +4687,240 @@ void test_no_junk_after_password_allowed()
     mock_messages->expect_msg_error(0, EINVAL, "Malformed data written to register 106");
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+}
+
+};
+
+namespace spi_registers_search
+{
+
+static tdbusdcpdViews *const dbus_dcpd_views_iface_dummy =
+    reinterpret_cast<tdbusdcpdViews *>(0x87654321);
+
+static MockMessages *mock_messages;
+static MockDcpdDBus *mock_dcpd_dbus;
+static MockDBusIface *mock_dbus_iface;
+
+void cut_setup()
+{
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_dcpd_dbus = new MockDcpdDBus();
+    cppcut_assert_not_null(mock_dcpd_dbus);
+    mock_dcpd_dbus->init();
+    mock_dcpd_dbus_singleton = mock_dcpd_dbus;
+
+    mock_dbus_iface = new MockDBusIface;
+    cppcut_assert_not_null(mock_dbus_iface);
+    mock_dbus_iface->init();
+    mock_dbus_iface_singleton = mock_dbus_iface;
+
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+
+    register_init(NULL, NULL, NULL, NULL);
+}
+
+void cut_teardown()
+{
+    register_deinit();
+
+    mock_messages->check();
+    mock_dcpd_dbus->check();
+    mock_dbus_iface->check();
+
+    mock_messages_singleton = nullptr;
+    mock_dcpd_dbus_singleton = nullptr;
+    mock_dbus_iface_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_dcpd_dbus;
+    delete mock_dbus_iface;
+
+    mock_messages = nullptr;
+    mock_dcpd_dbus = nullptr;
+    mock_dbus_iface = nullptr;
+}
+
+/*!\test
+ */
+void test_start_search_in_default_context()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
+            dbus_dcpd_views_iface_dummy, "default", nullptr);
+
+    static const char query[] = "default";
+
+    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_search_single_string_in_default_context()
+{
+    static const char *key_value_table[] =
+    {
+        "text0", "Some search string",
+        nullptr,
+    };
+
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
+            dbus_dcpd_views_iface_dummy, "default", key_value_table);
+
+    static const char query[] = "default\0text0=Some search string";
+
+    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_search_with_multiple_parameters_in_usb_context()
+{
+    static const char *key_value_table[] =
+    {
+        "text0",   "First string",
+        "text3",   "Second string",
+        "select0", "2",
+        "text4",   "Third string",
+        "select2", "yes",
+        nullptr,
+    };
+
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
+            dbus_dcpd_views_iface_dummy, "usb", key_value_table);
+
+    static const char query[] =
+        "usb\0"
+        "text0=First string\0"
+        "text3=Second string\0"
+        "select0=2\0"
+        "text4=Third string\0"
+        "select2=yes";
+
+    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_search_parameter_value_must_not_be_empty()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing value in query");
+
+    static const char query[] = "default\0text0=";
+
+    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_search_parameter_variable_must_not_be_empty()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing ID in query");
+
+    static const char query[] = "default\0=Some search string";
+
+    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_context_must_not_be_empty()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "No search context defined");
+
+    static const char query[] = "\0text0=Some search string";
+
+    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_context_must_not_contain_equals_character()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Invalid characters in search context");
+
+    static const char query[] = "default=yes\0text0=Some search string";
+
+    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_search_parameter_specification_must_contain_equals_character()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing assignment in query");
+
+    static const char query[] = "default\0text0 Some search string";
+
+    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_search_parameter_specification_must_not_be_empty()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Empty query");
+
+    static const char query[] = "default\0";
+
+    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+}
+
+/*!\test
+ */
+void test_embedded_search_parameter_specification_must_not_be_empty()
+{
+    auto *reg = lookup_register_expect_handlers(74,
+                                                dcpregs_write_74_search_parameters);
+
+    mock_messages->expect_msg_info("write 74 handler %p %zu");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Empty query");
+
+    static const char query[] = "default\0text0=My Query\0";
+
+    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
 }
 
 };
