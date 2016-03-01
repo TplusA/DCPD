@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -39,6 +39,7 @@ enum class DBusFn
     playback_emit_shuffle_mode_toggle,
     views_emit_open,
     views_emit_toggle,
+    views_emit_search_parameters,
     list_navigation_emit_level_up,
     list_navigation_emit_level_down,
     list_navigation_emit_move_lines,
@@ -113,6 +114,10 @@ static std::ostream &operator<<(std::ostream &os, const DBusFn id)
         os << "views_emit_toggle";
         break;
 
+      case DBusFn::views_emit_search_parameters:
+        os << "views_emit_search_parameters";
+        break;
+
       case DBusFn::list_navigation_emit_level_up:
         os << "list_navigation_emit_level_up";
         break;
@@ -156,13 +161,15 @@ class MockDcpdDBus::Expectation
         guint16 arg_index_;
         std::string arg_name_a_;
         std::string arg_name_b_;
+        const char **key_value_table_;
 
         explicit Data(DBusFn fn):
             function_id_(fn),
             dbus_object_(nullptr),
             arg_factor_(23.42),
             arg_count_(987),
-            arg_index_(9000)
+            arg_index_(9000),
+            key_value_table_(nullptr)
         {}
     };
 
@@ -191,6 +198,15 @@ class MockDcpdDBus::Expectation
         data_.dbus_object_ = static_cast<void *>(dbus_object);
         data_.arg_name_a_ = name_a;
         data_.arg_name_b_ = name_b;
+    }
+
+    explicit Expectation(DBusFn id, tdbusdcpdViews *dbus_object,
+                         const char *context, const char **key_value_table):
+        d(id)
+    {
+        data_.dbus_object_ = static_cast<void *>(dbus_object);
+        data_.arg_name_a_ = context;
+        data_.key_value_table_ = key_value_table;
     }
 
     explicit Expectation(DBusFn id, tdbusdcpdListNavigation *dbus_object,
@@ -301,6 +317,11 @@ void MockDcpdDBus::expect_tdbus_dcpd_views_emit_open(tdbusdcpdViews *object, con
 void MockDcpdDBus::expect_tdbus_dcpd_views_emit_toggle(tdbusdcpdViews *object, const gchar *arg_view_name_back, const gchar *arg_view_name_forth)
 {
     expectations_->add(Expectation(DBusFn::views_emit_toggle, object, arg_view_name_back, arg_view_name_forth));
+}
+
+void MockDcpdDBus::expect_tdbus_dcpd_views_emit_search_parameters(tdbusdcpdViews *object, const gchar *arg_context, const char **key_value_table)
+{
+    expectations_->add(Expectation(DBusFn::views_emit_search_parameters, object, arg_context, key_value_table));
 }
 
 
@@ -444,6 +465,42 @@ void tdbus_dcpd_views_emit_toggle(tdbusdcpdViews *object, const gchar *arg_view_
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_view_name_back));
     cppcut_assert_equal(expect.d.arg_name_b_, std::string(arg_view_name_forth));
+}
+
+void tdbus_dcpd_views_emit_search_parameters(tdbusdcpdViews *object, const gchar *arg_context, GVariant *arg_query)
+{
+    const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, DBusFn::views_emit_search_parameters);
+    cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
+    cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_context));
+    cppcut_assert_not_null(arg_query);
+
+    GVariantIter iter;
+
+    const size_t number_of_parameters = g_variant_iter_init(&iter, arg_query);
+
+    if(number_of_parameters == 0)
+        cppcut_assert_null(expect.d.key_value_table_);
+    else
+    {
+        cppcut_assert_not_null(expect.d.key_value_table_);
+
+        const gchar *varname;
+        const gchar *value;
+        size_t i = 0;
+
+        while(g_variant_iter_next(&iter, "(&s&s)", &varname, &value))
+        {
+            cppcut_assert_equal(expect.d.key_value_table_[i], varname);
+            cppcut_assert_equal(expect.d.key_value_table_[i + 1], value);
+
+            i += 2;
+        }
+
+        cppcut_assert_null(expect.d.key_value_table_[i]);
+        cppcut_assert_equal(i, number_of_parameters * 2);
+    }
 }
 
 

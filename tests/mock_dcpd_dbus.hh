@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -53,6 +53,7 @@ class MockDcpdDBus
     void expect_tdbus_dcpd_playback_emit_shuffle_mode_toggle(tdbusdcpdPlayback *object);
     void expect_tdbus_dcpd_views_emit_open(tdbusdcpdViews *object, const gchar *arg_view_name);
     void expect_tdbus_dcpd_views_emit_toggle(tdbusdcpdViews *object, const gchar *arg_view_name_back, const gchar *arg_view_name_forth);
+    void expect_tdbus_dcpd_views_emit_search_parameters(tdbusdcpdViews *object, const gchar *arg_context, const char **key_value_table);
     void expect_tdbus_dcpd_list_navigation_emit_level_up(tdbusdcpdListNavigation *object);
     void expect_tdbus_dcpd_list_navigation_emit_level_down(tdbusdcpdListNavigation *object);
     void expect_tdbus_dcpd_list_navigation_emit_move_lines(tdbusdcpdListNavigation *object, gint arg_count);
