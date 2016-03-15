@@ -2197,8 +2197,13 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
     mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+
+    const int expected_number_of_writes =
+        2 * 3 + (2 + 3) * 4 - ((passphrase_size == 0) ? 1 : 0);
+
+    for(int i = 0; i < expected_number_of_writes; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(connman_config_path);
 
@@ -2335,15 +2340,23 @@ void test_ascii_passphrase_character_set(void)
 }
 
 /*!\test
- * Passphrase with security mode "none" makes no sense and is rejected.
+ * Passphrase with security mode "none" makes no sense, but is not rejected.
  */
-void test_set_passphrase_with_security_mode_none_does_not_work(void)
+void test_set_passphrase_with_security_mode_none_works(void)
 {
     static constexpr char ascii_passphrase[] = "SuperSecret";
 
     cppcut_assert_operator(size_t(64), >, sizeof(ascii_passphrase) - 1);
     set_passphrase_with_security_mode(ascii_passphrase, sizeof(ascii_passphrase) - 1,
                                       "none");
+}
+
+/*!\test
+ * Explicitly empty passphrase with security mode "none" is accepted.
+ */
+void test_set_empty_passphrase_with_security_mode_none_works(void)
+{
+    set_passphrase_with_security_mode("", 0, "none");
 }
 
 /*!\test
