@@ -2198,8 +2198,14 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
 
+    if(strcmp(connman_security_mode, "none") == 0)
+    {
+        passphrase = "";
+        passphrase_size = 0;
+    }
+
     const int expected_number_of_writes =
-        2 * 3 + (2 + 3) * 4 - ((passphrase_size == 0) ? 1 : 0);
+        2 * 3 + (2 + 2 + ((passphrase_size == 0) ? 0 : 1)) * 4;
 
     for(int i = 0; i < expected_number_of_writes; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
@@ -2222,7 +2228,9 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
              expected_config_file_format, connman_security_mode, passphrase);
 
-    size_t written_config_file_length = strlen(new_config_file_buffer);
+    const size_t written_config_file_length =
+        strlen(new_config_file_buffer) -
+        ((passphrase_size == 0) ? 14 : 0);
 
     cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
                             os_write_buffer.data(), os_write_buffer.size());
@@ -2340,7 +2348,7 @@ void test_ascii_passphrase_character_set(void)
 }
 
 /*!\test
- * Passphrase with security mode "none" makes no sense, but is not rejected.
+ * Passphrase with security mode "none" makes no sense and is ignored.
  */
 void test_set_passphrase_with_security_mode_none_works(void)
 {

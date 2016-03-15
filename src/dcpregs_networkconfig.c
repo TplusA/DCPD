@@ -727,21 +727,21 @@ static int handle_set_wireless_config(struct ini_section *section,
     if(IS_REQUESTED(REQ_WLAN_WPA_PASSPHRASE_102))
     {
         const size_t passphrase_length =
-            nwconfig_write_data.wlan_wpa_passphrase_is_ascii
-            ? strlen((const char *)nwconfig_write_data.wlan_wpa_passphrase)
-            : sizeof(nwconfig_write_data.wlan_wpa_passphrase);
+            (strcmp(nwconfig_write_data.wlan_security_mode, "none") == 0)
+            ? 0
+            : (nwconfig_write_data.wlan_wpa_passphrase_is_ascii
+               ? strlen((const char *)nwconfig_write_data.wlan_wpa_passphrase)
+               : sizeof(nwconfig_write_data.wlan_wpa_passphrase));
 
-
-        if((passphrase_length > 0 &&
-            inifile_section_store_value(section, "Passphrase", 0,
-                                        (const char *)nwconfig_write_data.wlan_wpa_passphrase,
-                                        passphrase_length) == NULL) ||
-           (passphrase_length == 0 &&
-            inifile_section_store_empty_value(section,
-                                              "Passphrase", 0) == NULL))
+        if(passphrase_length > 0 &&
+           inifile_section_store_value(section, "Passphrase", 0,
+                                       (const char *)nwconfig_write_data.wlan_wpa_passphrase,
+                                       passphrase_length) == NULL)
         {
             return -1;
         }
+        else if(passphrase_length == 0)
+            inifile_section_remove_value(section, "Passphrase", 0);
     }
 
     return 0;
