@@ -487,6 +487,8 @@ static void try_start_stream(struct PlayAppStreamData *const data,
 
             data->current_stream_id = stream_id;
             data->next_stream_id = 0;
+
+            tdbus_dcpd_views_emit_open(dbus_get_views_iface(), "Play");
         }
         else
         {

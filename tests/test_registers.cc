@@ -3666,6 +3666,7 @@ namespace spi_registers_play_app_stream
 
 static MockMessages *mock_messages;
 static MockStreamplayerDBus *mock_streamplayer_dbus;
+static MockDcpdDBus *mock_dcpd_dbus;
 static MockDBusIface *mock_dbus_iface;
 
 static tdbussplayURLFIFO *const dbus_streamplayer_urlfifo_iface_dummy =
@@ -3673,6 +3674,9 @@ static tdbussplayURLFIFO *const dbus_streamplayer_urlfifo_iface_dummy =
 
 static tdbussplayPlayback *const dbus_streamplayer_playback_iface_dummy =
     reinterpret_cast<tdbussplayPlayback *>(0xc9a018b0);
+
+static tdbusdcpdViews *const dbus_dcpd_views_iface_dummy =
+    reinterpret_cast<tdbusdcpdViews *>(0x87654321);
 
 using OurStream = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
 
@@ -3696,6 +3700,11 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_streamplayer_dbus);
     mock_streamplayer_dbus->init();
     mock_streamplayer_dbus_singleton = mock_streamplayer_dbus;
+
+    mock_dcpd_dbus = new MockDcpdDBus();
+    cppcut_assert_not_null(mock_dcpd_dbus);
+    mock_dcpd_dbus->init();
+    mock_dcpd_dbus_singleton = mock_dcpd_dbus;
 
     mock_dbus_iface = new MockDBusIface;
     cppcut_assert_not_null(mock_dbus_iface);
@@ -3723,18 +3732,22 @@ void cut_teardown(void)
 
     mock_messages->check();
     mock_streamplayer_dbus->check();
+    mock_dcpd_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_streamplayer_dbus_singleton = nullptr;
+    mock_dcpd_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_streamplayer_dbus;
+    delete mock_dcpd_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_streamplayer_dbus = nullptr;
+    mock_dcpd_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
 
@@ -3773,6 +3786,9 @@ static void set_start_url(const std::string url, const OurStream stream_id,
         mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
     }
+
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Play");
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
 
