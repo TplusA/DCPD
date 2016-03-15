@@ -1,3 +1,11 @@
+2016-03-15  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.14 released.
+
+	* Networking: Accept empty WLAN passphrases for unprotected networks.
+
+	* Streaming: Activate play view when playing via register 79.
+
 2016-03-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.13 released.
