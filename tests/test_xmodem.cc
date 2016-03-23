@@ -186,7 +186,7 @@ void test_full_transmission_of_two_whole_blocks()
 
     expected_block[0] = XMODEM_COMMAND_SOH;
     set_expected_block_number(1);
-    copy_to_expected_block(data);
+    copy_to_expected_block(data, BLOCK_SIZE);
     compute_expected_block_crc();
 
     const uint8_t *block;
