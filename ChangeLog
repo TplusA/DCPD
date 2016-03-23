@@ -1,3 +1,10 @@
+2016-03-23  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.15 released.
+
+	* DRCP: Recognize command codes 0x21 and 0x22 for fast scrolling
+	  through lists.
+
 2016-03-15  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.14 released.
