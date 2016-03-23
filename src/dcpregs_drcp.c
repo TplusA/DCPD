@@ -105,6 +105,39 @@ static void handle_toggle_views_browse_play(tdbusdcpdViews *iface)
     tdbus_dcpd_views_emit_toggle(iface, "Browse", "Play");
 }
 
+static bool scroll_many_params_are_valid(const uint8_t *data, size_t length)
+{
+    if(!is_length_correct(2, length))
+        return false;
+
+    if(data[1] != DRCP_ACCEPT)
+        return false;
+
+    return (data[0] != 0);
+}
+
+static int handle_scroll_many_lines_up(tdbusdcpdListNavigation *iface,
+                                       const uint8_t *data, size_t length)
+{
+    if(!scroll_many_params_are_valid(data, length))
+        return -1;
+
+    tdbus_dcpd_list_navigation_emit_move_lines(iface, -(gint)data[0]);
+
+    return 0;
+}
+
+static int handle_scroll_many_lines_down(tdbusdcpdListNavigation *iface,
+                                         const uint8_t *data, size_t length)
+{
+    if(!scroll_many_params_are_valid(data, length))
+        return -1;
+
+    tdbus_dcpd_list_navigation_emit_move_lines(iface, (gint)data[0]);
+
+    return 0;
+}
+
 static void handle_scroll_one_line_up(tdbusdcpdListNavigation *iface)
 {
     tdbus_dcpd_list_navigation_emit_move_lines(iface, -1);
@@ -189,6 +222,16 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_PLAYBACK_PAUSE,
         .iface_id = DBUSIFACE_PLAYBACK,
         .dbus_signal.playback = tdbus_dcpd_playback_emit_pause,
+    },
+    {
+        .code = DRCP_SCROLL_UP_MANY,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION_WITH_DATA,
+        .dbus_signal.list_navigation_d = handle_scroll_many_lines_up,
+    },
+    {
+        .code = DRCP_SCROLL_DOWN_MANY,
+        .iface_id = DBUSIFACE_LIST_NAVIGATION_WITH_DATA,
+        .dbus_signal.list_navigation_d = handle_scroll_many_lines_down,
     },
     {
         .code = DRCP_GO_BACK_ONE_LEVEL,

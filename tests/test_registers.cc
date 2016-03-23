@@ -686,6 +686,52 @@ void test_slave_drc_list_navigation_scroll_one_page_down(void)
 }
 
 /*!\test
+ * Slave sends DRC command for moving the cursor 10 lines up.
+ */
+void test_slave_drc_list_navigation_scroll_10_lines_up()
+{
+    static const uint8_t buffer[] = { DRCP_SCROLL_UP_MANY, 0x0a, DRCP_ACCEPT, };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x21");
+    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, -10);
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends DRC command for moving the cursor 8 lines down.
+ */
+void test_slave_drc_list_navigation_scroll_8_lines_down()
+{
+    static const uint8_t buffer[] = { DRCP_SCROLL_DOWN_MANY, 0x08, DRCP_ACCEPT, };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x22");
+    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, 8);
+    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Fast scrolling by zero lines has no effect whatsoever.
+ */
+void test_slave_drc_list_navigation_scroll_fast_by_0_lines_is_ignored()
+{
+    static const uint8_t buffer_up[]   = { DRCP_SCROLL_UP_MANY,   0x00, DRCP_ACCEPT, };
+    static const uint8_t buffer_down[] = { DRCP_SCROLL_DOWN_MANY, 0x00, DRCP_ACCEPT, };
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x21");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x21 failed: -1");
+    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_up, sizeof(buffer_up)));
+
+    mock_messages->expect_msg_info_formatted("DRC: command code 0x22");
+    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x22 failed: -1");
+    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
+    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_down, sizeof(buffer_down)));
+}
+
+
+/*!\test
  * Slave sends DRC command for adding the currently selected item to the
  * favorites list.
  */
