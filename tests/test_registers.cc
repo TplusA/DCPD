@@ -3721,6 +3721,9 @@ static tdbussplayURLFIFO *const dbus_streamplayer_urlfifo_iface_dummy =
 static tdbussplayPlayback *const dbus_streamplayer_playback_iface_dummy =
     reinterpret_cast<tdbussplayPlayback *>(0xc9a018b0);
 
+static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
+    reinterpret_cast<tdbusdcpdPlayback *>(0x1337affe);
+
 static tdbusdcpdViews *const dbus_dcpd_views_iface_dummy =
     reinterpret_cast<tdbusdcpdViews *>(0x87654321);
 
@@ -3815,12 +3818,16 @@ static void set_next_title(const std::string title)
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
 }
 
-static void set_start_url(const std::string url, const OurStream stream_id,
-                          bool assume_already_playing)
+static void set_start_url(const std::string title, const std::string url,
+                          const OurStream stream_id, bool assume_already_playing)
 {
     const auto *const reg = register_lookup(79);
 
     mock_messages->expect_msg_info("write 79 handler %p %zu");
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
+            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
+            "", "", title.c_str());
     mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
         TRUE, dbus_streamplayer_urlfifo_iface_dummy,
@@ -3843,7 +3850,16 @@ static void set_start_url(const std::string url, const OurStream stream_id,
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
 }
 
-static void set_next_url(const std::string url, const OurStream stream_id,
+static void set_start_title_and_url(const std::string title, const std::string url,
+                                    const OurStream stream_id,
+                                    bool assume_already_playing)
+{
+    set_start_title(title);
+    set_start_url(title, url, stream_id, assume_already_playing);
+}
+
+static void set_next_url(const std::string title, const std::string url,
+                         const OurStream stream_id,
                          bool assume_is_app_mode, bool assume_already_playing)
 {
     const auto *const reg = register_lookup(239);
@@ -3852,6 +3868,10 @@ static void set_next_url(const std::string url, const OurStream stream_id,
 
     if(assume_is_app_mode)
     {
+        mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+        mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
+            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
+            "", "", title.c_str());
         mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
@@ -3862,6 +3882,14 @@ static void set_next_url(const std::string url, const OurStream stream_id,
         mock_messages->expect_msg_error(0, LOG_ERR, "Can't queue next stream, didn't receive a start stream");
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
+}
+
+static void set_next_title_and_url(const std::string title, const std::string url,
+                                   const OurStream stream_id,
+                                   bool assume_is_app_mode, bool assume_already_playing)
+{
+    set_next_title(title);
+    set_next_url(title, url, stream_id, assume_is_app_mode, assume_already_playing);
 }
 
 static void expect_current_title(const std::string &expected_title)
@@ -3947,8 +3975,7 @@ static void stop_stream(void)
  */
 void test_start_stream()
 {
-    set_start_title("Test stream");
-    set_start_url("http://app-provided.url.org/stream.flac", OurStream::make(), false);
+    set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac", OurStream::make(), false);
 
     expect_current_title_and_url("", "");
 }
@@ -3961,8 +3988,7 @@ void test_start_stream_then_start_another_stream()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title("First");
-    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+    set_start_title_and_url("First", "http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
@@ -3972,8 +3998,7 @@ void test_start_stream_then_start_another_stream()
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    set_start_title("Second");
-    set_start_url("http://app-provided.url.org/second.flac", stream_id_second, true);
+    set_start_title_and_url("Second", "http://app-provided.url.org/second.flac", stream_id_second, true);
     register_changed_data->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
@@ -3992,13 +4017,11 @@ void test_start_stream_then_quickly_start_another_stream()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title("First");
-    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+    set_start_title_and_url("First", "http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
 
     const auto stream_id_second(++next_stream_id);
-    set_start_title("Second");
-    set_start_url("http://app-provided.url.org/second.flac", stream_id_second, false);
+    set_start_title_and_url("Second", "http://app-provided.url.org/second.flac", stream_id_second, false);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
@@ -4024,8 +4047,7 @@ void test_app_can_start_stream_while_other_source_is_playing()
     expect_current_title_and_url("", "");
 
     const auto stream_id(OurStream::make());
-    set_start_title("Stream");
-    set_start_url("http://app-provided.url.org/stream.flac", stream_id, true);
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, true);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
@@ -4046,8 +4068,7 @@ void test_app_can_start_stream_while_other_source_is_playing()
 void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 {
     const auto stream_id(OurStream::make());
-    set_start_title("Stream");
-    set_start_url("http://app-provided.url.org/stream.flac", stream_id, false);
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, false);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
@@ -4080,8 +4101,7 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
 {
     const auto stream_id(OurStream::make());
-    set_start_title("Stream");
-    set_start_url("http://app-provided.url.org/stream.flac", stream_id, false);
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, false);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
@@ -4108,8 +4128,7 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
 static void start_stop_single_stream(bool with_notifications)
 {
     const auto stream_id(OurStream::make());
-    set_start_title("Stream");
-    set_start_url("http://app-provided.url.org/stream.flac", stream_id, false);
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, false);
     register_changed_data->check();
 
     if(with_notifications)
@@ -4175,8 +4194,7 @@ void test_start_stream_and_queue_next()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title("First FLAC");
-    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
@@ -4187,8 +4205,7 @@ void test_start_stream_and_queue_next()
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    set_next_title("Second FLAC");
-    set_next_url("http://app-provided.url.org/second.flac", stream_id_second, true, true);
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, true, true);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
@@ -4221,8 +4238,7 @@ void test_play_multiple_tracks_in_a_row()
 
     /* queue first track */
     const auto stream_id_first(next_stream_id);
-    set_start_title(title_and_url[0].first);
-    set_start_url(title_and_url[0].second, stream_id_first, false);
+    set_start_title_and_url(title_and_url[0].first, title_and_url[0].second, stream_id_first, false);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
@@ -4239,8 +4255,7 @@ void test_play_multiple_tracks_in_a_row()
 
         /* queue next track */
         const auto stream_id(++next_stream_id);
-        set_next_title(pair.first);
-        set_next_url(pair.second, stream_id, true, true);
+        set_next_title_and_url(pair.first, pair.second, stream_id, true, true);
         register_changed_data->check();
 
         /* next track starts playing */
@@ -4274,14 +4289,12 @@ void test_start_stream_and_quickly_queue_next()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title("First FLAC");
-    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     const auto stream_id_second(++next_stream_id);
-    set_next_title("Second FLAC");
-    set_next_url("http://app-provided.url.org/second.flac", stream_id_second, true, true);
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, true, true);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
@@ -4309,8 +4322,7 @@ void test_queue_next_after_stop_notification_is_ignored()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title("First FLAC");
-    set_start_url("http://app-provided.url.org/first.flac", stream_id_first, false);
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
@@ -4328,8 +4340,7 @@ void test_queue_next_after_stop_notification_is_ignored()
 
     /* ...but the slave sends another stream just in that moment */
     const auto stream_id_second(++next_stream_id);
-    set_next_title("Second FLAC");
-    set_next_url("http://app-provided.url.org/second.flac", stream_id_second, false, false);
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, false, false);
     expect_current_title_and_url("", "");
 }
 
@@ -4338,8 +4349,7 @@ void test_queue_next_after_stop_notification_is_ignored()
  */
 void test_queue_next_with_prior_start_is_ignored()
 {
-    set_next_title("Stream");
-    set_next_url("http://app-provided.url.org/stream.flac", OurStream::make(), false, false);
+    set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac", OurStream::make(), false, false);
     expect_current_title_and_url("", "");
 }
 
@@ -4349,8 +4359,7 @@ void test_queue_next_with_prior_start_is_ignored()
  */
 void test_queue_next_with_prior_start_by_us_is_ignored()
 {
-    set_next_title("Stream");
-    set_next_url("http://app-provided.url.org/stream.flac", OurStream::make(), false, true);
+    set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac", OurStream::make(), false, true);
     expect_current_title_and_url("", "");
 }
 
@@ -4363,8 +4372,7 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title("Playing stream");
-    set_start_url("http://app-provided.url.org/first.mp3", stream_id_first, false);
+    set_start_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3", stream_id_first, false);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
@@ -4375,20 +4383,17 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_second(++next_stream_id);
-    set_next_title("Stream 2");
-    set_next_url("http://app-provided.url.org/2.mp3", stream_id_second, true, true);
+    set_next_title_and_url("Stream 2", "http://app-provided.url.org/2.mp3", stream_id_second, true, true);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_third(++next_stream_id);
-    set_next_title("Stream 3");
-    set_next_url("http://app-provided.url.org/3.mp3", stream_id_third, true, true);
+    set_next_title_and_url("Stream 3", "http://app-provided.url.org/3.mp3", stream_id_third, true, true);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_fourth(++next_stream_id);
-    set_next_title("Stream 4");
-    set_next_url("http://app-provided.url.org/4.mp3", stream_id_fourth, true, true);
+    set_next_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3", stream_id_fourth, true, true);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 

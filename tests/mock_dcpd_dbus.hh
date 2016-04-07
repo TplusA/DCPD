@@ -51,6 +51,8 @@ class MockDcpdDBus
     void expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(tdbusdcpdPlayback *object, gdouble arg_speed);
     void expect_tdbus_dcpd_playback_emit_repeat_mode_toggle(tdbusdcpdPlayback *object);
     void expect_tdbus_dcpd_playback_emit_shuffle_mode_toggle(tdbusdcpdPlayback *object);
+    void expect_tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg_stream_id, const gchar *arg_artist, const gchar *arg_album, const gchar *arg_title);
+    void expect_tdbus_dcpd_playback_call_set_stream_info(gboolean ret, tdbusdcpdPlayback *proxy, guint16 arg_stream_id, const gchar *arg_title, const gchar *arg_url);
     void expect_tdbus_dcpd_views_emit_open(tdbusdcpdViews *object, const gchar *arg_view_name);
     void expect_tdbus_dcpd_views_emit_toggle(tdbusdcpdViews *object, const gchar *arg_view_name_back, const gchar *arg_view_name_forth);
     void expect_tdbus_dcpd_views_emit_search_parameters(tdbusdcpdViews *object, const gchar *arg_context, const char **key_value_table);
