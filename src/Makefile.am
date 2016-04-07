@@ -26,7 +26,8 @@ dcpd_SOURCES = \
     smartphone_app.c smartphone_app.h \
     applink.h applink_variables.h \
     network.h \
-    transactions.h dcpdefs.h messages.c messages.h \
+    transactions.h dcpdefs.h \
+    messages.c messages.h messages_glib.c messages_glib.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \

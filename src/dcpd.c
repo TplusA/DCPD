@@ -32,6 +32,7 @@
 #include "smartphone_app.h"
 #include "network_dispatcher.h"
 #include "messages.h"
+#include "messages_glib.h"
 #include "transactions.h"
 #include "dynamic_buffer.h"
 #include "dynamic_buffer_util.h"
@@ -734,6 +735,7 @@ static int setup(const struct parameters *parameters, struct files *files,
                  int *reg_changed_read_fd)
 {
     msg_enable_syslog(!parameters->run_in_foreground);
+    msg_enable_glib_message_redirection();
 
     if(!parameters->run_in_foreground)
         openlog("dcpd", LOG_PID, LOG_DAEMON);
