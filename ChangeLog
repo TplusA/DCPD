@@ -1,3 +1,12 @@
+2016-04-08  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.16 released.
+
+	* TA Control: Send information about externally started stream around.
+	  The information is distributed via D-Bus signal. This information is
+	  supposed to be caught by the user interface which should use it to
+	  generate proper DRC screen updates.
+
 2016-03-23  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.15 released.
