@@ -56,7 +56,7 @@ enum NotifyStreamInfo
 
 struct SimplifiedStreamInfo
 {
-    char title[128 + 1];
+    char meta_data[256 + 1];
     char url[512 + 1];
 };
 
@@ -210,7 +210,7 @@ static enum StreamIdType determine_stream_id_type(const stream_id_t raw_stream_i
 
 static inline void clear_stream_info(struct SimplifiedStreamInfo *info)
 {
-    info->title[0] = '\0';
+    info->meta_data[0] = '\0';
     info->url[0] = '\0';
 }
 
@@ -363,9 +363,9 @@ static stream_id_t get_next_stream_id(stream_id_t *const next_free_id)
     return ret;
 }
 
-static void unchecked_set_title_and_url(const stream_id_t raw_stream_id,
-                                        const char *title, const char *url,
-                                        struct PlayAnyStreamData *any_stream_data)
+static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
+                                            const char *title, const char *url,
+                                            struct PlayAnyStreamData *any_stream_data)
 {
     struct SimplifiedStreamInfo *const dest_info =
         (raw_stream_id == any_stream_data->currently_playing_stream
@@ -386,7 +386,7 @@ static void unchecked_set_title_and_url(const stream_id_t raw_stream_id,
     }
     else
     {
-        strncpy_terminated(dest_info->title, title, sizeof(dest_info->title));
+        strncpy_terminated(dest_info->meta_data, title, sizeof(dest_info->meta_data));
         strncpy_terminated(dest_info->url,   url,   sizeof(dest_info->url));
         which = NOTIFY_STREAM_INFO_UNMODIFIED;
     }
@@ -435,15 +435,15 @@ static void try_start_stream(struct PlayAppStreamData *const data,
     gboolean fifo_overflow;
     gboolean is_playing;
 
-    const char *const title = (is_restart
-                               ? data->inbuffer_new_stream.title
-                               : data->inbuffer_next_stream.title);
+    const char *const meta_data = (is_restart
+                                   ? data->inbuffer_new_stream.meta_data
+                                   : data->inbuffer_next_stream.meta_data);
     const char *const url = (is_restart
                              ? data->inbuffer_new_stream.url
                              : data->inbuffer_next_stream.url);
 
     tdbus_dcpd_playback_emit_stream_info(dbus_get_playback_iface(), stream_id,
-                                         "", "", title, title, url);
+                                         "", "", meta_data, meta_data, url);
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
                                            stream_id, url,
@@ -470,7 +470,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
 
     data->last_pushed_stream_id = stream_id;
 
-    unchecked_set_title_and_url(stream_id, title, url, any_stream_data);
+    unchecked_set_meta_data_and_url(stream_id, meta_data, url, any_stream_data);
 
     if(!is_playing &&
        !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
@@ -522,7 +522,7 @@ ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length)
 {
     msg_info("read 75 handler %p %zu", response, length);
 
-    return copy_string_to_slave(play_any_stream_data.current_stream_information.title,
+    return copy_string_to_slave(play_any_stream_data.current_stream_information.meta_data,
                                 (char *)response, length);
 }
 
@@ -538,8 +538,8 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 {
     msg_info("write 78 handler %p %zu", data, length);
 
-    (void)copy_string_data(play_app_stream_data.inbuffer_new_stream.title,
-                           sizeof(play_app_stream_data.inbuffer_new_stream.title),
+    (void)copy_string_data(play_app_stream_data.inbuffer_new_stream.meta_data,
+                           sizeof(play_app_stream_data.inbuffer_new_stream.meta_data),
                            data, length);
 
     return 0;
@@ -554,7 +554,7 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
                         data, length))
     {
         /* maybe start playing */
-        if(play_app_stream_data.inbuffer_new_stream.title[0] != '\0')
+        if(play_app_stream_data.inbuffer_new_stream.meta_data[0] != '\0')
             try_start_stream(&play_app_stream_data, &play_any_stream_data,
                              true);
         else
@@ -585,8 +585,8 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 {
     msg_info("write 238 handler %p %zu", data, length);
 
-    (void)copy_string_data(play_app_stream_data.inbuffer_next_stream.title,
-                           sizeof(play_app_stream_data.inbuffer_next_stream.title),
+    (void)copy_string_data(play_app_stream_data.inbuffer_next_stream.meta_data,
+                           sizeof(play_app_stream_data.inbuffer_next_stream.meta_data),
                            data, length);
 
     return 0;
@@ -612,7 +612,7 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
           case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
             /* maybe send to streamplayer queue */
-            if(play_app_stream_data.inbuffer_next_stream.title[0] != '\0')
+            if(play_app_stream_data.inbuffer_next_stream.meta_data[0] != '\0')
                 try_start_stream(&play_app_stream_data, &play_any_stream_data,
                                  false);
             else
@@ -647,8 +647,8 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
 
     if(!is_our_stream(raw_stream_id))
     {
-        unchecked_set_title_and_url(raw_stream_id, title, url,
-                                    &play_any_stream_data);
+        unchecked_set_meta_data_and_url(raw_stream_id, title, url,
+                                        &play_any_stream_data);
         return;
     }
 
