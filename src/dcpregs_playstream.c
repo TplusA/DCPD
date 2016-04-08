@@ -419,6 +419,36 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
     }
 }
 
+static void tokenize_meta_data(char *dest, const char *src,
+                               const char *artist_and_album[static 2])
+{
+    static const char empty[] = "";
+
+    dest[0] = '\0';
+    artist_and_album[0] = empty;
+    artist_and_album[1] = empty;
+
+    size_t idx = 0;
+
+    for(size_t i = 0; /* nothing */; ++i)
+    {
+        const char ch = src[i];
+
+        if(ch == '\x1d')
+        {
+            dest[i] = '\0';
+
+            if(idx < 2)
+                artist_and_album[idx++] = &dest[i + 1];
+        }
+        else
+            dest[i] = ch;
+
+        if(ch == '\0')
+            break;
+    }
+}
+
 static void try_start_stream(struct PlayAppStreamData *const data,
                              struct PlayAnyStreamData *any_stream_data,
                              bool is_restart)
@@ -442,8 +472,15 @@ static void try_start_stream(struct PlayAppStreamData *const data,
                              ? data->inbuffer_new_stream.url
                              : data->inbuffer_next_stream.url);
 
+    char meta_data_buffer[sizeof(data->inbuffer_new_stream.meta_data)];
+    const char *artist_and_album[2];
+
+    tokenize_meta_data(meta_data_buffer, meta_data, artist_and_album);
+
     tdbus_dcpd_playback_emit_stream_info(dbus_get_playback_iface(), stream_id,
-                                         "", "", meta_data, meta_data, url);
+                                         artist_and_album[0],
+                                         artist_and_album[1],
+                                         meta_data_buffer, meta_data, url);
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
                                            stream_id, url,

@@ -3800,6 +3800,15 @@ void cut_teardown(void)
     mock_dbus_iface = nullptr;
 }
 
+static void set_start_title(const uint8_t *title, size_t length)
+{
+    const auto *const reg = register_lookup(78);
+
+    mock_messages->expect_msg_info("write 78 handler %p %zu");
+
+    cppcut_assert_equal(0, reg->write_handler(title, length));
+}
+
 static void set_start_title(const std::string title)
 {
     const auto *const reg = register_lookup(78);
@@ -3818,7 +3827,11 @@ static void set_next_title(const std::string title)
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
 }
 
-static void set_start_url(const std::string title, const std::string url,
+static void set_start_url(const std::string expected_artist,
+                          const std::string expected_album,
+                          const std::string expected_title,
+                          const std::string expected_alttrack,
+                          const std::string url,
                           const OurStream stream_id, bool assume_already_playing)
 {
     const auto *const reg = register_lookup(79);
@@ -3827,7 +3840,9 @@ static void set_start_url(const std::string title, const std::string url,
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
             dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-            "", "", title.c_str(), title.c_str(), url.c_str());
+            expected_artist.c_str(), expected_album.c_str(),
+            expected_title.c_str(), expected_alttrack.c_str(),
+            url.c_str());
     mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
         TRUE, dbus_streamplayer_urlfifo_iface_dummy,
@@ -3850,12 +3865,41 @@ static void set_start_url(const std::string title, const std::string url,
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
 }
 
+static void set_start_meta_data_and_url(const std::string meta_data,
+                                        const std::string url,
+                                        const std::string expected_artist,
+                                        const std::string expected_album,
+                                        const std::string expected_title,
+                                        const OurStream stream_id,
+                                        bool assume_already_playing)
+{
+    set_start_title(meta_data);
+    set_start_url(expected_artist, expected_album, expected_title, meta_data,
+                  url, stream_id, assume_already_playing);
+}
+
+static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_data_length,
+                                        const std::string url,
+                                        const std::string expected_artist,
+                                        const std::string expected_album,
+                                        const std::string expected_title,
+                                        const OurStream stream_id,
+                                        bool assume_already_playing)
+{
+    set_start_title(meta_data, meta_data_length);
+    set_start_url(expected_artist, expected_album, expected_title,
+                  std::string(static_cast<const char *>(static_cast<const void *>(meta_data)),
+                              meta_data_length),
+                  url, stream_id, assume_already_playing);
+}
+
 static void set_start_title_and_url(const std::string title, const std::string url,
                                     const OurStream stream_id,
                                     bool assume_already_playing)
 {
     set_start_title(title);
-    set_start_url(title, url, stream_id, assume_already_playing);
+    set_start_url("", "", title, title, url,
+                  stream_id, assume_already_playing);
 }
 
 static void set_next_url(const std::string title, const std::string url,
@@ -3971,11 +4015,117 @@ static void stop_stream(void)
 }
 
 /*!\test
- * App starts single stream.
+ * App starts single stream with plain title information.
  */
 void test_start_stream()
 {
     set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac", OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with structured meta data information.
+ */
+void test_start_stream_with_meta_data()
+{
+    set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album",
+                                "http://app-provided.url.org/stream.aac",
+                                "By some artist", "On that album", "The title",
+                                OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with structured meta data information.
+ */
+void test_start_stream_with_unterminated_meta_data()
+{
+    static const uint8_t evil[] = { 'T', 'i', 't', 'l', 'e', 0x1d, };
+
+    set_start_meta_data_and_url(evil, sizeof(evil),
+                                "http://app-provided.url.org/stream.aac",
+                                "", "", "Title",
+                                OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with partial structured meta data information.
+ */
+void test_start_stream_with_partial_meta_data()
+{
+    set_start_meta_data_and_url("The title\x1d""By some artist on that album",
+                                "http://app-provided.url.org/stream.aac",
+                                "By some artist on that album", "", "The title",
+                                OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with too many meta data information.
+ */
+void test_start_stream_with_too_many_meta_data()
+{
+    set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat I like",
+                                "http://app-provided.url.org/stream.aac",
+                                "By some artist", "On that album", "The title",
+                                OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with too many meta data information.
+ */
+void test_start_stream_with_way_too_many_meta_data()
+{
+    set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat\x1dI\x1dlike",
+                                "http://app-provided.url.org/stream.aac",
+                                "By some artist", "On that album", "The title",
+                                OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with title, but no other information
+ */
+void test_start_stream_with_title_name()
+{
+    set_start_meta_data_and_url("The Title\x1d\x1d",
+                                "http://app-provided.url.org/stream.aac",
+                                "", "", "The Title",
+                                OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with artist, but no other information
+ */
+void test_start_stream_with_artist_name()
+{
+    set_start_meta_data_and_url("\x1dThe Artist\x1d",
+                                "http://app-provided.url.org/stream.aac",
+                                "The Artist", "", "",
+                                OurStream::make(), false);
+
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with album, but no other information
+ */
+void test_start_stream_with_album_name()
+{
+    set_start_meta_data_and_url("\x1d\x1dThe Album",
+                                "http://app-provided.url.org/stream.aac",
+                                "", "The Album", "",
+                                OurStream::make(), false);
 
     expect_current_title_and_url("", "");
 }
