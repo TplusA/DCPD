@@ -172,6 +172,8 @@ class MockDcpdDBus::Expectation
         std::string arg_name_a_;
         std::string arg_name_b_;
         std::string arg_name_c_;
+        std::string arg_name_d_;
+        std::string arg_name_e_;
         const char **key_value_table_;
         gboolean ret_bool_;
 
@@ -206,7 +208,8 @@ class MockDcpdDBus::Expectation
 
     explicit Expectation(tdbusdcpdPlayback *dbus_object,
                          guint16 stream_id, const char *artist,
-                         const char *album, const char *title):
+                         const char *album, const char *title,
+                         const char *alttrack, const char *url):
         d(DBusFn::playback_emit_stream_info)
     {
         data_.dbus_object_ = static_cast<void *>(dbus_object);
@@ -214,6 +217,8 @@ class MockDcpdDBus::Expectation
         data_.arg_name_a_ = artist;
         data_.arg_name_b_ = album;
         data_.arg_name_c_ = title;
+        data_.arg_name_d_ = alttrack;
+        data_.arg_name_e_ = url;
     }
 
     explicit Expectation(gboolean ret, tdbusdcpdPlayback *dbus_object,
@@ -345,9 +350,9 @@ void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_shuffle_mode_toggle(tdbusdcpd
     expectations_->add(Expectation(DBusFn::playback_emit_shuffle_mode_toggle, object));
 }
 
-void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg_stream_id, const gchar *arg_artist, const gchar *arg_album, const gchar *arg_title)
+void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg_stream_id, const gchar *arg_artist, const gchar *arg_album, const gchar *arg_title, const gchar *arg_alttrack, const gchar *arg_url)
 {
-    expectations_->add(Expectation(object, arg_stream_id, arg_artist, arg_album, arg_title));
+    expectations_->add(Expectation(object, arg_stream_id, arg_artist, arg_album, arg_title, arg_alttrack, arg_url));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_call_set_stream_info(gboolean ret, tdbusdcpdPlayback *proxy, guint16 arg_stream_id, const gchar *arg_title, const gchar *arg_url)
@@ -494,7 +499,7 @@ void tdbus_dcpd_playback_emit_shuffle_mode_toggle(tdbusdcpdPlayback *object)
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
-void tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg_stream_id, const gchar *arg_artist, const gchar *arg_album, const gchar *arg_title)
+void tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg_stream_id, const gchar *arg_artist, const gchar *arg_album, const gchar *arg_title, const gchar *arg_alttrack, const gchar *arg_url)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
@@ -504,6 +509,8 @@ void tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_artist));
     cppcut_assert_equal(expect.d.arg_name_b_, std::string(arg_album));
     cppcut_assert_equal(expect.d.arg_name_c_, std::string(arg_title));
+    cppcut_assert_equal(expect.d.arg_name_d_, std::string(arg_alttrack));
+    cppcut_assert_equal(expect.d.arg_name_e_, std::string(arg_url));
 }
 
 gboolean tdbus_dcpd_playback_call_set_stream_info_sync(tdbusdcpdPlayback *proxy, guint16 arg_stream_id, const gchar *arg_title, const gchar *arg_url, GCancellable *cancellable, GError **error)

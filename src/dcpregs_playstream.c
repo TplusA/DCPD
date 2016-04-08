@@ -443,7 +443,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
                              : data->inbuffer_next_stream.url);
 
     tdbus_dcpd_playback_emit_stream_info(dbus_get_playback_iface(), stream_id,
-                                         "", "", title);
+                                         "", "", title, title, url);
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
                                            stream_id, url,

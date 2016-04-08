@@ -3827,7 +3827,7 @@ static void set_start_url(const std::string title, const std::string url,
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
             dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-            "", "", title.c_str());
+            "", "", title.c_str(), title.c_str(), url.c_str());
     mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
         TRUE, dbus_streamplayer_urlfifo_iface_dummy,
@@ -3871,7 +3871,7 @@ static void set_next_url(const std::string title, const std::string url,
         mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
         mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
             dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-            "", "", title.c_str());
+            "", "", title.c_str(), title.c_str(), url.c_str());
         mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
