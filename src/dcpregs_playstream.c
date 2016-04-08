@@ -56,8 +56,8 @@ enum NotifyStreamInfo
 
 struct SimplifiedStreamInfo
 {
-    char title[129];
-    char url[513];
+    char title[128 + 1];
+    char url[512 + 1];
 };
 
 struct PlayAppStreamData
