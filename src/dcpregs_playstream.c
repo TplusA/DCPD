@@ -25,6 +25,7 @@
 #include "dcpregs_playstream.h"
 #include "registers_priv.h"
 #include "streamplayer_dbus.h"
+#include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
 
@@ -481,14 +482,20 @@ static void try_start_stream(struct PlayAppStreamData *const data,
                                          artist_and_album[0],
                                          artist_and_album[1],
                                          meta_data_buffer, meta_data, url);
+    GError *error = NULL;
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
                                            stream_id, url,
                                            0, "ms", 0, "ms",
                                            is_restart ? -2 : 0,
                                            &fifo_overflow, &is_playing,
-                                           NULL, NULL))
+                                           NULL, &error))
+    {
+        BUG("Failed pushing stream %u, URL %s to stream player",
+            stream_id, url);
+        dbus_common_handle_dbus_error(&error);
         return;
+    }
 
     if(fifo_overflow)
     {
@@ -511,12 +518,20 @@ static void try_start_stream(struct PlayAppStreamData *const data,
 
     if(!is_playing &&
        !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
-                                             NULL, NULL))
+                                             NULL, &error))
     {
+        msg_error(0, LOG_NOTICE, "Failed starting stream");
+        dbus_common_handle_dbus_error(&error);
+
         reset_to_idle_mode(data);
-        tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
-                                            0, NULL, NULL, NULL,
-                                            NULL, NULL);
+
+        if(!tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
+                                                0, NULL, NULL, NULL,
+                                                NULL, &error))
+        {
+            msg_error(0, LOG_NOTICE, "Failed clearing stream player FIFO");
+            dbus_common_handle_dbus_error(&error);
+        }
     }
     else
     {
@@ -602,9 +617,15 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
         /* stop command */
         play_app_stream_data.device_playmode = DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION;
 
+        GError *error = NULL;
+
         if(!tdbus_splay_playback_call_stop_sync(dbus_get_streamplayer_playback_iface(),
-                                                NULL, NULL))
+                                                NULL, &error))
+        {
+            msg_error(0, LOG_NOTICE, "Failed stopping stream player");
+            dbus_common_handle_dbus_error(&error);
             reset_to_idle_mode(&play_app_stream_data);
+        }
     }
 
     clear_stream_info(&play_app_stream_data.inbuffer_new_stream);
