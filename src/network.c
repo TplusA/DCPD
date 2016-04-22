@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -101,6 +102,31 @@ int network_accept_peer_connection(int server_fd, bool non_blocking)
     }
 
     msg_info("Accepted connection from %s", addr_string);
+
+    static const char setsockopt_error_message[] =
+        "Failed to configure TCP keepalive on socket fd %d (%s = %d)";
+
+    int optval = 1;
+    if(setsockopt(peer_fd, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) < 0)
+        msg_error(errno, LOG_ERR,
+                  setsockopt_error_message, peer_fd, "SO_KEEPALIVE", optval);
+    else
+    {
+        optval = 30;
+        if(setsockopt(peer_fd, IPPROTO_TCP, TCP_KEEPIDLE, &optval, sizeof(optval)) < 0)
+            msg_error(errno, LOG_ERR,
+                      setsockopt_error_message, peer_fd, "TCP_KEEPIDLE", optval);
+
+        optval = 30;
+        if(setsockopt(peer_fd, IPPROTO_TCP, TCP_KEEPINTVL, &optval, sizeof(optval)) < 0)
+            msg_error(errno, LOG_ERR,
+                      setsockopt_error_message, peer_fd, "TCP_KEEPINTVL", optval);
+
+        optval = 1;
+        if(setsockopt(peer_fd, IPPROTO_TCP, TCP_KEEPCNT, &optval, sizeof(optval)) < 0)
+            msg_error(errno, LOG_ERR,
+                      setsockopt_error_message, peer_fd, "TCP_KEEPCNT", optval);
+    }
 
     return peer_fd;
 }

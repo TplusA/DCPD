@@ -264,13 +264,13 @@ static unsigned int handle_dcp_peer_events(int fd, short revents,
                                                 state->preallocated_inet_slave_transaction,
                                                 WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET);
 
-    if(revents & POLLHUP)
+    if(revents & (POLLHUP | POLLERR))
     {
         msg_error(EPIPE, LOG_INFO, "DCP peer connection died, need to close");
         result |= WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED;
     }
 
-    if(revents & ~(POLLIN | POLLHUP))
+    if(revents & ~(POLLIN | POLLHUP | POLLERR))
         msg_error(EINVAL, LOG_WARNING,
                   "Unexpected poll() events on DCP peer socket fd %d: %04x",
                   fd, revents);
@@ -308,13 +308,13 @@ static unsigned int handle_app_peer_events(int fd, short revents)
         }
     }
 
-    if(revents & POLLHUP)
+    if(revents & (POLLHUP | POLLERR))
     {
         msg_error(EPIPE, LOG_INFO, "Smartphone app peer connection died, need to close");
         result |= WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED;
     }
 
-    if(revents & ~(POLLIN | POLLHUP))
+    if(revents & ~(POLLIN | POLLHUP | POLLERR))
         msg_error(EINVAL, LOG_WARNING,
                   "Unexpected poll() events on smartphone app peer socket fd %d: %04x",
                   fd, revents);
