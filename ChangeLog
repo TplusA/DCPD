@@ -1,3 +1,17 @@
+2016-04-26  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.18 released.
+
+	* TA Control: Detect broken connection between Streaming Board and
+	  smartphone app in case the connection dies silently. This feature
+	  comes at a minor prices: TCP keepalive with interval of 30 seconds
+	  is employed, increasing overall network traffic a bit.
+
+	* TA Control: The next stream register notification is avoided when
+	  continuing playing a paused stream.
+
+	* DCP protocol: Support SPI protocol level negotiation (register 1).
+
 2016-04-14  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.17 released.
