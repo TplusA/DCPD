@@ -271,7 +271,8 @@ static void do_notify_stream_info(struct PlayAnyStreamData *data,
 }
 
 static void app_stream_started_playing(struct PlayAppStreamData *data,
-                                       enum StreamIdType stype)
+                                       enum StreamIdType stype,
+                                       bool is_new_stream)
 {
     log_assert(stype == STREAM_ID_TYPE_APP_CURRENT ||
                stype == STREAM_ID_TYPE_APP_NEXT);
@@ -298,7 +299,8 @@ static void app_stream_started_playing(struct PlayAppStreamData *data,
         clear_stream_info(&data->inbuffer_next_stream);
     }
 
-    notify_ready_for_next_stream_from_slave();
+    if(is_new_stream)
+        notify_ready_for_next_stream_from_slave();
 }
 
 static inline void other_stream_started_playing(struct PlayAppStreamData *data,
@@ -721,6 +723,9 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
     const enum StreamIdType stream_id_type =
         determine_stream_id_type(raw_stream_id, &play_app_stream_data);
 
+    const bool is_new_stream =
+        play_any_stream_data.currently_playing_stream != raw_stream_id;
+
     play_any_stream_data.currently_playing_stream = raw_stream_id;
 
     bool switched_to_nonapp_mode = false;
@@ -748,18 +753,19 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
         {
           case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
             msg_info("Enter app mode: started stream %u", raw_stream_id);
-            app_stream_started_playing(&play_app_stream_data, stream_id_type);
+            app_stream_started_playing(&play_app_stream_data, stream_id_type, is_new_stream);
             break;
 
           case DEVICE_PLAYMODE_OTHER_IS_PLAYING:
             msg_info("Switch to app mode: continue with stream %u",
                      raw_stream_id);
-            app_stream_started_playing(&play_app_stream_data, stream_id_type);
+            app_stream_started_playing(&play_app_stream_data, stream_id_type, is_new_stream);
             break;
 
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
-            msg_info("Next app stream %u", raw_stream_id);
-            app_stream_started_playing(&play_app_stream_data, stream_id_type);
+            msg_info("%s app stream %u",
+                     is_new_stream ? "Next" : "Continue with", raw_stream_id);
+            app_stream_started_playing(&play_app_stream_data, stream_id_type, is_new_stream);
             break;
 
           case DEVICE_PLAYMODE_IDLE:

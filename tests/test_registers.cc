@@ -4554,6 +4554,46 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     expect_current_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3");
 }
 
+void test_pause_and_continue()
+{
+    auto next_stream_id(OurStream::make());
+
+    const auto stream_id_first(next_stream_id);
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
+    register_changed_data->check();
+    expect_current_title_and_url("", "");
+
+    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
+    expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
+
+    const auto stream_id_second(++next_stream_id);
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, true, true);
+    expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
+
+    /* the pause signal itself is caught, but ignored by dcpd; however,
+     * starting the same stream is treated as continue from pause */
+    mock_messages->expect_msg_info_formatted("Continue with app stream 257");
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_data->check();
+    expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
+
+    /* also works a second time */
+    mock_messages->expect_msg_info_formatted("Continue with app stream 257");
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    register_changed_data->check();
+    expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
+
+    /* now assume the next stream has started */
+    mock_messages->expect_msg_info_formatted("Next app stream 258");
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    expect_next_url_empty();
+    expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
+}
+
 };
 
 namespace spi_registers_media_services
