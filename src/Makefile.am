@@ -74,6 +74,7 @@ libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 libregisters_la_SOURCES = \
     registers.c registers.h registers_priv.h \
     dcpregs_drcp.c dcpregs_drcp.h \
+    dcpregs_protolevel.c dcpregs_protolevel.h \
     dcpregs_networkconfig.c dcpregs_networkconfig.h \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
     dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \

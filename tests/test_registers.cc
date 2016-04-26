@@ -27,6 +27,7 @@
 #include "registers.h"
 #include "registers_priv.h"
 #include "dcpregs_drcp.h"
+#include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_filetransfer.h"
@@ -257,8 +258,9 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 37> existing_registers =
+static const std::array<uint8_t, 38> existing_registers =
 {
+    1,
     17,
     37,
     40, 41, 44, 45,
@@ -756,6 +758,311 @@ void test_slave_drc_power_off(void)
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_power_off_sync(true, dbus_logind_manager_iface_dummy, false);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+}
+
+};
+
+namespace spi_registers_protocol_level
+{
+
+static MockMessages *mock_messages;
+
+static RegisterChangedData *register_changed_data;
+
+static const uint8_t expected_protocol_level[3] = { 1, 0, 0, };
+
+static void register_changed_callback(uint8_t reg_number)
+{
+    register_changed_data->append(reg_number);
+}
+
+void cut_setup(void)
+{
+    register_changed_data = new RegisterChangedData;
+
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    register_changed_data->init();
+
+    dcpregs_protocol_level_init();
+
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    register_init(NULL, NULL, NULL, register_changed_callback);
+}
+
+void cut_teardown(void)
+{
+    register_deinit();
+
+    register_changed_data->check();
+
+    delete register_changed_data;
+    register_changed_data = nullptr;
+
+    mock_messages->check();
+    mock_messages_singleton = nullptr;
+    delete mock_messages;
+    mock_messages = nullptr;
+}
+
+void test_read_out_protocol_level()
+{
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    uint8_t redzone_content[10];
+    memset(redzone_content, 0xff, sizeof(redzone_content));
+
+    uint8_t buffer[sizeof(redzone_content) + 3 + sizeof(redzone_content)];
+    memset(buffer, 0xff, sizeof(buffer));
+
+    mock_messages->expect_msg_info("read 1 handler %p %zu");
+
+    reg->read_handler(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
+
+    cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
+                            sizeof(redzone_content));
+    cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
+                            buffer + sizeof(redzone_content) + 3, sizeof(redzone_content));
+
+    cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+                            buffer + sizeof(redzone_content), 3);
+}
+
+void test_negotiate_protocol_level_single_range_with_match()
+{
+    static const uint8_t requests[][6] =
+    {
+        /* any version */
+        { 0, 0, 0, UINT8_MAX, UINT8_MAX, UINT8_MAX, },
+
+        /* major version must match */
+        { 1, 0, 0, 1, UINT8_MAX, UINT8_MAX, },
+
+        /* major and minor versions must match */
+        { 1, 0, 0, 1, 0, UINT8_MAX, },
+
+        /* a range of three supported protocol levels */
+        { 1, 0, 0, 1, 0, 2, },
+
+        /* a single, specific protocol level */
+        { 1, 0, 0, 1, 0, 0, },
+    };
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
+    {
+        mock_messages->expect_msg_info("write 1 handler %p %zu");
+
+        cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
+        register_changed_data->check(1);
+
+        mock_messages->expect_msg_info("read 1 handler %p %zu");
+        uint8_t buffer[3];
+        cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+
+        cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+                                buffer, sizeof(buffer));
+    }
+}
+
+void test_negotiate_protocol_level_multiple_ranges_with_match()
+{
+    static const uint8_t match_in_first_range[3 * 6] =
+    {
+        1, 0, 0, 1, 5, 20,
+        0, 0, 0, 0, UINT8_MAX, UINT8_MAX,
+        2, 0, 0, UINT8_MAX, UINT8_MAX,
+    };
+
+    static const uint8_t match_in_middle_range[3 * 6] =
+    {
+        0, 0, 0, 0, UINT8_MAX, UINT8_MAX,
+        1, 0, 0, 1, 5, 20,
+        2, 0, 0, UINT8_MAX, UINT8_MAX,
+    };
+
+    static const uint8_t match_in_last_range[3 * 6] =
+    {
+        0, 0, 0, 0, UINT8_MAX, UINT8_MAX,
+        2, 0, 0, UINT8_MAX, UINT8_MAX,
+        1, 0, 0, 1, 5, 20,
+    };
+
+    static const uint8_t *requests[] =
+    {
+        match_in_first_range, match_in_middle_range, match_in_last_range,
+    };
+
+    /* the test code below is written in sort of a primitive way and assumes
+     * equal size of all requests */
+    cppcut_assert_equal(sizeof(match_in_first_range), sizeof(match_in_middle_range));
+    cppcut_assert_equal(sizeof(match_in_first_range), sizeof(match_in_last_range));
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
+    {
+        mock_messages->expect_msg_info("write 1 handler %p %zu");
+
+        cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(match_in_first_range)));
+        register_changed_data->check(1);
+
+        mock_messages->expect_msg_info("read 1 handler %p %zu");
+        uint8_t buffer[3];
+        cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+
+        cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+                                buffer, sizeof(buffer));
+    }
+}
+
+void test_negotiate_protocol_level_single_range_with_mismatch()
+{
+    static const uint8_t requests[][6] =
+    {
+        /* any too high level */
+        { 1, 0, 1, UINT8_MAX, UINT8_MAX, UINT8_MAX, },
+
+        /* any too low level */
+        { 0, 0, 0, 0, UINT8_MAX, UINT8_MAX, },
+
+        /* major and minor versions must match */
+        { 2, 0, 0, 2, 0, UINT8_MAX, },
+
+        /* a range of three supported protocol levels */
+        { 6, 0, 0, 6, 0, 2, },
+
+        /* a single, specific protocol level */
+        { 0, 6, 3, 0, 6, 3, },
+    };
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
+    {
+        mock_messages->expect_msg_info("write 1 handler %p %zu");
+
+        cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
+        register_changed_data->check(1);
+
+        mock_messages->expect_msg_info("read 1 handler %p %zu");
+        uint8_t buffer[3];
+        cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+        cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
+    }
+}
+
+void test_negotiate_protocol_level_multiple_ranges_with_mismatch()
+{
+    static const uint8_t mismatch[3 * 6] =
+    {
+        0, 0, 0, 0, UINT8_MAX, UINT8_MAX,
+        2, 0, 0, 2, UINT8_MAX, UINT8_MAX,
+        3, 0, 0, 3, 4, UINT8_MAX,
+    };
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    mock_messages->expect_msg_info("write 1 handler %p %zu");
+
+    cppcut_assert_equal(0, reg->write_handler(mismatch, sizeof(mismatch)));
+    register_changed_data->check(1);
+
+    mock_messages->expect_msg_info("read 1 handler %p %zu");
+    uint8_t buffer[3];
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
+}
+
+void test_maximum_level_of_multiple_overlapping_ranges_is_chosen()
+{
+    static const uint8_t overlapping[4 * 6] =
+    {
+        1, 0, 0, 2, UINT8_MAX, UINT8_MAX,
+        1, 5, 7, 6, UINT8_MAX, UINT8_MAX,
+        1, 0, 0, 3, 4, 5,
+        0, 1, 2, 2, 0, 0,
+    };
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    mock_messages->expect_msg_info("write 1 handler %p %zu");
+
+    cppcut_assert_equal(0, reg->write_handler(overlapping, sizeof(overlapping)));
+    register_changed_data->check(1);
+
+    mock_messages->expect_msg_info("read 1 handler %p %zu");
+    uint8_t buffer[3];
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+
+    cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+                            buffer, sizeof(buffer));
+}
+
+void test_broken_ranges_are_ignored()
+{
+    static const uint8_t broken[][6] =
+    {
+        { 1, 0, 1, 1, 0, 0, },
+        { 1, UINT8_MAX, UINT8_MAX, 1, 0, 0, },
+        { UINT8_MAX, UINT8_MAX, UINT8_MAX, 0, 0, 0, },
+        { 1, 5, 20, 1, 0, 0, },
+    };
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    for(size_t i = 0; i < sizeof(broken) / sizeof(broken[0]); ++i)
+    {
+        mock_messages->expect_msg_info("write 1 handler %p %zu");
+
+        cppcut_assert_equal(0, reg->write_handler(broken[i], sizeof(broken[0])));
+        register_changed_data->check(1);
+
+        mock_messages->expect_msg_info("read 1 handler %p %zu");
+        uint8_t buffer[3];
+        cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+        cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
+    }
+}
+
+void test_negotiation_requires_at_least_one_range()
+{
+    static const uint8_t too_short[5] = {0, 0, 0, UINT8_MAX, UINT8_MAX, };
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    mock_messages->expect_msg_info("write 1 handler %p %zu");
+
+    cppcut_assert_equal(0, reg->write_handler(too_short, sizeof(too_short)));
+    register_changed_data->check(1);
+
+    /* because this register is really important, even broken requests generate
+     * an answer */
+    mock_messages->expect_msg_info("read 1 handler %p %zu");
+    uint8_t buffer[3];
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
 }
 
 };

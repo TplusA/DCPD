@@ -32,6 +32,7 @@
 
 #include "dcpdefs.h"
 #include "dcpregs_drcp.h"
+#include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_filetransfer.h"
@@ -184,6 +185,13 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
  */
 static const struct dcp_register_t register_map[] =
 {
+    {
+        /* Protocol level negotiation */
+        .address = 1,
+        .max_data_size = 10 * 2 * 3,
+        .read_handler = dcpregs_read_1_protocol_level,
+        .write_handler = dcpregs_write_1_protocol_level,
+    },
     {
         /* Device status register */
         .address = 17,

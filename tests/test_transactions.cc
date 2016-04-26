@@ -915,12 +915,12 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions(void)
         0x95, 0x10, 0xab, 0x7f, 0x05, 0x00, 0xff, 0xff,
         0x55, 0xcf, 0xaa, 0x8e,
     };
-    static const uint8_t write_unsupported_register[] = { 0x02, 0x01, sizeof(write_unknown_data), 0x00, };
+    static const uint8_t write_unsupported_register[] = { 0x02, 0x0a, sizeof(write_unknown_data), 0x00, };
     static constexpr const size_t internal_skip_command_size = 64;
 
     read_data->set(write_unsupported_register, DCP_HEADER_SIZE);
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
-                                              "BUG: Slave requested register 0x01, but is not implemented");
+                                              "BUG: Slave requested register 0x0a, but is not implemented");
     mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
     read_data->set(write_unknown_data, internal_skip_command_size);
     read_data->set(write_unknown_data, sizeof(write_unknown_data) - internal_skip_command_size);
