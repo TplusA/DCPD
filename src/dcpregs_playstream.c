@@ -556,45 +556,73 @@ static void try_start_stream(struct PlayAppStreamData *const data,
     }
 }
 
-static struct PlayAppStreamData play_app_stream_data =
+static struct
 {
-    .next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
-};
+    GMutex lock;
 
-static struct PlayAnyStreamData play_any_stream_data;
+    struct PlayAppStreamData app;
+    struct PlayAnyStreamData other;
+}
+play_stream_data =
+{
+    .app =
+    {
+        .next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
+    },
+};
 
 void dcpregs_playstream_init(void)
 {
-    memset(&play_app_stream_data, 0, sizeof(play_app_stream_data));
-    memset(&play_any_stream_data, 0, sizeof(play_any_stream_data));
-    play_app_stream_data.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
+    memset(&play_stream_data, 0, sizeof(play_stream_data));
+    play_stream_data.app.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
 }
 
-void dcpregs_playstream_deinit(void) {}
+void dcpregs_playstream_deinit(void)
+{
+    g_mutex_clear(&play_stream_data.lock);
+}
 
 ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length)
 {
     msg_info("read 75 handler %p %zu", response, length);
 
-    return copy_string_to_slave(play_any_stream_data.current_stream_information.meta_data,
-                                (char *)response, length);
+    g_mutex_lock(&play_stream_data.lock);
+
+    const ssize_t ret =
+        copy_string_to_slave(play_stream_data.other.current_stream_information.meta_data,
+                             (char *)response, length);
+
+    g_mutex_unlock(&play_stream_data.lock);
+
+    return ret;
 }
 
 ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length)
 {
     msg_info("read 76 handler %p %zu", response, length);
 
-    return copy_string_to_slave(play_any_stream_data.current_stream_information.url,
-                                (char *)response, length);
+    g_mutex_lock(&play_stream_data.lock);
+
+    const ssize_t ret =
+        copy_string_to_slave(play_stream_data.other.current_stream_information.url,
+                             (char *)response, length);
+
+    g_mutex_unlock(&play_stream_data.lock);
+
+    return ret;
 }
 
 int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 {
     msg_info("write 78 handler %p %zu", data, length);
 
-    (void)copy_string_data(play_app_stream_data.inbuffer_new_stream.meta_data,
-                           sizeof(play_app_stream_data.inbuffer_new_stream.meta_data),
+    g_mutex_lock(&play_stream_data.lock);
+
+    (void)copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
+                           sizeof(play_stream_data.app.inbuffer_new_stream.meta_data),
                            data, length);
+
+    g_mutex_unlock(&play_stream_data.lock);
 
     return 0;
 }
@@ -603,21 +631,23 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
 {
     msg_info("write 79 handler %p %zu", data, length);
 
-    if(copy_string_data(play_app_stream_data.inbuffer_new_stream.url,
-                        sizeof(play_app_stream_data.inbuffer_new_stream.url),
+    g_mutex_lock(&play_stream_data.lock);
+
+    if(copy_string_data(play_stream_data.app.inbuffer_new_stream.url,
+                        sizeof(play_stream_data.app.inbuffer_new_stream.url),
                         data, length))
     {
         /* maybe start playing */
-        if(play_app_stream_data.inbuffer_new_stream.meta_data[0] != '\0')
-            try_start_stream(&play_app_stream_data, &play_any_stream_data,
+        if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
+            try_start_stream(&play_stream_data.app, &play_stream_data.other,
                              true);
         else
             msg_error(0, LOG_ERR, "Not starting stream, register 78 still unset");
     }
-    else if(is_app_mode(play_app_stream_data.device_playmode))
+    else if(is_app_mode(play_stream_data.app.device_playmode))
     {
         /* stop command */
-        play_app_stream_data.device_playmode = DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION;
+        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION;
 
         GError *error = NULL;
 
@@ -626,11 +656,13 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
         {
             msg_error(0, LOG_NOTICE, "Failed stopping stream player");
             dbus_common_handle_dbus_error(&error);
-            reset_to_idle_mode(&play_app_stream_data);
+            reset_to_idle_mode(&play_stream_data.app);
         }
     }
 
-    clear_stream_info(&play_app_stream_data.inbuffer_new_stream);
+    clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
+
+    g_mutex_unlock(&play_stream_data.lock);
 
     return 0;
 }
@@ -645,9 +677,13 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 {
     msg_info("write 238 handler %p %zu", data, length);
 
-    (void)copy_string_data(play_app_stream_data.inbuffer_next_stream.meta_data,
-                           sizeof(play_app_stream_data.inbuffer_next_stream.meta_data),
+    g_mutex_lock(&play_stream_data.lock);
+
+    (void)copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
+                           sizeof(play_stream_data.app.inbuffer_next_stream.meta_data),
                            data, length);
+
+    g_mutex_unlock(&play_stream_data.lock);
 
     return 0;
 }
@@ -656,11 +692,13 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
 {
     msg_info("write 239 handler %p %zu", data, length);
 
-    if(copy_string_data(play_app_stream_data.inbuffer_next_stream.url,
-                        sizeof(play_app_stream_data.inbuffer_next_stream.url),
+    g_mutex_lock(&play_stream_data.lock);
+
+    if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
+                        sizeof(play_stream_data.app.inbuffer_next_stream.url),
                         data, length))
     {
-        switch(play_app_stream_data.device_playmode)
+        switch(play_stream_data.app.device_playmode)
         {
           case DEVICE_PLAYMODE_IDLE:
           case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION:
@@ -672,8 +710,8 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
           case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
             /* maybe send to streamplayer queue */
-            if(play_app_stream_data.inbuffer_next_stream.meta_data[0] != '\0')
-                try_start_stream(&play_app_stream_data, &play_any_stream_data,
+            if(play_stream_data.app.inbuffer_next_stream.meta_data[0] != '\0')
+                try_start_stream(&play_stream_data.app, &play_stream_data.other,
                                  false);
             else
                 msg_error(0, LOG_ERR,
@@ -687,7 +725,9 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
         /* ignore funny writes */
     }
 
-    clear_stream_info(&play_app_stream_data.inbuffer_next_stream);
+    clear_stream_info(&play_stream_data.app.inbuffer_next_stream);
+
+    g_mutex_unlock(&play_stream_data.lock);
 
     return 0;
 }
@@ -701,32 +741,37 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
                                           const char *title, const char *url)
 {
+    g_mutex_lock(&play_stream_data.lock);
+
     log_assert((raw_stream_id & STREAM_ID_SOURCE_MASK) != STREAM_ID_SOURCE_INVALID);
     log_assert(title != NULL);
     log_assert(url != NULL);
 
     if(!is_our_stream(raw_stream_id))
-    {
         unchecked_set_meta_data_and_url(raw_stream_id, title, url,
-                                        &play_any_stream_data);
-        return;
+                                        &play_stream_data.other);
+    else
+    {
+        BUG("Got title and URL information for app stream ID %u",
+            raw_stream_id);
+        BUG("+   Title: \"%s\"", title);
+        BUG("+   URL  : \"%s\"", url);
     }
 
-    BUG("Got title and URL information for app stream ID %u",
-        raw_stream_id);
-    BUG("+   Title: \"%s\"", title);
-    BUG("+   URL  : \"%s\"", url);
+    g_mutex_unlock(&play_stream_data.lock);
 }
 
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 {
+    g_mutex_lock(&play_stream_data.lock);
+
     const enum StreamIdType stream_id_type =
-        determine_stream_id_type(raw_stream_id, &play_app_stream_data);
+        determine_stream_id_type(raw_stream_id, &play_stream_data.app);
 
     const bool is_new_stream =
-        play_any_stream_data.currently_playing_stream != raw_stream_id;
+        play_stream_data.other.currently_playing_stream != raw_stream_id;
 
-    play_any_stream_data.currently_playing_stream = raw_stream_id;
+    play_stream_data.other.currently_playing_stream = raw_stream_id;
 
     bool switched_to_nonapp_mode = false;
 
@@ -737,35 +782,35 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
         break;
 
       case STREAM_ID_TYPE_APP_UNKNOWN:
-        if(is_app_mode_and_playing(play_app_stream_data.device_playmode))
+        if(is_app_mode_and_playing(play_stream_data.app.device_playmode))
             msg_error(0, LOG_NOTICE,
                       "Got start notification for unknown app stream ID %u",
                       raw_stream_id);
         else
-            other_stream_started_playing(&play_app_stream_data,
+            other_stream_started_playing(&play_stream_data.app,
                                          &switched_to_nonapp_mode);
 
         break;
 
       case STREAM_ID_TYPE_APP_CURRENT:
       case STREAM_ID_TYPE_APP_NEXT:
-        switch(play_app_stream_data.device_playmode)
+        switch(play_stream_data.app.device_playmode)
         {
           case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
             msg_info("Enter app mode: started stream %u", raw_stream_id);
-            app_stream_started_playing(&play_app_stream_data, stream_id_type, is_new_stream);
+            app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
             break;
 
           case DEVICE_PLAYMODE_OTHER_IS_PLAYING:
             msg_info("Switch to app mode: continue with stream %u",
                      raw_stream_id);
-            app_stream_started_playing(&play_app_stream_data, stream_id_type, is_new_stream);
+            app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
             break;
 
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
             msg_info("%s app stream %u",
                      is_new_stream ? "Next" : "Continue with", raw_stream_id);
-            app_stream_started_playing(&play_app_stream_data, stream_id_type, is_new_stream);
+            app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
             break;
 
           case DEVICE_PLAYMODE_IDLE:
@@ -773,7 +818,7 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
             msg_error(0, LOG_NOTICE,
                       "Unexpected start of app stream %u", raw_stream_id);
 
-            other_stream_started_playing(&play_app_stream_data,
+            other_stream_started_playing(&play_stream_data.app,
                                          &switched_to_nonapp_mode);
             break;
         }
@@ -781,41 +826,47 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
         break;
 
       case STREAM_ID_TYPE_NON_APP:
-        if(is_app_mode(play_app_stream_data.device_playmode))
+        if(is_app_mode(play_stream_data.app.device_playmode))
         {
             msg_error(0, LOG_NOTICE,
                       "Leave app mode: unexpected start of non-app stream %u "
                       "(expected next %u or new %u)",
                       raw_stream_id,
-                      play_app_stream_data.next_stream_id,
-                      play_app_stream_data.current_stream_id);
+                      play_stream_data.app.next_stream_id,
+                      play_stream_data.app.current_stream_id);
             notify_leave_app_mode();
         }
 
-        other_stream_started_playing(&play_app_stream_data,
+        other_stream_started_playing(&play_stream_data.app,
                                      &switched_to_nonapp_mode);
 
         break;
     }
 
-    try_notify_pending_stream_info(&play_any_stream_data,
+    try_notify_pending_stream_info(&play_stream_data.other,
                                    switched_to_nonapp_mode);
+
+    g_mutex_unlock(&play_stream_data.lock);
 }
 
 void dcpregs_playstream_stop_notification(void)
 {
-    if(is_app_mode(play_app_stream_data.device_playmode))
+    g_mutex_lock(&play_stream_data.lock);
+
+    if(is_app_mode(play_stream_data.app.device_playmode))
     {
         msg_info("Leave app mode: streamplayer has stopped");
         notify_leave_app_mode();
     }
 
-    play_app_stream_data.device_playmode = DEVICE_PLAYMODE_IDLE;
-    play_app_stream_data.last_pushed_stream_id =
+    play_stream_data.app.device_playmode = DEVICE_PLAYMODE_IDLE;
+    play_stream_data.app.last_pushed_stream_id =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
 
-    play_any_stream_data.currently_playing_stream =
+    play_stream_data.other.currently_playing_stream =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
 
-    do_notify_stream_info(&play_any_stream_data, NOTIFY_STREAM_INFO_DEV_NULL);
+    do_notify_stream_info(&play_stream_data.other, NOTIFY_STREAM_INFO_DEV_NULL);
+
+    g_mutex_unlock(&play_stream_data.lock);
 }
