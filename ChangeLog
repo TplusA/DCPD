@@ -1,3 +1,17 @@
+2016-05-03  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.19 released.
+
+	* Stability: Fix concurrent access to meta data structure, very rarely
+	  leading to messed up meta data, or maybe even crashes.
+
+	* D-Bus: Adapt to latest changes in Streamplayer D-Bus interfaces.
+	  Requires streamplayer 1.8 because of incompatible changes.
+
+	* D-Bus: Adapt to latest changes in Airable authentication D-Bus
+	  interfaces. Requires listbrokers 1.18 because of incompatible
+	  changes.
+
 2016-04-26  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.18 released.
