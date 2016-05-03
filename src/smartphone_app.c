@@ -111,11 +111,12 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
             applink_command_get_parameter(command, 0, locale_buffer, sizeof(locale_buffer));
             applink_command_get_parameter(command, 1, ipaddress_buffer, sizeof(ipaddress_buffer));
 
+            /* we keep requiring the IP address for backward compatibility, but
+             * ignore it */
             if(locale_buffer[0] == '\0' || ipaddress_buffer[0] == '\0')
                 break;
 
             tdbus_airable_call_generate_authentication_url_sync(dbus_get_airable_sec_iface(),
-                                                                ipaddress_buffer,
                                                                 locale_buffer,
                                                                 &answer,
                                                                 NULL, &error);
