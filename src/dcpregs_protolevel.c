@@ -23,19 +23,13 @@
 #include <string.h>
 
 #include "dcpregs_protolevel.h"
+#include "registers.h"
 #include "registers_priv.h"
 #include "messages.h"
 
 /*! Number of bytes needed to store a protocol level specification. */
 #define SIZE_OF_PROTOCOL_LEVEL_SPEC        3U
 #define SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC  (2U * SIZE_OF_PROTOCOL_LEVEL_SPEC)
-
-struct ProtocolLevel
-{
-    uint8_t major;
-    uint8_t minor;
-    uint8_t micro;
-};
 
 enum NegotiationState
 {
@@ -47,80 +41,57 @@ enum NegotiationState
 struct NegotiationStateData
 {
     enum NegotiationState state;
-    struct ProtocolLevel negotiated_level;
+    struct RegisterProtocolLevel negotiated_level;
 };
-
-static bool is_level_below(const uint8_t a_major, const uint8_t a_minor,
-                           const uint8_t a_micro,
-                           const uint8_t b_major, const uint8_t b_minor,
-                           const uint8_t b_micro)
-{
-    if(a_major < b_major)
-        return true;
-    else if(a_major > b_major)
-        return false;
-
-    if(a_minor < b_minor)
-        return true;
-    else if(a_minor > b_minor)
-        return false;
-    else
-        return (a_micro < b_micro);
-}
 
 static bool fill_in_highest_supported_level(const uint8_t *const ranges,
                                             const size_t number_of_ranges,
-                                            const struct ProtocolLevel *supported,
-                                            struct ProtocolLevel *level)
+                                            const struct RegisterProtocolLevel *supported,
+                                            const size_t number_of_supported_ranges,
+                                            struct RegisterProtocolLevel *level)
 {
-    level->major = level->minor = level->micro = 0;
+    /* FIXME: This code supports only a single range at the moment */
+    log_assert(number_of_supported_ranges == 1);
 
     for(size_t i = 0; i < number_of_ranges; ++i)
     {
         const uint8_t *const range_spec = &ranges[i * SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC];
+        const struct RegisterProtocolLevel from =
+        {
+            .code = REGISTER_MK_VERSION(range_spec[0], range_spec[1], range_spec[2]),
+        };
+        const struct RegisterProtocolLevel to =
+        {
+            .code = REGISTER_MK_VERSION(range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 0],
+                                        range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 1],
+                                        range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 2]),
+        };
 
-        if(!is_level_below(supported->major,
-                           supported->minor,
-                           supported->micro,
-                           range_spec[0],
-                           range_spec[1],
-                           range_spec[2]) &&
-           !is_level_below(range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 0],
-                           range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 1],
-                           range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 2],
-                           supported->major,
-                           supported->minor,
-                           supported->micro))
+        if(supported->code >= from.code && supported->code <= to.code)
         {
             *level = *supported;
             return true;
         }
     }
 
+    level->code = REGISTER_MK_VERSION(0, 0, 0);
+
     return false;
 }
 
 static size_t copy_protocol_level_to_response(uint8_t *response,
-                                              const struct ProtocolLevel *level)
+                                              struct RegisterProtocolLevel level)
 {
-    if(level != NULL)
-    {
-        response[0] = level->major;
-        response[1] = level->minor;
-        response[2] = level->micro;
-        return SIZE_OF_PROTOCOL_LEVEL_SPEC;
-    }
-    else
-    {
-        response[0] = UINT8_MAX;
-        return 1;
-    }
-}
+    register_unpack_protocol_level(level,
+                                   &response[0], &response[1], &response[2]);
 
-static const struct ProtocolLevel global_protocol_level =
-{
-    .major = 1,
-};
+    if(response[0] > 0)
+        return SIZE_OF_PROTOCOL_LEVEL_SPEC;
+
+    response[0] = UINT8_MAX;
+
+    return 1;
+}
 
 static struct NegotiationStateData global_negotiation_data;
 
@@ -133,16 +104,16 @@ ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length)
 {
     msg_info("read 1 handler %p %zu", response, length);
 
-    const struct ProtocolLevel *level = NULL;
+    struct RegisterProtocolLevel level = { .code = REGISTER_MK_VERSION(0, 0, 0) };
 
     switch(global_negotiation_data.state)
     {
       case NEGOTIATION_NOT_IN_PROGRESS:
-        level = &global_protocol_level;
+        level = *register_get_protocol_level();
         break;
 
       case NEGOTIATION_SUCCEEDED:
-        level = &global_negotiation_data.negotiated_level;
+        level = global_negotiation_data.negotiated_level;
         break;
 
       case NEGOTIATION_FAILED:
@@ -156,7 +127,7 @@ ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length)
         if(length < 1)
             return -1;
 
-        level = NULL;
+        level.code = REGISTER_MK_VERSION(0, 0, 0);
     }
 
     size_t ret = copy_protocol_level_to_response(response, level);
@@ -167,10 +138,12 @@ int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length)
 {
     msg_info("write 1 handler %p %zu", data, length);
 
-    const size_t number_of_ranges = length / SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC;
+    const struct RegisterProtocolLevel *supported_ranges;
+    const size_t number_of_supported_ranges =
+        register_get_supported_protocol_levels(&supported_ranges);
 
-    if(fill_in_highest_supported_level(data, number_of_ranges,
-                                       &global_protocol_level,
+    if(fill_in_highest_supported_level(data, length / SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC,
+                                       supported_ranges, number_of_supported_ranges,
                                        &global_negotiation_data.negotiated_level))
         global_negotiation_data.state = NEGOTIATION_SUCCEEDED;
     else

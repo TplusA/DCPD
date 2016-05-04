@@ -502,6 +502,42 @@ void register_deinit(void)
     dcpregs_filetransfer_deinit();
 }
 
+const struct RegisterProtocolLevel *register_get_protocol_level(void)
+{
+    static const struct RegisterProtocolLevel level =
+    {
+        .code = REGISTER_MK_VERSION(1, 0, 0),
+    };
+
+    return &level;
+}
+
+size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel **level_ranges)
+{
+    static const struct RegisterProtocolLevel supported_level_ranges[] =
+    {
+#define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
+
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 0)),
+
+#undef MK_RANGE
+    };
+
+    *level_ranges = supported_level_ranges;
+
+    return
+        sizeof(supported_level_ranges) / sizeof(supported_level_ranges[0]) / 2;
+}
+
+void register_unpack_protocol_level(const struct RegisterProtocolLevel level,
+                                    uint8_t *major, uint8_t *minor,
+                                    uint8_t *micro)
+{
+    *major = (level.code >> 16) & 0xff;
+    *minor = (level.code >> 8)  & 0xff;
+    *micro = (level.code >> 0)  & 0xff;
+}
+
 const struct dcp_register_t *register_lookup(uint8_t register_number)
 {
     if(register_number == 0 && register_zero_for_unit_tests != NULL)
