@@ -811,6 +811,8 @@ void test_big_data_is_sent_to_slave_in_fragments()
     static const struct dcp_register_t big_register =
     {
         .address = 0,
+        .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
+        .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
         .flags = 0,
         .max_data_size = 0,
         .read_handler = NULL,

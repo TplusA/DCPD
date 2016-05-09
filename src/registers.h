@@ -43,6 +43,9 @@ struct RegisterProtocolLevel { uint32_t code; };
 struct dcp_register_t
 {
     uint8_t address;         /*!< Register number. */
+    struct RegisterProtocolLevel minimum_protocol_version;
+    struct RegisterProtocolLevel maximum_protocol_version;
+
     uint8_t flags;           /*!< See DCP_REGISTER_FLAG_ defines. */
     uint16_t max_data_size;  /*!< Maximum size for variable size. */
 

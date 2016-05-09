@@ -336,6 +336,9 @@ void test_lookup_all_existing_registers(void)
         cppcut_assert_not_null(reg);
         cppcut_assert_equal(unsigned(r), unsigned(reg->address));
         cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
+        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
+        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 0)),
+                               <=, reg->minimum_protocol_version.code);
     }
 }
 

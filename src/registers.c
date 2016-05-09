@@ -50,21 +50,23 @@
 
 const struct dcp_register_t *register_zero_for_unit_tests = NULL;
 
-static struct
+struct RegistersPrivateData
 {
+    struct RegisterProtocolLevel configured_protocol_level;
     uint8_t status_byte;
     uint8_t status_code;
-}
-misc_registers_data;
+};
+
+static struct RegistersPrivateData registers_private_data;
 
 static bool update_status_register(uint8_t status, uint8_t code)
 {
-    if(misc_registers_data.status_byte == status &&
-       misc_registers_data.status_code == code)
+    if(registers_private_data.status_byte == status &&
+       registers_private_data.status_code == code)
         return false;
 
-    misc_registers_data.status_byte = status;
-    misc_registers_data.status_code = code;
+    registers_private_data.status_byte = status;
+    registers_private_data.status_code = code;
 
     return true;
 }
@@ -99,8 +101,8 @@ static ssize_t read_17_device_status(uint8_t *response, size_t length)
     msg_info("read 17 handler %p %zu", response, length);
     log_assert(length == 2);
 
-    response[0] = misc_registers_data.status_byte;
-    response[1] = misc_registers_data.status_code;
+    response[0] = registers_private_data.status_byte;
+    response[1] = registers_private_data.status_code;
 
     return length;
 }
@@ -185,248 +187,261 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
  */
 static const struct dcp_register_t register_map[] =
 {
+#define REGISTER(ADDRESS, MIN_VERSION) \
+    .address = (ADDRESS), \
+    .minimum_protocol_version = { .code = (MIN_VERSION) }, \
+    .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) }
+
+#define REGISTER_FOR_VERSION(ADDRESS, MIN_VERSION, MAX_VERSION) \
+    .address = (ADDRESS), \
+    .minimum_protocol_version = (MIN_VERSION), \
+    .maximum_protocol_version = (MAX_VERSION)
+
     {
         /* Protocol level negotiation */
-        .address = 1,
+        REGISTER(1, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 10 * 2 * 3,
         .read_handler = dcpregs_read_1_protocol_level,
         .write_handler = dcpregs_write_1_protocol_level,
     },
     {
         /* Device status register */
-        .address = 17,
+        REGISTER(17, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 2,
         .read_handler = read_17_device_status,
     },
     {
         /* Image version */
-        .address = 37,
+        REGISTER(37, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 20,
         .read_handler = read_37_image_version,
     },
     {
         /* File transfer host control register (HCR) */
-        .address = 40,
+        REGISTER(40, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 2,
         .write_handler = dcpregs_write_40_download_control,
     },
     {
         /* File transfer status register (HCR-STATUS) */
-        .address = 41,
+        REGISTER(41, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 2,
         .read_handler = dcpregs_read_41_download_status,
     },
     {
         /* Send XMODEM block to host controller */
-        .address = 44,
+        REGISTER(44, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 3 + 128 + 2,
         .read_handler = dcpregs_read_44_xmodem_data,
     },
     {
         /* XMODEM channel from host controller */
-        .address = 45,
+        REGISTER(45, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1,
         .write_handler = dcpregs_write_45_xmodem_command,
     },
     {
         /* Network status */
-        .address = 50,
+        REGISTER(50, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 2,
         .read_handler = dcpregs_read_50_network_status,
     },
     {
         /* MAC address */
-        .address = 51,
+        REGISTER(51, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 18,
         .read_handler = dcpregs_read_51_mac_address,
     },
     {
         /* Active IP profile (here: commit network configuration changes; see
          * also register 54) */
-        .address = 53,
+        REGISTER(53, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1,
         .write_handler = dcpregs_write_53_active_ip_profile,
     },
     {
         /* Selected IP profile (here: start changing network configuration; see
          * also register 53) */
-        .address = 54,
+        REGISTER(54, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1,
         .write_handler = dcpregs_write_54_selected_ip_profile,
     },
     {
         /* Enable or disable DHCP */
-        .address = 55,
+        REGISTER(55, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1,
         .read_handler = dcpregs_read_55_dhcp_enabled,
         .write_handler = dcpregs_write_55_dhcp_enabled,
     },
     {
         /* IPv4 address */
-        .address = 56,
+        REGISTER(56, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 16,
         .read_handler = dcpregs_read_56_ipv4_address,
         .write_handler = dcpregs_write_56_ipv4_address,
     },
     {
         /* IPv4 netmask */
-        .address = 57,
+        REGISTER(57, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 16,
         .read_handler = dcpregs_read_57_ipv4_netmask,
         .write_handler = dcpregs_write_57_ipv4_netmask,
     },
     {
         /* IPv4 gateway */
-        .address = 58,
+        REGISTER(58, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 16,
         .read_handler = dcpregs_read_58_ipv4_gateway,
         .write_handler = dcpregs_write_58_ipv4_gateway,
     },
     {
         /* Primary DNS server IPv4 address */
-        .address = 62,
+        REGISTER(62, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 16,
         .read_handler = dcpregs_read_62_primary_dns,
         .write_handler = dcpregs_write_62_primary_dns,
     },
     {
         /* Secondary DNS server IPv4 address */
-        .address = 63,
+        REGISTER(63, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 16,
         .read_handler = dcpregs_read_63_secondary_dns,
         .write_handler = dcpregs_write_63_secondary_dns,
     },
     {
         /* DRC protocol */
-        .address = 71,
+        REGISTER(71, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = DCP_PACKET_MAX_PAYLOAD_SIZE,
     },
     {
         /* DRC command */
-        .address = 72,
+        REGISTER(72, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 3,
         .write_handler = dcpregs_write_drcp_command,
     },
     {
         /* Search parameters */
-        .address =74,
+        REGISTER(74, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 256,
         .write_handler = dcpregs_write_74_search_parameters,
     },
     {
         /* Title of currently playing stream, if any. */
-        .address = 75,
+        REGISTER(75, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 128,
         .read_handler = dcpregs_read_75_current_stream_title,
     },
     {
         /* URL of currently playing stream, if any. */
-        .address = 76,
+        REGISTER(76, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1024,
         .read_handler = dcpregs_read_76_current_stream_url,
     },
     {
         /* Play stream with this title (fallback title) */
-        .address = 78,
+        REGISTER(78, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 128,
         .write_handler = dcpregs_write_78_start_play_stream_title,
     },
     {
         /* Play stream found under this URL */
-        .address = 79,
+        REGISTER(79, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1024,
         .read_handler = dcpregs_read_79_start_play_stream_url,
         .write_handler = dcpregs_write_79_start_play_stream_url,
     },
     {
         /* Wireless security setting */
-        .address = 92,
+        REGISTER(92, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 12,
         .write_handler = dcpregs_write_92_wlan_security,
         .read_handler = dcpregs_read_92_wlan_security,
     },
     {
         /* Wireless BSS/IBSS mode (infrastructure or ad-hoc) */
-        .address = 93,
+        REGISTER(93, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 8,
         .write_handler = dcpregs_write_93_ibss,
         .read_handler = dcpregs_read_93_ibss,
     },
     {
         /* Wireless SSID */
-        .address = 94,
+        REGISTER(94, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 32,
         .write_handler = dcpregs_write_94_ssid,
         .read_handler = dcpregs_read_94_ssid,
     },
     {
         /* WPA cipher type */
-        .address = 101,
+        REGISTER(101, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 8,
         .write_handler = dcpregs_write_101_wpa_cipher,
         .read_handler = dcpregs_read_101_wpa_cipher,
     },
     {
         /* WPA passphrase */
-        .address = 102,
+        REGISTER(102, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 64,
         .write_handler = dcpregs_write_102_passphrase,
         .read_handler = dcpregs_read_102_passphrase,
     },
     {
         /* WLAN site survey request */
-        .address = 104,
+        REGISTER(104, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1,
         .write_handler = dcpregs_write_104_start_wlan_site_survey,
     },
     {
         /* WLAN site survey results */
-        .address = 105,
+        REGISTER(105, REGISTER_MK_VERSION(1, 0, 0)),
         .read_handler_dynamic = dcpregs_read_105_wlan_site_survey_results,
     },
     {
         /* Query media services and set credentials */
-        .address = 106,
+        REGISTER(106, REGISTER_MK_VERSION(1, 0, 0)),
         .read_handler_dynamic = dcpregs_read_106_media_service_list,
         .write_handler = dcpregs_write_106_media_service_list,
     },
     {
         /* TCP tunnel control */
-        .address = 119,
+        REGISTER(119, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 3,
         .write_handler = dcpregs_write_119_tcp_tunnel_control,
     },
     {
         /* TCP tunnel: receive data from peer */
-        .address = 120,
+        REGISTER(120, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = DCP_PACKET_MAX_PAYLOAD_SIZE,
         .read_handler = dcpregs_read_120_tcp_tunnel_read,
     },
     {
         /* TCP tunnel: send data to peer */
-        .address = 121,
+        REGISTER(121, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = DCP_PACKET_MAX_PAYLOAD_SIZE,
         .write_handler = dcpregs_write_121_tcp_tunnel_write,
     },
     {
         /* File transfer CRC mode, encryption mode, URL */
-        .address = 209,
+        REGISTER(209, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 8 + 1024,
         .write_handler = dcpregs_write_209_download_url,
     },
     {
         /* Continue playing, next stream has this title (fallback title) */
-        .address = 238,
+        REGISTER(238, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 128,
         .write_handler = dcpregs_write_238_next_stream_title,
     },
     {
         /* Continue playing, next stream found under this URL */
-        .address = 239,
+        REGISTER(239, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1024,
         .read_handler = dcpregs_read_239_next_stream_url,
         .write_handler = dcpregs_write_239_next_stream_url,
     },
+
+#undef REGISTER
+#undef REGISTER_FOR_VERSION
 };
 
 static int compare_register_address(const void *a, const void *b)
@@ -460,7 +475,10 @@ void register_init(const char *ethernet_mac_address,
                    const char *connman_config_path,
                    void (*register_changed_callback)(uint8_t reg_number))
 {
-    memset(&misc_registers_data, 0, sizeof(misc_registers_data));
+    memset(&registers_private_data, 0, sizeof(registers_private_data));
+
+    registers_private_data.configured_protocol_level.code =
+        REGISTER_MK_VERSION(1, 0, 0);
 
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
