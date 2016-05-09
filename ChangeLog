@@ -1,3 +1,27 @@
+2016-05-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 1.20 released.
+
+	* UPnP: SPI slave can set the UPnP friendly name (register 88).
+
+	* TA Control: Synchronize Airable login status between device and app.
+
+	* Airable services: Allow SPI slave to delete service credentials for
+	  services like Tidal. The device then automatically logs out from the
+	  service.
+
+	* DCP protocol: Proper protocol versioning. We are now at protocol
+	  level 1.0.1. Setting the protocol to a specific level (this is
+	  something which cannot be done from the outside at the moment) will
+	  choose the register implementations as are correct for the selected
+	  protocol level.
+
+	* DCP protocol: Initial support for setting the appliance ID (register
+	  87). The ID can be read out, but writing is not supported in this
+	  version (writes are accepted and ignored). Also, the ID has no
+	  effect whatsoever; it has been introduced only to get the DCP
+	  command into the protocol implementation as soon as possible.
+
 2016-05-03  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.19 released.
