@@ -258,7 +258,8 @@ namespace spi_registers_tests
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
-static const std::array<uint8_t, 38> existing_registers =
+
+static const std::array<uint8_t, 38> existing_registers_v1_0_0 =
 {
     1,
     17,
@@ -275,6 +276,11 @@ static const std::array<uint8_t, 38> existing_registers =
     238, 239,
 };
 
+static const std::array<uint8_t, 1> existing_registers_v1_0_1 =
+{
+    88,
+};
+
 void cut_setup(void)
 {
     mock_messages = new MockMessages;
@@ -286,10 +292,16 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_dcpd_dbus);
     mock_dcpd_dbus->init();
     mock_dcpd_dbus_singleton = mock_dcpd_dbus;
+
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    register_init(NULL, NULL, NULL, NULL);
 }
 
 void cut_teardown(void)
 {
+    register_deinit();
+
     mock_messages->check();
     mock_dcpd_dbus->check();
 
@@ -329,7 +341,9 @@ void test_lookup_nonexistent_register_fails_gracefully(void)
  */
 void test_lookup_all_existing_registers(void)
 {
-    for(auto r : existing_registers)
+    cut_assert_true(register_set_protocol_level(1, 0, 0));
+
+    for(auto r : existing_registers_v1_0_0)
     {
         const struct dcp_register_t *reg = register_lookup(r);
 
@@ -338,6 +352,20 @@ void test_lookup_all_existing_registers(void)
         cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
         cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
         cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 0)),
+                               <=, reg->minimum_protocol_version.code);
+    }
+
+    cut_assert_true(register_set_protocol_level(1, 0, 1));
+
+    for(auto r : existing_registers_v1_0_1)
+    {
+        const struct dcp_register_t *reg = register_lookup(r);
+
+        cppcut_assert_not_null(reg);
+        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
+        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
+        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
+        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
                                <=, reg->minimum_protocol_version.code);
     }
 }
@@ -349,13 +377,39 @@ void test_lookup_all_nonexistent_registers(void)
 {
     for(unsigned int r = 0; r <= UINT8_MAX; ++r)
     {
-        auto found =
-            std::find(existing_registers.begin(), existing_registers.end(), r);
+        auto found_v1_0_0 =
+            std::find(existing_registers_v1_0_0.begin(), existing_registers_v1_0_0.end(), r);
+        auto found_v1_0_1 =
+            std::find(existing_registers_v1_0_1.begin(), existing_registers_v1_0_1.end(), r);
 
-        if(found == existing_registers.end())
+        cut_assert_true(register_set_protocol_level(1, 0, 0));
+
+        if(found_v1_0_0 == existing_registers_v1_0_0.end())
             cppcut_assert_null(register_lookup(r));
         else
-            cppcut_assert_not_null(register_lookup(r));
+        {
+            const struct dcp_register_t *reg = register_lookup(r);
+
+            cppcut_assert_not_null(reg);
+            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 0)),
+                                   <=, reg->minimum_protocol_version.code);
+        }
+
+        cut_assert_true(register_set_protocol_level(1, 0, 1));
+
+        if(found_v1_0_1 == existing_registers_v1_0_1.end())
+        {
+            if(found_v1_0_0 == existing_registers_v1_0_0.end())
+                cppcut_assert_null(register_lookup(r));
+        }
+        else
+        {
+            const struct dcp_register_t *reg = register_lookup(r);
+
+            cppcut_assert_not_null(reg);
+            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
+                                   <=, reg->minimum_protocol_version.code);
+        }
     }
 }
 

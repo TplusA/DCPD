@@ -35,6 +35,7 @@
 #include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
+#include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_tcptunnel.h"
 #include "dcpregs_playstream.h"
@@ -351,6 +352,13 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_79_start_play_stream_url,
     },
     {
+        /* Set UPnP friendly name */
+        REGISTER(88, REGISTER_MK_VERSION(1, 0, 1)),
+        .max_data_size = 256,
+        .read_handler = dcpregs_read_88_upnp_friendly_name,
+        .write_handler = dcpregs_write_88_upnp_friendly_name,
+    },
+    {
         /* Wireless security setting */
         REGISTER(92, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 12,
@@ -446,9 +454,21 @@ static const struct dcp_register_t register_map[] =
 
 static int compare_register_address(const void *a, const void *b)
 {
-    return
-        (int)((const struct dcp_register_t *)a)->address -
-        (int)((const struct dcp_register_t *)b)->address;
+    const struct dcp_register_t *needle = a;
+    const struct dcp_register_t *haystack = b;
+
+    const int ret = (int)(needle)->address - (int)(haystack)->address;
+
+    if(ret != 0)
+        return ret;
+
+    if(needle->minimum_protocol_version.code >= haystack->minimum_protocol_version.code &&
+       needle->minimum_protocol_version.code <= haystack->maximum_protocol_version.code)
+        return 0;
+    else if(needle->minimum_protocol_version.code < haystack->minimum_protocol_version.code)
+        return -1;
+    else
+        return 1;
 }
 
 static const char *check_mac_address(const char *mac_address,
@@ -478,7 +498,7 @@ void register_init(const char *ethernet_mac_address,
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
     registers_private_data.configured_protocol_level.code =
-        REGISTER_MK_VERSION(1, 0, 0);
+        REGISTER_MK_VERSION(1, 0, 1);
 
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
@@ -520,6 +540,24 @@ void register_deinit(void)
     dcpregs_filetransfer_deinit();
 }
 
+bool register_set_protocol_level(uint8_t major, uint8_t minor, uint8_t micro)
+{
+    const struct RegisterProtocolLevel *levels;
+    const size_t num_levels = register_get_supported_protocol_levels(&levels);
+    const uint32_t code = REGISTER_MK_VERSION(major, minor, micro);
+
+    for(size_t i = 0; i < num_levels; ++i)
+    {
+        if(code >= levels[2 * i + 0].code && code <= levels[2 * i + 1].code)
+        {
+            registers_private_data.configured_protocol_level.code = code;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 const struct RegisterProtocolLevel *register_get_protocol_level(void)
 {
     static const struct RegisterProtocolLevel level =
@@ -536,7 +574,7 @@ size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel
     {
 #define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
 
-        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 0)),
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 1)),
 
 #undef MK_RANGE
     };
@@ -564,6 +602,7 @@ const struct dcp_register_t *register_lookup(uint8_t register_number)
     static struct dcp_register_t key;
 
     key.address = register_number;
+    key.minimum_protocol_version = registers_private_data.configured_protocol_level;
 
     return bsearch(&key, register_map,
                    sizeof(register_map) / sizeof(register_map[0]),

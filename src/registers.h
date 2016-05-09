@@ -116,6 +116,13 @@ void register_init(const char *ethernet_mac_address,
 void register_deinit(void);
 
 /*!
+ * Set explicit protocol version.
+ *
+ * Default is the maximum supported version.
+ */
+bool register_set_protocol_level(uint8_t major, uint8_t minor, uint8_t micro);
+
+/*!
  * Get the currently configured protocol version.
  */
 const struct RegisterProtocolLevel *register_get_protocol_level(void);
