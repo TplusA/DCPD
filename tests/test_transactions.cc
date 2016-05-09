@@ -455,6 +455,7 @@ void test_register_read_request_size_1_transaction(void)
 {
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
     register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere", NULL);
 
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
@@ -509,6 +510,7 @@ void test_register_read_request_size_16_transaction(void)
 {
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
     register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere", NULL);
 
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
@@ -565,6 +567,7 @@ void test_register_multi_step_read_request_transaction(void)
 {
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
     register_init("12:34:56:78:9A:BC", NULL, NULL, NULL);
 
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
@@ -795,6 +798,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
 {
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
     register_init("00:11:ff:ee:22:dd", "dd:22:ee:ff:11:00", "/somewhere", NULL);
 
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);

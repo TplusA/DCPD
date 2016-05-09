@@ -103,6 +103,7 @@ libapplink_la_CFLAGS = $(AM_CFLAGS)
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
     dcpregs_networkconfig.h \
+    dcpregs_upnpname.h \
     dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h \
     dcpregs_playstream.h \

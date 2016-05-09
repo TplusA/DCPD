@@ -25,6 +25,7 @@
 
 #include "dbus_handlers.h"
 #include "dcpregs_networkconfig.h"
+#include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
@@ -100,6 +101,7 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
 
         dcpregs_filetransfer_prepare_for_shutdown();
         dcpregs_networkconfig_prepare_for_shutdown();
+        dcpregs_upnpname_prepare_for_shutdown();
 
         if(!is_active)
         {

@@ -24,6 +24,7 @@
 #include <errno.h>
 
 #include "dcpregs_upnpname.h"
+#include "shutdown_guard.h"
 #include "messages.h"
 
 static const char key_assignment[] = "FRIENDLY_NAME_OVERRIDE=";
@@ -160,8 +161,15 @@ static size_t fill_output_buffer(char *buffer, size_t max_escaped_name_length,
  * \retval -1 Failed, file system unchanged.
  */
 static int write_name_to_config_file(const char *filename, const char *rcpath,
-                                     const char *name, size_t name_length)
+                                     const char *name, size_t name_length,
+                                     struct ShutdownGuard *shutdown_guard)
 {
+    if(shutdown_guard_is_shutting_down_unlocked(shutdown_guard))
+    {
+        msg_info("Not writing UPnP configuration during shutdown.");
+        return -1;
+    }
+
     char buffer[512];
 
     static const size_t maximum_allowed_output_size =
@@ -198,6 +206,7 @@ static const char name_of_rcfile[] = "upnp_settings.rc";
 static struct
 {
     char rcfile[sizeof(path_to_rcfile) + sizeof(name_of_rcfile)];
+    struct ShutdownGuard *shutdown_guard;
 }
 upnpname_private_data;
 
@@ -208,10 +217,13 @@ void dcpregs_upnpname_init(void)
     upnpname_private_data.rcfile[sizeof(path_to_rcfile) - 1] = '/';
     memcpy(upnpname_private_data.rcfile + sizeof(path_to_rcfile),
            name_of_rcfile, sizeof(name_of_rcfile));
+
+    upnpname_private_data.shutdown_guard = shutdown_guard_alloc("upnpname");
 }
 
 void dcpregs_upnpname_deinit(void)
 {
+    shutdown_guard_free(&upnpname_private_data.shutdown_guard);
     memset(&upnpname_private_data, 0, sizeof(upnpname_private_data));
 }
 
@@ -254,9 +266,14 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
 {
     msg_info("write 88 handler %p %zu", data, length);
 
+    shutdown_guard_lock(upnpname_private_data.shutdown_guard);
+
     const int result =
         write_name_to_config_file(upnpname_private_data.rcfile, path_to_rcfile,
-                                  (char *)data, length);
+                                  (char *)data, length,
+                                  upnpname_private_data.shutdown_guard);
+
+    shutdown_guard_unlock(upnpname_private_data.shutdown_guard);
 
     if(result < 0)
         return -1;
@@ -265,4 +282,9 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
         return 0;
 
     return (result != 0) ? -1 : 0;
+}
+
+void dcpregs_upnpname_prepare_for_shutdown(void)
+{
+    (void)shutdown_guard_down(upnpname_private_data.shutdown_guard);
 }
