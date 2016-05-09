@@ -97,6 +97,32 @@ exit_unmap:
     return ret;
 }
 
+static bool is_stored_name_equal(const char *filename,
+                                 const char *new_name, size_t new_name_size)
+{
+    char buffer[256];
+    const ssize_t len =
+        read_name_from_config_file(filename, buffer, sizeof(buffer));
+
+    if(len < 0 || (size_t)len > new_name_size)
+        return false;
+
+    for(size_t i = 0; i < (size_t)len; ++i)
+    {
+        if(new_name[i] != buffer[i])
+            return false;
+    }
+
+    /* detect and allow zero-padding */
+    for(size_t i = (size_t)len; i < new_name_size; ++i)
+    {
+        if(new_name[i] != '\0')
+            return false;
+    }
+
+    return true;
+}
+
 static size_t fill_output_buffer(char *buffer, size_t max_escaped_name_length,
                                  const char *name, size_t name_length)
 {
@@ -262,9 +288,22 @@ ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length)
     return len;
 }
 
+/*!
+ * Write UPnP friendly name to configuration file and restart Flagpole.
+ *
+ * The Flagpole service is not restarted if the name is the same as already
+ * configured.
+ */
 int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
 {
     msg_info("write 88 handler %p %zu", data, length);
+
+    if(is_stored_name_equal(upnpname_private_data.rcfile,
+                            (const char *)data, length))
+    {
+        msg_info("UPnP name unchanged");
+        return 0;
+    }
 
     shutdown_guard_lock(upnpname_private_data.shutdown_guard);
 

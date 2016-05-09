@@ -3731,6 +3731,7 @@ static void write_and_read_name(const char *name,
     const size_t name_length = strlen(name);
 
     mock_messages->expect_msg_info("write 88 handler %p %zu");
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
     mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
@@ -3782,6 +3783,32 @@ void test_write_and_read_out_friendly_name_with_special_characters()
     static const char escaped[]   = "a'\\''b#c<d>e\"f&g%%h*i(j)k\\l/m.n^o'\\'''\\'''\\'''\\''p";
 
     write_and_read_name(evil_name, escaped);
+}
+
+void test_writing_same_name_does_not_change_files_nor_flagpole_service()
+{
+    auto *reg = lookup_register_expect_handlers(88,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name);
+    cppcut_assert_not_null(reg);
+
+    static char config_file_content[] = "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    static const char upnp_name[] = "My UPnP Device";
+
+    mock_messages->expect_msg_info("write 88 handler %p %zu");
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+    mock_messages->expect_msg_info("UPnP name unchanged");
+
+    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)upnp_name, sizeof(upnp_name)));
 }
 
 };
