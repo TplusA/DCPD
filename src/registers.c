@@ -531,6 +531,7 @@ void register_init(const char *ethernet_mac_address,
     dcpregs_networkconfig_init();
     dcpregs_wlansurvey_init();
     dcpregs_filetransfer_init();
+    dcpregs_upnpname_init();
 }
 
 void register_deinit(void)
@@ -538,6 +539,7 @@ void register_deinit(void)
     dcpregs_networkconfig_deinit();
     dcpregs_wlansurvey_deinit();
     dcpregs_filetransfer_deinit();
+    dcpregs_upnpname_deinit();
 }
 
 bool register_set_protocol_level(uint8_t major, uint8_t minor, uint8_t micro)

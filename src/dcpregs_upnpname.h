@@ -31,6 +31,8 @@
 extern "C" {
 #endif
 
+void dcpregs_upnpname_init(void);
+void dcpregs_upnpname_deinit(void);
 ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length);
 int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length);
 

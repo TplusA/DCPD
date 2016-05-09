@@ -30,6 +30,7 @@
 #include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
+#include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_playstream.h"
@@ -3626,6 +3627,156 @@ void test_reading_out_ssids_without_scan_returns_empty_list()
                             buffer.data, buffer.pos);
 
     dynamic_buffer_free(&buffer);
+}
+
+};
+
+namespace spi_registers_upnp
+{
+
+static MockMessages *mock_messages;
+static MockOs *mock_os;
+
+static std::vector<char> os_write_buffer;
+static constexpr int expected_os_write_fd = 85;
+static constexpr int expected_os_map_file_to_memory_fd = 67;
+
+static const char expected_rc_path[]     = "/var/local/etc";
+static const char expected_rc_filename[] = "/var/local/etc/upnp_settings.rc";
+
+static int write_from_buffer_callback(const void *src, size_t count, int fd)
+{
+    cppcut_assert_equal(expected_os_write_fd, fd);
+    cppcut_assert_not_null(src);
+    cppcut_assert_operator(size_t(0), <, count);
+
+    std::copy_n(static_cast<const char *>(src), count,
+                std::back_inserter<std::vector<char>>(os_write_buffer));
+
+    return 0;
+}
+
+void cut_setup(void)
+{
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_os = new MockOs;
+    cppcut_assert_not_null(mock_os);
+    mock_os->init();
+    mock_os_singleton = mock_os;
+
+    os_write_buffer.clear();
+
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
+    register_init(NULL, NULL, NULL, NULL);
+}
+
+void cut_teardown(void)
+{
+    register_deinit();
+
+    os_write_buffer.clear();
+    os_write_buffer.shrink_to_fit();
+
+    mock_messages->check();
+    mock_os->check();
+
+    mock_messages_singleton = nullptr;
+    mock_os_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_os;
+
+    mock_messages = nullptr;
+    mock_os = nullptr;
+}
+
+void test_read_out_default_friendly_name()
+{
+    auto *reg = lookup_register_expect_handlers(88,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name);
+    cppcut_assert_not_null(reg);
+
+    mock_messages->expect_msg_info("read 88 handler %p %zu");
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
+
+    uint8_t buffer[64];
+    ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+
+    static const char expected_name[] = "T+A Streaming Board";
+
+    cppcut_assert_equal(ssize_t(sizeof(expected_name) - 1), bytes);
+    cut_assert_equal_memory(expected_name, sizeof(expected_name) - 1,
+                            buffer, bytes);
+}
+
+static void write_and_read_name(const char *name,
+                                const char *expected_escaped_name)
+{
+    auto *reg = lookup_register_expect_handlers(88,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name);
+    cppcut_assert_not_null(reg);
+
+    const size_t name_length = strlen(name);
+
+    mock_messages->expect_msg_info("write 88 handler %p %zu");
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(0, "/bin/systemctl restart flagpole");
+
+    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)name, name_length));
+
+    static const char expected_config_file_format[] = "FRIENDLY_NAME_OVERRIDE='%s'\n";
+    char config_file_buffer[1024];
+
+    const int config_len = snprintf(config_file_buffer, sizeof(config_file_buffer),
+                                    expected_config_file_format,
+                                    expected_escaped_name);
+
+    cut_assert_equal_memory(config_file_buffer, config_len,
+                            os_write_buffer.data(), os_write_buffer.size());
+
+    /* nice, now let's check if the code can read back what it has just
+     * written */
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = size_t(config_len),
+    };
+
+    mock_messages->expect_msg_info("read 88 handler %p %zu");
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    uint8_t buffer[1024];
+    ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+
+    cppcut_assert_equal(ssize_t(name_length), bytes);
+    cut_assert_equal_memory(name, name_length, buffer, bytes);
+}
+
+void test_write_and_read_out_simple_friendly_name()
+{
+    static const char simple_name[] = "UPnP name in unit test";
+
+    write_and_read_name(simple_name, simple_name);
+}
+
+void test_write_and_read_out_friendly_name_with_special_characters()
+{
+    static const char evil_name[] = "a'b#c<d>e\"f&g%%h*i(j)k\\l/m.n^o''''p";
+    static const char escaped[]   = "a'\\''b#c<d>e\"f&g%%h*i(j)k\\l/m.n^o'\\'''\\'''\\'''\\''p";
+
+    write_and_read_name(evil_name, escaped);
 }
 
 };
