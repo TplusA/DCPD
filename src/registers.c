@@ -181,6 +181,24 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     return ok ? (ssize_t)length : -1;
 }
 
+static ssize_t read_87_appliance_id(uint8_t *response, size_t length)
+{
+    static const char appliance_id[] = "strbo";
+
+    if(length < sizeof(appliance_id) - 1)
+        return -1;
+
+    memcpy(response, appliance_id, sizeof(appliance_id) - 1);
+
+    return sizeof(appliance_id) - 1;
+}
+
+static int write_87_appliance_id(const uint8_t *data, size_t length)
+{
+    /* FIXME: Dummy implementation that accepts anything and does nothing */
+    return 0;
+}
+
 /*!
  * List of implemented DCP registers.
  *
@@ -350,6 +368,13 @@ static const struct dcp_register_t register_map[] =
         .max_data_size = 1024,
         .read_handler = dcpregs_read_79_start_play_stream_url,
         .write_handler = dcpregs_write_79_start_play_stream_url,
+    },
+    {
+        /* Set appliance ID */
+        REGISTER(87, REGISTER_MK_VERSION(1, 0, 1)),
+        .max_data_size = 32,
+        .read_handler = read_87_appliance_id,
+        .write_handler = write_87_appliance_id,
     },
     {
         /* Set UPnP friendly name */

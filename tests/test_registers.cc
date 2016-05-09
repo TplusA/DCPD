@@ -277,9 +277,9 @@ static const std::array<uint8_t, 38> existing_registers_v1_0_0 =
     238, 239,
 };
 
-static const std::array<uint8_t, 1> existing_registers_v1_0_1 =
+static const std::array<uint8_t, 2> existing_registers_v1_0_1 =
 {
-    88,
+    87, 88,
 };
 
 void cut_setup(void)
