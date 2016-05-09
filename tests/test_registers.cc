@@ -879,21 +879,21 @@ void test_negotiate_protocol_level_multiple_ranges_with_match()
     static const uint8_t match_in_first_range[3 * 6] =
     {
         1, 0, 0, 1, 5, 20,
-        0, 0, 0, 0, UINT8_MAX, UINT8_MAX,
-        2, 0, 0, UINT8_MAX, UINT8_MAX,
+        0, 0, 1, 0, UINT8_MAX, UINT8_MAX,
+        2, 0, 0, UINT8_MAX, UINT8_MAX, UINT8_MAX,
     };
 
     static const uint8_t match_in_middle_range[3 * 6] =
     {
-        0, 0, 0, 0, UINT8_MAX, UINT8_MAX,
+        0, 0, 1, 0, UINT8_MAX, UINT8_MAX,
         1, 0, 0, 1, 5, 20,
-        2, 0, 0, UINT8_MAX, UINT8_MAX,
+        2, 0, 0, UINT8_MAX, UINT8_MAX, UINT8_MAX,
     };
 
     static const uint8_t match_in_last_range[3 * 6] =
     {
-        0, 0, 0, 0, UINT8_MAX, UINT8_MAX,
-        2, 0, 0, UINT8_MAX, UINT8_MAX,
+        0, 0, 1, 0, UINT8_MAX, UINT8_MAX,
+        2, 0, 0, UINT8_MAX, UINT8_MAX, UINT8_MAX,
         1, 0, 0, 1, 5, 20,
     };
 
