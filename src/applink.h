@@ -84,22 +84,125 @@ struct ApplinkCommand
 extern "C" {
 #endif
 
+/*!
+ * Initialize connection structure.
+ *
+ * The structure is not initially associated with a network connection.
+ */
 int applink_connection_init(struct ApplinkConnection *conn);
+
+/*!
+ * Associate connection structure with network connection.
+ */
 void applink_connection_associate(struct ApplinkConnection *conn, int peer_fd);
+
+/*!
+ * Detach connection structure from network connection.
+ *
+ * The structure may be reused for a later connection. It is not necessary to
+ * free the connection structure.
+ */
 void applink_connection_release(struct ApplinkConnection *conn);
+
+/*!
+ * Free data associated with connection structure.
+ *
+ * The structure itself is not freed. This is the responsibility of the caller.
+ */
 void applink_connection_free(struct ApplinkConnection *conn);
 
+/*!
+ * Look up a protocol variable by name.
+ *
+ * \param name
+ *     Name of the variable.
+ *
+ * \param length
+ *     Length of the variable if known. If greater than 0, then \p name does
+ *     not need to be zero-terminated. Pass 0 to have the function determine
+ *     the length (in which case \p name \e must be zero-terminated).
+ */
 const struct ApplinkVariable *applink_lookup(const char *name, size_t length);
 
+/*!
+ * Initialize a command structure for received commands.
+ *
+ * The structure is not initially associated with a specific commnd. It may be
+ * reused for successive commands.
+ */
 int applink_command_init(struct ApplinkCommand *command);
+
+/*!
+ * Free command structure.
+ */
 void applink_command_free(struct ApplinkCommand *command);
 
+/*!
+ * Parse next command from connection.
+ *
+ * \param conn
+ *     The connection to parse the next command from, if any.
+ *
+ * \param command
+ *     On success, the parsed command is returned in this structure.
+ *
+ * \returns
+ *     Any #ApplinkResult, #APPLINK_RESULT_HAVE_COMMAND on success.
+ */
 enum ApplinkResult applink_get_next_command(struct ApplinkConnection *conn,
                                             struct ApplinkCommand *command);
+
+/*!
+ * Return the n'th parameter passed with given command.
+ *
+ * \param command
+ *     The command whose parameter list shall be parsed.
+ *
+ * \param n
+ *     Which parameter to return.
+ *
+ * \param buffer
+ *     Buffer the parameter shall be copied to as zero-terminated string.
+ *
+ * \param buffer_size
+ *     Size of the return buffer.
+ */
 void applink_command_get_parameter(const struct ApplinkCommand *command,
                                    size_t n, char *buffer, size_t buffer_size);
+
+/*!
+ * Generate answer for protocol variable of given name.
+ *
+ * \see
+ *     #applink_make_answer_for_var()
+ */
 ssize_t applink_make_answer_for_name(char *buffer, size_t buffer_size,
                                      const char *variable_name, ...);
+
+/*!
+ * Generate answer for given protocol variable.
+ *
+ * The parameters for the answer are taken from the variadic function
+ * parameters, all of which must be zero-terminated strings or \c NULL. This
+ * function expects #ApplinkVariable::number_of_answer_parameters parameters as
+ * defined for the \p variable.
+ *
+ * Parameters which are set to \c NULL are skipped, but be aware that \c NULL
+ * does \e not indicate the end of the parameter list.
+ *
+ * The returned answer is not zero-terminated.
+ *
+ * \param buffer, buffer_size
+ *     Buffer and its size for the generated answer. The buffer is not going to
+ *     be zero-terminated.
+ *
+ * \param variable
+ *     Variable for which the answer shall be generated.
+ *
+ * \returns
+ *     The number of bytes written to \p buffer, -1 in case the buffer was too
+ *     small for the answer.
+ */
 ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
                                     const struct ApplinkVariable *variable,
                                     ...);
