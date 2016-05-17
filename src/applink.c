@@ -427,7 +427,9 @@ static ssize_t make_answer(char *buffer, size_t buffer_size,
     for(unsigned int i = 0; i < variable->number_of_answer_parameters; ++i)
     {
         const char *const string = va_arg(ap, const char *);
-        log_assert(string != NULL);
+
+        if(string == NULL)
+            continue;
 
         if(append_escaped_parameter(buffer, (ssize_t)buffer_size,
                                     string, &pos) < 0)
