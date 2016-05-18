@@ -90,8 +90,7 @@ void applink_command_free(struct ApplinkCommand *command)
     dynamic_buffer_free(&command->private_data.parameters_buffer);
 }
 
-static void remove_processed_data_from_buffer(struct ApplinkConnection *conn,
-                                              struct ApplinkCommand *command)
+static void remove_processed_data_from_buffer(struct ApplinkConnection *conn)
 {
     log_assert(conn->scan_pos <= conn->input_buffer.pos);
 
@@ -182,7 +181,6 @@ static size_t count_parameters(struct ParserContext *ctx,
 }
 
 static enum ApplinkResult parse_request_line(struct ParserContext *ctx,
-                                             struct ApplinkConnection *conn,
                                              struct ApplinkCommand *command)
 {
     dynamic_buffer_clear(&command->private_data.parameters_buffer);
@@ -263,9 +261,9 @@ static enum ApplinkResult parse_line(struct ApplinkConnection *conn,
             return APPLINK_RESULT_IO_ERROR;
     }
 
-    const enum ApplinkResult retval = parse_request_line(&ctx, conn, command);
+    const enum ApplinkResult retval = parse_request_line(&ctx, command);
 
-    remove_processed_data_from_buffer(conn, command);
+    remove_processed_data_from_buffer(conn);
 
     return retval;
 }
@@ -304,7 +302,7 @@ static enum ApplinkResult parse_command(struct ApplinkConnection *conn,
         begin_pos = conn->scan_pos + 1;
     }
 
-    remove_processed_data_from_buffer(conn, command);
+    remove_processed_data_from_buffer(conn);
 
     return conn->scan_pos < conn->input_buffer.pos
         ? APPLINK_RESULT_NEED_MORE_DATA
