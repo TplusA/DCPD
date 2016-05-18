@@ -27,6 +27,7 @@
 #include "applink.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
+#include "actor_id.h"
 #include "messages.h"
 
 int appconn_init(struct smartphone_app_connection_data *appconn,
@@ -226,10 +227,67 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
     return len;
 }
 
-static void process_and_flush_on_overflow(struct ApplinkCommand *command,
-                                          int out_fd, char *const buffer,
-                                          const size_t buffer_size,
-                                          size_t *buffer_pos)
+static void process_applink_answer(const struct ApplinkCommand *const command)
+{
+    msg_info("App answer: %s", command->variable->name);
+
+    enum ApplinkSupportedVariables id = command->variable->variable_id;
+
+    log_assert(id >= VAR_FIRST_SUPPORTED_VARIABLE);
+    log_assert(id <= VAR_LAST_SUPPORTED_VARIABLE);
+
+    switch(id)
+    {
+      case VAR_AIRABLE_AUTH_URL:
+      case VAR_AIRABLE_PASSWORD:
+      case VAR_AIRABLE_ROOT_URL:
+      case VAR_SERVICE_CREDENTIALS:
+        msg_info("App answer ignored");
+        break;
+
+      case VAR_SERVICE_LOGGED_IN:
+        {
+            char service_id_buffer[32];
+            char username_buffer[128];
+
+            applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
+            applink_command_get_parameter(command, 1, username_buffer, sizeof(username_buffer));
+
+            msg_info("App said it logged into \"%s\" with user \"%s\"",
+                     service_id_buffer, username_buffer);
+
+            tdbus_airable_call_external_service_login_sync(
+                dbus_get_airable_sec_iface(), service_id_buffer,
+                username_buffer, false, ACTOR_ID_SMARTPHONE_APP, NULL, NULL);
+        }
+
+        break;
+
+      case VAR_SERVICE_LOGGED_OUT:
+        {
+            char service_id_buffer[32];
+            char url_buffer[1024];
+
+            applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
+            applink_command_get_parameter(command, 1, url_buffer, sizeof(url_buffer));
+
+            msg_info("App said it logged out from \"%s\" using URL \"%s\"",
+                     service_id_buffer, url_buffer);
+
+            tdbus_airable_call_external_service_logout_sync(
+                dbus_get_airable_sec_iface(), service_id_buffer,
+                url_buffer, false, ACTOR_ID_SMARTPHONE_APP, NULL, NULL);
+        }
+
+        break;
+    }
+}
+
+static void process_requests_and_flush_on_overflow(struct ApplinkCommand *command,
+                                                   int out_fd,
+                                                   char *const buffer,
+                                                   const size_t buffer_size,
+                                                   size_t *buffer_pos)
 {
     while(1)
     {
@@ -342,14 +400,14 @@ void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
             switch(result)
             {
               case APPLINK_RESULT_HAVE_COMMAND:
-                process_and_flush_on_overflow(&appconn->command,
-                                              appconn->connection.peer_fd,
-                                              output_buffer, sizeof(output_buffer),
-                                              &output_buffer_pos);
+                process_requests_and_flush_on_overflow(&appconn->command,
+                                                       appconn->connection.peer_fd,
+                                                       output_buffer, sizeof(output_buffer),
+                                                       &output_buffer_pos);
                 break;
 
               case APPLINK_RESULT_HAVE_ANSWER:
-                BUG("App answers not handled yet");
+                process_applink_answer(&appconn->command);
                 break;
 
               case APPLINK_RESULT_IO_ERROR:

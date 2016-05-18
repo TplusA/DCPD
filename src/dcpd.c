@@ -656,6 +656,7 @@ static void process_smartphone_outgoing_queue(void)
  * Process DCP.
  */
 static void main_loop(struct files *files,
+                      struct smartphone_app_connection_data *appconn,
                       int app_process_queue_fd, int register_changed_fd)
 {
     static struct state state;
@@ -670,8 +671,7 @@ static void main_loop(struct files *files,
     (void)dot_init(&dot);
 
     applink_init();
-    static struct smartphone_app_connection_data appconn;
-    (void)appconn_init(&appconn, process_smartphone_outgoing_queue);
+    (void)appconn_init(appconn, process_smartphone_outgoing_queue);
 
     dcpregs_status_set_ready();
 
@@ -683,7 +683,7 @@ static void main_loop(struct files *files,
             wait_for_events(&state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             dot.server_fd, dot.peer_fd,
-                            appconn.server_fd, appconn.peer_fd,
+                            appconn->server_fd, appconn->peer_fd,
                             app_process_queue_fd, register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
 
@@ -728,9 +728,9 @@ static void main_loop(struct files *files,
                             (wait_result & WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED) != 0);
 
         if((wait_result & WAITEVENT_CAN_READ_FROM_SMARTPHONE_SOCKET) != 0)
-            appconn_handle_incoming(&appconn);
+            appconn_handle_incoming(appconn);
 
-        appconn_handle_outgoing(&appconn,
+        appconn_handle_outgoing(appconn,
                                 (wait_result & WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET) != 0,
                                 (wait_result & WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS) != 0,
                                 (wait_result & WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED) != 0);
@@ -773,7 +773,7 @@ static void main_loop(struct files *files,
     transaction_free(&state.preallocated_inet_slave_transaction);
 
     dot_close(&dot);
-    appconn_close(&appconn);
+    appconn_close(appconn);
 }
 
 struct parameters
@@ -1033,13 +1033,18 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files, &app_process_fd, &register_changed_fd) < 0)
         return EXIT_FAILURE;
 
+    /*!
+     * Data for smartphone connection.
+     */
+    static struct smartphone_app_connection_data appconn;
+
     register_init(parameters.ethernet_interface_mac_address,
                   parameters.wlan_interface_mac_address,
                   "/var/lib/connman",
                   push_register_to_slave);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
-                  parameters.with_connman) < 0)
+                  parameters.with_connman, &appconn) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
@@ -1062,7 +1067,7 @@ int main(int argc, char *argv[])
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
-    main_loop(&files, app_process_fd, register_changed_fd);
+    main_loop(&files, &appconn, app_process_fd, register_changed_fd);
 
     msg_info("Shutting down");
 

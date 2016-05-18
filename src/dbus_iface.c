@@ -283,7 +283,8 @@ static const struct dbussignal_shutdown_iface logind_shutdown_functions =
 
 static struct dbus_process_data process_data;
 
-int dbus_setup(bool connect_to_session_bus, bool with_connman)
+int dbus_setup(bool connect_to_session_bus, bool with_connman,
+               struct smartphone_app_connection_data *appconn_data)
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();
@@ -375,6 +376,9 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
 
     g_signal_connect(streamplayer_iface_data.playback_iface, "g-signal",
                      G_CALLBACK(dbussignal_splay_playback), NULL);
+
+    g_signal_connect(airable_iface_data.airable_sec_iface, "g-signal",
+                     G_CALLBACK(dbussignal_airable), appconn_data);
 
     if(connman_iface_data.is_enabled)
     {

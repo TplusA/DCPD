@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,26 +16,24 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DBUS_IFACE_H
-#define DBUS_IFACE_H
+#ifndef SMARTPHONE_APP_SEND_H
+#define SMARTPHONE_APP_SEND_H
 
-#include <stdbool.h>
+#include "smartphone_app.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct smartphone_app_connection_data;
-
-int dbus_setup(bool connect_to_session_bus, bool with_connman,
-               struct smartphone_app_connection_data *appconn_data);
-void dbus_shutdown(void);
-
-void dbus_lock_shutdown_sequence(const char *why);
-void dbus_unlock_shutdown_sequence(void);
+void appconn_send_airable_service_logged_in(struct smartphone_app_connection_data *conn,
+                                            const char *service_id,
+                                            const char *username);
+void appconn_send_airable_service_logged_out(struct smartphone_app_connection_data *conn,
+                                             const char *service_id,
+                                             const char *logout_url);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* !DBUS_IFACE_H */
+#endif /* !SMARTPHONE_APP_SEND_H */

@@ -24,6 +24,8 @@ dcpd_SOURCES = \
     dcpd.c os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
     dcp_over_tcp.c dcp_over_tcp.h \
     smartphone_app.c smartphone_app.h \
+    smartphone_app_send.c smartphone_app_send.h \
+    actor_id.h \
     applink.h applink_variables.h \
     network.h \
     transactions.h dcpdefs.h \
@@ -102,6 +104,7 @@ libapplink_la_CFLAGS = $(AM_CFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
+    actor_id.h \
     dcpregs_networkconfig.h \
     dcpregs_upnpname.h \
     dcpregs_wlansurvey.h \

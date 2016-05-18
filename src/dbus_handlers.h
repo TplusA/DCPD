@@ -52,6 +52,9 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
 void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
                               const gchar *signal_name, GVariant *parameters,
                               gpointer user_data);
+void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
+                        const gchar *signal_name, GVariant *parameters,
+                        gpointer user_data);
 
 gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     GDBusMethodInvocation *invocation,

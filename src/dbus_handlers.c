@@ -29,7 +29,9 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
+#include "smartphone_app_send.h"
 #include "stream_id.h"
+#include "actor_id.h"
 #include "messages.h"
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
@@ -261,4 +263,41 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     tdbus_dcpd_playback_complete_set_stream_info(object, invocation);
 
     return TRUE;
+}
+
+void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
+                        const gchar *signal_name, GVariant *parameters,
+                        gpointer user_data)
+{
+    static const char iface_name[] = "de.tahifi.Airable";
+
+    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
+
+    if(strcmp(signal_name, "ExternalServiceLoginStatus") == 0)
+    {
+        check_parameter_assertions(parameters, 5);
+
+        const gchar *service_id;
+        const gchar *info;
+        uint8_t actor_id;
+        gboolean is_login;
+        gboolean has_failed;
+
+        g_variant_get(parameters, "(&sybb&s)",
+                      &service_id, &actor_id, &is_login, &has_failed, &info);
+
+        if(actor_id != ACTOR_ID_SMARTPHONE_APP && !has_failed)
+        {
+            if(is_login)
+                appconn_send_airable_service_logged_in(user_data, service_id, info);
+            else
+                appconn_send_airable_service_logged_out(user_data, service_id, info);
+        }
+        else
+        {
+            /* ignore silently, not interesting at the moment */
+        }
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
 }
