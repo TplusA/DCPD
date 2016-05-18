@@ -29,6 +29,7 @@
 #include "credentials_dbus.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
+#include "actor_id.h"
 #include "messages.h"
 
 #define TRY_EMIT(BUF, FAILCODE, ...) \
@@ -49,34 +50,53 @@ struct XmlEscapeSequence
     const size_t escape_sequence_length;
 };
 
-static int delete_credentials(const char *service_id)
+static int delete_credentials(const char *service_id, bool logout_on_failure)
 {
-    BUG("%s(): not implemented yet", __func__);
-    return -1;
+    GError *error = NULL;
+    gchar *dummy = NULL;
+
+    tdbus_credentials_write_call_delete_credentials_sync(dbus_get_credentials_write_iface(),
+                                                         service_id,
+                                                         "", &dummy,
+                                                         NULL, &error);
+
+    const int delete_ret = dbus_common_handle_dbus_error(&error);
+
+    if(delete_ret < 0)
+    {
+        if(!logout_on_failure)
+            return delete_ret;
+    }
+    else
+    {
+        if(dummy == NULL || (dummy != NULL && dummy[0] != '\0'))
+            BUG("Expected empty default user");
+
+        g_free(dummy);
+    }
+
+    tdbus_airable_call_external_service_logout_sync(dbus_get_airable_sec_iface(),
+                                                    service_id, "",
+                                                    true, ACTOR_ID_LOCAL_UI,
+                                                    NULL, &error);
+
+    const int logout_ret = dbus_common_handle_dbus_error(&error);
+
+    if(logout_ret != 0)
+        return logout_ret;
+    else
+        return delete_ret;
 }
 
 static int set_credentials(const char *service_id,
                            const char *login, const char *password)
 {
-    tdbuscredentialsWrite *iface = dbus_get_credentials_write_iface();
+    (void)delete_credentials(service_id, true);
 
     GError *error = NULL;
-    gchar *dummy = NULL;
 
-    tdbus_credentials_write_call_delete_credentials_sync(iface, service_id,
-                                                         "", &dummy,
-                                                         NULL, &error);
-
-    int ret = dbus_common_handle_dbus_error(&error);
-    if(ret < 0)
-        return ret;
-
-    if(dummy == NULL || (dummy != NULL && dummy[0] != '\0'))
-        BUG("Expected empty default user");
-
-    g_free(dummy);
-
-    tdbus_credentials_write_call_set_credentials_sync(iface, service_id,
+    tdbus_credentials_write_call_set_credentials_sync(dbus_get_credentials_write_iface(),
+                                                      service_id,
                                                       login, password, TRUE,
                                                       NULL, &error);
 
@@ -142,7 +162,7 @@ int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
     }
 
     if(login_length == 0)
-        return delete_credentials(string_data);
+        return delete_credentials(string_data, false);
 
     char password_buffer[256];
     size_t safe_password_length = password_length;

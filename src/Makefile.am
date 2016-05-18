@@ -88,6 +88,7 @@ libregisters_la_SOURCES = \
     dcpregs_status.h \
     dbusdl_dbus.h \
     stream_id.h \
+    actor_id.h \
     shutdown_guard.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \
     drcp_command_codes.h messages.h

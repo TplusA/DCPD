@@ -39,11 +39,13 @@
 #include "dcpregs_status.h"
 #include "drcp_command_codes.h"
 #include "stream_id.hh"
+#include "actor_id.h"
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_file_transfer_dbus.hh"
 #include "mock_streamplayer_dbus.hh"
 #include "mock_credentials_dbus.hh"
+#include "mock_airable_dbus.hh"
 #include "mock_logind_manager_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
@@ -5154,8 +5156,12 @@ static tdbuscredentialsRead *const dbus_cred_read_iface_dummy =
 static tdbuscredentialsWrite *const dbus_cred_write_iface_dummy =
     reinterpret_cast<tdbuscredentialsWrite *>(0xf127ac82);
 
+static tdbusAirable *const dbus_airable_iface_dummy =
+    reinterpret_cast<tdbusAirable *>(0xf280be98);
+
 static MockMessages *mock_messages;
 static MockCredentialsDBus *mock_credentials_dbus = nullptr;
+static MockAirableDBus *mock_airable_dbus = nullptr;
 static MockDBusIface *mock_dbus_iface;
 
 static RegisterChangedData *register_changed_data;
@@ -5178,6 +5184,11 @@ void cut_setup(void)
     cppcut_assert_not_null(mock_credentials_dbus);
     mock_credentials_dbus->init();
     mock_credentials_dbus_singleton = mock_credentials_dbus;
+
+    mock_airable_dbus = new MockAirableDBus;
+    cppcut_assert_not_null(mock_airable_dbus);
+    mock_airable_dbus->init();
+    mock_airable_dbus_singleton = mock_airable_dbus;
 
     mock_dbus_iface = new MockDBusIface;
     cppcut_assert_not_null(mock_dbus_iface);
@@ -5203,18 +5214,22 @@ void cut_teardown(void)
 
     mock_messages->check();
     mock_credentials_dbus->check();
+    mock_airable_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_credentials_dbus_singleton = nullptr;
+    mock_airable_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_credentials_dbus;
+    delete mock_airable_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_credentials_dbus = nullptr;
+    mock_airable_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
 
@@ -5419,6 +5434,11 @@ void test_set_service_credentials()
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "tidal", "", "");
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
+    mock_airable_dbus->expect_tdbus_airable_call_external_service_logout_sync(
+        TRUE, dbus_airable_iface_dummy,
+        "tidal", "", TRUE, guchar(ACTOR_ID_LOCAL_UI));
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_set_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "tidal", "login email", "my password", TRUE);
@@ -5442,6 +5462,11 @@ void test_password_may_be_zero_terminated()
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "deezer", "", "");
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
+    mock_airable_dbus->expect_tdbus_airable_call_external_service_logout_sync(
+        TRUE, dbus_airable_iface_dummy,
+        "deezer", "", TRUE, guchar(ACTOR_ID_LOCAL_UI));
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_set_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "deezer", "login", "password", TRUE);
