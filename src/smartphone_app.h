@@ -19,6 +19,8 @@
 #ifndef SMARTPHONE_APP_H
 #define SMARTPHONE_APP_H
 
+#include <glib.h>
+
 #include "network.h"
 #include "applink.h"
 
@@ -37,6 +39,15 @@ struct smartphone_app_connection_data
 
     struct ApplinkConnection connection;
     struct ApplinkCommand command;
+
+    struct
+    {
+        GMutex lock;
+
+        struct ApplinkOutputQueue queue;
+        void (*notification_fn)(void);
+    }
+    out_queue;
 };
 
 #ifdef __cplusplus
@@ -45,8 +56,16 @@ extern "C" {
 
 /*!
  * Initialize connection data and open TCP/IP port for listing.
+ *
+ * \param appconn
+ *     Structure to be initialized.
+ *
+ * \param send_notification_fn
+ *     Function that is called whenever there is a command in the output
+ *     command queue.
  */
-int appconn_init(struct smartphone_app_connection_data *appconn);
+int appconn_init(struct smartphone_app_connection_data *appconn,
+                 void (*send_notification_fn)(void));
 
 /*!
  * Handle incoming connection from the smartphone.
@@ -69,11 +88,16 @@ void appconn_handle_incoming(struct smartphone_app_connection_data *appconn);
  *     placed into an output buffer. After having collected all answers, that
  *     buffer is sent as a single network transfer.
  *
+ * \param can_send_from_queue
+ *     True if there might be commands in the output command queue which should
+ *     be processed now.
+ *
  * \param peer_died
  *     The peer was determined dead, connection is to be closed cleanly.
  */
 void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
-                             bool can_read_from_peer, bool peer_died);
+                             bool can_read_from_peer, bool can_send_from_queue,
+                             bool peer_died);
 
 /*!
  * Actively close network connection to the smartphone.

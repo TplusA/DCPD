@@ -85,9 +85,32 @@ struct ApplinkCommand
     struct ApplinkCommandPrivate_ private_data;
 };
 
+struct ApplinkOutputCommand;
+
+struct ApplinkOutputCommandPrivate_
+{
+    struct ApplinkOutputCommand *prev;
+    struct ApplinkOutputCommand *next;
+};
+
+struct ApplinkOutputCommand
+{
+    char buffer[1024];
+    size_t buffer_used;
+
+    struct ApplinkOutputCommandPrivate_ private_data;
+};
+
+struct ApplinkOutputQueue
+{
+    struct ApplinkOutputCommand *head;
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+void applink_init(void);
 
 /*!
  * Initialize connection structure.
@@ -211,6 +234,28 @@ ssize_t applink_make_answer_for_name(char *buffer, size_t buffer_size,
 ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
                                     const struct ApplinkVariable *variable,
                                     ...);
+
+/*!
+ * Dynamically allocate output command structure from memory pool.
+ */
+struct ApplinkOutputCommand *applink_output_command_alloc_from_pool(void);
+
+/*!
+ * Put command structure back into memory pool.
+ */
+void applink_output_command_return_to_pool(struct ApplinkOutputCommand *command);
+
+/*!
+ * Append output command to end of queue.
+ */
+void applink_output_command_append_to_queue(struct ApplinkOutputQueue *queue,
+                                            struct ApplinkOutputCommand *command);
+
+/*!
+ * Remove next output command from queue.
+ */
+struct ApplinkOutputCommand *
+applink_output_command_take_next(struct ApplinkOutputQueue *queue);
 
 #ifdef __cplusplus
 }

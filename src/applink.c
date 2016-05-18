@@ -564,3 +564,92 @@ const struct ApplinkVariable *applink_lookup(const char *name, size_t length)
     else
         return applink_variable_lookup_with_length(&known_variables, name, length);
 }
+
+static struct ApplinkOutputCommand free_list[32];
+static struct ApplinkOutputQueue free_list_queue;
+
+void applink_init(void)
+{
+    size_t i;
+
+    for(i = 1; i < sizeof(free_list) / sizeof(free_list[0]); ++i)
+    {
+        free_list[i - 1].private_data.next = &free_list[i];
+        free_list[i].private_data.prev = &free_list[i - 1];
+    }
+
+    free_list[i - 1].private_data.next = &free_list[0];
+    free_list[0].private_data.prev = &free_list[i - 1];
+
+    free_list_queue.head = &free_list[0];
+}
+
+struct ApplinkOutputCommand *applink_output_command_alloc_from_pool(void)
+{
+    struct ApplinkOutputCommand *const command =
+        applink_output_command_take_next(&free_list_queue);
+
+    if(command == NULL)
+        msg_out_of_memory("output command");
+    else
+    {
+        command->buffer_used = 0;
+        command->private_data.prev = command->private_data.next = command;
+    }
+
+    return command;
+}
+
+void applink_output_command_return_to_pool(struct ApplinkOutputCommand *command)
+{
+    log_assert(command != NULL);
+    log_assert(command >= free_list);
+    log_assert(command < &free_list[sizeof(free_list) / sizeof(free_list[0])]);
+
+    applink_output_command_append_to_queue(&free_list_queue, command);
+}
+
+void applink_output_command_append_to_queue(struct ApplinkOutputQueue *queue,
+                                            struct ApplinkOutputCommand *command)
+{
+    log_assert(queue != NULL);
+    log_assert(command != NULL);
+    log_assert(command->private_data.prev == command);
+    log_assert(command->private_data.next == command);
+
+    if(queue->head == NULL)
+        queue->head = command;
+    else
+    {
+        command->private_data.prev = queue->head->private_data.prev;
+        command->private_data.next = queue->head;
+        queue->head->private_data.prev->private_data.next = command;
+        queue->head->private_data.prev = command;
+    }
+}
+
+struct ApplinkOutputCommand *
+applink_output_command_take_next(struct ApplinkOutputQueue *queue)
+{
+    log_assert(queue != NULL);
+
+    if(queue->head == NULL)
+        return NULL;
+
+    struct ApplinkOutputCommand *const cmd = queue->head;
+
+    if(queue->head->private_data.next != queue->head)
+    {
+        log_assert(queue->head->private_data.prev != queue->head);
+        queue->head = cmd->private_data.next;
+
+        cmd->private_data.prev->private_data.next = queue->head;
+        queue->head->private_data.prev = cmd->private_data.prev;
+    }
+    else
+        queue->head = NULL;
+
+    cmd->private_data.prev = cmd->private_data.next = cmd;
+
+    return cmd;
+}

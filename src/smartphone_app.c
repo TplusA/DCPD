@@ -20,6 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <string.h>
 #include <sys/socket.h>
 
 #include "smartphone_app.h"
@@ -28,7 +29,8 @@
 #include "dbus_iface_deep.h"
 #include "messages.h"
 
-int appconn_init(struct smartphone_app_connection_data *appconn)
+int appconn_init(struct smartphone_app_connection_data *appconn,
+                 void (*send_notification_fn)(void))
 {
     log_assert(appconn != NULL);
 
@@ -46,6 +48,10 @@ int appconn_init(struct smartphone_app_connection_data *appconn)
         appconn->server_fd = -1;
         return -1;
     }
+
+    g_mutex_init(&appconn->out_queue.lock);
+    appconn->out_queue.queue.head = NULL;
+    appconn->out_queue.notification_fn = send_notification_fn;
 
     /*
      * The port number is ASCII "TB" (meaning T + A) + 1.
@@ -256,18 +262,76 @@ static void process_and_flush_on_overflow(struct ApplinkCommand *command,
     }
 }
 
-void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
-                             bool can_read_from_peer, bool peer_died)
+static void process_out_command(struct ApplinkOutputCommand *const cmd,
+                                char *const buffer, const size_t buffer_size,
+                                size_t *buffer_pos, int fd)
 {
+    cmd->buffer[cmd->buffer_used] = '\0';
+
+    size_t src_pos = 0;
+    size_t bytes_remaining = cmd->buffer_used;
+
+    while(src_pos < cmd->buffer_used)
+    {
+        const size_t bytes_to_copy =
+            (bytes_remaining <= buffer_size - *buffer_pos)
+            ? bytes_remaining
+            : buffer_size - *buffer_pos;
+
+        memcpy(buffer + *buffer_pos, cmd->buffer + src_pos, bytes_to_copy);
+
+        (*buffer_pos) += bytes_to_copy;
+        src_pos += bytes_to_copy;
+        bytes_remaining -= bytes_to_copy;
+
+        if(bytes_remaining > 0)
+        {
+            /* overflow, flush to network */
+            log_assert(*buffer_pos == buffer_size);
+            (void)os_write_from_buffer(buffer, buffer_size, fd);
+            *buffer_pos = 0;
+        }
+    }
+}
+
+static void process_queue_and_flush_on_overflow(struct smartphone_app_connection_data *appconn,
+                                                char *const buffer,
+                                                const size_t buffer_size,
+                                                size_t *buffer_pos)
+{
+    while(1)
+    {
+        g_mutex_lock(&appconn->out_queue.lock);
+
+        struct ApplinkOutputCommand *const cmd =
+            applink_output_command_take_next(&appconn->out_queue.queue);
+
+        g_mutex_unlock(&appconn->out_queue.lock);
+
+        if(cmd == NULL)
+            break;
+
+        if(appconn->connection.peer_fd >= 0)
+            process_out_command(cmd, buffer, buffer_size, buffer_pos,
+                                appconn->connection.peer_fd);
+
+        applink_output_command_return_to_pool(cmd);
+    }
+}
+
+void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
+                             bool can_read_from_peer, bool can_send_from_queue,
+                             bool peer_died)
+{
+    static char output_buffer[4096];
+    size_t output_buffer_pos = 0;
+
     if(can_read_from_peer)
     {
         log_assert(appconn->peer_fd >= 0);
         msg_info("Smartphone app over TCP/IP");
 
         bool done = false;
-
-        static char buffer[4096];
-        size_t buffer_pos = 0;
 
         while(!done)
         {
@@ -280,8 +344,8 @@ void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
               case APPLINK_RESULT_HAVE_COMMAND:
                 process_and_flush_on_overflow(&appconn->command,
                                               appconn->connection.peer_fd,
-                                              buffer, sizeof(buffer),
-                                              &buffer_pos);
+                                              output_buffer, sizeof(output_buffer),
+                                              &output_buffer_pos);
                 break;
 
               case APPLINK_RESULT_HAVE_ANSWER:
@@ -300,11 +364,15 @@ void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
                 break;
             }
         }
-
-        if(!peer_died && buffer_pos > 0)
-            (void)os_write_from_buffer(buffer, buffer_pos,
-                                       appconn->connection.peer_fd);
     }
+
+    if(!peer_died && can_send_from_queue)
+        process_queue_and_flush_on_overflow(appconn, output_buffer, sizeof(output_buffer),
+                                            &output_buffer_pos);
+
+    if(!peer_died && output_buffer_pos > 0)
+        (void)os_write_from_buffer(output_buffer, output_buffer_pos,
+                                   appconn->connection.peer_fd);
 
     if(peer_died)
     {
@@ -330,4 +398,5 @@ void appconn_close(struct smartphone_app_connection_data *appconn)
     applink_connection_free(&appconn->connection);
     applink_command_free(&appconn->command);
     network_close(&appconn->server_fd);
+    g_mutex_clear(&appconn->out_queue.lock);
 }

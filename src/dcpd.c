@@ -64,6 +64,7 @@
 
 /* internal events */
 #define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
+#define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 13)
 
 /*!
  * Global state of the DCP machinery.
@@ -125,6 +126,14 @@ static volatile bool keep_running = true;
  * The read end is passed as parameter to #main_loop().
  */
 static int register_changed_write_fd;
+
+/*!
+ * Global write end of pipe to self for communicating back requests to send
+ * something to a connected smartphone from others contexts.
+ *
+ * The read end is passed as parameter to #main_loop().
+ */
+static int app_process_queue_notification_write_fd;
 
 static void show_version_info(void)
 {
@@ -321,6 +330,27 @@ static unsigned int handle_app_peer_events(int fd, short revents)
     return result;
 }
 
+static unsigned int handle_app_queue_events(int fd, short revents)
+{
+    unsigned int result = 0;
+
+    if(revents & POLLIN)
+    {
+        result |= WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS;
+
+        uint8_t dummy[16];
+        while(os_read(fd, dummy, sizeof(dummy)) < 0 && errno == EINTR)
+            ;
+    }
+
+    if(revents & ~POLLIN)
+        msg_error(EINVAL, LOG_WARNING,
+                  "Unexpected poll() events on internal socket fd %d: %04x",
+                  fd, revents);
+
+    return result;
+}
+
 static unsigned int wait_for_events(struct state *state,
                                     const int drcp_fifo_in_fd,
                                     const int dcpspi_fifo_in_fd,
@@ -328,13 +358,14 @@ static unsigned int wait_for_events(struct state *state,
                                     const int dcp_peer_socket_fd,
                                     const int app_server_socket_fd,
                                     const int app_peer_socket_fd,
+                                    const int app_process_queue_fd,
                                     const int register_changed_fd,
                                     bool do_block)
 {
     /*
      * Local define for array layout below.
      */
-#define FIRST_NWDISPATCH_INDEX  7U
+#define FIRST_NWDISPATCH_INDEX  8U
 
     /*
      * File descriptor breakdown:
@@ -375,6 +406,10 @@ static unsigned int wait_for_events(struct state *state,
             .events = POLLIN,
         },
         {
+            .fd = app_process_queue_fd,
+            .events = POLLIN,
+        },
+        {
             .fd = register_changed_fd,
             .events = POLLIN,
         },
@@ -407,7 +442,8 @@ static unsigned int wait_for_events(struct state *state,
     return_value |= handle_dcp_peer_events(dcp_peer_socket_fd,     fds[3].revents, state);
     return_value |= handle_app_server_events(app_server_socket_fd, fds[4].revents);
     return_value |= handle_app_peer_events(app_peer_socket_fd,     fds[5].revents);
-    return_value |= handle_register_events(register_changed_fd,    fds[6].revents);
+    return_value |= handle_app_queue_events(app_process_queue_fd,  fds[6].revents);
+    return_value |= handle_register_events(register_changed_fd,    fds[7].revents);
 
     return return_value;
 
@@ -597,10 +633,30 @@ static void push_register_to_slave(uint8_t reg_number)
                   ret, reg_number);
 }
 
+static void process_smartphone_outgoing_queue(void)
+{
+    msg_info("Out queue notification");
+
+    ssize_t ret;
+    static const uint8_t zero = 0;
+
+    while((ret = os_write(app_process_queue_notification_write_fd, &zero, sizeof(zero))) < 0 &&
+          errno == EINTR)
+        ;
+
+    if(ret < 0)
+        msg_error(errno, LOG_ERR, "Failed queuing processing of smartphone queue");
+    else if(ret != sizeof(zero))
+        msg_error(0, LOG_ERR,
+                  "Wrote %zd bytes instead of 1 while trying to queue smartphone processing",
+                  ret);
+}
+
 /*!
  * Process DCP.
  */
-static void main_loop(struct files *files, int register_changed_fd)
+static void main_loop(struct files *files,
+                      int app_process_queue_fd, int register_changed_fd)
 {
     static struct state state;
 
@@ -613,8 +669,9 @@ static void main_loop(struct files *files, int register_changed_fd)
     static struct dcp_over_tcp_data dot;
     (void)dot_init(&dot);
 
+    applink_init();
     static struct smartphone_app_connection_data appconn;
-    (void)appconn_init(&appconn);
+    (void)appconn_init(&appconn, process_smartphone_outgoing_queue);
 
     dcpregs_status_set_ready();
 
@@ -627,7 +684,7 @@ static void main_loop(struct files *files, int register_changed_fd)
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             dot.server_fd, dot.peer_fd,
                             appconn.server_fd, appconn.peer_fd,
-                            register_changed_fd,
+                            app_process_queue_fd, register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
 
         if((wait_result & WAITEVENT_POLL_ERROR) != 0)
@@ -675,6 +732,7 @@ static void main_loop(struct files *files, int register_changed_fd)
 
         appconn_handle_outgoing(&appconn,
                                 (wait_result & WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET) != 0,
+                                (wait_result & WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS) != 0,
                                 (wait_result & WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED) != 0);
 
         try_dequeue_next_transaction(&state);
@@ -731,6 +789,7 @@ struct parameters
  * Open devices, daemonize.
  */
 static int setup(const struct parameters *parameters, struct files *files,
+                 int *app_process_queue_notification_read_fd,
                  int *reg_changed_read_fd)
 {
     msg_enable_syslog(!parameters->run_in_foreground);
@@ -773,10 +832,20 @@ static int setup(const struct parameters *parameters, struct files *files,
         goto error_dcpspi_fifo_out;
 
     int fds[2];
+
     if(pipe(fds) < 0)
     {
-        msg_error(errno, LOG_ERR, "Failed creating pipe");
-        goto error_pipe_to_self;
+        msg_error(errno, LOG_ERR, "Failed creating pipe for smartphone");
+        goto error_smartphone_pipe_to_self;
+    }
+
+    *app_process_queue_notification_read_fd = fds[0];
+    app_process_queue_notification_write_fd = fds[1];
+
+    if(pipe(fds) < 0)
+    {
+        msg_error(errno, LOG_ERR, "Failed creating pipe for register changes");
+        goto error_regchange_pipe_to_self;
     }
 
     *reg_changed_read_fd = fds[0];
@@ -784,7 +853,8 @@ static int setup(const struct parameters *parameters, struct files *files,
 
     return 0;
 
-error_pipe_to_self:
+error_smartphone_pipe_to_self:
+error_regchange_pipe_to_self:
     fifo_close(&files->dcpspi_fifo.out_fd);
 
 error_dcpspi_fifo_out:
@@ -943,6 +1013,15 @@ int main(int argc, char *argv[])
     }
 
     /*!
+     * File descriptor for write notifications to smartphone apps.
+     *
+     * The fd always reads 0. The only purpose of this pipe is to break the
+     * poll(2) in the main loop so that the smartphone app protocol code can
+     * process its output queue.
+     */
+    int app_process_fd;
+
+    /*!
      * File descriptor from which register changes can be read.
      *
      * The fd is supposed to be read byte by byte. Each byte corresponds to a
@@ -951,7 +1030,7 @@ int main(int argc, char *argv[])
      */
     int register_changed_fd;
 
-    if(setup(&parameters, &files, &register_changed_fd) < 0)
+    if(setup(&parameters, &files, &app_process_fd, &register_changed_fd) < 0)
         return EXIT_FAILURE;
 
     register_init(parameters.ethernet_interface_mac_address,
@@ -983,7 +1062,7 @@ int main(int argc, char *argv[])
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
-    main_loop(&files, register_changed_fd);
+    main_loop(&files, app_process_fd, register_changed_fd);
 
     msg_info("Shutting down");
 

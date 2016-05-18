@@ -68,6 +68,8 @@ void cut_setup()
 
     fill_buffer_data = new fill_buffer_data_t;
 
+    applink_init();
+
     cppcut_assert_equal(0, applink_connection_init(&conn));
     applink_connection_associate(&conn, default_peer_fd);
 
@@ -369,6 +371,141 @@ void test_single_unrequested_answer_from_app()
 
     applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
     cppcut_assert_equal("test account", static_cast<const char *>(buffer));
+}
+
+/*!\test
+ * The output command structures are managed in a pool of fixed size.
+ */
+void test_total_number_of_output_commands_is_limited()
+{
+    static const size_t reasonable_upper_bound = 50;
+    size_t count;
+
+    /* OOM message */
+    mock_messages->expect_msg_error_formatted(ENOMEM, LOG_EMERG, "output command");
+
+    for(count = 0; count < reasonable_upper_bound; ++count)
+    {
+        if(applink_output_command_alloc_from_pool() == nullptr)
+            break;
+    }
+
+    cppcut_assert_not_equal(size_t(0), count);
+    cppcut_assert_operator(reasonable_upper_bound, >, count);
+}
+
+/*!\test
+ * Output command structures can be returned to pool and be reused.
+ */
+void test_take_command_from_pool_release_and_take_again()
+{
+    struct ApplinkOutputQueue queue = { NULL };
+    static const size_t reasonable_upper_bound = 50;
+    size_t count;
+
+    /* OOM message */
+    mock_messages->expect_msg_error_formatted(ENOMEM, LOG_EMERG, "output command");
+
+    for(count = 0; count < reasonable_upper_bound; ++count)
+    {
+        auto *cmd = applink_output_command_alloc_from_pool();
+
+        if(cmd != nullptr)
+            applink_output_command_append_to_queue(&queue, cmd);
+        else
+            break;
+    }
+
+    cppcut_assert_not_equal(size_t(0), count);
+    cppcut_assert_operator(reasonable_upper_bound, >, count);
+    cppcut_assert_not_null(queue.head);
+    mock_messages->check();
+
+    for(size_t i = 0; i < count; ++i)
+    {
+        auto *cmd = applink_output_command_take_next(&queue);
+        cppcut_assert_not_null(cmd);
+        applink_output_command_return_to_pool(cmd);
+    }
+
+    cppcut_assert_null(queue.head);
+
+    for(size_t i = 0; i < count; ++i)
+    {
+        auto *cmd = applink_output_command_alloc_from_pool();
+        cppcut_assert_not_null(cmd);
+    }
+
+    mock_messages->expect_msg_error_formatted(ENOMEM, LOG_EMERG, "output command");
+    cppcut_assert_null(applink_output_command_alloc_from_pool());
+}
+
+/*!\test
+ * Taking a command from an empty queue does not crash, but returns nullptr.
+ */
+void test_take_command_from_empty_queue_returns_null()
+{
+    struct ApplinkOutputQueue queue = { NULL };
+    struct ApplinkOutputCommand *const empty = applink_output_command_take_next(&queue);
+    cppcut_assert_null(empty);
+}
+
+/*!\test
+ * Push single answer through output command queue.
+ */
+void test_put_single_answer_into_output_queue_and_remove()
+{
+    struct ApplinkOutputCommand *const command = applink_output_command_alloc_from_pool();
+    cppcut_assert_not_null(command);
+
+    struct ApplinkOutputQueue queue = { NULL };
+    applink_output_command_append_to_queue(&queue, command);
+
+    cppcut_assert_equal(command, queue.head);
+
+    struct ApplinkOutputCommand *const taken = applink_output_command_take_next(&queue);
+
+    cppcut_assert_equal(command, taken);
+    cppcut_assert_null(queue.head);
+
+    applink_output_command_return_to_pool(command);
+}
+
+/*!\test
+ * Push multiple answers through output command queue.
+ */
+void test_put_multiple_answers_into_output_queue_and_remove()
+{
+    std::array<struct ApplinkOutputCommand *, 4> commands =
+    {
+        applink_output_command_alloc_from_pool(),
+        applink_output_command_alloc_from_pool(),
+        applink_output_command_alloc_from_pool(),
+        applink_output_command_alloc_from_pool(),
+    };
+
+    for(const auto &cmd : commands)
+        cppcut_assert_not_null(cmd);
+
+    struct ApplinkOutputQueue queue = { NULL };
+
+    for(auto &cmd : commands)
+    {
+        applink_output_command_append_to_queue(&queue, cmd);
+        cppcut_assert_equal(commands[0], queue.head);
+    }
+
+    for(const auto &cmd : commands)
+    {
+        cppcut_assert_not_null(queue.head);
+        struct ApplinkOutputCommand *const taken = applink_output_command_take_next(&queue);
+        cppcut_assert_equal(cmd, taken);
+    }
+
+    cppcut_assert_null(queue.head);
+
+    for(auto &cmd: commands)
+        applink_output_command_return_to_pool(cmd);
 }
 
 }
