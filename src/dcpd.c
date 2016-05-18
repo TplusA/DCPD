@@ -20,10 +20,8 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <poll.h>
 #include <signal.h>
 #include <errno.h>
 
@@ -111,6 +109,7 @@ struct state
 
 ssize_t (*os_read)(int fd, void *dest, size_t count) = read;
 ssize_t (*os_write)(int fd, const void *buf, size_t count) = write;
+int (*os_poll)(struct pollfd *fds, nfds_t nfds, int timeout) = poll;
 
 /*!
  * Global flag that gets cleared in the SIGTERM signal handler.
@@ -384,7 +383,7 @@ static unsigned int wait_for_events(struct state *state,
     (void)nwdispatch_scatter_fds(&fds[FIRST_NWDISPATCH_INDEX],
                                  NWDISPATCH_MAX_CONNECTIONS, POLLIN);
 
-    int ret = poll(fds, sizeof(fds) / sizeof(fds[0]), do_block ? -1 : 0);
+    int ret = os_poll(fds, sizeof(fds) / sizeof(fds[0]), do_block ? -1 : 0);
 
     if(ret <= 0)
     {
