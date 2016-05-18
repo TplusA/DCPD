@@ -33,9 +33,11 @@ enum ApplinkSupportedVariables
     VAR_AIRABLE_AUTH_URL,
     VAR_AIRABLE_PASSWORD,
     VAR_SERVICE_CREDENTIALS,
+    VAR_SERVICE_LOGGED_IN,
+    VAR_SERVICE_LOGGED_OUT,
 
     VAR_FIRST_SUPPORTED_VARIABLE = VAR_AIRABLE_ROOT_URL,
-    VAR_LAST_SUPPORTED_VARIABLE = VAR_SERVICE_CREDENTIALS,
+    VAR_LAST_SUPPORTED_VARIABLE = VAR_SERVICE_LOGGED_OUT,
 };
 
 enum ApplinkResult
@@ -45,6 +47,9 @@ enum ApplinkResult
 
     /*! Found a command, input buffer may contain more. */
     APPLINK_RESULT_HAVE_COMMAND,
+
+    /*! Found an answer, input buffer may contain more. */
+    APPLINK_RESULT_HAVE_ANSWER,
 
     /*! Found possible partial command, line incomplete. */
     APPLINK_RESULT_NEED_MORE_DATA,
@@ -138,7 +143,7 @@ int applink_command_init(struct ApplinkCommand *command);
 void applink_command_free(struct ApplinkCommand *command);
 
 /*!
- * Parse next command from connection.
+ * Parse next command or answer from connection.
  *
  * \param conn
  *     The connection to parse the next command from, if any.

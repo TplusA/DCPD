@@ -128,6 +128,19 @@ static void check_expected_command(const struct ApplinkCommand &command,
         cut_assert_true(dynamic_buffer_is_empty(&command.private_data.parameters_buffer));
 }
 
+static void check_expected_answer(const struct ApplinkCommand &command,
+                                  const char *expected_variable)
+{
+    cut_assert_false(command.is_request);
+    cppcut_assert_not_null(command.variable);
+    cppcut_assert_equal(expected_variable, command.variable->name);
+
+    if(command.variable->number_of_answer_parameters > 0)
+        cut_assert_false(dynamic_buffer_is_empty(&command.private_data.parameters_buffer));
+    else
+        cut_assert_true(dynamic_buffer_is_empty(&command.private_data.parameters_buffer));
+}
+
 static void expect_read_but_return_nothing()
 {
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -330,6 +343,32 @@ void test_generate_answer_line_for_variable()
         "SERVICE_CREDENTIALS: service known here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
     cut_assert_equal_memory(expected_line, sizeof(expected_line) - 1,
                             buffer, len);
+}
+
+/*!\test
+ * The app may send answers to set variables.
+ */
+void test_single_unrequested_answer_from_app()
+{
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("SERVICE_LOGGED_IN: tidal test\\ account\n", 0, 0);
+
+    cppcut_assert_equal(APPLINK_RESULT_HAVE_ANSWER,
+                        applink_get_next_command(&conn, &default_command));
+
+    check_expected_answer(default_command, "SERVICE_LOGGED_IN");
+
+    static const char expected_parameters[] = "tidal test\\ account";
+    cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
+                            default_command.private_data.parameters_buffer.data,
+                            default_command.private_data.parameters_buffer.pos);
+
+    char buffer[512];
+    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
+    cppcut_assert_equal("tidal", static_cast<const char *>(buffer));
+
+    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
+    cppcut_assert_equal("test account", static_cast<const char *>(buffer));
 }
 
 }

@@ -203,6 +203,11 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
         }
 
         break;
+
+      case VAR_SERVICE_LOGGED_IN:
+      case VAR_SERVICE_LOGGED_OUT:
+        msg_info("App request for \"%s\" ignored", command->variable->name);
+        break;
     }
 
     if(answer != NULL)
@@ -277,6 +282,10 @@ void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
                                               appconn->connection.peer_fd,
                                               buffer, sizeof(buffer),
                                               &buffer_pos);
+                break;
+
+              case APPLINK_RESULT_HAVE_ANSWER:
+                BUG("App answers not handled yet");
                 break;
 
               case APPLINK_RESULT_IO_ERROR:

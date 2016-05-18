@@ -180,6 +180,48 @@ static size_t count_parameters(struct ParserContext *ctx,
     return count;
 }
 
+static enum ApplinkResult parse_parameters(struct ParserContext *ctx,
+                                           struct ApplinkCommand *command,
+                                           const enum ApplinkResult success_code)
+{
+    if(command->variable == NULL)
+        return APPLINK_RESULT_IO_ERROR;
+
+    (void)skip_spaces(ctx);
+    const size_t parameters_pos = ctx->pos;
+
+    const size_t count = count_parameters(ctx, command, parameters_pos);
+
+    if(command->is_request &&
+       command->variable->number_of_request_parameters != count)
+    {
+        msg_error(EINVAL, LOG_ERR,
+                  "Expected %u parameters in applink command, but got %zu",
+                  command->variable->number_of_request_parameters, count);
+        return APPLINK_RESULT_IO_ERROR;
+    }
+    else if(!command->is_request &&
+            command->variable->number_of_answer_parameters != count)
+    {
+        msg_error(EINVAL, LOG_ERR,
+                  "Expected %u parameters in applink answer, but got %zu",
+                  command->variable->number_of_answer_parameters, count);
+        return APPLINK_RESULT_IO_ERROR;
+    }
+
+    if(count > 0)
+    {
+        log_assert(parameters_pos < ctx->pos);
+
+        command->private_data.parameters_buffer.pos = ctx->pos - parameters_pos;
+        memcpy(command->private_data.parameters_buffer.data,
+               &ctx->line[parameters_pos],
+               command->private_data.parameters_buffer.pos);
+    }
+
+    return success_code;
+}
+
 static enum ApplinkResult parse_request_line(struct ParserContext *ctx,
                                              struct ApplinkCommand *command)
 {
@@ -194,33 +236,21 @@ static enum ApplinkResult parse_request_line(struct ParserContext *ctx,
     command->variable =
         applink_lookup(ctx->line + ctx->token_pos, ctx->token_length);
 
-    if(command->variable == NULL)
+    return parse_parameters(ctx, command, APPLINK_RESULT_HAVE_COMMAND);
+}
+
+static enum ApplinkResult parse_answer_line(struct ParserContext *ctx,
+                                            struct ApplinkCommand *command)
+{
+    dynamic_buffer_clear(&command->private_data.parameters_buffer);
+
+    if(ctx->token_length < 2)
         return APPLINK_RESULT_IO_ERROR;
 
-    (void)skip_spaces(ctx);
-    const size_t parameters_pos = ctx->pos;
+    command->variable =
+        applink_lookup(ctx->line + ctx->token_pos, ctx->token_length - 1);
 
-    const size_t count = count_parameters(ctx, command, parameters_pos);
-
-    if(command->variable->number_of_request_parameters != count)
-    {
-        msg_error(EINVAL, LOG_ERR,
-                  "Expected %u parameters in applink command, but got %zu",
-                  command->variable->number_of_request_parameters, count);
-        return APPLINK_RESULT_IO_ERROR;
-    }
-
-    if(count > 0)
-    {
-        log_assert(parameters_pos < ctx->pos);
-
-        command->private_data.parameters_buffer.pos = ctx->pos - parameters_pos;
-        memcpy(command->private_data.parameters_buffer.data,
-               &ctx->line[parameters_pos],
-               command->private_data.parameters_buffer.pos);
-    }
-
-    return APPLINK_RESULT_HAVE_COMMAND;
+    return parse_parameters(ctx, command, APPLINK_RESULT_HAVE_ANSWER);
 }
 
 /*!
@@ -246,30 +276,26 @@ static enum ApplinkResult parse_line(struct ApplinkConnection *conn,
     if(scan_token(&ctx) == 0)
         return APPLINK_RESULT_IO_ERROR;
 
+    enum ApplinkResult retval;
+
     command->is_request = token_equals(&ctx, "GET");
 
-    if(!command->is_request)
-    {
-        if(ctx.token_length > 0 &&
-           ctx.token_pos + ctx.token_length -  1 < ctx.line_length &&
-           ctx.line[ctx.token_pos + ctx.token_length - 1] == ':')
-        {
-            msg_error(0, LOG_NOTICE, "Applink answers are not supported");
-            return APPLINK_RESULT_EMPTY;
-        }
-        else
-            return APPLINK_RESULT_IO_ERROR;
-    }
-
-    const enum ApplinkResult retval = parse_request_line(&ctx, command);
+    if(command->is_request)
+        retval = parse_request_line(&ctx, command);
+    else if(ctx.token_length > 0 &&
+            ctx.token_pos + ctx.token_length - 1 < ctx.line_length &&
+            ctx.line[ctx.token_pos + ctx.token_length - 1] == ':')
+        retval = parse_answer_line(&ctx, command);
+    else
+        return APPLINK_RESULT_IO_ERROR;
 
     remove_processed_data_from_buffer(conn);
 
     return retval;
 }
 
-static enum ApplinkResult parse_command(struct ApplinkConnection *conn,
-                                        struct ApplinkCommand *command)
+static enum ApplinkResult parse_command_or_answer(struct ApplinkConnection *conn,
+                                                  struct ApplinkCommand *command)
 {
     size_t begin_pos = 0;
 
@@ -283,6 +309,7 @@ static enum ApplinkResult parse_command(struct ApplinkConnection *conn,
         switch(result)
         {
           case APPLINK_RESULT_HAVE_COMMAND:
+          case APPLINK_RESULT_HAVE_ANSWER:
           case APPLINK_RESULT_OUT_OF_MEMORY:
             return result;
 
@@ -322,14 +349,24 @@ enum ApplinkResult applink_get_next_command(struct ApplinkConnection *conn,
                                     true, "app commands"))
         result = APPLINK_RESULT_IO_ERROR;
     else
-        result = parse_command(conn, command);
+        result = parse_command_or_answer(conn, command);
 
-    if(result != APPLINK_RESULT_HAVE_COMMAND)
+    switch(result)
     {
-        command->is_request = false;
-        command->variable = NULL;
-        dynamic_buffer_clear(&command->private_data.parameters_buffer);
+      case APPLINK_RESULT_HAVE_COMMAND:
+      case APPLINK_RESULT_HAVE_ANSWER:
+        return result;
+
+      case APPLINK_RESULT_EMPTY:
+      case APPLINK_RESULT_NEED_MORE_DATA:
+      case APPLINK_RESULT_IO_ERROR:
+      case APPLINK_RESULT_OUT_OF_MEMORY:
+        break;
     }
+
+    command->is_request = false;
+    command->variable = NULL;
+    dynamic_buffer_clear(&command->private_data.parameters_buffer);
 
     return result;
 }
@@ -508,6 +545,8 @@ static const struct ApplinkVariable sorted_variables[VAR_LAST_SUPPORTED_VARIABLE
     MK_VARIABLE(AIRABLE_PASSWORD,    2, 1),
     MK_VARIABLE(AIRABLE_ROOT_URL,    0, 1),
     MK_VARIABLE(SERVICE_CREDENTIALS, 1, 4),
+    MK_VARIABLE(SERVICE_LOGGED_IN,   0, 2),
+    MK_VARIABLE(SERVICE_LOGGED_OUT,  0, 2),
 
 #undef MK_VARIABLE
 };
