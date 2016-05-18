@@ -70,4 +70,3 @@ applink_variable_lookup_with_length(const struct ApplinkVariableTable *table,
 
     return applink_variable_lookup(table, buffer);
 }
-

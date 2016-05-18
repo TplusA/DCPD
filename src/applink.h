@@ -72,7 +72,6 @@ struct ApplinkCommandPrivate_
     size_t number_of_parameters;
 };
 
-
 struct ApplinkCommand
 {
     bool is_request;

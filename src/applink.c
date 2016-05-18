@@ -284,8 +284,8 @@ static enum ApplinkResult parse_command(struct ApplinkConnection *conn,
 
         switch(result)
         {
-          case  APPLINK_RESULT_HAVE_COMMAND:
-          case  APPLINK_RESULT_OUT_OF_MEMORY:
+          case APPLINK_RESULT_HAVE_COMMAND:
+          case APPLINK_RESULT_OUT_OF_MEMORY:
             return result;
 
           case APPLINK_RESULT_EMPTY:
