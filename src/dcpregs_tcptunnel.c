@@ -214,8 +214,8 @@ static int handle_new_peer(int fd, void *user_data)
         return -1;
     }
 
-    msg_info("Accepted connection on tunnel on port %u, fd %d",
-             tunnel->port, peer->fd);
+    msg_info("Accepted connection on tunnel on port %u, peer %u, fd %d",
+             tunnel->port, get_peer_id(peer), peer->fd);
 
     return 0;
 }
@@ -275,6 +275,15 @@ static int tunnel_error(const char *what, uint16_t port, const char *why)
 {
     msg_error(EINVAL, LOG_ERR,
               "%s TCP tunnel on port %u failed: %s", what, port, why);
+    return -1;
+}
+
+static int tunnel_error_with_peer(const char *what, uint16_t port,
+                                  uint8_t peer_id, const char *why)
+{
+    msg_error(EINVAL, LOG_ERR,
+              "%s peer ID %u on TCP tunnel on port %u failed: %s",
+              what, peer_id, port, why);
     return -1;
 }
 
@@ -429,7 +438,8 @@ ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length)
         if(len < 0)
         {
             msg_error(errno, LOG_ERR,
-                      "Reading data from peer failed, closing connection");
+                      "Reading data from peer %u failed, closing connection",
+                      get_peer_id(register_status.peer_with_data));
             close_and_free_peer(register_status.peer_with_data, false);
             register_status.peer_with_data = NULL;
             return -1;
@@ -480,12 +490,14 @@ int dcpregs_write_121_tcp_tunnel_write(const uint8_t *data, size_t length)
 
     const struct tcp_tunnel *tunnel = find_tunnel(requested_port);
     if(tunnel == NULL)
-        return tunnel_error(what_error, requested_port, "no active tunnel");
+        return tunnel_error_with_peer(what_error, requested_port,
+                                      requested_peer_id, "no active tunnel");
 
     const uint8_t peer_id_slot =
         find_client_link_index_by_id(tunnel, requested_peer_id);
     if(peer_id_slot == UINT8_MAX)
-        return tunnel_error(what_error, requested_port, "no such peer");
+        return tunnel_error_with_peer(what_error, requested_port,
+                                      requested_peer_id, "no such peer");
 
     /* skip command header parsed above */
     data += 3;
@@ -495,7 +507,8 @@ int dcpregs_write_121_tcp_tunnel_write(const uint8_t *data, size_t length)
                             tunnel->peer_links[peer_id_slot].peer->fd) < 0)
     {
         msg_error(errno, LOG_ERR,
-                  "Sending data to peer failed, closing connection");
+                  "Sending data to peer %u on port %u failed, closing connection",
+                  requested_peer_id, requested_port);
         close_and_free_peer(tunnel->peer_links[peer_id_slot].peer, false);
         return -1;
     }
