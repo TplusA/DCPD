@@ -61,7 +61,7 @@ static fill_buffer_data_t *fill_buffer_data;
 static struct dynamic_buffer buffer;
 static const struct fifo_pair fds = { 10, 20 };
 
-void cut_setup(void)
+void cut_setup()
 {
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
@@ -78,7 +78,7 @@ void cut_setup(void)
     dynamic_buffer_init(&buffer);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     mock_messages->check();
     mock_os->check();
@@ -124,7 +124,7 @@ static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
 /*!\test
  * Reading of a valid size header works.
  */
-void test_read_drcp_size_header(void)
+void test_read_drcp_size_header()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -142,7 +142,7 @@ void test_read_drcp_size_header(void)
 /*!\test
  * Attempting to read size header from empty input fails.
  */
-void test_read_drcp_size_header_from_empty_input(void)
+void test_read_drcp_size_header_from_empty_input()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -167,7 +167,7 @@ void test_read_drcp_size_header_from_empty_input(void)
  * impossible case anyway and document the expected behavior in form of this
  * test.
  */
-void test_read_drcp_size_header_from_nearly_empty_input(void)
+void test_read_drcp_size_header_from_nearly_empty_input()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -196,7 +196,7 @@ void test_read_drcp_size_header_from_nearly_empty_input(void)
  * impossible case anyway and document the expected behavior in form of this
  * test.
  */
-void test_read_drcp_size_header_from_incomplete_input(void)
+void test_read_drcp_size_header_from_incomplete_input()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -216,7 +216,7 @@ void test_read_drcp_size_header_from_incomplete_input(void)
 /*!\test
  * Attempting to read size header with a number followed by some non-digit.
  */
-void test_read_drcp_size_header_with_trailing_byte(void)
+void test_read_drcp_size_header_with_trailing_byte()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -236,7 +236,7 @@ void test_read_drcp_size_header_with_trailing_byte(void)
 /*!\test
  * Attempting to read size header containing negative size.
  */
-void test_read_drcp_size_header_with_negative_size(void)
+void test_read_drcp_size_header_with_negative_size()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -256,7 +256,7 @@ void test_read_drcp_size_header_with_negative_size(void)
 /*!\test
  * Attempting to read size header containing an unreasonably big size.
  */
-void test_read_drcp_size_header_with_huge_size(void)
+void test_read_drcp_size_header_with_huge_size()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -276,7 +276,7 @@ void test_read_drcp_size_header_with_huge_size(void)
 /*!\test
  * Attempting to read size header causing an integer overflow.
  */
-void test_read_drcp_size_header_with_overflow_size(void)
+void test_read_drcp_size_header_with_overflow_size()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -300,7 +300,7 @@ void test_read_drcp_size_header_with_overflow_size(void)
  * some bug that causes the size header to be incorrect for some transaction.
  * Resynchronization is not handled here.
  */
-void test_read_faulty_drcp_size_header(void)
+void test_read_faulty_drcp_size_header()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -324,7 +324,7 @@ void test_read_faulty_drcp_size_header(void)
  * descriptor somehow got invalid. Maybe it was closed, maybe the kernel stops
  * playing nicely, maybe some other unpredictable error. Unlikely, but handled.
  */
-void test_read_drcp_size_header_from_broken_file_descriptor(void)
+void test_read_drcp_size_header_from_broken_file_descriptor()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -344,7 +344,7 @@ void test_read_drcp_size_header_from_broken_file_descriptor(void)
 /*!\test
  * Attempting to read some data from the named pipe filled by DRCPD.
  */
-void test_read_drcp_data(void)
+void test_read_drcp_data()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -367,7 +367,7 @@ void test_read_drcp_data(void)
  *       The test writes 8 bytes per read to the consumer's buffer. We expect
  *       the reader to stop reading when its buffer is full.
  */
-void test_read_drcp_data_from_infinite_size_input(void)
+void test_read_drcp_data_from_infinite_size_input()
 {
     dynamic_buffer_check_space(&buffer);
 
@@ -393,7 +393,7 @@ void test_read_drcp_data_from_infinite_size_input(void)
  * descriptor somehow got invalid. Maybe it was closed, maybe the kernel stops
  * playing nicely, maybe some other unpredictable error. Unlikely, but handled.
  */
-void test_read_drcp_data_from_broken_file_descriptor(void)
+void test_read_drcp_data_from_broken_file_descriptor()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
@@ -424,7 +424,7 @@ static int receive_buffer(const void *src, size_t count, int fd)
 /*!\test
  * Tell DRCPD that everything went fine.
  */
-void test_write_drcp_result_successful(void)
+void test_write_drcp_result_successful()
 {
     mock_os->expect_os_write_from_buffer_callback(receive_buffer);
 
@@ -435,7 +435,7 @@ void test_write_drcp_result_successful(void)
 /*!\test
  * Tell DRCPD that we got an error.
  */
-void test_write_drcp_result_failed(void)
+void test_write_drcp_result_failed()
 {
     mock_os->expect_os_write_from_buffer_callback(receive_buffer);
 

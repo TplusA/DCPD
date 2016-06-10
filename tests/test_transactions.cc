@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -44,20 +44,20 @@
 namespace dcp_transaction_tests_queue
 {
 
-void cut_setup(void)
+void cut_setup()
 {
     register_zero_for_unit_tests = NULL;
     transaction_init_allocator();
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
 }
 
 /*!\test
  * Single transactions can be allocated and deallocated for SPI channel.
  */
-void test_allocation_and_deallocation_of_single_transaction_object_spi(void)
+void test_allocation_and_deallocation_of_single_transaction_object_spi()
 {
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -71,7 +71,7 @@ void test_allocation_and_deallocation_of_single_transaction_object_spi(void)
 /*!\test
  * Transactions can be pinned in memory.
  */
-void test_pinned_transaction_object(void)
+void test_pinned_transaction_object()
 {
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, true);
     cppcut_assert_not_null(t);
@@ -81,7 +81,7 @@ void test_pinned_transaction_object(void)
 /*!\test
  * Single transactions can be allocated and deallocated for IP channel.
  */
-void test_allocation_and_deallocation_of_single_transaction_object_inet(void)
+void test_allocation_and_deallocation_of_single_transaction_object_inet()
 {
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_INET, false);
     cppcut_assert_not_null(t);
@@ -98,7 +98,7 @@ void test_allocation_and_deallocation_of_single_transaction_object_inet(void)
  * dynamic_buffer_free(), but since Valgrind is run anyway, this half-assed
  * test is all we need to stay on the green side.
  */
-void test_deallocation_frees_payload_buffer(void)
+void test_deallocation_frees_payload_buffer()
 {
     static const uint8_t payload_data[] = "test payload data";
 
@@ -161,7 +161,7 @@ queue_up_all_transactions(std::array<struct transaction *, max_allocs> &objects,
 /*!\test
  * Allocate all transaction objects, free them, allocate them again.
  */
-void test_allocation_and_deallocation_of_all_transaction_objects(void)
+void test_allocation_and_deallocation_of_all_transaction_objects()
 {
     std::array<struct transaction *, max_allocs> objects;
     const size_t count = allocate_all_transactions(objects);
@@ -180,7 +180,7 @@ void test_allocation_and_deallocation_of_all_transaction_objects(void)
 /*!\test
  * Allocate all transaction objects, free one in the middle, allocate it again.
  */
-void test_allocation_of_all_transaction_objects_reallocate_one(void)
+void test_allocation_of_all_transaction_objects_reallocate_one()
 {
     std::array<struct transaction *, max_allocs> objects;
     const size_t count = allocate_all_transactions(objects);
@@ -197,7 +197,7 @@ void test_allocation_of_all_transaction_objects_reallocate_one(void)
 /*!\test
  * Allocate all transaction objects, queue them up, deallocate by freeing head.
  */
-void test_deallocation_of_linked_list(void)
+void test_deallocation_of_linked_list()
 {
     std::array<struct transaction *, max_allocs> objects;
     const size_t count = allocate_all_transactions(objects);
@@ -213,7 +213,7 @@ void test_deallocation_of_linked_list(void)
 /*!\test
  * Allocate all transaction objects, queue them up, dequeue one in the middle.
  */
-void test_dequeue_from_middle_of_linked_list(void)
+void test_dequeue_from_middle_of_linked_list()
 {
     std::array<struct transaction *, max_allocs> objects;
     const size_t count = allocate_all_transactions(objects);
@@ -235,7 +235,7 @@ void test_dequeue_from_middle_of_linked_list(void)
 /*!\test
  * Dequeue single element from list.
  */
-void test_dequeue_from_list_of_length_one(void)
+void test_dequeue_from_list_of_length_one()
 {
     struct transaction *const head = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(head);
@@ -330,7 +330,7 @@ static MockConnman *mock_connman;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
 
-void cut_setup(void)
+void cut_setup()
 {
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
@@ -362,7 +362,7 @@ void cut_setup(void)
     transaction_init_allocator();
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     mock_messages->check();
     mock_os->check();
@@ -395,7 +395,7 @@ void cut_teardown(void)
  * A whole (former) simple register write transaction initiated by the slave
  * device.
  */
-void test_register_write_request_transaction(void)
+void test_register_write_request_transaction()
 {
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -422,7 +422,7 @@ void test_register_write_request_transaction(void)
  *
  * This was done to keep the implementation a bit simpler.
  */
-void test_register_simple_write_not_supported(void)
+void test_register_simple_write_not_supported()
 {
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -451,7 +451,7 @@ static int read_answer(const void *src, size_t count, int fd)
  * A whole simple register read transaction initiated by the slave device, one
  * byte of payload.
  */
-void test_register_read_request_size_1_transaction(void)
+void test_register_read_request_size_1_transaction()
 {
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
@@ -506,7 +506,7 @@ void test_register_read_request_size_1_transaction(void)
  * A whole simple register read transaction initiated by the slave device,
  * several bytes of payload.
  */
-void test_register_read_request_size_16_transaction(void)
+void test_register_read_request_size_16_transaction()
 {
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
@@ -563,7 +563,7 @@ void test_register_read_request_size_16_transaction(void)
 /*!\test
  * A whole multi-step register read transaction initiated by the slave device.
  */
-void test_register_multi_step_read_request_transaction(void)
+void test_register_multi_step_read_request_transaction()
 {
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
@@ -613,7 +613,7 @@ void test_register_multi_step_read_request_transaction(void)
  *
  * This was done to keep the implementation a bit simpler.
  */
-void test_register_multi_read_not_supported(void)
+void test_register_multi_read_not_supported()
 {
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -639,7 +639,7 @@ void test_register_multi_read_not_supported(void)
  * into multiple transactions as demonstrated in the more generic test
  * #test_big_master_transaction().
  */
-void test_small_master_transaction(void)
+void test_small_master_transaction()
 {
     static const uint8_t xml_data[] =
         "<view name=\"welcome\"><icon id=\"welcome\" text=\"Profile 1\">welcome</icon></view>";
@@ -685,7 +685,7 @@ void test_small_master_transaction(void)
 /*!\test
  * A big, fragmented write transaction initiated by the master device.
  */
-void test_big_master_transaction(void)
+void test_big_master_transaction()
 {
     static const uint8_t xml_data[] =
         "<view name=\"play\">\n"
@@ -901,7 +901,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
  * In case the slave sends a write command for an unsupported register, the
  * command is ignored and skipped.
  */
-void test_bad_register_addresses_are_handled_in_slave_write_transactions(void)
+void test_bad_register_addresses_are_handled_in_slave_write_transactions()
 {
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -973,7 +973,7 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions(void)
  * Accesses to unsupported registers are intercepted when pushing registers to
  * slave.
  */
-void test_bad_register_addresses_are_handled_in_push_transactions(void)
+void test_bad_register_addresses_are_handled_in_push_transactions()
 {
     struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -990,7 +990,7 @@ void test_bad_register_addresses_are_handled_in_push_transactions(void)
  * Accesses to unsupported registers are intercepted in fragmented
  * transactions.
  */
-void test_bad_register_addresses_are_handled_in_fragmented_transactions(void)
+void test_bad_register_addresses_are_handled_in_fragmented_transactions()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");

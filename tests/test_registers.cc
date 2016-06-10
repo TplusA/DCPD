@@ -284,7 +284,7 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_1 =
     87, 88,
 };
 
-void cut_setup(void)
+void cut_setup()
 {
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
@@ -302,7 +302,7 @@ void cut_setup(void)
     register_init(NULL, NULL, NULL, NULL);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     register_deinit();
 
@@ -322,7 +322,7 @@ void cut_teardown(void)
 /*!\test
  * Look up some register known to be implemented.
  */
-void test_lookup_existing_register(void)
+void test_lookup_existing_register()
 {
     const struct dcp_register_t *reg = register_lookup(51);
 
@@ -333,7 +333,7 @@ void test_lookup_existing_register(void)
 /*!\test
  * Look up some register known not to be implemented.
  */
-void test_lookup_nonexistent_register_fails_gracefully(void)
+void test_lookup_nonexistent_register_fails_gracefully()
 {
     cppcut_assert_null(register_lookup(10));
 }
@@ -343,7 +343,7 @@ void test_lookup_nonexistent_register_fails_gracefully(void)
  *
  * Also check if the register structures are consistently defined.
  */
-void test_lookup_all_existing_registers(void)
+void test_lookup_all_existing_registers()
 {
     cut_assert_true(register_set_protocol_level(1, 0, 0));
 
@@ -377,7 +377,7 @@ void test_lookup_all_existing_registers(void)
 /*!\test
  * Look up all registers that should not be implemented.
  */
-void test_lookup_all_nonexistent_registers(void)
+void test_lookup_all_nonexistent_registers()
 {
     for(unsigned int r = 0; r <= UINT8_MAX; ++r)
     {
@@ -443,7 +443,7 @@ static tdbusdcpdListItem *const dbus_dcpd_list_item_iface_dummy =
 static tdbuslogindManager *const dbus_logind_manager_iface_dummy =
     reinterpret_cast<tdbuslogindManager *>(0x35127956);
 
-void cut_setup(void)
+void cut_setup()
 {
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
@@ -471,7 +471,7 @@ void cut_setup(void)
     mock_dbus_iface_singleton = mock_dbus_iface;
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     mock_messages->check();
     mock_os->check();
@@ -503,7 +503,7 @@ void cut_teardown(void)
  * dcpregs_write_drcp_command(), and that reading from register 72 is not
  * possible.
  */
-void test_dcp_register_72_calls_correct_write_handler(void)
+void test_dcp_register_72_calls_correct_write_handler()
 {
     const struct dcp_register_t *reg = register_lookup(72);
 
@@ -516,7 +516,7 @@ void test_dcp_register_72_calls_correct_write_handler(void)
 /*!\test
  * Slave sends some unsupported DRC command over DCP.
  */
-void test_slave_drc_invalid_command(void)
+void test_slave_drc_invalid_command()
 {
     static const uint8_t buffer[] = { 0xbe };
 
@@ -528,7 +528,7 @@ void test_slave_drc_invalid_command(void)
 /*!\test
  * Slave sends DRC command for starting playback.
  */
-void test_slave_drc_playback_start(void)
+void test_slave_drc_playback_start()
 {
     static const uint8_t buffer[] = { DRCP_PLAYBACK_START };
 
@@ -541,7 +541,7 @@ void test_slave_drc_playback_start(void)
 /*!\test
  * Slave sends complex DRC command for setting the fast wind speed factor.
  */
-void test_slave_drc_playback_fast_find_set_speed(void)
+void test_slave_drc_playback_fast_find_set_speed()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4 };
 
@@ -555,7 +555,7 @@ void test_slave_drc_playback_fast_find_set_speed(void)
  * Slave sends complex DRC command for setting the fast wind speed factor, but
  * with an invalid out-of-range parameter.
  */
-void test_slave_drc_playback_fast_find_set_speed_invalid_parameter(void)
+void test_slave_drc_playback_fast_find_set_speed_invalid_parameter()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_BROWSE_PLAY_VIEW_SET };
 
@@ -569,7 +569,7 @@ void test_slave_drc_playback_fast_find_set_speed_invalid_parameter(void)
  * Slave sends complex DRC command for setting the fast wind speed factor, but
  * without any parameter.
  */
-void test_slave_drc_playback_fast_find_set_speed_without_parameter(void)
+void test_slave_drc_playback_fast_find_set_speed_without_parameter()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED };
 
@@ -584,7 +584,7 @@ void test_slave_drc_playback_fast_find_set_speed_without_parameter(void)
  * Slave sends complex DRC command for setting the fast wind speed factor, but
  * with two parameters instead of one.
  */
-void test_slave_drc_playback_fast_find_set_speed_with_two_parameters(void)
+void test_slave_drc_playback_fast_find_set_speed_with_two_parameters()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4, DRCP_KEY_DIGIT_4 };
 
@@ -598,7 +598,7 @@ void test_slave_drc_playback_fast_find_set_speed_with_two_parameters(void)
 /*!\test
  * Slave sends DRC command for opening the view with binary ID 0.
  */
-void test_slave_drc_views_goto_view_by_id_0(void)
+void test_slave_drc_views_goto_view_by_id_0()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT };
 
@@ -611,7 +611,7 @@ void test_slave_drc_views_goto_view_by_id_0(void)
 /*!\test
  * Slave sends DRC command for opening the view with binary ID 1.
  */
-void test_slave_drc_views_goto_view_by_id_1(void)
+void test_slave_drc_views_goto_view_by_id_1()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x01, DRCP_ACCEPT };
 
@@ -624,7 +624,7 @@ void test_slave_drc_views_goto_view_by_id_1(void)
 /*!\test
  * Slave sends DRC command for opening the view with binary ID 2.
  */
-void test_slave_drc_views_goto_view_by_id_2(void)
+void test_slave_drc_views_goto_view_by_id_2()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x02, DRCP_ACCEPT };
 
@@ -637,7 +637,7 @@ void test_slave_drc_views_goto_view_by_id_2(void)
 /*!\test
  * Slave sends DRC command for opening a view with unknown binary ID.
  */
-void test_slave_drc_views_goto_view_by_id_unknown_id(void)
+void test_slave_drc_views_goto_view_by_id_unknown_id()
 {
     static const uint8_t buffer_lowest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x03, DRCP_ACCEPT };
     static const uint8_t buffer_highest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, UINT8_MAX, DRCP_ACCEPT };
@@ -658,7 +658,7 @@ void test_slave_drc_views_goto_view_by_id_unknown_id(void)
 /*!\test
  * Slave sends malformed DRC command for opening a view by ID.
  */
-void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code(void)
+void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT - 1U };
 
@@ -671,7 +671,7 @@ void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code(vo
 /*!\test
  * Slave sends too short DRC command for opening view by ID.
  */
-void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes(void)
+void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00 };
 
@@ -685,7 +685,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes(void)
 /*!\test
  * Slave sends too long DRC command for opening view by ID.
  */
-void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes(void)
+void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT, 0x00 };
 
@@ -699,7 +699,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes(void)
 /*!\test
  * Slave sends DRC command for opening the internet radio view.
  */
-void test_slave_drc_views_goto_internet_radio(void)
+void test_slave_drc_views_goto_internet_radio()
 {
     static const uint8_t buffer[] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
 
@@ -712,7 +712,7 @@ void test_slave_drc_views_goto_internet_radio(void)
 /*!\test
  * Slave sends DRC command for toggling between browsing and playing views.
  */
-void test_slave_drc_views_toggle_browse_and_play(void)
+void test_slave_drc_views_toggle_browse_and_play()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_PLAY_VIEW_TOGGLE, 0x00 };
 
@@ -725,7 +725,7 @@ void test_slave_drc_views_toggle_browse_and_play(void)
 /*!\test
  * Slave sends DRC command for moving the cursor one line up.
  */
-void test_slave_drc_list_navigation_scroll_one_line_up(void)
+void test_slave_drc_list_navigation_scroll_one_line_up()
 {
     static const uint8_t buffer[] = { DRCP_SCROLL_UP_ONE, 0x00 };
 
@@ -738,7 +738,7 @@ void test_slave_drc_list_navigation_scroll_one_line_up(void)
 /*!\test
  * Slave sends DRC command for moving the cursor one page down.
  */
-void test_slave_drc_list_navigation_scroll_one_page_down(void)
+void test_slave_drc_list_navigation_scroll_one_page_down()
 {
     static const uint8_t buffer[] = { DRCP_SCROLL_PAGE_DOWN, 0x00 };
 
@@ -798,7 +798,7 @@ void test_slave_drc_list_navigation_scroll_fast_by_0_lines_is_ignored()
  * Slave sends DRC command for adding the currently selected item to the
  * favorites list.
  */
-void test_slave_drc_list_item_add_to_favorites(void)
+void test_slave_drc_list_item_add_to_favorites()
 {
     static const uint8_t buffer[] = { DRCP_FAVORITES_ADD_ITEM, 0x00 };
 
@@ -811,7 +811,7 @@ void test_slave_drc_list_item_add_to_favorites(void)
 /*!\test
  * Slave sends DRC command for power off.
  */
-void test_slave_drc_power_off(void)
+void test_slave_drc_power_off()
 {
     static const uint8_t buffer[] = { DRCP_POWER_OFF, 0x00 };
 
@@ -837,7 +837,7 @@ static void register_changed_callback(uint8_t reg_number)
     register_changed_data->append(reg_number);
 }
 
-void cut_setup(void)
+void cut_setup()
 {
     register_changed_data = new RegisterChangedData;
 
@@ -856,7 +856,7 @@ void cut_setup(void)
     register_init(NULL, NULL, NULL, register_changed_callback);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     register_deinit();
 
@@ -1176,7 +1176,7 @@ static void register_changed_callback(uint8_t reg_number)
     register_changed_data->append(reg_number);
 }
 
-void cut_setup(void)
+void cut_setup()
 {
     register_changed_data = new RegisterChangedData;
 
@@ -1207,7 +1207,7 @@ void cut_setup(void)
                   register_changed_callback);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     register_deinit();
 
@@ -1241,7 +1241,7 @@ void cut_teardown(void)
 /*!\test
  * Read out MAC address of built-in Ethernet interface.
  */
-void test_read_mac_address(void)
+void test_read_mac_address()
 {
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
@@ -1267,7 +1267,7 @@ void test_read_mac_address(void)
 /*!\test
  * MAC address of built-in Ethernet interface is an invalid address if not set.
  */
-void test_read_mac_address_default(void)
+void test_read_mac_address_default()
 {
     register_deinit();
 
@@ -1435,7 +1435,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
  * Initial setting of static IPv4 configuration generates a Connman
  * configuration file.
  */
-void test_set_initial_static_ipv4_configuration(void)
+void test_set_initial_static_ipv4_configuration()
 {
     char buffer[512];
     (void)do_test_set_static_ipv4_config(NULL, buffer, sizeof(buffer));
@@ -1448,7 +1448,7 @@ void test_set_initial_static_ipv4_configuration(void)
  * because they look like octal numbers. In fact, \c inet_pton(3) also chokes
  * on those.
  */
-void test_leading_zeros_are_removed_from_ipv4_addresses(void)
+void test_leading_zeros_are_removed_from_ipv4_addresses()
 {
     start_ipv4_config();
 
@@ -1480,7 +1480,7 @@ void test_leading_zeros_are_removed_from_ipv4_addresses(void)
 /*!\test
  * Initial enabling of DHCPv4 generates a Connman configuration file.
  */
-void test_set_initial_dhcp_ipv4_configuration(void)
+void test_set_initial_dhcp_ipv4_configuration()
 {
     char buffer[512];
     (void)do_test_set_dhcp_ipv4_config(NULL, buffer, sizeof(buffer));
@@ -1490,7 +1490,7 @@ void test_set_initial_dhcp_ipv4_configuration(void)
  * Setting static IPv4 configuration while a DHCPv4 configuration is active
  * rewrites the corresponding Connman configuration file.
  */
-void test_switch_to_dhcp_ipv4_configuration(void)
+void test_switch_to_dhcp_ipv4_configuration()
 {
     char config_file_buffer[512];
     const struct os_mapped_file_data config_file =
@@ -1512,7 +1512,7 @@ void test_switch_to_dhcp_ipv4_configuration(void)
  * Enabling DHCPv4 while a static IPv4 configuration is active rewrites the
  * corresponding Connman configuration file.
  */
-void test_switch_to_static_ipv4_configuration(void)
+void test_switch_to_static_ipv4_configuration()
 {
     char config_file_buffer[512];
     const struct os_mapped_file_data config_file =
@@ -1533,7 +1533,7 @@ void test_switch_to_static_ipv4_configuration(void)
 /*!\test
  * Only values 0 and 1 are valid parameters for register 55.
  */
-void test_dhcp_parameter_boundaries(void)
+void test_dhcp_parameter_boundaries()
 {
     start_ipv4_config();
 
@@ -1560,7 +1560,7 @@ void test_dhcp_parameter_boundaries(void)
  * Switching DHCP off and setting no IPv4 configuration tells us to disable the
  * interface for IPv4.
  */
-void test_explicitly_disabling_dhcp_disables_whole_interface(void)
+void test_explicitly_disabling_dhcp_disables_whole_interface()
 {
     start_ipv4_config();
 
@@ -1612,7 +1612,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface(void)
  * When being asked for DHCP mode in normal mode, Connman is consulted
  * (reporting "disabled" in this test).
  */
-void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled(void)
+void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
 {
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -1636,7 +1636,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled(void)
  * When being asked for DHCP mode in normal mode, Connman is consulted
  * (reporting "enabled" in this test).
  */
-void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled(void)
+void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
 {
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -1660,7 +1660,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled(void)
  * When being asked for DHCP mode in edit mode, Connman is consulted if the
  * mode has not been set during this edit session.
  */
-void test_read_dhcp_mode_in_edit_mode_before_any_changes(void)
+void test_read_dhcp_mode_in_edit_mode_before_any_changes()
 {
     start_ipv4_config();
 
@@ -1683,7 +1683,7 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes(void)
  * When being asked for DHCP mode in edit mode, the mode written during this
  * edit session is returned.
  */
-void test_read_dhcp_mode_in_edit_mode_after_change(void)
+void test_read_dhcp_mode_in_edit_mode_after_change()
 {
     start_ipv4_config();
 
@@ -1751,7 +1751,7 @@ struct RegisterTraits<63U>
 };
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
-static void read_ipv4_parameter_in_normal_mode(void)
+static void read_ipv4_parameter_in_normal_mode()
 {
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
@@ -1777,7 +1777,7 @@ static void read_ipv4_parameter_in_normal_mode(void)
 }
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
-static void read_ipv4_parameter_in_edit_mode_before_any_changes(void)
+static void read_ipv4_parameter_in_edit_mode_before_any_changes()
 {
     start_ipv4_config();
 
@@ -1802,7 +1802,7 @@ static void read_ipv4_parameter_in_edit_mode_before_any_changes(void)
 }
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
-static void read_ipv4_parameter_in_edit_mode_after_change(void)
+static void read_ipv4_parameter_in_edit_mode_after_change()
 {
     start_ipv4_config();
 
@@ -1838,7 +1838,7 @@ static void read_ipv4_parameter_in_edit_mode_after_change(void)
 /*!\test
  * When being asked for the IPv4 address in normal mode, Connman is consulted.
  */
-void test_read_ipv4_address_in_normal_mode(void)
+void test_read_ipv4_address_in_normal_mode()
 {
     read_ipv4_parameter_in_normal_mode<56>();
 }
@@ -1847,7 +1847,7 @@ void test_read_ipv4_address_in_normal_mode(void)
  * When being asked for the IPv4 address in edit mode, Connman is consulted if
  * the address has not been set during this edit session.
  */
-void test_read_ipv4_address_in_edit_mode_before_any_changes(void)
+void test_read_ipv4_address_in_edit_mode_before_any_changes()
 {
     read_ipv4_parameter_in_edit_mode_before_any_changes<56>();
 }
@@ -1856,7 +1856,7 @@ void test_read_ipv4_address_in_edit_mode_before_any_changes(void)
  * When being asked for the IPv4 address in edit mode, the address written
  * during this edit session is returned.
  */
-void test_read_ipv4_address_in_edit_mode_after_change(void)
+void test_read_ipv4_address_in_edit_mode_after_change()
 {
     read_ipv4_parameter_in_edit_mode_after_change<56>();
 }
@@ -1864,7 +1864,7 @@ void test_read_ipv4_address_in_edit_mode_after_change(void)
 /*!\test
  * When being asked for the IPv4 netmask in normal mode, Connman is consulted.
  */
-void test_read_ipv4_netmask_in_normal_mode(void)
+void test_read_ipv4_netmask_in_normal_mode()
 {
     read_ipv4_parameter_in_normal_mode<57>();
 }
@@ -1873,7 +1873,7 @@ void test_read_ipv4_netmask_in_normal_mode(void)
  * When being asked for the IPv4 netmask in edit mode, Connman is consulted if
  * the mask has not been set during this edit session.
  */
-void test_read_ipv4_netmask_in_edit_mode_before_any_changes(void)
+void test_read_ipv4_netmask_in_edit_mode_before_any_changes()
 {
     read_ipv4_parameter_in_edit_mode_before_any_changes<57>();
 }
@@ -1882,7 +1882,7 @@ void test_read_ipv4_netmask_in_edit_mode_before_any_changes(void)
  * When being asked for the IPv4 netmask in edit mode, the address written
  * during this edit session is returned.
  */
-void test_read_ipv4_netmask_in_edit_mode_after_change(void)
+void test_read_ipv4_netmask_in_edit_mode_after_change()
 {
     read_ipv4_parameter_in_edit_mode_after_change<57>();
 }
@@ -1890,7 +1890,7 @@ void test_read_ipv4_netmask_in_edit_mode_after_change(void)
 /*!\test
  * When being asked for the IPv4 gateway in normal mode, Connman is consulted.
  */
-void test_read_ipv4_gateway_in_normal_mode(void)
+void test_read_ipv4_gateway_in_normal_mode()
 {
     read_ipv4_parameter_in_normal_mode<58>();
 }
@@ -1899,7 +1899,7 @@ void test_read_ipv4_gateway_in_normal_mode(void)
  * When being asked for the IPv4 gateway in edit mode, Connman is consulted if
  * the gateway has not been set during this edit session.
  */
-void test_read_ipv4_gateway_in_edit_mode_before_any_changes(void)
+void test_read_ipv4_gateway_in_edit_mode_before_any_changes()
 {
     read_ipv4_parameter_in_edit_mode_before_any_changes<58>();
 }
@@ -1908,7 +1908,7 @@ void test_read_ipv4_gateway_in_edit_mode_before_any_changes(void)
  * When being asked for the IPv4 gateway in edit mode, the gateway written
  * during this edit session is returned.
  */
-void test_read_ipv4_gateway_in_edit_mode_after_change(void)
+void test_read_ipv4_gateway_in_edit_mode_after_change()
 {
     read_ipv4_parameter_in_edit_mode_after_change<58>();
 }
@@ -1981,7 +1981,7 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
  * Add primary DNS server address to static IPv4 configuration without
  * previously defined DNS servers.
  */
-void test_set_only_first_dns_server(void)
+void test_set_only_first_dns_server()
 {
     set_one_dns_server<62>(standard_dns1_address, sizeof(standard_dns1_address),
                            NULL, NULL);
@@ -1994,7 +1994,7 @@ void test_set_only_first_dns_server(void)
  * Since this is the only address sent to the device, it becomes the primary
  * DNS server.
  */
-void test_set_only_second_dns_server(void)
+void test_set_only_second_dns_server()
 {
     set_one_dns_server<63>(standard_dns2_address, sizeof(standard_dns2_address),
                            NULL, NULL);
@@ -2004,7 +2004,7 @@ void test_set_only_second_dns_server(void)
  * Add two DNS servers to static IPv4 configuration without previously defined
  * DNS servers.
  */
-void test_set_both_dns_servers(void)
+void test_set_both_dns_servers()
 {
     char config_file_buffer[512];
     const struct os_mapped_file_data config_file =
@@ -2068,7 +2068,7 @@ void test_set_both_dns_servers(void)
  * Read out the primary DNS in edit mode, Connman is consulted if the primary
  * DNS server has not been set during this edit session.
  */
-void test_read_primary_dns_in_edit_mode_before_any_changes(void)
+void test_read_primary_dns_in_edit_mode_before_any_changes()
 {
     start_ipv4_config();
 
@@ -2099,7 +2099,7 @@ void test_read_primary_dns_in_edit_mode_before_any_changes(void)
  * Read out the secondary DNS in edit mode, Connman is consulted if the
  * secondary DNS server has not been set during this edit session.
  */
-void test_read_secondary_dns_in_edit_mode_before_any_changes(void)
+void test_read_secondary_dns_in_edit_mode_before_any_changes()
 {
     start_ipv4_config();
 
@@ -2129,7 +2129,7 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes(void)
 /*!\test
  * Given two previously defined DNS servers, replace the primary one.
  */
-void test_replace_primary_dns_server_of_two_servers(void)
+void test_replace_primary_dns_server_of_two_servers()
 {
     start_ipv4_config();
 
@@ -2188,7 +2188,7 @@ void test_replace_primary_dns_server_of_two_servers(void)
 /*!\test
  * Given two previously defined DNS servers, replace the secondary one.
  */
-void test_replace_secondary_dns_server_of_two_servers(void)
+void test_replace_secondary_dns_server_of_two_servers()
 {
     start_ipv4_config();
 
@@ -2247,7 +2247,7 @@ void test_replace_secondary_dns_server_of_two_servers(void)
 /*!\test
  * Given one previously defined DNS server, add a secondary one.
  */
-void test_add_secondary_dns_server_to_primary_server(void)
+void test_add_secondary_dns_server_to_primary_server()
 {
     start_ipv4_config();
 
@@ -2305,7 +2305,7 @@ void test_add_secondary_dns_server_to_primary_server(void)
 /*!\test
  * WPA passphrase for Ethernet connections is ignored and not written to file.
  */
-void test_set_wlan_security_mode_on_ethernet_service_is_ignored(void)
+void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
 {
     start_ipv4_config();
 
@@ -2347,7 +2347,7 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored(void)
 /*!\test
  * There is no wireless security mode for Ethernet connections.
  */
-void test_get_wlan_security_mode_for_ethernet_returns_error(void)
+void test_get_wlan_security_mode_for_ethernet_returns_error()
 {
     uint8_t buffer[64];
     memset(buffer, UINT8_MAX, sizeof(buffer));
@@ -2370,7 +2370,7 @@ void test_get_wlan_security_mode_for_ethernet_returns_error(void)
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[1]);
 }
 
-static void assume_wlan_interface_is_active(void)
+static void assume_wlan_interface_is_active()
 {
     struct register_configuration_t *config = registers_get_nonconst_data();
 
@@ -2420,7 +2420,7 @@ static void set_wlan_security_mode(const char *requested_security_mode)
 /*!\test
  * Disable WLAN security.
  */
-void test_set_wlan_security_mode_none(void)
+void test_set_wlan_security_mode_none()
 {
     set_wlan_security_mode("none");
 }
@@ -2428,7 +2428,7 @@ void test_set_wlan_security_mode_none(void)
 /*!\test
  * Set WLAN security mode to WPA/PSK.
  */
-void test_set_wlan_security_mode_wpa_psk(void)
+void test_set_wlan_security_mode_wpa_psk()
 {
     set_wlan_security_mode("psk");
 }
@@ -2436,7 +2436,7 @@ void test_set_wlan_security_mode_wpa_psk(void)
 /*!\test
  * Set WLAN security mode to WPA EAP mode ("WPA Enterprise").
  */
-void test_set_wlan_security_mode_wpa_eap(void)
+void test_set_wlan_security_mode_wpa_eap()
 {
     set_wlan_security_mode("ieee8021x");
 }
@@ -2444,7 +2444,7 @@ void test_set_wlan_security_mode_wpa_eap(void)
 /*!\test
  * Set WLAN security mode to WPS.
  */
-void test_set_wlan_security_mode_wps(void)
+void test_set_wlan_security_mode_wps()
 {
     set_wlan_security_mode("wps");
 }
@@ -2452,7 +2452,7 @@ void test_set_wlan_security_mode_wps(void)
 /*!\test
  * Setting WLAN security mode to WEP is not implemented yet.
  */
-void test_set_wlan_security_mode_wep(void)
+void test_set_wlan_security_mode_wep()
 {
     assume_wlan_interface_is_active();
 
@@ -2479,7 +2479,7 @@ void test_set_wlan_security_mode_wep(void)
  * Setting invalid WLAN security mode is detected when attempting to write
  * configuration.
  */
-void test_set_invalid_wlan_security_mode(void)
+void test_set_invalid_wlan_security_mode()
 {
     assume_wlan_interface_is_active();
 
@@ -2552,7 +2552,7 @@ static void get_wlan_security_mode(const char *assumed_connman_security_mode,
 /*!\test
  * Read out WLAN security mode when no security mode is enabled.
  */
-void test_get_wlan_security_mode_assume_none(void)
+void test_get_wlan_security_mode_assume_none()
 {
     get_wlan_security_mode("none");
 }
@@ -2560,7 +2560,7 @@ void test_get_wlan_security_mode_assume_none(void)
 /*!\test
  * Read out WLAN security mode in WEP mode.
  */
-void test_get_wlan_security_mode_assume_wep(void)
+void test_get_wlan_security_mode_assume_wep()
 {
     get_wlan_security_mode("wep");
 }
@@ -2568,7 +2568,7 @@ void test_get_wlan_security_mode_assume_wep(void)
 /*!\test
  * Read out WLAN security mode in WPA/WPA2 PSK mode.
  */
-void test_get_wlan_security_mode_assume_psk(void)
+void test_get_wlan_security_mode_assume_psk()
 {
     get_wlan_security_mode("psk");
 }
@@ -2576,7 +2576,7 @@ void test_get_wlan_security_mode_assume_psk(void)
 /*!\test
  * Read out WLAN security mode in WPA EAP mode ("WPA Enterprise").
  */
-void test_get_wlan_security_mode_assume_wpa_eap(void)
+void test_get_wlan_security_mode_assume_wpa_eap()
 {
     get_wlan_security_mode("ieee8021x");
 }
@@ -2587,7 +2587,7 @@ void test_get_wlan_security_mode_assume_wpa_eap(void)
  * This test shows that we are simply passing through any mode name that is
  * currently configured into Connman configuration.
  */
-void test_get_wlan_security_mode_assume_unknown_mode(void)
+void test_get_wlan_security_mode_assume_unknown_mode()
 {
     get_wlan_security_mode("fortknox");
 }
@@ -2656,7 +2656,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
 /*!\test
  * Passphrase may be sent as ASCII string.
  */
-void test_set_ascii_passphrase_with_psk_security_mode(void)
+void test_set_ascii_passphrase_with_psk_security_mode()
 {
     static constexpr char ascii_passphrase[] = "My Secret 123&Foo~Bar";
 
@@ -2668,7 +2668,7 @@ void test_set_ascii_passphrase_with_psk_security_mode(void)
 /*!\test
  * Passphrase may be sent as string containing only hex characters.
  */
-void test_set_hex_passphrase_with_psk_security_mode(void)
+void test_set_hex_passphrase_with_psk_security_mode()
 {
     static constexpr char hex_passphrase[] =
         "1234567890abcdef"
@@ -2684,7 +2684,7 @@ void test_set_hex_passphrase_with_psk_security_mode(void)
 /*!\test
  * ASCII passphrase lengths must be with certain limits.
  */
-void test_ascii_passphrase_minimum_and_maximum_length(void)
+void test_ascii_passphrase_minimum_and_maximum_length()
 {
     assume_wlan_interface_is_active();
 
@@ -2735,7 +2735,7 @@ struct StringWithLength
 /*!\test
  * ASCII passphrase must contain characters in certain range
  */
-void test_ascii_passphrase_character_set(void)
+void test_ascii_passphrase_character_set()
 {
     assume_wlan_interface_is_active();
 
@@ -2767,7 +2767,7 @@ void test_ascii_passphrase_character_set(void)
 /*!\test
  * Passphrase with security mode "none" makes no sense and is ignored.
  */
-void test_set_passphrase_with_security_mode_none_works(void)
+void test_set_passphrase_with_security_mode_none_works()
 {
     static constexpr char ascii_passphrase[] = "SuperSecret";
 
@@ -2779,7 +2779,7 @@ void test_set_passphrase_with_security_mode_none_works(void)
 /*!\test
  * Explicitly empty passphrase with security mode "none" is accepted.
  */
-void test_set_empty_passphrase_with_security_mode_none_works(void)
+void test_set_empty_passphrase_with_security_mode_none_works()
 {
     set_passphrase_with_security_mode("", 0, "none");
 }
@@ -2787,7 +2787,7 @@ void test_set_empty_passphrase_with_security_mode_none_works(void)
 /*!\test
  * Passphrase without any security mode makes no sense and is rejected.
  */
-void test_set_passphrase_without_security_mode_does_not_work(void)
+void test_set_passphrase_without_security_mode_does_not_work()
 {
     assume_wlan_interface_is_active();
 
@@ -2817,7 +2817,7 @@ void test_set_passphrase_without_security_mode_does_not_work(void)
 /*!\test
  * Passphrase can be read out while the configuration is in edit mode.
  */
-void test_get_wlan_passphrase_in_edit_mode(void)
+void test_get_wlan_passphrase_in_edit_mode()
 {
     assume_wlan_interface_is_active();
 
@@ -2882,7 +2882,7 @@ void test_get_wlan_passphrase_in_edit_mode(void)
 /*!\test
  * Passphrase cannot be read out while the configuration is in read-only mode.
  */
-void test_get_wlan_passphrase_in_regular_mode(void)
+void test_get_wlan_passphrase_in_regular_mode()
 {
     assume_wlan_interface_is_active();
 
@@ -2911,7 +2911,7 @@ void test_get_wlan_passphrase_in_regular_mode(void)
  * over DCP (otherwise the SSID will be considered binary because it ends with
  * a 0 byte).
  */
-void test_set_simple_ascii_wlan_ssid(void)
+void test_set_simple_ascii_wlan_ssid()
 {
     assume_wlan_interface_is_active();
 
@@ -2965,7 +2965,7 @@ void test_set_simple_ascii_wlan_ssid(void)
 /*!\test
  * An SSID may be any binary string with a length of up to 32 bytes.
  */
-void test_set_binary_wlan_ssid(void)
+void test_set_binary_wlan_ssid()
 {
     assume_wlan_interface_is_active();
 
@@ -3022,7 +3022,7 @@ void test_set_binary_wlan_ssid(void)
 /*!\test
  * The empty SSID is a special wildcard SSID and cannot be used here.
  */
-void test_set_empty_wlan_ssid_is_an_error(void)
+void test_set_empty_wlan_ssid_is_an_error()
 {
     assume_wlan_interface_is_active();
 
@@ -3044,7 +3044,7 @@ void test_set_empty_wlan_ssid_is_an_error(void)
 /*!\test
  * Read out the SSID for displaying purposes.
  */
-void test_get_wlan_ssid_in_normal_mode(void)
+void test_get_wlan_ssid_in_normal_mode()
 {
     assume_wlan_interface_is_active();
 
@@ -3093,7 +3093,7 @@ void test_get_wlan_ssid_in_normal_mode(void)
  * Read out the SSID in edit mode, Connman is consulted if the SSID has not
  * been set during this edit session.
  */
-void test_get_wlan_ssid_in_edit_mode_before_any_changes(void)
+void test_get_wlan_ssid_in_edit_mode_before_any_changes()
 {
     assume_wlan_interface_is_active();
 
@@ -3141,7 +3141,7 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes(void)
 /*!\test
  * Read out the SSID in edit mode, return SSID currently being edited.
  */
-void test_get_wlan_ssid_in_edit_mode_after_change(void)
+void test_get_wlan_ssid_in_edit_mode_after_change()
 {
     assume_wlan_interface_is_active();
 
@@ -3184,7 +3184,7 @@ void test_get_wlan_ssid_in_edit_mode_after_change(void)
  *
  * Connman does not support ad-hoc mode, so we do not either.
  */
-void test_set_ibss_mode_adhoc_is_not_supported(void)
+void test_set_ibss_mode_adhoc_is_not_supported()
 {
     assume_wlan_interface_is_active();
 
@@ -3204,7 +3204,7 @@ void test_set_ibss_mode_adhoc_is_not_supported(void)
  * Attempting to set infrastructure mode succeeds, but the attempt is logged
  * and gets ignored.
  */
-void test_set_ibss_mode_infrastructure_is_ignored(void)
+void test_set_ibss_mode_infrastructure_is_ignored()
 {
     assume_wlan_interface_is_active();
 
@@ -3223,7 +3223,7 @@ void test_set_ibss_mode_infrastructure_is_ignored(void)
  * Even though we do not support setting IBSS mode, it is still not allowed to
  * send junk.
  */
-void test_set_junk_ibss_mode_is_an_error(void)
+void test_set_junk_ibss_mode_is_an_error()
 {
     assume_wlan_interface_is_active();
 
@@ -3261,7 +3261,7 @@ void test_set_junk_ibss_mode_is_an_error(void)
 /*!\test
  * We always tell we are operating in infrastructure mode.
  */
-void test_get_ibss_mode_returns_infrastructure_mode(void)
+void test_get_ibss_mode_returns_infrastructure_mode()
 {
     assume_wlan_interface_is_active();
 
@@ -3278,7 +3278,7 @@ void test_get_ibss_mode_returns_infrastructure_mode(void)
  * Attempting to set WPA cipher mode succeeds, but the attempt is logged and
  * gets ignored.
  */
-void test_set_wpa_cipher_is_ignored(void)
+void test_set_wpa_cipher_is_ignored()
 {
     assume_wlan_interface_is_active();
 
@@ -3305,7 +3305,7 @@ void test_set_wpa_cipher_is_ignored(void)
  * Even though we do not support setting WPA cipher, it is still not allowed to
  * send junk.
  */
-void test_set_junk_wpa_cipher_is_an_error(void)
+void test_set_junk_wpa_cipher_is_an_error()
 {
     assume_wlan_interface_is_active();
 
@@ -3346,7 +3346,7 @@ void test_set_junk_wpa_cipher_is_an_error(void)
 /*!\test
  * We always tell we are using AES.
  */
-void test_get_wpa_cipher_returns_aes(void)
+void test_get_wpa_cipher_returns_aes()
 {
     assume_wlan_interface_is_active();
 
@@ -3662,7 +3662,7 @@ static int write_from_buffer_callback(const void *src, size_t count, int fd)
     return 0;
 }
 
-void cut_setup(void)
+void cut_setup()
 {
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
@@ -3682,7 +3682,7 @@ void cut_setup(void)
     register_init(NULL, NULL, NULL, NULL);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     register_deinit();
 
@@ -3837,7 +3837,7 @@ static void register_changed_callback(uint8_t reg_number)
     register_changed_data->append(reg_number);
 }
 
-void cut_setup(void)
+void cut_setup()
 {
     register_changed_data = new RegisterChangedData;
 
@@ -3874,7 +3874,7 @@ void cut_setup(void)
     register_init(NULL, NULL, NULL, register_changed_callback);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     register_deinit();
 
@@ -4286,7 +4286,7 @@ static void register_changed_callback(uint8_t reg_number)
     register_changed_data->append(reg_number);
 }
 
-void cut_setup(void)
+void cut_setup()
 {
     register_changed_data = new RegisterChangedData;
 
@@ -4320,7 +4320,7 @@ void cut_setup(void)
     dcpregs_playstream_init();
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     dcpregs_playstream_deinit();
     register_deinit();
@@ -4553,7 +4553,7 @@ static void send_title_and_url(const ID::Stream stream_id,
                                          expected_title, expected_url);
 }
 
-static void stop_stream(void)
+static void stop_stream()
 {
     const auto *const reg = register_lookup(79);
 
@@ -5171,7 +5171,7 @@ static void register_changed_callback(uint8_t reg_number)
     register_changed_data->append(reg_number);
 }
 
-void cut_setup(void)
+void cut_setup()
 {
     register_changed_data = new RegisterChangedData;
 
@@ -5203,7 +5203,7 @@ void cut_setup(void)
     register_init(NULL, NULL, NULL, register_changed_callback);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     register_deinit();
 
@@ -5796,7 +5796,7 @@ static void register_changed_callback(uint8_t reg_number)
     register_changed_data->append(reg_number);
 }
 
-void cut_setup(void)
+void cut_setup()
 {
     register_changed_data = new RegisterChangedData;
 
@@ -5818,7 +5818,7 @@ void cut_setup(void)
     register_init(NULL, NULL, NULL, register_changed_callback);
 }
 
-void cut_teardown(void)
+void cut_teardown()
 {
     register_deinit();
 
