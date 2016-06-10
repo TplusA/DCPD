@@ -415,7 +415,8 @@ void dbus_shutdown(void)
         g_bus_unown_name(dbus_data_session_bus.owner_id);
 
     g_main_loop_quit(process_data.loop);
-    (void)g_thread_join(process_data.thread);
+    if(process_data.thread != NULL)
+        (void)g_thread_join(process_data.thread);
     g_main_loop_unref(process_data.loop);
 
     g_object_unref(dcpd_iface_data.playback_iface);
