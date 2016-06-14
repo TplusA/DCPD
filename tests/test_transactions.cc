@@ -400,7 +400,10 @@ void test_register_write_request_transaction()
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t write_reg_54_selected_ip_profile[] = { 0x02, 0x36, 0x01, 0x00, 0x00 };
+    static const uint8_t write_reg_54_selected_ip_profile[] =
+    {
+        DCP_COMMAND_MULTI_WRITE_REGISTER, 0x36, 0x01, 0x00, 0x00,
+    };
     read_data->set(write_reg_54_selected_ip_profile, DCP_HEADER_SIZE);
     read_data->set(write_reg_54_selected_ip_profile + DCP_HEADER_SIZE,
                    sizeof(write_reg_54_selected_ip_profile) - DCP_HEADER_SIZE);
@@ -427,7 +430,10 @@ void test_register_simple_write_not_supported()
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t oldstyle_write_reg_55_enable_dhcp[] = { 0x00, 0x37, 0x01, 0x00 };
+    static const uint8_t oldstyle_write_reg_55_enable_dhcp[] =
+    {
+        DCP_COMMAND_WRITE_REGISTER, 0x37, 0x01, 0x00,
+    };
     read_data->set(oldstyle_write_reg_55_enable_dhcp);
 
     mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Simple write command not supported");
@@ -461,7 +467,10 @@ void test_register_read_request_size_1_transaction()
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t read_reg_55_read_dhcp_mode[] = { 0x01, 0x37, 0x00, 0x00 };
+    static const uint8_t read_reg_55_read_dhcp_mode[] =
+    {
+        DCP_COMMAND_READ_REGISTER, 0x37, 0x00, 0x00,
+    };
     read_data->set(read_reg_55_read_dhcp_mode);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -488,7 +497,7 @@ void test_register_read_request_size_1_transaction()
     static const uint8_t expected_answer[] =
     {
         /* command header, payload size is 1 byte */
-        0x03, 0x37, 0x01, 0x00,
+        DCP_COMMAND_MULTI_READ_REGISTER, 0x37, 0x01, 0x00,
 
         /* DHCP is not enabled */
         0x00
@@ -516,7 +525,10 @@ void test_register_read_request_size_16_transaction()
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t read_reg_56_read_ipv4_address[] = { 0x01, 0x38, 0x00, 0x00 };
+    static const uint8_t read_reg_56_read_ipv4_address[] =
+    {
+        DCP_COMMAND_READ_REGISTER, 0x38, 0x00, 0x00,
+    };
     read_data->set(read_reg_56_read_ipv4_address);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -545,7 +557,7 @@ void test_register_read_request_size_16_transaction()
     static const uint8_t expected_answer[] =
     {
         /* command header, payload size is 16 bytes */
-        0x03, 0x38, 0x10, 0x00,
+        DCP_COMMAND_MULTI_READ_REGISTER, 0x38, 0x10, 0x00,
 
         /* zero-terminated string "111.222.255.100" */
         0x31, 0x31, 0x31, 0x2e, 0x32, 0x32, 0x32, 0x2e,
@@ -573,7 +585,10 @@ void test_register_multi_step_read_request_transaction()
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t read_reg_51_mac_address[] = { 0x01, 0x33, 0x00, 0x00 };
+    static const uint8_t read_reg_51_mac_address[] =
+    {
+        DCP_COMMAND_READ_REGISTER, 0x33, 0x00, 0x00,
+    };
     read_data->set(read_reg_51_mac_address);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -592,7 +607,7 @@ void test_register_multi_step_read_request_transaction()
     static const uint8_t expected_answer[] =
     {
         /* command header, payload size is 18 bytes */
-        0x03, 0x33, 0x12, 0x00,
+        DCP_COMMAND_MULTI_READ_REGISTER, 0x33, 0x12, 0x00,
 
         /* MAC address 12:34:56:78:9A:BC */
         0x31, 0x32, 0x3a, 0x33, 0x34, 0x3a, 0x35, 0x36,
@@ -618,7 +633,10 @@ void test_register_multi_read_not_supported()
     struct transaction *t = transaction_alloc(true, TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    static const uint8_t oldstyle_read_reg_51_mac_address[] = { 0x03, 0x33, 0x00, 0x00 };
+    static const uint8_t oldstyle_read_reg_51_mac_address[] =
+    {
+        DCP_COMMAND_MULTI_READ_REGISTER, 0x33, 0x00, 0x00,
+    };
     read_data->set(oldstyle_read_reg_51_mac_address);
 
     mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Multiple read command not supported");
@@ -664,7 +682,7 @@ void test_small_master_transaction()
     /* check emitted DCP data */
     static const uint8_t expected_header[] =
     {
-        0x02, 71,
+        DCP_COMMAND_MULTI_WRITE_REGISTER, 71,
         sizeof(xml_data) - 1U,
         0x00,
     };
@@ -739,7 +757,7 @@ void test_big_master_transaction()
         const size_t expected_data_size = std::min(bytes_left, max_data_size);
         const uint8_t expected_header[] =
         {
-            0x02, 71,
+            DCP_COMMAND_MULTI_WRITE_REGISTER, 71,
             static_cast<uint8_t>(expected_data_size & 0xff),
             static_cast<uint8_t>(expected_data_size >> 8)
         };
@@ -826,7 +844,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
 
     register_zero_for_unit_tests = &big_register;
 
-    static const uint8_t read_test_register[] = { 0x01, 0x00, 0x00, 0x00, };
+    static const uint8_t read_test_register[] = { DCP_COMMAND_READ_REGISTER, 0x00, 0x00, 0x00, };
 
     read_data->set(read_test_register);
 
@@ -857,7 +875,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
                                            : DCP_PACKET_MAX_PAYLOAD_SIZE);
         const uint8_t expected_header[] =
         {
-            0x03, 0x00,
+            DCP_COMMAND_MULTI_READ_REGISTER, 0x00,
             static_cast<uint8_t>(expected_data_size & 0xff),
             static_cast<uint8_t>(expected_data_size >> 8)
         };
@@ -921,7 +939,11 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
         0x95, 0x10, 0xab, 0x7f, 0x05, 0x00, 0xff, 0xff,
         0x55, 0xcf, 0xaa, 0x8e,
     };
-    static const uint8_t write_unsupported_register[] = { 0x02, 0x0a, sizeof(write_unknown_data), 0x00, };
+    static const uint8_t write_unsupported_register[] =
+    {
+        DCP_COMMAND_MULTI_WRITE_REGISTER, 0x0a,
+        sizeof(write_unknown_data), 0x00,
+    };
     static constexpr const size_t internal_skip_command_size = 64;
 
     read_data->set(write_unsupported_register, DCP_HEADER_SIZE);
@@ -938,7 +960,7 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
      * the previously rejected command has indeed been skipped */
     transaction_reset_for_slave(t);
 
-    static const uint8_t read_device_status[] = { 0x01, 0x11, 0x00, 0x00, };
+    static const uint8_t read_device_status[] = { DCP_COMMAND_READ_REGISTER, 0x11, 0x00, 0x00, };
     read_data->set(read_device_status);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -958,7 +980,7 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     static const uint8_t expected_answer[] =
     {
         /* command header, payload size is 2 byte */
-        0x03, 0x11, 0x02, 0x00,
+        DCP_COMMAND_MULTI_READ_REGISTER, 0x11, 0x02, 0x00,
 
         /* device status all zero */
         0x00, 0x00,
