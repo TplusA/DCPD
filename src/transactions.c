@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -64,31 +64,34 @@ struct transaction
     size_t current_fragment_offset;
 };
 
-static struct transaction transactions_container[100];
+static struct
+{
+    struct transaction tpool[100];
+    struct transaction *free_list;
+}
+global_data;
 
 #define MAX_NUMBER_OF_TRANSACTIONS \
-    (sizeof(transactions_container) / sizeof(transactions_container[0]))
-
-static struct transaction *free_list;
+    (sizeof(global_data.tpool) / sizeof(global_data.tpool[0]))
 
 void transaction_init_allocator(void)
 {
     for(unsigned int i = 1; i < MAX_NUMBER_OF_TRANSACTIONS - 1; ++i)
     {
-        transactions_container[i].prev = &transactions_container[i - 1];
-        transactions_container[i].next = &transactions_container[i + 1];
+        global_data.tpool[i].prev = &global_data.tpool[i - 1];
+        global_data.tpool[i].next = &global_data.tpool[i + 1];
     }
 
-    struct transaction *t = &transactions_container[0];
+    struct transaction *t = &global_data.tpool[0];
 
-    t->prev = &transactions_container[MAX_NUMBER_OF_TRANSACTIONS - 1];
-    t->next = &transactions_container[1];
+    t->prev = &global_data.tpool[MAX_NUMBER_OF_TRANSACTIONS - 1];
+    t->next = &global_data.tpool[1];
 
-    t = &transactions_container[MAX_NUMBER_OF_TRANSACTIONS - 1];
-    t->prev = &transactions_container[MAX_NUMBER_OF_TRANSACTIONS - 2];
-    t->next = &transactions_container[0];
+    t = &global_data.tpool[MAX_NUMBER_OF_TRANSACTIONS - 1];
+    t->prev = &global_data.tpool[MAX_NUMBER_OF_TRANSACTIONS - 2];
+    t->next = &global_data.tpool[0];
 
-    free_list = &transactions_container[0];
+    global_data.free_list = &global_data.tpool[0];
 }
 
 static void transaction_init(struct transaction *t, bool is_slave_request,
@@ -109,10 +112,10 @@ struct transaction *transaction_alloc(bool is_slave_request,
                                       enum transaction_channel channel,
                                       bool is_pinned)
 {
-    if(free_list == NULL)
+    if(global_data.free_list == NULL)
         return NULL;
 
-    struct transaction *t = transaction_queue_remove(&free_list);
+    struct transaction *t = transaction_queue_remove(&global_data.free_list);
 
     transaction_init(t, is_slave_request, channel, is_pinned);
     return t;
@@ -128,7 +131,7 @@ void transaction_free(struct transaction **head)
     do
     {
 #ifndef NDEBUG
-        ptrdiff_t idx = t - transactions_container;
+        ptrdiff_t idx = t - global_data.tpool;
 #endif /* !NDEBUG */
 
         log_assert(idx >= 0);
@@ -140,7 +143,7 @@ void transaction_free(struct transaction **head)
     }
     while(t != *head);
 
-    transaction_queue_add(&free_list, *head);
+    transaction_queue_add(&global_data.free_list, *head);
     *head = NULL;
 }
 
