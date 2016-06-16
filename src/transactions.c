@@ -257,6 +257,8 @@ request_command_matches_register_definition(uint8_t command,
 static int read_to_buffer(uint8_t *dest, size_t count, int fd,
                           const char *what)
 {
+    unsigned int retry_counter = 0;
+
     while(count > 0)
     {
         ssize_t len = os_read(fd, dest, count);
@@ -269,12 +271,26 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd,
 
         if(len < 0)
         {
+            if(errno == EAGAIN && retry_counter < 40)
+            {
+                ++retry_counter;
+
+                /* we retry reading up to 40 times with a delay of 25 ms in
+                 * between, so that's at least one second, but not much more */
+                static const struct timespec t = { .tv_nsec = 25L * 1000L * 1000L, };
+                os_nanosleep(&t);
+
+                continue;
+            }
+
             if(errno == EINTR)
                 continue;
 
             msg_error(errno, LOG_ERR, "Failed reading DCP %s from fd %d", what, fd);
             return -1;
         }
+
+        retry_counter = 0;
 
         dest += len;
         count -= len;
