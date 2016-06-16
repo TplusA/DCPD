@@ -997,15 +997,13 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
  */
 void test_bad_register_addresses_are_handled_in_push_transactions()
 {
-    struct transaction *t = transaction_alloc(false, TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    struct transaction *t = NULL;
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");
 
     cut_assert_false(transaction_push_register_to_slave(&t, 42, TRANSACTION_CHANNEL_SPI));
-
-    transaction_free(&t);
+    cppcut_assert_null(t);
 }
 
 /*!\test
