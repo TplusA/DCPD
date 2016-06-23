@@ -170,19 +170,19 @@ static void try_dequeue_next_transaction(struct state *state)
                              transaction_queue_remove(&state->master_transaction_queue));
 }
 
-static unsigned int
-schedule_slave_transaction_or_defer(struct state *state, struct transaction *t,
-                                    unsigned int retcode_if_scheduled)
+static unsigned int try_schedule_slave_transaction(struct state *state,
+                                                   struct transaction *t,
+                                                   unsigned int retcode)
 {
     if(state->active_transaction != NULL)
-        return 0;
+        return retcode;
 
     transaction_reset_for_slave(t);
 
     /* bypass queue because slave requests always have priority */
     schedule_transaction(state, t);
 
-    return retcode_if_scheduled;
+    return retcode;
 }
 
 static unsigned int handle_dcp_fifo_in_events(int fd, short revents,
@@ -191,10 +191,9 @@ static unsigned int handle_dcp_fifo_in_events(int fd, short revents,
     unsigned int result = 0;
 
     if(revents & POLLIN)
-        result |=
-            schedule_slave_transaction_or_defer(state,
-                                                state->preallocated_spi_slave_transaction,
-                                                WAITEVENT_CAN_READ_DCP);
+        result |= try_schedule_slave_transaction(state,
+                                                 state->preallocated_spi_slave_transaction,
+                                                 WAITEVENT_CAN_READ_DCP);
 
     if(revents & POLLHUP)
     {
@@ -267,10 +266,9 @@ static unsigned int handle_dcp_peer_events(int fd, short revents,
     unsigned int result = 0;
 
     if((revents & POLLIN) && network_have_data(fd))
-        result |=
-            schedule_slave_transaction_or_defer(state,
-                                                state->preallocated_inet_slave_transaction,
-                                                WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET);
+        result |= try_schedule_slave_transaction(state,
+                                                 state->preallocated_inet_slave_transaction,
+                                                 WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET);
 
     if(revents & (POLLHUP | POLLERR))
     {
@@ -653,6 +651,93 @@ static void process_smartphone_outgoing_queue(void)
 }
 
 /*!
+ * Hold back active transaction, make another transaction the active one.
+ *
+ * This function moves the active transaction to the front of our pending
+ * queue. Then, the passed transaction is made the active one.
+ */
+static void replace_active_transaction(struct state *const state,
+                                       struct transaction *new_active)
+{
+    transaction_queue_add(&state->master_transaction_queue,
+                          state->active_transaction);
+    state->master_transaction_queue = state->active_transaction;
+
+    state->active_transaction = new_active;
+}
+
+/*!
+ * Possibly replace active transaction by some other transaction.
+ */
+static void handle_transaction_exception(struct state *const state,
+                                         const struct transaction_exception *const e)
+{
+    log_assert(state->active_transaction != NULL);
+
+    struct transaction *t = NULL;
+    enum transaction_process_status result = TRANSACTION_EXCEPTION;
+
+    switch(e->exception_code)
+    {
+      case TRANSACTION_EXCEPTION_COLLISION:
+        /* colliding slave transaction must be processed next because there
+         * might be more data in the pipe buffer that belongs to the
+         * transaction */
+        log_assert(e->d.collision.t != NULL);
+        log_assert(e->d.collision.t != state->active_transaction);
+
+        replace_active_transaction(state, e->d.collision.t);
+
+        break;
+
+      case TRANSACTION_EXCEPTION_OUT_OF_ORDER_ACK:
+        t = transaction_queue_find_by_serial(state->master_transaction_queue,
+                                             e->d.ack.serial);
+
+        if(t == NULL)
+        {
+            BUG("Packet serial 0x%04x unknown, dropping out-of-order ACK",
+                e->d.ack.serial);
+            break;
+        }
+
+        result = transaction_process_out_of_order_ack(t, &e->d.ack);
+
+        break;
+
+      case TRANSACTION_EXCEPTION_OUT_OF_ORDER_NACK:
+        t = transaction_queue_find_by_serial(state->master_transaction_queue,
+                                             e->d.nack.serial);
+
+        if(t == NULL)
+        {
+            BUG("Packet serial 0x%04x unknown, dropping out-of-order NACK",
+                e->d.nack.serial);
+            break;
+        }
+
+        result = transaction_process_out_of_order_nack(t, &e->d.nack);
+
+        break;
+    }
+
+    switch(result)
+    {
+      case TRANSACTION_IN_PROGRESS:
+        break;
+
+      case TRANSACTION_PUSH_BACK:
+      case TRANSACTION_FINISHED:
+      case TRANSACTION_ERROR:
+        BUG("Unimplemented outcome of transaction exception handling");
+        break;
+
+      case TRANSACTION_EXCEPTION:
+        break;
+    }
+}
+
+/*!
  * Process DCP.
  */
 static void main_loop(struct files *files,
@@ -662,9 +747,11 @@ static void main_loop(struct files *files,
     static struct state state;
 
     state.preallocated_spi_slave_transaction =
-        transaction_alloc(true, TRANSACTION_CHANNEL_SPI, true);
+        transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
+                          TRANSACTION_CHANNEL_SPI, true);
     state.preallocated_inet_slave_transaction =
-        transaction_alloc(true, TRANSACTION_CHANNEL_INET, true);
+        transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
+                          TRANSACTION_CHANNEL_INET, true);
     dynamic_buffer_init(&state.drcp_buffer);
 
     static struct dcp_over_tcp_data dot;
@@ -756,15 +843,27 @@ static void main_loop(struct files *files,
             break;
         }
 
-        switch(transaction_process(state.active_transaction, in_fd, out_fd))
+        struct transaction_exception e;
+        switch(transaction_process(state.active_transaction, in_fd, out_fd, &e))
         {
           case TRANSACTION_IN_PROGRESS:
+            break;
+
+          case TRANSACTION_PUSH_BACK:
+            transaction_queue_add(&state.master_transaction_queue,
+                                  state.active_transaction);
+            state.active_transaction = NULL;
+            try_dequeue_next_transaction(&state);
             break;
 
           case TRANSACTION_FINISHED:
           case TRANSACTION_ERROR:
             terminate_active_transaction(&state, &dot);
             try_dequeue_next_transaction(&state);
+            break;
+
+          case TRANSACTION_EXCEPTION:
+            handle_transaction_exception(&state, &e);
             break;
         }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -26,10 +26,17 @@
  */
 /*!@{*/
 
-#define DCP_PACKET_MAX_PAYLOAD_SIZE  256U
+#define DCPSYNC_HEADER_SIZE              6
+#define DCPSYNC_SLAVE_SERIAL_INVALID     0x0000
+#define DCPSYNC_SLAVE_SERIAL_MIN         0x0001
+#define DCPSYNC_SLAVE_SERIAL_MAX         0x7fff
+#define DCPSYNC_MASTER_SERIAL_INVALID    0x8000
+#define DCPSYNC_MASTER_SERIAL_MIN        0x8001
+#define DCPSYNC_MASTER_SERIAL_MAX        0xffff
 
-#define DCP_HEADER_SIZE        4
-#define DCP_HEADER_DATA_OFFSET 2
+#define DCP_HEADER_SIZE                  4
+#define DCP_HEADER_DATA_OFFSET           2
+#define DCP_PACKET_MAX_PAYLOAD_SIZE      256U
 
 #define DCP_COMMAND_WRITE_REGISTER       0
 #define DCP_COMMAND_READ_REGISTER        1

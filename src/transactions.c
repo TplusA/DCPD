@@ -38,12 +38,41 @@
 enum transaction_state
 {
     TRANSACTION_STATE_ERROR,                /*!< Error state, cannot process */
-    TRANSACTION_STATE_SLAVE_READ_COMMAND,   /*!< Read command + data from slave */
-    TRANSACTION_STATE_PUSH_TO_SLAVE,        /*!< Prepare answer buffer */
+    TRANSACTION_STATE_SLAVE_PREPARE__INIT,  /*!< Read command from slave */
+    TRANSACTION_STATE_PUSH_TO_SLAVE__INIT,  /*!< Prepare answer buffer */
+    TRANSACTION_STATE_MASTER_PREPARE__INIT, /*!< Filling command buffer */
+    TRANSACTION_STATE_SLAVE_READ_DATA,      /*!< Read data from slave */
     TRANSACTION_STATE_SLAVE_PREPARE_ANSWER, /*!< Fill answer buffer */
     TRANSACTION_STATE_SLAVE_PROCESS_WRITE,  /*!< Process data written by slave */
-    TRANSACTION_STATE_MASTER_PREPARE,       /*!< Filling command buffer */
     TRANSACTION_STATE_SEND_TO_SLAVE,        /*!< Send (any) data to slave */
+    TRANSACTION_STATE_SEND_TO_SLAVE_ACKED,  /*!< Data was acknowledged by slave */
+    TRANSACTION_STATE_SEND_TO_SLAVE_FAILED, /*!< Final NACK received, abort */
+    TRANSACTION_STATE_DCPSYNC_WAIT_FOR_ACK, /*!< Wait for DCPSYNC ack from slave */
+};
+
+enum dcpsync_packet_type
+{
+    DCPSYNC_PACKET_INVALID,
+    DCPSYNC_PACKET_IO_ERROR,
+    DCPSYNC_PACKET_COMMAND,
+    DCPSYNC_PACKET_ACK,
+    DCPSYNC_PACKET_NACK,
+};
+
+enum read_to_buffer_result
+{
+    READ_OK,
+    READ_INCOMPLETE,
+    READ_IO_ERROR,
+};
+
+struct dcpsync_header
+{
+    bool is_enabled;
+    uint8_t original_command;
+    uint8_t ttl;
+    uint16_t serial;
+    uint16_t remaining_payload_size;
 };
 
 struct transaction
@@ -53,6 +82,8 @@ struct transaction
 
     enum transaction_state state;
     bool is_pinned;
+
+    struct dcpsync_header dcpsync;
 
     uint8_t request_header[DCP_HEADER_SIZE];
     uint8_t command;
@@ -68,11 +99,25 @@ static struct
 {
     struct transaction tpool[100];
     struct transaction *free_list;
+
+    uint16_t next_dcpsync_serial;
 }
+
 global_data;
 
 #define MAX_NUMBER_OF_TRANSACTIONS \
     (sizeof(global_data.tpool) / sizeof(global_data.tpool[0]))
+
+static uint16_t mk_serial(void)
+{
+    if(global_data.next_dcpsync_serial < DCPSYNC_MASTER_SERIAL_MIN ||
+       global_data.next_dcpsync_serial > DCPSYNC_MASTER_SERIAL_MAX)
+    {
+        global_data.next_dcpsync_serial = DCPSYNC_MASTER_SERIAL_MIN;
+    }
+
+    return global_data.next_dcpsync_serial++;
+}
 
 void transaction_init_allocator(void)
 {
@@ -92,15 +137,66 @@ void transaction_init_allocator(void)
     t->next = &global_data.tpool[0];
 
     global_data.free_list = &global_data.tpool[0];
+    global_data.next_dcpsync_serial = 0;
 }
 
-static void transaction_init(struct transaction *t, bool is_slave_request,
+static void transaction_refresh_as_master(struct transaction *t)
+{
+    if(!t->dcpsync.is_enabled)
+        return;
+
+    const uint16_t new_serial = mk_serial();
+
+    /*see also #transaction_init()  */
+    t->dcpsync.serial = new_serial;
+    t->dcpsync.ttl = UINT8_MAX;
+}
+
+static void transaction_init(struct transaction *t,
+                             enum transaction_alloc_type alloc_type,
                              enum transaction_channel channel, bool is_pinned)
 {
-    t->state = (is_slave_request
-                ? TRANSACTION_STATE_SLAVE_READ_COMMAND
-                : TRANSACTION_STATE_MASTER_PREPARE);
+    switch(alloc_type)
+    {
+      case TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA:
+        /* plain master transaction initiated by DRCPD */
+        t->state = TRANSACTION_STATE_MASTER_PREPARE__INIT;
+        break;
+
+      case TRANSACTION_ALLOC_MASTER_FOR_REGISTER:
+        /* plain master transaction initiated by us for register data */
+        t->state = TRANSACTION_STATE_PUSH_TO_SLAVE__INIT;
+        break;
+
+      case TRANSACTION_ALLOC_SLAVE_BY_SLAVE:
+        /* plain slave transaction initiated by slave device */
+        t->state = TRANSACTION_STATE_SLAVE_PREPARE__INIT;
+        break;
+    }
+
     t->is_pinned = is_pinned;
+
+    memset(&t->dcpsync, 0, sizeof(t->dcpsync));
+
+    if(channel == TRANSACTION_CHANNEL_SPI)
+    {
+        t->dcpsync.is_enabled = true;
+        t->dcpsync.ttl = UINT8_MAX;
+
+        switch(alloc_type)
+        {
+          case TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA:
+          case TRANSACTION_ALLOC_MASTER_FOR_REGISTER:
+            /*see also #transaction_convert_to_master()  */
+            t->dcpsync.serial = mk_serial();
+            break;
+
+          case TRANSACTION_ALLOC_SLAVE_BY_SLAVE:
+            t->dcpsync.serial = DCPSYNC_SLAVE_SERIAL_INVALID;
+            break;
+        }
+    }
+
     t->reg = NULL;
     t->channel = channel;
     t->current_fragment_offset = 0;
@@ -108,7 +204,7 @@ static void transaction_init(struct transaction *t, bool is_slave_request,
     dynamic_buffer_init(&t->payload);
 }
 
-struct transaction *transaction_alloc(bool is_slave_request,
+struct transaction *transaction_alloc(enum transaction_alloc_type alloc_type,
                                       enum transaction_channel channel,
                                       bool is_pinned)
 {
@@ -117,7 +213,7 @@ struct transaction *transaction_alloc(bool is_slave_request,
 
     struct transaction *t = transaction_queue_remove(&global_data.free_list);
 
-    transaction_init(t, is_slave_request, channel, is_pinned);
+    transaction_init(t, alloc_type, channel, is_pinned);
     return t;
 }
 
@@ -150,7 +246,8 @@ void transaction_free(struct transaction **head)
 void transaction_reset_for_slave(struct transaction *t)
 {
     dynamic_buffer_free(&t->payload);
-    transaction_init(t, true, t->channel, t->is_pinned);
+    transaction_init(t, TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
+                     t->channel, t->is_pinned);
 }
 
 static const struct dcp_register_t *
@@ -236,6 +333,57 @@ struct transaction *transaction_queue_remove(struct transaction **head)
     return t;
 }
 
+static inline bool is_serial_out_of_range(const uint16_t serial)
+{
+    return
+        !((serial >= DCPSYNC_MASTER_SERIAL_MIN && serial <= DCPSYNC_MASTER_SERIAL_MAX) ||
+          (serial >= DCPSYNC_SLAVE_SERIAL_MIN && serial <= DCPSYNC_SLAVE_SERIAL_MAX));
+}
+
+struct transaction *transaction_queue_find_by_serial(struct transaction *head,
+                                                     uint16_t serial)
+{
+    if(is_serial_out_of_range(serial))
+    {
+        BUG("Tried to find transaction with invalid serial 0x%04x", serial);
+        return NULL;
+    }
+
+    if(head == NULL)
+        return NULL;
+
+    struct transaction *t = head;
+
+    do
+    {
+        if(t->dcpsync.serial == serial)
+            return t;
+
+        t = t->next;
+    }
+    while(t != head);
+
+    return NULL;
+}
+
+struct transaction *transaction_queue_cut_element(struct transaction *t)
+{
+    if(t == NULL)
+        return NULL;
+
+    if(t == t->next)
+        return t;
+
+    struct transaction *const next = t->next;
+
+    next->prev = t->prev;
+    t->prev->next = next;
+
+    t->next = t->prev = t;
+
+    return next;
+}
+
 static bool
 request_command_matches_register_definition(uint8_t command,
                                             const struct dcp_register_t *reg)
@@ -254,8 +402,8 @@ request_command_matches_register_definition(uint8_t command,
     return false;
 }
 
-static int read_to_buffer(uint8_t *dest, size_t count, int fd,
-                          const char *what)
+static enum read_to_buffer_result read_to_buffer(uint8_t *dest, size_t count,
+                                                 int fd, const char *what)
 {
     unsigned int retry_counter = 0;
 
@@ -266,7 +414,7 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd,
         if(len == 0)
         {
             msg_info("End of data while reading DCP packet from fd %d", fd);
-            return -1;
+            break;
         }
 
         if(len < 0)
@@ -287,7 +435,8 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd,
                 continue;
 
             msg_error(errno, LOG_ERR, "Failed reading DCP %s from fd %d", what, fd);
-            return -1;
+
+            return READ_IO_ERROR;
         }
 
         retry_counter = 0;
@@ -296,7 +445,7 @@ static int read_to_buffer(uint8_t *dest, size_t count, int fd,
         count -= len;
     }
 
-    return 0;
+    return count == 0 ? READ_OK : READ_INCOMPLETE;
 }
 
 static void skip_transaction_payload(struct transaction *t, const int fd)
@@ -304,26 +453,149 @@ static void skip_transaction_payload(struct transaction *t, const int fd)
     uint8_t dummy[64];
     uint16_t skipped_bytes;
 
-    for(uint16_t count = dcp_read_header_data(t->request_header +
-                                              DCP_HEADER_DATA_OFFSET);
-        count > 0;
-        count -= skipped_bytes)
+    uint16_t count =
+        t->dcpsync.is_enabled
+        ? t->dcpsync.remaining_payload_size
+        : dcp_read_header_data(t->request_header + DCP_HEADER_DATA_OFFSET);
+
+    for(/* nothing */; count > 0; count -= skipped_bytes)
     {
         skipped_bytes = (count >= sizeof(dummy)) ? sizeof(dummy) : count;
 
-        if(read_to_buffer(dummy, skipped_bytes, fd, "unprocessed payload") < 0)
+        switch(read_to_buffer(dummy, skipped_bytes, fd, "unprocessed payload"))
+        {
+          case READ_OK:
             break;
+
+          case READ_IO_ERROR:
+          case READ_INCOMPLETE:
+            count = 0;
+            break;
+        }
     }
+
+    t->dcpsync.remaining_payload_size = 0;
+}
+
+static void fill_dcpsync_header_generic(uint8_t *const dcpsync_header,
+                                        const uint8_t command,
+                                        const uint8_t ttl,
+                                        const uint16_t serial,
+                                        const uint16_t dcp_packet_size)
+{
+    dcpsync_header[0] = command;
+    dcpsync_header[1] = ttl;
+    dcpsync_header[2] = (serial >> 8) & UINT8_MAX;
+    dcpsync_header[3] = (serial >> 0) & UINT8_MAX;
+    dcpsync_header[4] = (dcp_packet_size >> 8) & UINT8_MAX;
+    dcpsync_header[5] = (dcp_packet_size >> 0) & UINT8_MAX;
+}
+
+static uint16_t get_dcpsync_serial(const uint8_t *dcpsync_header)
+{
+    return (dcpsync_header[0] << 8) | dcpsync_header[1];
+}
+
+static uint16_t get_dcpsync_data_size(const uint8_t *dcpsync_header)
+{
+    return (dcpsync_header[0] << 8) | dcpsync_header[1];
+}
+
+static enum dcpsync_packet_type read_dcpsync_header(struct dcpsync_header *dh,
+                                                    const int fd)
+{
+    uint8_t buffer[DCPSYNC_HEADER_SIZE];
+
+    memset(dh, 0, sizeof(*dh));
+
+    if(fd < 0)
+        return DCPSYNC_PACKET_COMMAND;
+
+    switch(read_to_buffer(buffer, sizeof(buffer), fd, "sync"))
+    {
+      case READ_OK:
+        break;
+
+      case READ_INCOMPLETE:
+        return DCPSYNC_PACKET_INVALID;
+
+      case READ_IO_ERROR:
+        return DCPSYNC_PACKET_IO_ERROR;
+    }
+
+    dh->is_enabled = true;
+    dh->original_command = buffer[0];
+    dh->ttl = buffer[1];
+    dh->serial = get_dcpsync_serial(buffer + 2);
+    dh->remaining_payload_size = get_dcpsync_data_size(buffer + 4);
+
+    static const char unexpected_size_error[] =
+        "Skip packet 0x%02x/0x%04x of unexpected size %u";
+    static const char unknown_dcpsync_command_error[] =
+        "Unknown DCPSYNC command 0x%02x, skipping packet 0x%04x of size %u";
+
+    const char *error_format_string;
+
+    if(dh->original_command == 'c')
+    {
+        if(dh->remaining_payload_size >= DCP_HEADER_SIZE)
+            return DCPSYNC_PACKET_COMMAND;
+
+        if(dh->ttl > 0)
+            BUG("Got DCP packet with positive TTL");
+
+        error_format_string = unexpected_size_error;
+    }
+    else if(dh->original_command == 'a')
+    {
+        if(dh->remaining_payload_size == 0)
+            return DCPSYNC_PACKET_ACK;
+
+        if(dh->ttl > 0)
+            BUG("Got ACK with positive TTL");
+
+        error_format_string = unexpected_size_error;
+    }
+    else if(dh->original_command == 'n')
+    {
+        if(dh->remaining_payload_size == 0)
+            return DCPSYNC_PACKET_NACK;
+
+        error_format_string = unexpected_size_error;
+    }
+    else
+        error_format_string = unknown_dcpsync_command_error;
+
+    msg_error(0, LOG_ERR, error_format_string, dh->original_command,
+              dh->serial, dh->remaining_payload_size);
+
+    return DCPSYNC_PACKET_INVALID;
 }
 
 static bool fill_request_header(struct transaction *t, const int fd)
 {
-    if(read_to_buffer(t->request_header, sizeof(t->request_header),
-                      fd, "header") < 0)
-        return false;
+    switch(read_to_buffer(t->request_header, sizeof(t->request_header), fd, "header"))
+    {
+      case READ_OK:
+        if(t->dcpsync.is_enabled)
+            t->dcpsync.remaining_payload_size -= sizeof(t->request_header);
 
-    if((t->request_header[0] & 0xf0) != 0)
+        break;
+
+      case READ_INCOMPLETE:
+      case READ_IO_ERROR:
+        return false;
+    }
+
+    const bool is_header_valid = ((t->request_header[0] & 0xf0) == 0);
+
+    if(!is_header_valid)
+    {
+        if(t->dcpsync.is_enabled)
+            skip_transaction_payload(t, fd);
+
         goto error_invalid_header;
+    }
 
     const struct dcp_register_t *reg = lookup_register_for_transaction(t->request_header[1], false);
 
@@ -384,9 +656,26 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
     if(size == 0)
         return true;
 
+    if(t->dcpsync.is_enabled)
+    {
+        if(size < t->dcpsync.remaining_payload_size)
+            msg_error(0, LOG_WARNING, "DCP packet size %u smaller than "
+                      "DCPSYNC remaining payload size %u (ignored)",
+                      size, t->dcpsync.remaining_payload_size);
+        else if(size > t->dcpsync.remaining_payload_size)
+        {
+            msg_error(EINVAL, LOG_ERR, "DCP packet size %u too large to fit "
+                      "into remaining DCPSYNC payload of size %u",
+                      size, t->dcpsync.remaining_payload_size);
+            goto error_exit;
+        }
+    }
+
     if(!dynamic_buffer_is_allocated(&t->payload) &&
        !dynamic_buffer_resize(&t->payload, size))
-        return false;
+    {
+        goto error_exit;
+    }
 
     if(t->payload.size < size)
     {
@@ -394,16 +683,32 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
                   "DCP payload too large for register %u, "
                   "expecting no more than %zu bytes of data",
                   t->reg->address, t->payload.size);
-        skip_transaction_payload(t, fd);
+        goto error_exit;
+    }
+
+    switch(read_to_buffer(t->payload.data, size, fd, "payload"))
+    {
+      case READ_OK:
+        break;
+
+      case READ_INCOMPLETE:
+      case READ_IO_ERROR:
         return false;
     }
 
-    if(read_to_buffer(t->payload.data, size, fd, "payload") < 0)
-        return false;
-
     t->payload.pos = size;
 
+    if(t->dcpsync.is_enabled)
+    {
+        t->dcpsync.remaining_payload_size -= size;
+        skip_transaction_payload(t, fd);
+    }
+
     return true;
+
+error_exit:
+    skip_transaction_payload(t, fd);
+    return false;
 }
 
 static bool allocate_payload_buffer(struct transaction *t)
@@ -475,21 +780,132 @@ static bool is_last_fragment(struct transaction *t)
     return get_remaining_fragment_size(t) <= DCP_PACKET_MAX_PAYLOAD_SIZE;
 }
 
+static void set_collision_exception(struct transaction_exception *e,
+                                    struct transaction *t)
+{
+    e->exception_code = TRANSACTION_EXCEPTION_COLLISION;
+    e->d.collision.t = t;
+}
+
+static void set_ooo_ack_exception(struct transaction_exception *e,
+                                  uint16_t serial)
+{
+    e->exception_code = TRANSACTION_EXCEPTION_OUT_OF_ORDER_ACK;
+    e->d.ack.serial = serial;
+}
+
+static void set_ooo_nack_exception(struct transaction_exception *e,
+                                   uint16_t serial, uint8_t ttl)
+{
+    e->exception_code = TRANSACTION_EXCEPTION_OUT_OF_ORDER_NACK;
+    e->d.nack.ttl = ttl;
+    e->d.nack.serial = serial;
+}
+
+static bool process_ack(struct transaction *t, uint16_t serial)
+{
+    if(serial != t->dcpsync.serial)
+        return false;
+
+    t->state = TRANSACTION_STATE_SEND_TO_SLAVE_ACKED;
+
+    return true;
+}
+
+static bool process_nack(struct transaction *t, uint16_t serial, uint8_t ttl)
+{
+    if(serial != t->dcpsync.serial)
+    {
+        msg_info("Got NACK[%u] for 0x%04x while waiting for 0x%04x ACK",
+                 ttl, serial, t->dcpsync.serial);
+        return false;
+    }
+
+    t->dcpsync.ttl = ttl;
+
+    if(ttl > 0)
+    {
+        t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
+        t->dcpsync.serial = mk_serial();
+
+        msg_info("Got NACK[%u] for 0x%04x, resending packet as 0x%04x",
+                 ttl, serial, t->dcpsync.serial);
+    }
+    else
+    {
+        t->state = TRANSACTION_STATE_SEND_TO_SLAVE_FAILED;
+
+        msg_info("Got final NACK for 0x%04x, aborting transaction", serial);
+    }
+
+    return true;
+}
+
 enum transaction_process_status transaction_process(struct transaction *t,
                                                     int from_slave_fd,
-                                                    int to_slave_fd)
+                                                    int to_slave_fd,
+                                                    struct transaction_exception *e)
 {
     log_assert(t != NULL);
+    log_assert(e != NULL);
 
     switch(t->state)
     {
       case TRANSACTION_STATE_ERROR:
         break;
 
-      case TRANSACTION_STATE_SLAVE_READ_COMMAND:
-        if(!fill_request_header(t, from_slave_fd))
-            break;
+      case TRANSACTION_STATE_SLAVE_PREPARE__INIT:
+        {
+            bool failed = false;
 
+            switch(read_dcpsync_header(&t->dcpsync,
+                                       t->channel == TRANSACTION_CHANNEL_SPI ? from_slave_fd : -1))
+            {
+              case DCPSYNC_PACKET_INVALID:
+                skip_transaction_payload(t, from_slave_fd);
+
+                /* fall-through */
+
+              case DCPSYNC_PACKET_IO_ERROR:
+                failed = true;
+                break;
+
+              case DCPSYNC_PACKET_COMMAND:
+                failed = !fill_request_header(t, from_slave_fd);
+                break;
+
+              case DCPSYNC_PACKET_ACK:
+                msg_info("Got ACK for 0x%04x while waiting for new command packet",
+                         t->dcpsync.serial);
+
+                set_ooo_ack_exception(e, t->dcpsync.serial);
+
+                t->dcpsync.original_command = 0x00;
+                t->dcpsync.serial = DCPSYNC_SLAVE_SERIAL_INVALID;
+
+                return TRANSACTION_EXCEPTION;
+
+              case DCPSYNC_PACKET_NACK:
+                msg_info("Got NACK[%u] for 0x%04x while waiting for new "
+                         "command packet", t->dcpsync.ttl, t->dcpsync.serial);
+
+                set_ooo_nack_exception(e, t->dcpsync.serial, t->dcpsync.ttl);
+
+                t->dcpsync.original_command = 0x00;
+                t->dcpsync.serial = DCPSYNC_SLAVE_SERIAL_INVALID;
+
+                return TRANSACTION_EXCEPTION;
+            }
+
+            if(failed)
+                break;
+            else
+                t->state = TRANSACTION_STATE_SLAVE_READ_DATA;
+        }
+
+        /* fall-through */
+
+      case TRANSACTION_STATE_SLAVE_READ_DATA:
         if(!allocate_payload_buffer(t))
             break;
 
@@ -502,13 +918,18 @@ enum transaction_process_status transaction_process(struct transaction *t,
                 break;
 
             t->state = TRANSACTION_STATE_SLAVE_PROCESS_WRITE;
+
+            return TRANSACTION_IN_PROGRESS;
         }
         else
+        {
+            transaction_refresh_as_master(t);
             t->state = TRANSACTION_STATE_SLAVE_PREPARE_ANSWER;
 
-        return TRANSACTION_IN_PROGRESS;
+            return TRANSACTION_PUSH_BACK;
+        }
 
-      case TRANSACTION_STATE_PUSH_TO_SLAVE:
+      case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
         if(!allocate_payload_buffer(t))
             break;
 
@@ -548,7 +969,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
         return TRANSACTION_FINISHED;
 
-      case TRANSACTION_STATE_MASTER_PREPARE:
+      case TRANSACTION_STATE_MASTER_PREPARE__INIT:
         if(t->command != DCP_COMMAND_MULTI_WRITE_REGISTER)
         {
             log_assert(t->command == DCP_COMMAND_READ_REGISTER);
@@ -562,30 +983,225 @@ enum transaction_process_status transaction_process(struct transaction *t,
       case TRANSACTION_STATE_SEND_TO_SLAVE:
         {
             const size_t fragsize = get_current_fragment_size(t);
+            uint8_t sync_header[DCPSYNC_HEADER_SIZE];
+
+            if(t->dcpsync.is_enabled)
+                fill_dcpsync_header_generic(sync_header, 'c',
+                                            t->dcpsync.ttl, t->dcpsync.serial,
+                                            fragsize + DCP_HEADER_SIZE);
 
             dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
                                 fragsize);
 
-            if(os_write_from_buffer(t->request_header, sizeof(t->request_header),
+            if((t->dcpsync.is_enabled &&
+                os_write_from_buffer(sync_header, sizeof(sync_header),
+                                     to_slave_fd) < 0) ||
+               os_write_from_buffer(t->request_header, sizeof(t->request_header),
                                     to_slave_fd) < 0 ||
                os_write_from_buffer(t->payload.data + t->current_fragment_offset,
                                     fragsize, to_slave_fd) < 0)
                 break;
         }
 
+        if(t->dcpsync.is_enabled)
+        {
+            t->state = TRANSACTION_STATE_DCPSYNC_WAIT_FOR_ACK;
+            return TRANSACTION_IN_PROGRESS;
+        }
+        else
+            t->state = TRANSACTION_STATE_SEND_TO_SLAVE_ACKED;
+
+        /* fall-through */
+
+      case TRANSACTION_STATE_SEND_TO_SLAVE_ACKED:
         if(is_last_fragment(t))
             return TRANSACTION_FINISHED;
 
         t->current_fragment_offset += DCP_PACKET_MAX_PAYLOAD_SIZE;
         log_assert(t->current_fragment_offset < t->payload.pos);
 
-        return TRANSACTION_IN_PROGRESS;
+        transaction_refresh_as_master(t);
+        t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
+
+        return TRANSACTION_PUSH_BACK;
+
+      case TRANSACTION_STATE_SEND_TO_SLAVE_FAILED:
+        t->state = TRANSACTION_STATE_ERROR;
+
+        return TRANSACTION_ERROR;
+
+      case TRANSACTION_STATE_DCPSYNC_WAIT_FOR_ACK:
+        log_assert(t->dcpsync.is_enabled);
+
+        {
+            struct dcpsync_header dh;
+
+            switch(read_dcpsync_header(&dh, from_slave_fd))
+            {
+              case DCPSYNC_PACKET_IO_ERROR:
+                break;
+
+              case DCPSYNC_PACKET_INVALID:
+                skip_transaction_payload(t, from_slave_fd);
+
+                return TRANSACTION_IN_PROGRESS;
+
+              case DCPSYNC_PACKET_COMMAND:
+                msg_info("Collision: New packet 0x%04x while waiting for 0x%04x ACK",
+                         dh.serial, t->dcpsync.serial);
+
+                set_collision_exception(e,
+                                        transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
+                                                          t->channel, false));
+
+                bool failed;
+
+                if(e->d.collision.t == NULL)
+                {
+                    msg_out_of_memory("interrupting slave transaction");
+                    msg_error(ENOMEM, LOG_CRIT,
+                              "Received packet 0x%04x while processing "
+                              "packet 0x%04x, but cannot handle it",
+                              dh.serial, t->dcpsync.serial);
+                    failed = true;
+                }
+                else
+                {
+                    e->d.collision.t->dcpsync = dh;
+                    failed = !fill_request_header(e->d.collision.t, from_slave_fd);
+                }
+
+                if(failed)
+                {
+                    if(e->d.collision.t != NULL)
+                        transaction_free(&e->d.collision.t);
+
+                    /* skipping this transaction is all we can do under these
+                     * conditions... */
+                    skip_transaction_payload(t, from_slave_fd);
+                    return TRANSACTION_IN_PROGRESS;
+                }
+                else
+                {
+                    e->d.collision.t->state = TRANSACTION_STATE_SLAVE_READ_DATA;
+                    return TRANSACTION_EXCEPTION;
+                }
+
+              case DCPSYNC_PACKET_ACK:
+                if(process_ack(t, dh.serial))
+                    return TRANSACTION_IN_PROGRESS;
+
+                set_ooo_ack_exception(e, dh.serial);
+
+                return TRANSACTION_EXCEPTION;
+
+              case DCPSYNC_PACKET_NACK:
+                if(process_nack(t, dh.serial, dh.ttl))
+                    return TRANSACTION_IN_PROGRESS;
+
+                set_ooo_nack_exception(e, dh.serial, dh.ttl);
+
+                return TRANSACTION_EXCEPTION;
+            }
+        }
+
+        break;
     }
 
     msg_error(0, LOG_ERR, "Transaction %p failed in state %d", t, t->state);
     t->state = TRANSACTION_STATE_ERROR;
 
     return TRANSACTION_ERROR;
+}
+
+enum transaction_process_status
+transaction_process_out_of_order_ack(struct transaction *t,
+                                     const struct transaction_exception_ack_data *d)
+{
+    log_assert(t != NULL);
+    log_assert(t->dcpsync.is_enabled);
+    log_assert(d != NULL);
+
+    if(d->serial != t->dcpsync.serial)
+    {
+        BUG("Serial for out-of-order ACK wrong (0x%04x, expected 0x%04x)",
+            d->serial, t->dcpsync.serial);
+        return TRANSACTION_EXCEPTION;
+    }
+
+    switch(t->state)
+    {
+      case TRANSACTION_STATE_ERROR:
+        return TRANSACTION_ERROR;
+
+      case TRANSACTION_STATE_SLAVE_PREPARE__INIT:
+      case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
+      case TRANSACTION_STATE_MASTER_PREPARE__INIT:
+      case TRANSACTION_STATE_SLAVE_READ_DATA:
+      case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
+      case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
+      case TRANSACTION_STATE_SEND_TO_SLAVE:
+      case TRANSACTION_STATE_SEND_TO_SLAVE_ACKED:
+      case TRANSACTION_STATE_SEND_TO_SLAVE_FAILED:
+        BUG("Ignoring out-of-order ACK for 0x%04x in state %d",
+            t->dcpsync.serial, t->state);
+        break;
+
+      case TRANSACTION_STATE_DCPSYNC_WAIT_FOR_ACK:
+        if(process_ack(t, d->serial))
+            return TRANSACTION_IN_PROGRESS;
+
+        BUG("Double out-of-order ACK exception");
+
+        break;
+    }
+
+    return TRANSACTION_EXCEPTION;
+}
+
+enum transaction_process_status
+transaction_process_out_of_order_nack(struct transaction *t,
+                                      const struct transaction_exception_nack_data *d)
+{
+    log_assert(t != NULL);
+    log_assert(t->dcpsync.is_enabled);
+    log_assert(d != NULL);
+
+    if(d->serial != t->dcpsync.serial)
+    {
+        BUG("Serial for out-of-order NACK[%u] wrong (0x%04x, expected 0x%04x)",
+            d->ttl, d->serial, t->dcpsync.serial);
+        return TRANSACTION_EXCEPTION;
+    }
+
+    switch(t->state)
+    {
+      case TRANSACTION_STATE_ERROR:
+        return TRANSACTION_ERROR;
+
+      case TRANSACTION_STATE_SLAVE_PREPARE__INIT:
+      case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
+      case TRANSACTION_STATE_MASTER_PREPARE__INIT:
+      case TRANSACTION_STATE_SLAVE_READ_DATA:
+      case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
+      case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
+      case TRANSACTION_STATE_SEND_TO_SLAVE:
+      case TRANSACTION_STATE_SEND_TO_SLAVE_ACKED:
+      case TRANSACTION_STATE_SEND_TO_SLAVE_FAILED:
+        BUG("Ignoring out-of-order NACK[%u] for 0x%04x in state %d",
+            d->ttl, t->dcpsync.serial, t->state);
+        break;
+
+      case TRANSACTION_STATE_DCPSYNC_WAIT_FOR_ACK:
+        if(process_nack(t, d->serial, d->ttl))
+            return TRANSACTION_IN_PROGRESS;
+
+        BUG("Double out-of-order NACK[%u] exception", d->ttl);
+
+        break;
+    }
+
+    return TRANSACTION_EXCEPTION;
 }
 
 bool transaction_is_input_required(const struct transaction *t)
@@ -595,14 +1211,18 @@ bool transaction_is_input_required(const struct transaction *t)
 
     switch(t->state)
     {
-      case TRANSACTION_STATE_SLAVE_READ_COMMAND:
+      case TRANSACTION_STATE_SLAVE_PREPARE__INIT:
+      case TRANSACTION_STATE_SLAVE_READ_DATA:
+      case TRANSACTION_STATE_DCPSYNC_WAIT_FOR_ACK:
         return true;
 
-      case TRANSACTION_STATE_PUSH_TO_SLAVE:
+      case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
+      case TRANSACTION_STATE_MASTER_PREPARE__INIT:
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
       case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
-      case TRANSACTION_STATE_MASTER_PREPARE:
       case TRANSACTION_STATE_SEND_TO_SLAVE:
+      case TRANSACTION_STATE_SEND_TO_SLAVE_ACKED:
+      case TRANSACTION_STATE_SEND_TO_SLAVE_FAILED:
       case TRANSACTION_STATE_ERROR:
         break;
     }
@@ -637,12 +1257,15 @@ static void set_address_for_master(struct transaction *t,
 
 static struct transaction *mk_push_transaction(struct transaction **head,
                                                const struct dcp_register_t *reg,
-                                               bool is_pure_push,
+                                               bool is_register_push,
                                                enum transaction_channel channel)
 {
     log_assert(reg != NULL);
 
-    struct transaction *t = transaction_alloc(is_pure_push, channel, false);
+    const enum transaction_alloc_type alloc_type = is_register_push
+        ? TRANSACTION_ALLOC_MASTER_FOR_REGISTER
+        : TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA;
+    struct transaction *t = transaction_alloc(alloc_type, channel, false);
 
     if(t == NULL)
     {
@@ -653,11 +1276,7 @@ static struct transaction *mk_push_transaction(struct transaction **head,
     /* fill in request header */
     set_address_for_master(t, reg);
 
-    if(is_pure_push)
-    {
-        /* simulate slave request, bypass reading command from slave fd */
-        t->state = TRANSACTION_STATE_PUSH_TO_SLAVE;
-    }
+    t->dcpsync.original_command = 'c';
 
     transaction_queue_add(head, t);
 

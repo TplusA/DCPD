@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -26,11 +26,27 @@
  */
 /*!@{*/
 
+enum transaction_alloc_type
+{
+    TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
+    TRANSACTION_ALLOC_MASTER_FOR_REGISTER,
+    TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
+};
+
 enum transaction_process_status
 {
     TRANSACTION_IN_PROGRESS,
+    TRANSACTION_PUSH_BACK,
     TRANSACTION_FINISHED,
     TRANSACTION_ERROR,
+    TRANSACTION_EXCEPTION,
+};
+
+enum transaction_exception_code
+{
+    TRANSACTION_EXCEPTION_COLLISION,
+    TRANSACTION_EXCEPTION_OUT_OF_ORDER_ACK,
+    TRANSACTION_EXCEPTION_OUT_OF_ORDER_NACK,
 };
 
 enum transaction_channel
@@ -43,6 +59,38 @@ enum transaction_channel
  * Opaque transaction structure.
  */
 struct transaction;
+
+struct transaction_exception_collision_data
+{
+    struct transaction *t;
+};
+
+struct transaction_exception_ack_data
+{
+    uint16_t serial;
+};
+
+struct transaction_exception_nack_data
+{
+    uint8_t ttl;
+    uint16_t serial;
+};
+
+/*!
+ * Pseudo exception for exceptional situations in transaction processing.
+ */
+struct transaction_exception
+{
+    enum transaction_exception_code exception_code;
+
+    union
+    {
+        struct transaction_exception_collision_data collision;
+        struct transaction_exception_ack_data ack;
+        struct transaction_exception_nack_data nack;
+    }
+    d;
+};
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,7 +109,7 @@ void transaction_init_allocator(void);
  *
  * \returns A pointer to a transaction, or NULL on error.
  */
-struct transaction *transaction_alloc(bool is_slave_request,
+struct transaction *transaction_alloc(enum transaction_alloc_type alloc_type,
                                       enum transaction_channel channel,
                                       bool is_pinned);
 
@@ -99,6 +147,23 @@ void transaction_queue_add(struct transaction **head, struct transaction *t);
  */
 struct transaction *transaction_queue_remove(struct transaction **head);
 
+/*!
+ * Find transaction given a DCPSYNC serial.
+ */
+struct transaction *transaction_queue_find_by_serial(struct transaction *head,
+                                                     uint16_t serial);
+
+/*!
+ * Remove transaction from queue, making it a queue of its own.
+ *
+ * \returns
+ *     The element that followed \p t before it was removed from its queue.
+ */
+struct transaction *transaction_queue_cut_element(struct transaction *t);
+
+/*!
+ * Return communication channel used by the given transaction.
+ */
 enum transaction_channel transaction_get_channel(const struct transaction *t);
 
 /*!
@@ -112,10 +177,57 @@ bool transaction_is_pinned(const struct transaction *t);
 
 /*!
  * Process the transaction.
+ *
+ * \param[in] t
+ *     Transaction to process.
+ * \param[in] from_slave_fd
+ *     Where to read data sent by slave from.
+ * \param[in] to_slave_fd
+ *     Where to write data to be sent to slave to.
+ * \param[out] e
+ *     New transaction that was created while processing \p t as a result of a
+ *     collision. This new transaction takes priority over \p tc and must be
+ *     processed next, processing of \p t must be deferred until after \p tc
+ *     has finished.
+ *
+ * \retval #TRANSACTION_IN_PROGRESS
+ *     The transaction needs more processing, #transaction_process() must be
+ *     called again. Check result of #transaction_is_input_required() before
+ *     actually doing it.
+ * \retval #TRANSACTION_PUSH_BACK
+ *     The transaction has been recycled (ACK received, answer to read command
+ *     should be sent) and should be reinserted at the end of the queue.
+ * \retval #TRANSACTION_FINISHED
+ *     The transaction has been processed without any errors and may be freed.
+ * \retval #TRANSACTION_ERROR
+ *     The transaction has finished with an error and may be freed.
+ * \retval #TRANSACTION_EXCEPTION
+ *     There was an exception (see #transaction_exception_code) which must be
+ *     handled by the caller. This mechnism is required because this function
+ *     only operates on a single transaction, not a queue of transactions.
  */
 enum transaction_process_status transaction_process(struct transaction *t,
                                                     int from_slave_fd,
-                                                    int to_slave_fd);
+                                                    int to_slave_fd,
+                                                    struct transaction_exception *e);
+
+/*!
+ * Inject ACK into transaction.
+ *
+ * For out-of-order ACK handling.
+ */
+enum transaction_process_status
+transaction_process_out_of_order_ack(struct transaction *t,
+                                     const struct transaction_exception_ack_data *d);
+
+/*!
+ * Inject NACK into transaction.
+ *
+ * For out-of-order NACK handling.
+ */
+enum transaction_process_status
+transaction_process_out_of_order_nack(struct transaction *t,
+                                      const struct transaction_exception_nack_data *d);
 
 bool transaction_is_input_required(const struct transaction *t);
 
