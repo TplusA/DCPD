@@ -1,3 +1,16 @@
+2016-06-27  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.0 released.
+
+	* Communication with dcpspi: Major changes in the protocol between
+	  dcpspi and dcpd. A small protocol has been added that encapsulates
+	  DCP to get collision handling and synchronization right.
+
+	  Collision handling is done completely within dcpd now (was mixed
+	  handling in v1.x versions).
+
+	* IP tunnel: Improved error messages.
+
 2016-05-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 1.20 released.
