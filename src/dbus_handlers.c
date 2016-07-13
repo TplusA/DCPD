@@ -57,8 +57,6 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 {
     static const char iface_name[] = "net.connman.Manager";
 
-    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
-
     if(strcmp(signal_name, "ServicesChanged") == 0)
     {
         check_parameter_assertions(parameters, 2);
@@ -85,8 +83,6 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
                                gpointer user_data)
 {
     static const char iface_name[] = "org.freedesktop.login1.Manager";
-
-    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
 
     if(strcmp(signal_name, "PrepareForShutdown") == 0)
     {
@@ -138,8 +134,6 @@ void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
                               gpointer user_data)
 {
     static const char iface_name[] = "de.tahifi.FileTransfer";
-
-    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
 
     if(strcmp(signal_name, "Progress") == 0)
     {
@@ -195,8 +189,6 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
 {
     static const char iface_name[] = "de.tahifi.Streamplayer.Playback";
 
-    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
-
     if(strcmp(signal_name, "NowPlaying") == 0)
     {
         /* some stream started or continued playing---is it ours? */
@@ -224,22 +216,11 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
         unknown_signal(iface_name, signal_name, sender_name);
 }
 
-static void enter_dcpd_playback_handler(GDBusMethodInvocation *invocation)
-{
-    static const char iface_name[] = "de.tahifi.Dcpd.Playback";
-
-    msg_info("%s method invocation from '%s': %s",
-             iface_name, g_dbus_method_invocation_get_sender(invocation),
-             g_dbus_method_invocation_get_method_name(invocation));
-}
-
 gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     GDBusMethodInvocation *invocation,
                                     guint16 raw_stream_id,
                                     const gchar *title, const gchar *url)
 {
-    enter_dcpd_playback_handler(invocation);
-
     if((raw_stream_id & STREAM_ID_SOURCE_MASK) == STREAM_ID_SOURCE_INVALID)
     {
         g_dbus_method_invocation_return_error(invocation,
@@ -270,8 +251,6 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
                         gpointer user_data)
 {
     static const char iface_name[] = "de.tahifi.Airable";
-
-    msg_info("%s signal from '%s': %s", iface_name, sender_name, signal_name);
 
     if(strcmp(signal_name, "ExternalServiceLoginStatus") == 0)
     {
