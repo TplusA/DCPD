@@ -105,6 +105,8 @@ extern "C" {
 void register_init(const char *ethernet_mac_address,
                    const char *wlan_mac_address,
                    const char *connman_config_path,
+                   const char *network_config_path,
+                   const char *network_config_file,
                    void (*register_changed_callback)(uint8_t reg_number));
 
 /*!

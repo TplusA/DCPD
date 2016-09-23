@@ -96,6 +96,7 @@ credentials_iface_data;
 static struct
 {
     bool is_enabled;
+    struct connman_agent_data *agent_data;
     tdbusconnmanManager *connman_manager_iface;
     tdbusconnmanAgent *connman_agent_iface;
 }
@@ -157,21 +158,22 @@ static void bus_acquired(GDBusConnection *connection,
     if(!is_session_bus)
     {
         connman_iface_data.connman_agent_iface = tdbus_connman_agent_skeleton_new();
+        struct connman_agent_data *const agent_data = connman_iface_data.agent_data;
 
         g_signal_connect(connman_iface_data.connman_agent_iface, "handle-release",
-                         G_CALLBACK(dbusmethod_connman_agent_release), NULL);
+                         G_CALLBACK(dbusmethod_connman_agent_release), agent_data);
         g_signal_connect(connman_iface_data.connman_agent_iface, "handle-report-error",
-                         G_CALLBACK(dbusmethod_connman_agent_report_error), NULL);
+                         G_CALLBACK(dbusmethod_connman_agent_report_error), agent_data);
         g_signal_connect(connman_iface_data.connman_agent_iface, "handle-report-peer-error",
-                         G_CALLBACK(dbusmethod_connman_agent_report_peer_error), NULL);
+                         G_CALLBACK(dbusmethod_connman_agent_report_peer_error), agent_data);
         g_signal_connect(connman_iface_data.connman_agent_iface, "handle-request-browser",
-                         G_CALLBACK(dbusmethod_connman_agent_request_browser), NULL);
+                         G_CALLBACK(dbusmethod_connman_agent_request_browser), agent_data);
         g_signal_connect(connman_iface_data.connman_agent_iface, "handle-request-input",
-                         G_CALLBACK(dbusmethod_connman_agent_request_input), NULL);
+                         G_CALLBACK(dbusmethod_connman_agent_request_input), agent_data);
         g_signal_connect(connman_iface_data.connman_agent_iface, "handle-request-peer-authorization",
-                         G_CALLBACK(dbusmethod_connman_agent_request_peer_authorization), NULL);
+                         G_CALLBACK(dbusmethod_connman_agent_request_peer_authorization), agent_data);
         g_signal_connect(connman_iface_data.connman_agent_iface, "handle-cancel",
-                         G_CALLBACK(dbusmethod_connman_agent_cancel), NULL);
+                         G_CALLBACK(dbusmethod_connman_agent_cancel), agent_data);
 
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(connman_iface_data.connman_agent_iface));
     }
@@ -313,7 +315,8 @@ static const struct dbussignal_shutdown_iface logind_shutdown_functions =
 static struct dbus_process_data process_data;
 
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
-               struct smartphone_app_connection_data *appconn_data)
+               struct smartphone_app_connection_data *appconn_data,
+               struct connman_agent_data *connman_data)
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();
@@ -331,6 +334,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     memset(&process_data, 0, sizeof(process_data));
 
     connman_iface_data.is_enabled = with_connman;
+    connman_iface_data.agent_data = connman_data;
     login1_iface_data.lock_fd = -1;
 
     process_data.loop = g_main_loop_new(NULL, FALSE);

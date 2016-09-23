@@ -299,7 +299,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, NULL);
+    register_init(NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
 void cut_teardown()
@@ -853,7 +853,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+    register_init(NULL, NULL, NULL, NULL, NULL, register_changed_callback);
 }
 
 void cut_teardown()
@@ -1137,6 +1137,8 @@ static MockMessages *mock_messages;
 static MockOs *mock_os;
 
 static constexpr char connman_config_path[] = "/var/lib/connman";
+static constexpr char network_config_path[] = "/var/local/etc";
+static constexpr char network_config_file[] = "/var/local/etc/network.rc";
 
 static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
 static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
@@ -1204,6 +1206,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
     register_init(ethernet_mac_address, wlan_mac_address, connman_config_path,
+                  network_config_path, network_config_file,
                   register_changed_callback);
 }
 
@@ -1274,7 +1277,7 @@ void test_read_mac_address_default()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, NULL);
+    register_init(NULL, NULL, NULL, NULL, NULL, NULL);
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
@@ -3679,7 +3682,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, NULL);
+    register_init(NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
 void cut_teardown()
@@ -3871,7 +3874,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+    register_init(NULL, NULL, NULL, NULL, NULL, register_changed_callback);
 }
 
 void cut_teardown()
@@ -4315,7 +4318,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+    register_init(NULL, NULL, NULL, NULL, NULL, register_changed_callback);
 
     dcpregs_playstream_init();
 }
@@ -5200,7 +5203,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+    register_init(NULL, NULL, NULL, NULL, NULL, register_changed_callback);
 }
 
 void cut_teardown()
@@ -5575,7 +5578,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
 
-    register_init(NULL, NULL, NULL, NULL);
+    register_init(NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
 void cut_teardown()
@@ -5815,7 +5818,7 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+    register_init(NULL, NULL, NULL, NULL, NULL, register_changed_callback);
 }
 
 void cut_teardown()

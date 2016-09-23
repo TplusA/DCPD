@@ -20,7 +20,13 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <string.h>
+#include <ctype.h>
+#include <inttypes.h>
+
 #include "dbus_handlers_connman_agent.h"
+#include "connman_agent.h"
+#include "inifile.h"
 #include "messages.h"
 
 #define NET_CONNMAN_AGENT_ERROR (net_connman_agent_error_quark())
@@ -53,6 +59,116 @@ static GQuark net_connman_agent_error_quark(void)
                                        G_N_ELEMENTS(net_connman_agent_error_entries));
     return (GQuark)quark_volatile;
 }
+
+enum RequestID
+{
+    /*! Any request not understood by the parser is mapped to this ID */
+    REQUEST_UNKNOWN,
+
+    /*! Need name of hidden network */
+    REQUEST_NAME,
+
+    /*! Need SSID of hidden network as an alternative to #REQUEST_NAME */
+    REQUEST_SSID,
+
+    /*! Username for EAP authentication */
+    REQUEST_IDENTITY,
+
+    /*! Passphrase for WEP, PSK, etc. */
+    REQUEST_PASSPHRASE,
+
+    /*! Passphrase that was tried, but failed (passphrase changed or wrong) */
+    REQUEST_PREVIOUS_PASSPHRASE,
+
+    /*! Request use of WPS */
+    REQUEST_WPS,
+
+    /*! Username for WISPr authentication */
+    REQUEST_USERNAME,
+
+    /*! Password for WISPr authentication */
+    REQUEST_PASSWORD,
+
+    /*! Stable name for last ID */
+    REQUEST_LAST_REQUEST_ID = REQUEST_PASSWORD,
+};
+
+enum RequestRequirement
+{
+    /*! Special ID to express that there was no request for a #RequestID */
+    REQREQ_NOT_REQUESTED,
+
+    /*! Answer to request is mandatory, or the request must fail */
+    REQREQ_MANDATORY,
+
+    /*! Answer to request is optional, information not required for success */
+    REQREQ_OPTIONAL,
+
+    /*! Requested field is an alternative to another field */
+    REQREQ_ALTERNATE,
+
+    /*! Field contains information and can be safely ignored */
+    REQREQ_INFORMATIONAL,
+
+    /*! Stable name for last ID */
+    REQREQ_LAST_REQUEST_REQUIREMENT = REQREQ_INFORMATIONAL,
+};
+
+static const char *const request_string_ids[] =
+{
+    NULL,
+    "Name",
+    "SSID",
+    "Identity",
+    "Passphrase",
+    "PreviousPassphrase",
+    "WPS",
+    "Username",
+    "Password",
+};
+
+static enum RequestID string_to_request_id(const char *string)
+{
+    G_STATIC_ASSERT(G_N_ELEMENTS(request_string_ids) == REQUEST_LAST_REQUEST_ID + 1);
+
+    for(enum RequestID i = 1; i <= REQUEST_LAST_REQUEST_ID; ++i)
+    {
+        if(strcmp(request_string_ids[i], string) == 0)
+            return i;
+    }
+
+    return REQUEST_UNKNOWN;
+}
+
+static enum RequestRequirement string_to_request_requirement(const char *string)
+{
+    static const char *const string_ids[] =
+    {
+        NULL,
+        "mandatory",
+        "optional",
+        "alternate",
+        "informational",
+    };
+
+    G_STATIC_ASSERT(G_N_ELEMENTS(string_ids) == REQREQ_LAST_REQUEST_REQUIREMENT + 1);
+
+    for(enum RequestRequirement i = 1; i <= REQREQ_LAST_REQUEST_REQUIREMENT; ++i)
+    {
+        if(strcmp(string_ids[i], string) == 0)
+            return i;
+    }
+
+    return REQREQ_NOT_REQUESTED;
+}
+
+struct Request
+{
+    enum RequestRequirement requirement;
+    uint32_t alternates;
+    GVariant *variant;
+    bool is_answered;
+};
 
 static bool send_error_if_possible(GDBusMethodInvocation *invocation,
                                    const char *error_message)
@@ -131,6 +247,408 @@ gboolean dbusmethod_connman_agent_request_browser(tdbusconnmanAgent *object,
     return TRUE;
 }
 
+static void unref_collected_requests(struct Request *requests)
+{
+    for(enum RequestID i = 0; i <= REQUEST_LAST_REQUEST_ID; ++i)
+    {
+        if(requests[i].variant != NULL)
+        {
+            g_variant_unref(requests[i].variant);
+            requests[i].variant = NULL;
+        }
+    }
+}
+
+static const char *fill_in_request_requirement(struct Request *request,
+                                               GVariant *value)
+{
+    if(request->requirement != REQREQ_NOT_REQUESTED)
+        return "Duplicate request requirement";
+
+    request->requirement =
+        string_to_request_requirement(g_variant_get_string(value, NULL));
+
+    if(request->requirement == REQREQ_NOT_REQUESTED)
+        return "Unknown request requirement";
+
+    return NULL;
+}
+
+static const char *fill_in_alternates(struct Request *request,
+                                      GVariant *value)
+{
+    if(request->alternates != 0)
+        return "Duplicate request alternates specification";
+
+    GVariantIter alternates_iter;
+    g_variant_iter_init(&alternates_iter, value);
+
+    const gchar *alternate;
+
+    while(g_variant_iter_next(&alternates_iter, "&s", &alternate))
+    {
+        const enum RequestID request_id = string_to_request_id(alternate);
+
+        if(request_id == REQUEST_UNKNOWN)
+            return "Unknown request alternate";
+
+        const uint32_t mask = (1U << (request_id - 1));
+
+        if((request->alternates & mask) != 0)
+            return "Duplicate request alternate field";
+
+        request->alternates |= mask;
+    }
+
+    if(request->alternates == 0)
+        return "Empty request alternates specification";
+
+    return NULL;
+}
+
+static const char *collect_requests(struct Request *requests, GVariant *request)
+{
+    GVariantIter request_iter;
+    g_variant_iter_init(&request_iter, request);
+
+    const char *return_string = NULL;
+
+    const gchar *request_key;
+    GVariant *request_details;
+
+    while(return_string == NULL &&
+          g_variant_iter_next(&request_iter, "{&sv}", &request_key, &request_details))
+    {
+        const enum RequestID request_id = string_to_request_id(request_key);
+
+        if(request_id == REQUEST_UNKNOWN)
+        {
+            return_string = "Unknown request";
+            goto error_request;
+        }
+
+        if(requests[request_id].variant != NULL)
+        {
+            return_string = "Duplicate request";
+            goto error_request;
+        }
+
+        GVariantIter detail_iter;
+        g_variant_iter_init(&detail_iter, request_details);
+
+        const gchar *detail_key;
+        GVariant *detail_value;
+
+        while(return_string == NULL &&
+              g_variant_iter_next(&detail_iter, "{&sv}", &detail_key, &detail_value))
+        {
+            if(strcmp(detail_key, "Requirement") == 0)
+                return_string = fill_in_request_requirement(&requests[request_id],
+                                                            detail_value);
+            else if(strcmp(detail_key, "Alternates") == 0)
+                return_string = fill_in_alternates(&requests[request_id],
+                                                   detail_value);
+
+            g_variant_unref(detail_value);
+        }
+
+        if(requests[request_id].requirement != REQREQ_NOT_REQUESTED)
+        {
+            g_variant_ref(request_details);
+            requests[request_id].variant = request_details;
+        }
+        else if(return_string == NULL)
+            return_string = "Missing request requirement";
+
+error_request:
+        g_variant_unref(request_details);
+    }
+
+    return return_string;
+}
+
+static bool insert_answer(GVariantBuilder *result_builder,
+                          struct Request *request, enum RequestID request_id,
+                          const struct ini_section *preferences)
+{
+    /* must match #RequestID enumeration */
+    static const char *const inifile_keys[] =
+    {
+        NULL,
+        "NetworkName",
+        "SSID",
+        NULL,
+        "Passphrase",
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+    };
+
+    G_STATIC_ASSERT(G_N_ELEMENTS(inifile_keys) == REQUEST_LAST_REQUEST_ID + 1);
+
+    log_assert(request != NULL);
+    log_assert(!request->is_answered);
+
+    const char *const key = inifile_keys[request_id];
+
+    if(key == NULL)
+    {
+        msg_info("ConnMan request %u not supported", request_id);
+        return false;
+    }
+
+    const struct ini_key_value_pair *const key_value =
+        inifile_section_lookup_kv_pair(preferences, key, 0);
+
+    if(key_value == NULL || key_value->value[0] == '\0')
+    {
+        msg_info("Have no answer for ConnMan request %u", request_id);
+        return false;
+    }
+
+    g_variant_builder_add(result_builder, "{sv}",
+                          request_string_ids[request_id],
+                          g_variant_new_string(key_value->value));
+    request->is_answered = true;
+
+    return true;
+}
+
+static bool insert_alternate_answer(GVariantBuilder *result_builder,
+                                    struct Request *requests,
+                                    enum RequestID related_id,
+                                    const struct ini_section *preferences)
+{
+    if(requests[related_id].alternates != 0)
+    {
+        enum RequestID alternate_id = REQUEST_UNKNOWN;
+
+        for(uint32_t alternates = requests[related_id].alternates;
+            alternates != 0;
+            alternates >>= 1)
+        {
+            ++alternate_id;
+
+            if((alternates & 1U) == 0)
+                continue;
+
+            log_assert(alternate_id <= REQUEST_LAST_REQUEST_ID);
+
+            if(insert_answer(result_builder, &requests[alternate_id],
+                             alternate_id, preferences))
+                return true;
+            else
+                return insert_alternate_answer(result_builder, requests,
+                                               alternate_id, preferences);
+        }
+    }
+
+    return false;
+}
+
+static void wipe_out_alternates(struct Request *requests, enum RequestID related_id)
+{
+    uint32_t alternates = requests[related_id].alternates;
+
+    if(alternates == 0)
+        return;
+
+    requests[related_id].alternates = 0;
+
+    enum RequestID alternate_id = REQUEST_UNKNOWN;
+
+    for(/* nothing */; alternates != 0; alternates >>= 1)
+    {
+        ++alternate_id;
+
+        if((alternates & 1U) == 0)
+            continue;
+
+        log_assert(alternate_id <= REQUEST_LAST_REQUEST_ID);
+
+        requests[alternate_id].requirement = REQREQ_NOT_REQUESTED;
+        wipe_out_alternates(requests, alternate_id);
+    }
+}
+
+static char nibble_to_char(uint8_t nibble)
+{
+    if(nibble < 10)
+        return '0' + nibble;
+    else
+        return 'a' + nibble - 10;
+}
+
+static const char *generate_service_name(char *const buffer,
+                                         const size_t buffer_size,
+                                         const size_t tech_length,
+                                         const struct ini_key_value_pair *mac,
+                                         const struct ini_key_value_pair *network_name,
+                                         const struct ini_key_value_pair *network_ssid,
+                                         const struct ini_key_value_pair *network_security)
+{
+    static const char buffer_too_small_error[] = "Internal error: buffer too small";
+
+#define APPEND_TO_BUFFER(CH) \
+    do \
+    { \
+        if(offset >= buffer_size) \
+            return buffer_too_small_error; \
+        \
+        buffer[offset++] = (CH); \
+    } \
+    while(0)
+
+    if(mac == NULL)
+        return "No MAC configured";
+
+    bool is_wifi;
+
+    if(strcmp(buffer, "wifi") == 0)
+    {
+        if(network_name == NULL && network_ssid == NULL)
+            return "No network name configured";
+
+        if(network_security == NULL)
+            return "No network security configured";
+
+        is_wifi = true;
+    }
+    else if(strcmp(buffer, "ethernet") == 0)
+        is_wifi = false;
+    else
+        return "Unknown technology name";
+
+    size_t offset = tech_length;
+
+    APPEND_TO_BUFFER('_');
+
+    for(size_t input_offset = 0; /* nothing */; ++input_offset)
+    {
+        const char ch = tolower(mac->value[input_offset]);
+
+        if(ch == '\0')
+            break;
+
+        if(isdigit(ch) || (ch >= 'a' && ch <= 'f'))
+            APPEND_TO_BUFFER(ch);
+    }
+
+    APPEND_TO_BUFFER('_');
+
+    if(is_wifi)
+    {
+        if(network_ssid != NULL)
+        {
+            for(size_t input_offset = 0; /* nothing */; ++input_offset)
+            {
+                const char ch = tolower(network_ssid->value[input_offset]);
+
+                if(ch == '\0')
+                    break;
+
+                APPEND_TO_BUFFER(ch);
+            }
+        }
+        else
+        {
+            for(size_t input_offset = 0; /* nothing */; ++input_offset)
+            {
+                const char ch = network_name->value[input_offset];
+
+                if(ch == '\0')
+                    break;
+
+                APPEND_TO_BUFFER(nibble_to_char(ch >> 4));
+                APPEND_TO_BUFFER(nibble_to_char(ch & 0x0f));
+            }
+        }
+
+        APPEND_TO_BUFFER('_');
+
+        static const char first_suffix[] = "managed_";
+
+        if(offset + (sizeof(first_suffix) - 1) + strlen(network_security->value) >= buffer_size)
+            return buffer_too_small_error;
+
+        strcpy(buffer + offset, first_suffix);
+        strcpy(buffer + offset + sizeof(first_suffix) - 1, network_security->value);
+    }
+    else
+    {
+        static const char suffix[] = "cable";
+
+        if(offset + sizeof(suffix) > buffer_size)
+            return buffer_too_small_error;
+
+        strcpy(buffer + offset, suffix);
+    }
+
+    return NULL;
+
+#undef APPEND_TO_BUFFER
+}
+
+static const char *
+find_preferences_for_service(const char *ini_filename, struct ini_file *ini,
+                             const struct ini_section **preferences_section,
+                             const char *full_service_name)
+{
+    *preferences_section = NULL;
+
+    char buffer[512];
+
+    const char *const before_service = strrchr(full_service_name, '/');
+    const char *const service = before_service + 1;
+    const char *const after_tech = (before_service != NULL) ? strchr(service, '_') : NULL;
+    const size_t tech_length = after_tech - service;
+
+    if(before_service == NULL || after_tech == NULL ||
+       tech_length == 0 || tech_length >= sizeof(buffer))
+        return "Malformed service name";
+
+    int ret = inifile_parse_from_file(ini, ini_filename);
+
+    if(ret < 0)
+        return "Failed parsing network preferences";
+    else if(ret > 0)
+        return "Network preferences file not found";
+
+    const struct ini_section *preferences =
+        inifile_find_section(ini, service, tech_length);
+
+    if(preferences == NULL)
+    {
+        inifile_free(ini);
+        return "Network preferences not found for service name";
+    }
+
+    memcpy(buffer, service, tech_length);
+    buffer[tech_length] = '\0';
+
+    const char *error_message =
+        generate_service_name(buffer, sizeof(buffer),
+                              tech_length,
+                              inifile_section_lookup_kv_pair(preferences, "MAC", 3),
+                              inifile_section_lookup_kv_pair(preferences, "NetworkName", 11),
+                              inifile_section_lookup_kv_pair(preferences, "SSID", 4),
+                              inifile_section_lookup_kv_pair(preferences, "Security", 8));
+
+    if(error_message == NULL)
+    {
+        if(strcmp(buffer, service) != 0)
+            error_message = "Service unknown";
+        else
+            *preferences_section = preferences;
+    }
+
+    if(*preferences_section == NULL)
+        inifile_free(ini);
+
+    return error_message;
+}
+
 gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
                                                 GDBusMethodInvocation *invocation,
                                                 const gchar *arg_service,
@@ -139,8 +657,74 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
 {
     enter_agent_handler(invocation);
 
-    BUG("%s(): not implemented yet", __func__);
-    send_error_if_possible(invocation, "Not implemented yet");
+    const struct connman_agent_data *data = user_data;
+    struct ini_file ini;
+    const struct ini_section *preferences = NULL;
+
+    const char *error_message =
+        find_preferences_for_service(data->network_prefs, &ini, &preferences,
+                                     arg_service);
+
+    if(send_error_if_possible(invocation, error_message))
+        return TRUE;
+
+    struct Request requests[REQUEST_LAST_REQUEST_ID + 1] = {{ 0 }};
+
+    error_message = collect_requests(requests, arg_fields);
+
+    if(send_error_if_possible(invocation, error_message))
+    {
+        unref_collected_requests(requests);
+        inifile_free(&ini);
+        return TRUE;
+    }
+
+    GVariantBuilder result_builder;
+    g_variant_builder_init(&result_builder, G_VARIANT_TYPE ("a{sv}"));
+
+    /* fill in the mandatory requests first, fall back to alternate requests if
+     * necessary, fail if not possible */
+    for(enum RequestID i = 0; error_message == NULL && i <= REQUEST_LAST_REQUEST_ID; ++i)
+    {
+        struct Request *const request = &requests[i];
+
+        switch(request->requirement)
+        {
+          case REQREQ_NOT_REQUESTED:
+          case REQREQ_ALTERNATE:
+          case REQREQ_INFORMATIONAL:
+            continue;
+
+          case REQREQ_MANDATORY:
+          case REQREQ_OPTIONAL:
+            if(!insert_answer(&result_builder, request, i, preferences) &&
+               !insert_alternate_answer(&result_builder, requests, i, preferences))
+            {
+                if(request->requirement == REQREQ_MANDATORY)
+                {
+                    msg_error(0, LOG_ERR, "Answer to mandatory request %u not known", i);
+                    error_message = "Answer to mandatory request unknown";
+                }
+                else
+                    msg_info("Answer to optional request %u not known", i);
+            }
+
+            if(error_message == NULL)
+                wipe_out_alternates(requests, i);
+
+            break;
+        }
+    }
+
+    GVariant *result = g_variant_builder_end(&result_builder);
+
+    unref_collected_requests(requests);
+    inifile_free(&ini);
+
+    if(send_error_if_possible(invocation, error_message))
+        g_variant_unref(result);
+    else
+        tdbus_connman_agent_complete_request_input(object, invocation, result);
 
     return TRUE;
 }

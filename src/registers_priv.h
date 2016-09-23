@@ -38,6 +38,8 @@ struct register_configuration_t
     struct register_network_interface_t builtin_wlan_interface;
     struct register_network_interface_t *active_interface;
     const char *connman_config_path;
+    const char *network_config_path;
+    const char *network_config_file;
 
     void (*register_changed_notification_fn)(uint8_t reg_number);
 };

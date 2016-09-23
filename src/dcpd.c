@@ -39,6 +39,7 @@
 #include "registers.h"
 #include "dcpregs_status.h"
 #include "connman.h"
+#include "connman_agent.h"
 #include "os.h"
 #include "versioninfo.h"
 
@@ -1132,18 +1133,35 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files, &app_process_fd, &register_changed_fd) < 0)
         return EXIT_FAILURE;
 
+    static const char network_preferences_dir[] = "/var/local/etc";
+    static const char network_preferences_file[] = "network.rc";
+    static char network_preferences_full_file[sizeof(network_preferences_dir) +
+                                              sizeof(network_preferences_file)];
+
+    snprintf(network_preferences_full_file, sizeof(network_preferences_full_file),
+             "%s/%s", network_preferences_dir, network_preferences_file);
+
     /*!
      * Data for smartphone connection.
      */
     static struct smartphone_app_connection_data appconn;
 
+    /*
+     * Data for ConnMan agent implementation.
+     */
+    static struct connman_agent_data connman_agent =
+    {
+        .network_prefs = network_preferences_full_file,
+    };
+
     register_init(parameters.ethernet_interface_mac_address,
                   parameters.wlan_interface_mac_address,
                   "/var/lib/connman",
+                  network_preferences_dir, network_preferences_full_file,
                   push_register_to_slave);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
-                  parameters.with_connman, &appconn) < 0)
+                  parameters.with_connman, &appconn, &connman_agent) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
