@@ -28,6 +28,7 @@
 #include "dbus_iface.h"
 #include "dbus_iface_deep.h"
 #include "dbus_handlers.h"
+#include "dbus_handlers_connman_agent.h"
 #include "dbus_common.h"
 #include "dcpd_dbus.h"
 #include "streamplayer_dbus.h"
@@ -96,6 +97,7 @@ static struct
 {
     bool is_enabled;
     tdbusconnmanManager *connman_manager_iface;
+    tdbusconnmanAgent *connman_agent_iface;
 }
 connman_iface_data;
 
@@ -150,6 +152,28 @@ static void bus_acquired(GDBusConnection *connection,
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.views_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_item_iface));
+    }
+
+    if(!is_session_bus)
+    {
+        connman_iface_data.connman_agent_iface = tdbus_connman_agent_skeleton_new();
+
+        g_signal_connect(connman_iface_data.connman_agent_iface, "handle-release",
+                         G_CALLBACK(dbusmethod_connman_agent_release), NULL);
+        g_signal_connect(connman_iface_data.connman_agent_iface, "handle-report-error",
+                         G_CALLBACK(dbusmethod_connman_agent_report_error), NULL);
+        g_signal_connect(connman_iface_data.connman_agent_iface, "handle-report-peer-error",
+                         G_CALLBACK(dbusmethod_connman_agent_report_peer_error), NULL);
+        g_signal_connect(connman_iface_data.connman_agent_iface, "handle-request-browser",
+                         G_CALLBACK(dbusmethod_connman_agent_request_browser), NULL);
+        g_signal_connect(connman_iface_data.connman_agent_iface, "handle-request-input",
+                         G_CALLBACK(dbusmethod_connman_agent_request_input), NULL);
+        g_signal_connect(connman_iface_data.connman_agent_iface, "handle-request-peer-authorization",
+                         G_CALLBACK(dbusmethod_connman_agent_request_peer_authorization), NULL);
+        g_signal_connect(connman_iface_data.connman_agent_iface, "handle-cancel",
+                         G_CALLBACK(dbusmethod_connman_agent_cancel), NULL);
+
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(connman_iface_data.connman_agent_iface));
     }
 }
 
@@ -243,6 +267,11 @@ static void name_acquired(GDBusConnection *connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      "net.connman", "/",
                                                      NULL, &error);
+            (void)dbus_common_handle_dbus_error(&error);
+
+            tdbus_connman_manager_call_register_agent_sync(connman_iface_data.connman_manager_iface,
+                                                           "/de/tahifi/Dcpd",
+                                                           NULL, &error);
             (void)dbus_common_handle_dbus_error(&error);
         }
 
@@ -370,6 +399,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(airable_iface_data.airable_sec_iface != NULL);
     log_assert(credentials_iface_data.cred_read_iface != NULL);
     log_assert(credentials_iface_data.cred_write_iface != NULL);
+    log_assert(connman_iface_data.connman_agent_iface != NULL);
 
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
                      G_CALLBACK(dbussignal_file_transfer), NULL);
@@ -430,6 +460,7 @@ void dbus_shutdown(void)
     g_object_unref(airable_iface_data.airable_sec_iface);
     g_object_unref(credentials_iface_data.cred_read_iface);
     g_object_unref(credentials_iface_data.cred_write_iface);
+    g_object_unref(connman_iface_data.connman_agent_iface);
 
     if(connman_iface_data.connman_manager_iface != NULL)
         g_object_unref(connman_iface_data.connman_manager_iface);

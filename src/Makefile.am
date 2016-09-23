@@ -38,7 +38,8 @@ dcpd_SOURCES = \
     connman.c connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
     dbus_common.c dbus_common.h \
-    dbus_iface.c dbus_iface.h dbus_iface_deep.h dbus_handlers.h
+    dbus_iface.c dbus_iface.h dbus_iface_deep.h \
+    dbus_handlers.h dbus_handlers_connman_agent.h
 
 DBUS_IFACES = $(top_srcdir)/dbus_interfaces
 
@@ -105,6 +106,8 @@ libapplink_la_CFLAGS = $(AM_CFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
+    dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h \
+    connman_dbus.h \
     actor_id.h \
     dcpregs_networkconfig.h \
     dcpregs_upnpname.h \
