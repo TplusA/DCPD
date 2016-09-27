@@ -121,6 +121,33 @@ struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
     return (struct ConnmanInterfaceData *)found;
 }
 
+struct ConnmanInterfaceData *connman_find_interface_by_object_path(const char *path)
+{
+    GVariant *services = connman_common_query_services(dbus_get_connman_manager_iface());
+    if(services == NULL)
+        return NULL;
+
+    GVariant *found = NULL;
+    const size_t count = g_variant_n_children(services);
+
+    for(size_t i = 0; i < count && found == NULL; ++i)
+    {
+        GVariant *tuple = g_variant_get_child_value(services, i);
+        GVariant *path_variant = g_variant_get_child_value(tuple, 0);
+
+        if(strcmp(g_variant_get_string(path_variant, NULL), path) == 0)
+            found = tuple;
+        else
+            g_variant_unref(tuple);
+
+        g_variant_unref(path_variant);
+    }
+
+    g_variant_unref(services);
+
+    return (struct ConnmanInterfaceData *)found;
+}
+
 struct match_mac_address_data
 {
     GVariant *active_default;

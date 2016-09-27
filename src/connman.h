@@ -78,6 +78,7 @@ extern "C" {
  * Find information about NIC with given MAC address, regardless of state.
  */
 struct ConnmanInterfaceData *connman_find_interface(const char *mac_address);
+struct ConnmanInterfaceData *connman_find_interface_by_object_path(const char *path);
 
 /*!
  * Find active NIC with MAC address matching one of the given ones.
