@@ -22,6 +22,12 @@
 #include "connman_dbus.h"
 
 GVariant *connman_common_query_services(tdbusconnmanManager *iface);
+void connman_common_set_service_property(const char *object_path,
+                                         const char *property_name,
+                                         GVariant *value);
+void connman_common_connect_service_by_object_path(const char *object_path);
+void connman_common_disconnect_service_by_object_path(const char *object_path);
+void connman_common_remove_service_by_object_path(const char *object_path);
 void connman_common_init_dict_from_temp_gvariant(GVariant *temp,
                                                  GVariantDict *dict);
 void connman_common_init_subdict(GVariant *tuple, GVariantDict *subdict,

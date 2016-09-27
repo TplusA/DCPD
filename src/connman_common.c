@@ -22,6 +22,7 @@
 
 #include "connman_common.h"
 #include "dbus_common.h"
+#include "dbus_iface_deep.h"
 #include "messages.h"
 
 GVariant *connman_common_query_services(tdbusconnmanManager *iface)
@@ -35,6 +36,69 @@ GVariant *connman_common_query_services(tdbusconnmanManager *iface)
     (void)dbus_common_handle_dbus_error(&error);
 
     return result;
+}
+
+void connman_common_set_service_property(const char *object_path,
+                                         const char *property_name,
+                                         GVariant *value)
+{
+    tdbusconnmanService *proxy =
+        dbus_get_connman_service_proxy_for_object_path(object_path);
+
+    if(proxy == NULL)
+        return;
+
+    GError *error = NULL;
+    tdbus_connman_service_call_set_property_sync(proxy, property_name, value,
+                                                 NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error);
+
+    g_object_unref(proxy);
+}
+
+void connman_common_connect_service_by_object_path(const char *object_path)
+{
+    tdbusconnmanService *proxy =
+        dbus_get_connman_service_proxy_for_object_path(object_path);
+
+    if(proxy == NULL)
+        return;
+
+    GError *error = NULL;
+    tdbus_connman_service_call_connect_sync(proxy, NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error);
+
+    g_object_unref(proxy);
+}
+
+void connman_common_disconnect_service_by_object_path(const char *object_path)
+{
+    tdbusconnmanService *proxy =
+        dbus_get_connman_service_proxy_for_object_path(object_path);
+
+    if(proxy == NULL)
+        return;
+
+    GError *error = NULL;
+    tdbus_connman_service_call_disconnect_sync(proxy, NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error);
+
+    g_object_unref(proxy);
+}
+
+void connman_common_remove_service_by_object_path(const char *object_path)
+{
+    tdbusconnmanService *proxy =
+        dbus_get_connman_service_proxy_for_object_path(object_path);
+
+    if(proxy == NULL)
+        return;
+
+    GError *error = NULL;
+    tdbus_connman_service_call_remove_sync(proxy, NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error);
+
+    g_object_unref(proxy);
 }
 
 void connman_common_init_dict_from_temp_gvariant(GVariant *temp,
