@@ -482,7 +482,9 @@ static void fill_in_missing_dns_server_config_requests(void)
 static bool query_dhcp_mode(void)
 {
     struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
-    bool ret = (iface_data != NULL) ? connman_get_dhcp_mode(iface_data) : false;
+    bool ret = (iface_data != NULL)
+        ? (connman_get_dhcp_mode(iface_data, true) == CONNMAN_DHCP_ON)
+        : false;
     connman_free_interface_data(iface_data);
 
     return ret;
@@ -964,7 +966,7 @@ static void fill_network_status_register_response(uint8_t response[static 2])
         connman_get_ipv4_address_string(iface_data, result, sizeof(result));
 
         if(result[0] != '\0')
-            response[0] = connman_get_dhcp_mode(iface_data) ? 0x02 : 0x01;
+            response[0] = (connman_get_dhcp_mode(iface_data, true) == CONNMAN_DHCP_ON) ? 0x02 : 0x01;
     }
     else if(fallback_iface_data != NULL)
     {

@@ -58,6 +58,15 @@ enum ConnmanSiteScanResult
 
 typedef void (*ConnmanSurveyDoneFn)(enum ConnmanSiteScanResult result);
 
+enum ConnmanDHCPMode
+{
+    CONNMAN_DHCP_NOT_SPECIFIED,
+    CONNMAN_DHCP_ON,
+    CONNMAN_DHCP_OFF,
+    CONNMAN_DHCP_MANUAL,
+    CONNMAN_DHCP_FIXED,
+};
+
 struct ConnmanServiceIterator;
 struct ConnmanServiceSecurityIterator;
 
@@ -87,7 +96,8 @@ connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wireless_mac_address,
                                       struct ConnmanInterfaceData **fallback);
 
-bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data);
+enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
+                                           bool from_user_config);
 enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
 void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);

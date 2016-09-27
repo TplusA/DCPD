@@ -146,7 +146,7 @@ class MockConnman
 
     void expect_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address);
     void expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address, struct ConnmanInterfaceData *ret_fallback = nullptr);
-    void expect_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data);
+    void expect_get_dhcp_mode(enum ConnmanDHCPMode ret, struct ConnmanInterfaceData *iface_data, bool from_user_config);
     void expect_get_ipv4_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
     void expect_get_ipv4_netmask_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
     void expect_get_ipv4_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);

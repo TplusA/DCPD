@@ -175,12 +175,14 @@ class MockConnman::Expectation
         const uint8_t *ret_bytes_;
         size_t ret_bytes_size_;
         struct ConnmanInterfaceData *ret_data_;
+        enum ConnmanDHCPMode ret_dhcp_mode_;
         struct ConnmanInterfaceData *ret_fallback_data_;
         struct ConnmanInterfaceData *arg_iface_data_;
         std::string arg_mac_address_;
         std::string arg_wired_mac_address_;
         std::string arg_wireless_mac_address_;
         bool arg_pointer_shall_be_null_;
+        bool arg_from_user_config_;
         size_t arg_dest_size_;
         SurveyCallbackInvocation callback_invocation_;
         enum ConnmanSiteScanResult callback_result_;
@@ -192,9 +194,11 @@ class MockConnman::Expectation
             ret_bytes_(nullptr),
             ret_bytes_size_(123456),
             ret_data_(nullptr),
+            ret_dhcp_mode_(CONNMAN_DHCP_NOT_SPECIFIED),
             ret_fallback_data_(nullptr),
             arg_iface_data_(nullptr),
             arg_pointer_shall_be_null_(false),
+            arg_from_user_config_(false),
             arg_dest_size_(9876543),
             callback_invocation_(nullptr),
             callback_result_(ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1)),
@@ -233,11 +237,14 @@ class MockConnman::Expectation
         data_.ret_fallback_data_ = ret_fallback;
     }
 
-    explicit Expectation(bool ret, struct ConnmanInterfaceData *iface_data):
+    explicit Expectation(enum ConnmanDHCPMode ret,
+                         struct ConnmanInterfaceData *iface_data,
+                         bool from_user_config):
         d(ConnmanFn::get_dhcp_mode)
     {
-        data_.ret_bool_ = ret;
+        data_.ret_dhcp_mode_ = ret;
         data_.arg_iface_data_ = iface_data;
+        data_.arg_from_user_config_ = from_user_config;
     }
 
     explicit Expectation(bool ret, SurveyCallbackInvocation invocation,
@@ -387,9 +394,9 @@ void MockConnman::expect_find_active_primary_interface(struct ConnmanInterfaceDa
     expectations_->add(Expectation(ret, default_mac_address, wired_mac_address, wireless_mac_address, ret_fallback));
 }
 
-void MockConnman::expect_get_dhcp_mode(bool ret, struct ConnmanInterfaceData *iface_data)
+void MockConnman::expect_get_dhcp_mode(enum ConnmanDHCPMode ret, struct ConnmanInterfaceData *iface_data, bool from_user_config)
 {
-    expectations_->add(Expectation(ret, iface_data));
+    expectations_->add(Expectation(ret, iface_data, from_user_config));
 }
 
 void MockConnman::expect_get_ipv4_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
@@ -540,14 +547,16 @@ connman_find_active_primary_interface(const char *default_mac_address,
     return expect.d.ret_data_;
 }
 
-bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
+enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
+                                           bool from_user_config)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_dhcp_mode);
     cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
+    cppcut_assert_equal(expect.d.arg_from_user_config_, from_user_config);
 
-    return expect.d.ret_bool_;
+    return expect.d.ret_dhcp_mode_;
 }
 
 static void get_ipv4_parameter_string(const MockConnman::Expectation &expect,

@@ -246,19 +246,33 @@ connman_find_active_primary_interface(const char *default_mac_address,
     return (struct ConnmanInterfaceData *)found;
 }
 
-bool connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data)
+enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
+                                           bool from_user_config)
 {
     log_assert(iface_data != NULL);
 
     GVariantDict dict;
-    connman_common_init_subdict((GVariant *)iface_data, &dict, "IPv4.Configuration");
+    connman_common_init_subdict((GVariant *)iface_data, &dict,
+                                from_user_config ? "IPv4.Configuration" : "IPv4");
 
     GVariant *method_variant =
         g_variant_dict_lookup_value(&dict, "Method", G_VARIANT_TYPE_STRING);
     log_assert(method_variant != NULL);
 
     const char *method = g_variant_get_string(method_variant, NULL);
-    bool retval = (strcmp(method, "dhcp") == 0);
+
+    enum ConnmanDHCPMode retval;
+
+    if(strcmp(method, "dhcp") == 0)
+        retval = CONNMAN_DHCP_ON;
+    else if(strcmp(method, "off") == 0)
+        retval = CONNMAN_DHCP_OFF;
+    else if(strcmp(method, "manual") == 0)
+        retval = CONNMAN_DHCP_MANUAL;
+    else if(strcmp(method, "fixed") == 0)
+        retval = CONNMAN_DHCP_FIXED;
+    else
+        retval = CONNMAN_DHCP_NOT_SPECIFIED;
 
     g_variant_unref(method_variant);
     g_variant_dict_clear(&dict);

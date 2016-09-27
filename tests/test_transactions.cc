@@ -617,7 +617,7 @@ void test_register_read_request_size_1_transaction()
     mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
         "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
-    mock_connman->expect_get_dhcp_mode(false, dummy_connman_iface_data);
+    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface_data, true);
     mock_connman->expect_free_interface_data(dummy_connman_iface_data);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
