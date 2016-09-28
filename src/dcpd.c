@@ -784,6 +784,7 @@ static void handle_transaction_exception(struct state *const state,
  * Process DCP.
  */
 static void main_loop(struct files *files,
+                      struct dcp_over_tcp_data *dot,
                       struct smartphone_app_connection_data *appconn,
                       int primitive_queue_fd, int register_changed_fd)
 {
@@ -797,12 +798,6 @@ static void main_loop(struct files *files,
                           TRANSACTION_CHANNEL_INET, true);
     dynamic_buffer_init(&state.drcp_buffer);
 
-    static struct dcp_over_tcp_data dot;
-    (void)dot_init(&dot);
-
-    applink_init();
-    (void)appconn_init(appconn, process_smartphone_outgoing_queue);
-
     dcpregs_status_set_ready();
 
     msg_info("Ready for accepting traffic");
@@ -812,7 +807,7 @@ static void main_loop(struct files *files,
         const unsigned int wait_result =
             wait_for_events(&state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
-                            dot.server_fd, dot.peer_fd,
+                            dot->server_fd, dot->peer_fd,
                             appconn->server_fd, appconn->peer_fd,
                             primitive_queue_fd, register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
@@ -842,7 +837,7 @@ static void main_loop(struct files *files,
             }
         }
 
-        if(!handle_reopen_connections(wait_result, files, &dot, &state))
+        if(!handle_reopen_connections(wait_result, files, dot, &state))
         {
             keep_running = false;
             continue;
@@ -851,9 +846,9 @@ static void main_loop(struct files *files,
         handle_register_change(wait_result, register_changed_fd, &state);
 
         if((wait_result & WAITEVENT_CAN_READ_FROM_SERVER_SOCKET) != 0)
-            dot_handle_incoming(&dot);
+            dot_handle_incoming(dot);
 
-        dot_handle_outgoing(&dot,
+        dot_handle_outgoing(dot,
                             (wait_result & WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET) != 0,
                             (wait_result & WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED) != 0);
 
@@ -881,8 +876,8 @@ static void main_loop(struct files *files,
             break;
 
           case TRANSACTION_CHANNEL_INET:
-            in_fd = dot.peer_fd;
-            out_fd = dot.peer_fd;
+            in_fd = dot->peer_fd;
+            out_fd = dot->peer_fd;
             break;
         }
 
@@ -901,7 +896,7 @@ static void main_loop(struct files *files,
 
           case TRANSACTION_FINISHED:
           case TRANSACTION_ERROR:
-            terminate_active_transaction(&state, &dot);
+            terminate_active_transaction(&state, dot);
             try_dequeue_next_transaction(&state);
             break;
 
@@ -913,9 +908,6 @@ static void main_loop(struct files *files,
 
     transaction_free(&state.preallocated_spi_slave_transaction);
     transaction_free(&state.preallocated_inet_slave_transaction);
-
-    dot_close(&dot);
-    appconn_close(appconn);
 }
 
 struct parameters
@@ -926,6 +918,40 @@ struct parameters
     const char *ethernet_interface_mac_address;
     const char *wlan_interface_mac_address;
 };
+
+static bool main_loop_init(const struct parameters *parameters,
+                           struct smartphone_app_connection_data *appconn,
+                           struct connman_agent_data *connman_agent,
+                           struct dcp_over_tcp_data *dot)
+{
+    static const char network_preferences_dir[] = "/var/local/etc";
+    static const char network_preferences_file[] = "network.rc";
+    static char network_preferences_full_file[sizeof(network_preferences_dir) +
+                                              sizeof(network_preferences_file)];
+
+    snprintf(network_preferences_full_file, sizeof(network_preferences_full_file),
+             "%s/%s", network_preferences_dir, network_preferences_file);
+
+    connman_agent->network_prefs = network_preferences_full_file;
+
+    register_init(parameters->ethernet_interface_mac_address,
+                  parameters->wlan_interface_mac_address,
+                  "/var/lib/connman",
+                  network_preferences_dir, network_preferences_full_file,
+                  push_register_to_slave);
+
+    transaction_init_allocator();
+
+    applink_init();
+
+    if(appconn_init(appconn, process_smartphone_outgoing_queue) < 0)
+        return false;
+
+    if(dot_init(dot) < 0)
+        return false;
+
+    return true;
+}
 
 /*!
  * Open devices, daemonize.
@@ -1175,14 +1201,6 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files, &primitive_queue_fd, &register_changed_fd) < 0)
         return EXIT_FAILURE;
 
-    static const char network_preferences_dir[] = "/var/local/etc";
-    static const char network_preferences_file[] = "network.rc";
-    static char network_preferences_full_file[sizeof(network_preferences_dir) +
-                                              sizeof(network_preferences_file)];
-
-    snprintf(network_preferences_full_file, sizeof(network_preferences_full_file),
-             "%s/%s", network_preferences_dir, network_preferences_file);
-
     /*!
      * Data for smartphone connection.
      */
@@ -1191,16 +1209,14 @@ int main(int argc, char *argv[])
     /*
      * Data for ConnMan agent implementation.
      */
-    static struct connman_agent_data connman_agent =
-    {
-        .network_prefs = network_preferences_full_file,
-    };
+    static struct connman_agent_data connman_agent;
 
-    register_init(parameters.ethernet_interface_mac_address,
-                  parameters.wlan_interface_mac_address,
-                  "/var/lib/connman",
-                  network_preferences_dir, network_preferences_full_file,
-                  push_register_to_slave);
+    /*!
+     * Data for handling DCP over TCP/IP.
+     */
+    static struct dcp_over_tcp_data dot;
+
+    main_loop_init(&parameters, &appconn, &connman_agent, &dot);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, &connman_agent) < 0)
@@ -1219,16 +1235,18 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTERM, &action, NULL);
 
-    transaction_init_allocator();
-
     if(parameters.with_connman)
         connman_wlan_power_on();
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
-    main_loop(&files, &appconn, primitive_queue_fd, register_changed_fd);
+    main_loop(&files, &dot, &appconn,
+              primitive_queue_fd, register_changed_fd);
 
     msg_info("Shutting down");
+
+    dot_close(&dot);
+    appconn_close(&appconn);
 
     shutdown(&files);
     dbus_unlock_shutdown_sequence();
