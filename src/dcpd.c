@@ -67,6 +67,11 @@
 #define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
 #define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 13)
 
+enum PrimitiveQueueCommand
+{
+    PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
+};
+
 /*!
  * Global state of the DCP machinery.
  */
@@ -129,12 +134,15 @@ static volatile bool keep_running = true;
 static int register_changed_write_fd;
 
 /*!
- * Global write end of pipe to self for communicating back requests to send
- * something to a connected smartphone from others contexts.
+ * Global write end of pipe to self for communicating back requests to do
+ * something in main context.
+ *
+ * This is a simple queue of one-byte commands that tells the main loop to do
+ * something, most notably processing the smartphone app command queue.
  *
  * The read end is passed as parameter to #main_loop().
  */
-static int app_process_queue_notification_write_fd;
+static int primitive_command_queue_write_fd;
 
 static void show_version_info(void)
 {
@@ -329,17 +337,46 @@ static unsigned int handle_app_peer_events(int fd, short revents)
     return result;
 }
 
-static unsigned int handle_app_queue_events(int fd, short revents)
+static unsigned int handle_primqueue_events(int fd, short revents)
 {
     unsigned int result = 0;
 
     if(revents & POLLIN)
     {
-        result |= WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS;
+        while(true)
+        {
+            errno = 0;
 
-        uint8_t dummy[16];
-        while(os_read(fd, dummy, sizeof(dummy)) < 0 && errno == EINTR)
-            ;
+            uint8_t commands[16];
+            const ssize_t number_of_commands =
+                os_read(fd, commands, sizeof(commands));
+
+            if(number_of_commands < 0)
+            {
+                if(errno == EINTR)
+                    continue;
+                else
+                {
+                    msg_error(errno, LOG_ERR,
+                              "Error while reading from primitive queue");
+                    break;
+                }
+            }
+
+            for(ssize_t i = 0; i < number_of_commands; ++i)
+            {
+                const enum PrimitiveQueueCommand cmd = commands[i];
+
+                switch(cmd)
+                {
+                  case PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE:
+                    result |= WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS;
+                    break;
+                }
+            }
+
+            break;
+        }
     }
 
     if(revents & ~POLLIN)
@@ -357,7 +394,7 @@ static unsigned int wait_for_events(struct state *state,
                                     const int dcp_peer_socket_fd,
                                     const int app_server_socket_fd,
                                     const int app_peer_socket_fd,
-                                    const int app_process_queue_fd,
+                                    const int primitive_queue_fd,
                                     const int register_changed_fd,
                                     bool do_block)
 {
@@ -405,7 +442,7 @@ static unsigned int wait_for_events(struct state *state,
             .events = POLLIN,
         },
         {
-            .fd = app_process_queue_fd,
+            .fd = primitive_queue_fd,
             .events = POLLIN,
         },
         {
@@ -441,7 +478,7 @@ static unsigned int wait_for_events(struct state *state,
     return_value |= handle_dcp_peer_events(dcp_peer_socket_fd,     fds[3].revents, state);
     return_value |= handle_app_server_events(app_server_socket_fd, fds[4].revents);
     return_value |= handle_app_peer_events(app_peer_socket_fd,     fds[5].revents);
-    return_value |= handle_app_queue_events(app_process_queue_fd,  fds[6].revents);
+    return_value |= handle_primqueue_events(primitive_queue_fd,    fds[6].revents);
     return_value |= handle_register_events(register_changed_fd,    fds[7].revents);
 
     return return_value;
@@ -632,23 +669,28 @@ static void push_register_to_slave(uint8_t reg_number)
                   ret, reg_number);
 }
 
-static void process_smartphone_outgoing_queue(void)
+static void primitive_queue_send(const enum PrimitiveQueueCommand cmd, const char *what)
 {
-    msg_info("Out queue notification");
-
+    const uint8_t cmd_as_byte = (const uint8_t)cmd;
     ssize_t ret;
-    static const uint8_t zero = 0;
 
-    while((ret = os_write(app_process_queue_notification_write_fd, &zero, sizeof(zero))) < 0 &&
+    while((ret = os_write(primitive_command_queue_write_fd,
+                          &cmd_as_byte, sizeof(cmd_as_byte))) < 0 &&
           errno == EINTR)
         ;
 
     if(ret < 0)
-        msg_error(errno, LOG_ERR, "Failed queuing processing of smartphone queue");
-    else if(ret != sizeof(zero))
+        msg_error(errno, LOG_ERR, "Failed queuing command for %s", what);
+    else if(ret != sizeof(cmd_as_byte))
         msg_error(0, LOG_ERR,
-                  "Wrote %zd bytes instead of 1 while trying to queue smartphone processing",
-                  ret);
+                  "Wrote %zd bytes instead of 1 while queuing command for %s",
+                  ret, what);
+}
+
+static void process_smartphone_outgoing_queue(void)
+{
+    primitive_queue_send(PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
+                         "processing smartphone queue");
 }
 
 /*!
@@ -743,7 +785,7 @@ static void handle_transaction_exception(struct state *const state,
  */
 static void main_loop(struct files *files,
                       struct smartphone_app_connection_data *appconn,
-                      int app_process_queue_fd, int register_changed_fd)
+                      int primitive_queue_fd, int register_changed_fd)
 {
     static struct state state;
 
@@ -772,7 +814,7 @@ static void main_loop(struct files *files,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             dot.server_fd, dot.peer_fd,
                             appconn->server_fd, appconn->peer_fd,
-                            app_process_queue_fd, register_changed_fd,
+                            primitive_queue_fd, register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
 
         if((wait_result & WAITEVENT_POLL_ERROR) != 0)
@@ -889,7 +931,7 @@ struct parameters
  * Open devices, daemonize.
  */
 static int setup(const struct parameters *parameters, struct files *files,
-                 int *app_process_queue_notification_read_fd,
+                 int *primitive_command_queue_read_fd,
                  int *reg_changed_read_fd)
 {
     msg_enable_syslog(!parameters->run_in_foreground);
@@ -939,8 +981,8 @@ static int setup(const struct parameters *parameters, struct files *files,
         goto error_smartphone_pipe_to_self;
     }
 
-    *app_process_queue_notification_read_fd = fds[0];
-    app_process_queue_notification_write_fd = fds[1];
+    *primitive_command_queue_read_fd = fds[0];
+    primitive_command_queue_write_fd = fds[1];
 
     if(pipe(fds) < 0)
     {
@@ -1119,7 +1161,7 @@ int main(int argc, char *argv[])
      * poll(2) in the main loop so that the smartphone app protocol code can
      * process its output queue.
      */
-    int app_process_fd;
+    int primitive_queue_fd;
 
     /*!
      * File descriptor from which register changes can be read.
@@ -1130,7 +1172,7 @@ int main(int argc, char *argv[])
      */
     int register_changed_fd;
 
-    if(setup(&parameters, &files, &app_process_fd, &register_changed_fd) < 0)
+    if(setup(&parameters, &files, &primitive_queue_fd, &register_changed_fd) < 0)
         return EXIT_FAILURE;
 
     static const char network_preferences_dir[] = "/var/local/etc";
@@ -1184,7 +1226,7 @@ int main(int argc, char *argv[])
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
-    main_loop(&files, &appconn, app_process_fd, register_changed_fd);
+    main_loop(&files, &appconn, primitive_queue_fd, register_changed_fd);
 
     msg_info("Shutting down");
 
