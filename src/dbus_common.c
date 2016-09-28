@@ -28,7 +28,11 @@ int dbus_common_handle_dbus_error(GError **error)
     if(*error == NULL)
         return 0;
 
-    msg_error(0, LOG_EMERG, "%s", (*error)->message);
+    if((*error)->message != NULL)
+        msg_error(0, LOG_EMERG, "Got D-Bus error: %s", (*error)->message);
+    else
+        msg_error(0, LOG_EMERG, "Got D-Bus error without any message");
+
     g_error_free(*error);
     *error = NULL;
 
