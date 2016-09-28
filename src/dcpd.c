@@ -36,10 +36,11 @@
 #include "dynamic_buffer_util.h"
 #include "drcp.h"
 #include "dbus_iface.h"
+#include "dbus_handlers_connman_manager_data.h"
 #include "registers.h"
 #include "dcpregs_status.h"
 #include "connman.h"
-#include "connman_agent.h"
+#include "networkprefs.h"
 #include "os.h"
 #include "versioninfo.h"
 
@@ -66,10 +67,12 @@
 /* internal events */
 #define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
 #define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 13)
+#define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 14)
 
 enum PrimitiveQueueCommand
 {
     PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
+    PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
 };
 
 /*!
@@ -372,6 +375,10 @@ static unsigned int handle_primqueue_events(int fd, short revents)
                   case PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE:
                     result |= WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS;
                     break;
+
+                  case PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN:
+                    result |= WAITEVENT_CONNECT_TO_WLAN_REQUESTED;
+                    break;
                 }
             }
 
@@ -649,6 +656,13 @@ static void handle_register_change(unsigned int wait_result, int fd,
                                            reg_number, TRANSACTION_CHANNEL_SPI);
 }
 
+static void handle_connman_manager_events(unsigned int wait_result,
+                                          struct dbussignal_connman_manager_data *data)
+{
+    if((wait_result & WAITEVENT_CONNECT_TO_WLAN_REQUESTED) != 0)
+        dbussignal_connman_manager_connect_our_wlan(data);
+}
+
 /*!
  * Callback from network status register implementation.
  *
@@ -691,6 +705,12 @@ static void process_smartphone_outgoing_queue(void)
 {
     primitive_queue_send(PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
                          "processing smartphone queue");
+}
+
+static void try_connect_to_managed_wlan(void)
+{
+    primitive_queue_send(PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
+                         "connecting to WLAN");
 }
 
 /*!
@@ -786,6 +806,7 @@ static void handle_transaction_exception(struct state *const state,
 static void main_loop(struct files *files,
                       struct dcp_over_tcp_data *dot,
                       struct smartphone_app_connection_data *appconn,
+                      struct dbussignal_connman_manager_data *connman,
                       int primitive_queue_fd, int register_changed_fd)
 {
     static struct state state;
@@ -844,6 +865,8 @@ static void main_loop(struct files *files,
         }
 
         handle_register_change(wait_result, register_changed_fd, &state);
+
+        handle_connman_manager_events(wait_result, connman);
 
         if((wait_result & WAITEVENT_CAN_READ_FROM_SERVER_SOCKET) != 0)
             dot_handle_incoming(dot);
@@ -921,7 +944,7 @@ struct parameters
 
 static bool main_loop_init(const struct parameters *parameters,
                            struct smartphone_app_connection_data *appconn,
-                           struct connman_agent_data *connman_agent,
+                           struct dbussignal_connman_manager_data *connman,
                            struct dcp_over_tcp_data *dot)
 {
     static const char network_preferences_dir[] = "/var/local/etc";
@@ -932,15 +955,17 @@ static bool main_loop_init(const struct parameters *parameters,
     snprintf(network_preferences_full_file, sizeof(network_preferences_full_file),
              "%s/%s", network_preferences_dir, network_preferences_file);
 
-    connman_agent->network_prefs = network_preferences_full_file;
+    network_prefs_init(parameters->ethernet_interface_mac_address,
+                       parameters->wlan_interface_mac_address,
+                       network_preferences_dir, network_preferences_full_file);
 
     register_init(parameters->ethernet_interface_mac_address,
                   parameters->wlan_interface_mac_address,
-                  "/var/lib/connman",
-                  network_preferences_dir, network_preferences_full_file,
-                  push_register_to_slave);
+                  "/var/lib/connman", push_register_to_slave);
 
     transaction_init_allocator();
+
+    dbussignal_connman_manager_init(connman, try_connect_to_managed_wlan);
 
     applink_init();
 
@@ -1206,20 +1231,20 @@ int main(int argc, char *argv[])
      */
     static struct smartphone_app_connection_data appconn;
 
-    /*
-     * Data for ConnMan agent implementation.
+    /*!
+     * Data for net.connman.Manager D-Bus signal handlers.
      */
-    static struct connman_agent_data connman_agent;
+    static struct dbussignal_connman_manager_data connman;
 
     /*!
      * Data for handling DCP over TCP/IP.
      */
     static struct dcp_over_tcp_data dot;
 
-    main_loop_init(&parameters, &appconn, &connman_agent, &dot);
+    main_loop_init(&parameters, &appconn, &connman, &dot);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
-                  parameters.with_connman, &appconn, &connman_agent) < 0)
+                  parameters.with_connman, &appconn, &connman) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
@@ -1240,7 +1265,7 @@ int main(int argc, char *argv[])
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
-    main_loop(&files, &dot, &appconn,
+    main_loop(&files, &dot, &appconn, &connman,
               primitive_queue_fd, register_changed_fd);
 
     msg_info("Shutting down");

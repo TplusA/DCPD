@@ -518,8 +518,6 @@ static void copy_mac_address(char *dest, size_t dest_size, const char *src)
 void register_init(const char *ethernet_mac_address,
                    const char *wlan_mac_address,
                    const char *connman_config_path,
-                   const char *network_config_path,
-                   const char *network_config_file,
                    void (*register_changed_callback)(uint8_t reg_number))
 {
     memset(&registers_private_data, 0, sizeof(registers_private_data));
@@ -551,8 +549,6 @@ void register_init(const char *ethernet_mac_address,
 
     config->active_interface = NULL;
     config->connman_config_path = connman_config_path;
-    config->network_config_path = network_config_path;
-    config->network_config_file = network_config_file;
     config->register_changed_notification_fn = register_changed_callback;
 
     register_zero_for_unit_tests = NULL;

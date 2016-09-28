@@ -273,6 +273,46 @@ connman_find_active_primary_interface(const char *default_mac_address,
     return (struct ConnmanInterfaceData *)found;
 }
 
+static bool get_bool_value(struct ConnmanInterfaceData *iface_data,
+                           const char *key)
+{
+    log_assert(iface_data != NULL);
+
+    GVariant *dict = g_variant_get_child_value((GVariant *)iface_data, 1);
+    GVariant *bool_variant =
+        dict != NULL
+        ? g_variant_lookup_value(dict, key, G_VARIANT_TYPE_BOOLEAN)
+        : NULL;
+
+    if(bool_variant == NULL)
+    {
+        msg_error(0, LOG_NOTICE,
+                  "Property \"%s\" not defined for network interface", key);
+
+        if(dict != NULL)
+            g_variant_unref(dict);
+
+        return false;
+    }
+
+    const bool bool_value = g_variant_get_boolean(bool_variant);
+
+    g_variant_unref(bool_variant);
+    g_variant_unref(dict);
+
+    return bool_value;
+}
+
+bool connman_get_favorite(struct ConnmanInterfaceData *iface_data)
+{
+    return get_bool_value(iface_data, "Favorite");
+}
+
+bool connman_get_auto_connect_mode(struct ConnmanInterfaceData *iface_data)
+{
+    return get_bool_value(iface_data, "AutoConnect");
+}
+
 enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
                                            bool from_user_config)
 {
@@ -347,6 +387,56 @@ enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceDa
     }
 
     g_variant_unref(type_variant);
+    g_variant_unref(dict);
+
+    return retval;
+}
+
+enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_data)
+{
+    log_assert(iface_data != NULL);
+
+    GVariant *dict = g_variant_get_child_value((GVariant *)iface_data, 1);
+    GVariant *state_variant =
+        dict != NULL
+        ? g_variant_lookup_value(dict, "State", G_VARIANT_TYPE_STRING)
+        : NULL;
+
+    if(state_variant == NULL)
+    {
+        msg_error(0, LOG_NOTICE, "No connection state for network interface");
+
+        if(dict != NULL)
+            g_variant_unref(dict);
+
+        return CONNMAN_STATE_NOT_SPECIFIED;
+    }
+
+    const char *state = g_variant_get_string(state_variant, NULL);
+
+    enum ConnmanServiceState retval;
+
+    if(strcmp(state, "idle") == 0)
+        retval = CONNMAN_STATE_IDLE;
+    else if(strcmp(state, "failure") == 0)
+        retval = CONNMAN_STATE_FAILURE;
+    else if(strcmp(state, "association") == 0)
+        retval = CONNMAN_STATE_ASSOCIATION;
+    else if(strcmp(state, "configuration") == 0)
+        retval = CONNMAN_STATE_CONFIGURATION;
+    else if(strcmp(state, "ready") == 0)
+        retval = CONNMAN_STATE_READY;
+    else if(strcmp(state, "disconnect") == 0)
+        retval = CONNMAN_STATE_DISCONNECT;
+    else if(strcmp(state, "online") == 0)
+        retval = CONNMAN_STATE_ONLINE;
+    else
+    {
+        msg_error(0, LOG_NOTICE, "Unsupported connection state \"%s\"", state);
+        retval = CONNMAN_STATE_NOT_SPECIFIED;
+    }
+
+    g_variant_unref(state_variant);
     g_variant_unref(dict);
 
     return retval;

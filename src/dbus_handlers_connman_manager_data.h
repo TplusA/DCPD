@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,28 +16,35 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DBUS_IFACE_H
-#define DBUS_IFACE_H
+#ifndef DBUS_HANDLERS_CONNMAN_MANAGER_DATA_H
+#define DBUS_HANDLERS_CONNMAN_MANAGER_DATA_H
 
-#include <stdbool.h>
+#include <glib.h>
+
+/*!
+ * \addtogroup dbus_handlers
+ */
+/*!@{*/
+
+struct dbussignal_connman_manager_data
+{
+    GMutex lock;
+    char wlan_service_name[512];
+    void (*schedule_connect_to_wlan)(void);
+};
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct smartphone_app_connection_data;
-struct dbussignal_connman_manager_data;
-
-int dbus_setup(bool connect_to_session_bus, bool with_connman,
-               struct smartphone_app_connection_data *appconn_data,
-               struct dbussignal_connman_manager_data *connman_manager_data);
-void dbus_shutdown(void);
-
-void dbus_lock_shutdown_sequence(const char *why);
-void dbus_unlock_shutdown_sequence(void);
+void dbussignal_connman_manager_init(struct dbussignal_connman_manager_data *data,
+                                     void (*schedule_connect_to_wlan_fn)(void));
+void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* !DBUS_IFACE_H */
+/*!@}*/
+
+#endif /* !DBUS_HANDLERS_CONNMAN_MANAGER_DATA_H */

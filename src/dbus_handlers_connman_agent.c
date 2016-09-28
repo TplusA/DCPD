@@ -25,8 +25,7 @@
 #include <inttypes.h>
 
 #include "dbus_handlers_connman_agent.h"
-#include "connman_agent.h"
-#include "inifile.h"
+#include "networkprefs.h"
 #include "messages.h"
 
 #define NET_CONNMAN_AGENT_ERROR (net_connman_agent_error_quark())
@@ -186,7 +185,7 @@ static bool send_error_if_possible(GDBusMethodInvocation *invocation,
 
 static void enter_agent_handler(GDBusMethodInvocation *invocation)
 {
-    static const char iface_name[] = "net.connman.Manager";
+    static const char iface_name[] = "net.connman.Agent";
 
     msg_info("%s method invocation from '%s': %s",
              iface_name, g_dbus_method_invocation_get_sender(invocation),
@@ -369,39 +368,36 @@ error_request:
 
 static bool insert_answer(GVariantBuilder *result_builder,
                           struct Request *request, enum RequestID request_id,
-                          const struct ini_section *preferences)
+                          const struct network_prefs *preferences)
 {
     /* must match #RequestID enumeration */
-    static const char *const inifile_keys[] =
+    static const char *(*const prefgetters[])(const struct network_prefs *) =
     {
         NULL,
-        "NetworkName",
-        "SSID",
+        network_prefs_get_name,
+        network_prefs_get_ssid,
         NULL,
-        "Passphrase",
+        network_prefs_get_passphrase,
         NULL,
         NULL,
         NULL,
         NULL,
     };
 
-    G_STATIC_ASSERT(G_N_ELEMENTS(inifile_keys) == REQUEST_LAST_REQUEST_ID + 1);
+    G_STATIC_ASSERT(G_N_ELEMENTS(prefgetters) == REQUEST_LAST_REQUEST_ID + 1);
 
     log_assert(request != NULL);
     log_assert(!request->is_answered);
 
-    const char *const key = inifile_keys[request_id];
-
-    if(key == NULL)
+    if(prefgetters[request_id] == NULL)
     {
         msg_info("ConnMan request %u not supported", request_id);
         return false;
     }
 
-    const struct ini_key_value_pair *const key_value =
-        inifile_section_lookup_kv_pair(preferences, key, 0);
+    const char *const value = prefgetters[request_id](preferences);
 
-    if(key_value == NULL || key_value->value[0] == '\0')
+    if(value == NULL)
     {
         msg_info("Have no answer for ConnMan request %u", request_id);
         return false;
@@ -409,7 +405,7 @@ static bool insert_answer(GVariantBuilder *result_builder,
 
     g_variant_builder_add(result_builder, "{sv}",
                           request_string_ids[request_id],
-                          g_variant_new_string(key_value->value));
+                          g_variant_new_string(value));
     request->is_answered = true;
 
     return true;
@@ -418,7 +414,7 @@ static bool insert_answer(GVariantBuilder *result_builder,
 static bool insert_alternate_answer(GVariantBuilder *result_builder,
                                     struct Request *requests,
                                     enum RequestID related_id,
-                                    const struct ini_section *preferences)
+                                    const struct network_prefs *preferences)
 {
     if(requests[related_id].alternates != 0)
     {
@@ -472,181 +468,59 @@ static void wipe_out_alternates(struct Request *requests, enum RequestID related
     }
 }
 
-static char nibble_to_char(uint8_t nibble)
-{
-    if(nibble < 10)
-        return '0' + nibble;
-    else
-        return 'a' + nibble - 10;
-}
-
-static const char *generate_service_name(char *const buffer,
-                                         const size_t buffer_size,
-                                         const size_t tech_length,
-                                         const struct ini_key_value_pair *mac,
-                                         const struct ini_key_value_pair *network_name,
-                                         const struct ini_key_value_pair *network_ssid,
-                                         const struct ini_key_value_pair *network_security)
-{
-    static const char buffer_too_small_error[] = "Internal error: buffer too small";
-
-#define APPEND_TO_BUFFER(CH) \
-    do \
-    { \
-        if(offset >= buffer_size) \
-            return buffer_too_small_error; \
-        \
-        buffer[offset++] = (CH); \
-    } \
-    while(0)
-
-    if(mac == NULL)
-        return "No MAC configured";
-
-    bool is_wifi;
-
-    if(strcmp(buffer, "wifi") == 0)
-    {
-        if(network_name == NULL && network_ssid == NULL)
-            return "No network name configured";
-
-        if(network_security == NULL)
-            return "No network security configured";
-
-        is_wifi = true;
-    }
-    else if(strcmp(buffer, "ethernet") == 0)
-        is_wifi = false;
-    else
-        return "Unknown technology name";
-
-    size_t offset = tech_length;
-
-    APPEND_TO_BUFFER('_');
-
-    for(size_t input_offset = 0; /* nothing */; ++input_offset)
-    {
-        const char ch = tolower(mac->value[input_offset]);
-
-        if(ch == '\0')
-            break;
-
-        if(isdigit(ch) || (ch >= 'a' && ch <= 'f'))
-            APPEND_TO_BUFFER(ch);
-    }
-
-    APPEND_TO_BUFFER('_');
-
-    if(is_wifi)
-    {
-        if(network_ssid != NULL)
-        {
-            for(size_t input_offset = 0; /* nothing */; ++input_offset)
-            {
-                const char ch = tolower(network_ssid->value[input_offset]);
-
-                if(ch == '\0')
-                    break;
-
-                APPEND_TO_BUFFER(ch);
-            }
-        }
-        else
-        {
-            for(size_t input_offset = 0; /* nothing */; ++input_offset)
-            {
-                const char ch = network_name->value[input_offset];
-
-                if(ch == '\0')
-                    break;
-
-                APPEND_TO_BUFFER(nibble_to_char(ch >> 4));
-                APPEND_TO_BUFFER(nibble_to_char(ch & 0x0f));
-            }
-        }
-
-        APPEND_TO_BUFFER('_');
-
-        static const char first_suffix[] = "managed_";
-
-        if(offset + (sizeof(first_suffix) - 1) + strlen(network_security->value) >= buffer_size)
-            return buffer_too_small_error;
-
-        strcpy(buffer + offset, first_suffix);
-        strcpy(buffer + offset + sizeof(first_suffix) - 1, network_security->value);
-    }
-    else
-    {
-        static const char suffix[] = "cable";
-
-        if(offset + sizeof(suffix) > buffer_size)
-            return buffer_too_small_error;
-
-        strcpy(buffer + offset, suffix);
-    }
-
-    return NULL;
-
-#undef APPEND_TO_BUFFER
-}
-
 static const char *
-find_preferences_for_service(const char *ini_filename, struct ini_file *ini,
-                             const struct ini_section **preferences_section,
+find_preferences_for_service(struct network_prefs_handle **prefsfile,
+                             const struct network_prefs **preferences,
                              const char *full_service_name)
 {
-    *preferences_section = NULL;
-
-    char buffer[512];
+    *preferences = NULL;
 
     const char *const before_service = strrchr(full_service_name, '/');
     const char *const service = before_service + 1;
     const char *const after_tech = (before_service != NULL) ? strchr(service, '_') : NULL;
     const size_t tech_length = after_tech - service;
 
-    if(before_service == NULL || after_tech == NULL ||
-       tech_length == 0 || tech_length >= sizeof(buffer))
+    if(before_service == NULL || after_tech == NULL || tech_length == 0)
         return "Malformed service name";
 
-    int ret = inifile_parse_from_file(ini, ini_filename);
+    const struct network_prefs *dummy;
+    const struct network_prefs *prefs;
 
-    if(ret < 0)
-        return "Failed parsing network preferences";
-    else if(ret > 0)
-        return "Network preferences file not found";
-
-    const struct ini_section *preferences =
-        inifile_find_section(ini, service, tech_length);
-
-    if(preferences == NULL)
+    if(tech_length == 8 && memcmp(service, "ethernet", tech_length) == 0)
+        *prefsfile = network_prefs_open_ro(&prefs, &dummy);
+    else if(tech_length == 4 && memcmp(service, "wifi", tech_length) == 0)
+        *prefsfile = network_prefs_open_ro(&dummy, &prefs);
+    else
     {
-        inifile_free(ini);
+        *prefsfile = NULL;
+        return "Technology unknown";
+    }
+
+    if(*prefsfile == NULL)
+        return "Failed reading network preferences";
+
+    if(prefs == NULL)
+    {
+        network_prefs_close(*prefsfile);
+        *prefsfile = NULL;
         return "Network preferences not found for service name";
     }
+
+    char buffer[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
 
     memcpy(buffer, service, tech_length);
     buffer[tech_length] = '\0';
 
-    const char *error_message =
-        generate_service_name(buffer, sizeof(buffer),
-                              tech_length,
-                              inifile_section_lookup_kv_pair(preferences, "MAC", 3),
-                              inifile_section_lookup_kv_pair(preferences, "NetworkName", 11),
-                              inifile_section_lookup_kv_pair(preferences, "SSID", 4),
-                              inifile_section_lookup_kv_pair(preferences, "Security", 8));
-
-    if(error_message == NULL)
+    if(network_prefs_generate_service_name(prefs, buffer, sizeof(buffer)) == 0)
     {
-        if(strcmp(buffer, service) != 0)
-            error_message = "Service unknown";
-        else
-            *preferences_section = preferences;
+        network_prefs_close(*prefsfile);
+        *prefsfile = NULL;
+        return "Network preferences incomplete";
     }
 
-    if(*preferences_section == NULL)
-        inifile_free(ini);
+    *preferences = prefs;
 
-    return error_message;
+    return NULL;
 }
 
 gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
@@ -657,13 +531,11 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
 {
     enter_agent_handler(invocation);
 
-    const struct connman_agent_data *data = user_data;
-    struct ini_file ini;
-    const struct ini_section *preferences = NULL;
+    struct network_prefs_handle *prefsfile;
+    const struct network_prefs *preferences;
 
     const char *error_message =
-        find_preferences_for_service(data->network_prefs, &ini, &preferences,
-                                     arg_service);
+        find_preferences_for_service(&prefsfile, &preferences, arg_service);
 
     if(send_error_if_possible(invocation, error_message))
         return TRUE;
@@ -675,7 +547,7 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     if(send_error_if_possible(invocation, error_message))
     {
         unref_collected_requests(requests);
-        inifile_free(&ini);
+        network_prefs_close(prefsfile);
         return TRUE;
     }
 
@@ -719,7 +591,7 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     GVariant *result = g_variant_builder_end(&result_builder);
 
     unref_collected_requests(requests);
-    inifile_free(&ini);
+    network_prefs_close(prefsfile);
 
     if(send_error_if_possible(invocation, error_message))
         g_variant_unref(result);

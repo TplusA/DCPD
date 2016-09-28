@@ -40,9 +40,6 @@ struct dbussignal_shutdown_iface
 extern "C" {
 #endif
 
-void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
-                                const gchar *signal_name, GVariant *parameters,
-                                gpointer user_data);
 void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
                                const gchar *signal_name, GVariant *parameters,
                                gpointer user_data);

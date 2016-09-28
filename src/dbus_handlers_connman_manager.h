@@ -16,12 +16,28 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CONNMAN_AGENT_H
-#define CONNMAN_AGENT_H
+#ifndef DBUS_HANDLERS_CONNMAN_MANAGER_H
+#define DBUS_HANDLERS_CONNMAN_MANAGER_H
 
-struct connman_agent_data
-{
-    const char *network_prefs;
-};
+#include <gio/gio.h>
 
-#endif /* !CONNMAN_AGENT_H */
+/*!
+ * \addtogroup dbus_handlers
+ */
+/*!@{*/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
+                                const gchar *signal_name, GVariant *parameters,
+                                gpointer user_data);
+
+#ifdef __cplusplus
+}
+#endif
+
+/*!@}*/
+
+#endif /* !DBUS_HANDLERS_CONNMAN_MANAGER_H */

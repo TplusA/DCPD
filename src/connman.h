@@ -67,6 +67,18 @@ enum ConnmanDHCPMode
     CONNMAN_DHCP_FIXED,
 };
 
+enum ConnmanServiceState
+{
+    CONNMAN_STATE_NOT_SPECIFIED,
+    CONNMAN_STATE_IDLE,
+    CONNMAN_STATE_FAILURE,
+    CONNMAN_STATE_ASSOCIATION,
+    CONNMAN_STATE_CONFIGURATION,
+    CONNMAN_STATE_READY,
+    CONNMAN_STATE_DISCONNECT,
+    CONNMAN_STATE_ONLINE,
+};
+
 struct ConnmanServiceIterator;
 struct ConnmanServiceSecurityIterator;
 
@@ -97,9 +109,12 @@ connman_find_active_primary_interface(const char *default_mac_address,
                                       const char *wireless_mac_address,
                                       struct ConnmanInterfaceData **fallback);
 
+bool connman_get_favorite(struct ConnmanInterfaceData *iface_data);
+bool connman_get_auto_connect_mode(struct ConnmanInterfaceData *iface_data);
 enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
                                            bool from_user_config);
 enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
+enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_data);
 void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);
 void connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
