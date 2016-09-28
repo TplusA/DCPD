@@ -284,7 +284,12 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
 
     GVariant *method_variant =
         g_variant_dict_lookup_value(&dict, "Method", G_VARIANT_TYPE_STRING);
-    log_assert(method_variant != NULL);
+
+    if(method_variant == NULL)
+    {
+        g_variant_dict_clear(&dict);
+        return CONNMAN_DHCP_NOT_SPECIFIED;
+    }
 
     const char *method = g_variant_get_string(method_variant, NULL);
 
