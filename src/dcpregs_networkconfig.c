@@ -20,7 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -29,7 +28,7 @@
 
 #include "dcpregs_networkconfig.h"
 #include "registers_priv.h"
-#include "inifile.h"
+#include "networkprefs.h"
 #include "connman.h"
 #include "shutdown_guard.h"
 #include "messages.h"
@@ -75,9 +74,6 @@ static const uint32_t req_wireless_only_parameters =
 #define ALL_REQUESTED(R) \
     ((nwconfig_write_data.requested_changes & (R)) == (R))
 
-static const char global_section_name[]  = "global";
-static const char service_section_name[] = "service_config";
-
 /*!
  * Network configuration change requests.
  *
@@ -116,10 +112,10 @@ static struct
     char wlan_security_mode[SIZE_OF_WLAN_SECURITY_MODE];
 
     size_t wlan_ssid_length;
-    uint8_t wlan_ssid[32];
+    uint8_t wlan_ssid[32 + 1];
 
     bool wlan_wpa_passphrase_is_ascii;
-    uint8_t wlan_wpa_passphrase[64];
+    uint8_t wlan_wpa_passphrase[64 + 1];
 }
 nwconfig_write_data;
 
@@ -154,140 +150,6 @@ void dcpregs_networkconfig_deinit(void)
     shutdown_guard_free(&nwstatus_data.shutdown_guard);
 }
 
-struct config_filename_template
-{
-    const char *const template;
-    const size_t size_including_zero_terminator;
-    const size_t replacement_start_offset;
-};
-
-static const struct config_filename_template *get_filename_template(bool is_builtin)
-{
-    static const char config_filename_for_builtin_interfaces[] =
-        "builtin_xxxxxxxxxxxx.config";
-    static const char config_filename_for_external_interfaces[] =
-        "external_xxxxxxxxxxxx.config";
-
-    static const struct config_filename_template config_for_builtin =
-    {
-        .template = config_filename_for_builtin_interfaces,
-        .size_including_zero_terminator = sizeof(config_filename_for_builtin_interfaces),
-        .replacement_start_offset = 8,
-    };
-
-    static const struct config_filename_template config_for_external =
-    {
-        .template = config_filename_for_external_interfaces,
-        .size_including_zero_terminator = sizeof(config_filename_for_external_interfaces),
-        .replacement_start_offset = 9,
-    };
-
-    return is_builtin ? &config_for_builtin : &config_for_external;
-}
-
-static char *generate_network_config_file_name(const struct register_network_interface_t *iface,
-                                               const char *connman_config_path)
-{
-    /*
-     * Single configuration for all WLAN devices.
-     * This is a quick hack that is likely going to be reverted anyway once
-     * people understand what kind of mess this approach actually creates...
-     * See #131 and #132 for rationale.
-     */
-    static const char fixed_name_for_wlan_config[] = "wlan_device.config";
-
-    const struct config_filename_template *const cfg_template =
-        get_filename_template(iface->is_builtin);
-    const size_t prefix_length = strlen(connman_config_path);
-    const size_t total_length =
-        prefix_length + 1 + (iface->is_wired
-                             ? cfg_template->size_including_zero_terminator
-                             : sizeof(fixed_name_for_wlan_config));
-
-    char *filename = malloc(total_length);
-
-    if(filename == NULL)
-    {
-        msg_out_of_memory("network configuration filename");
-        return NULL;
-    }
-
-    memcpy(filename, connman_config_path, prefix_length);
-    filename[prefix_length] = '/';
-
-    if(iface->is_wired)
-        memcpy(filename + prefix_length + 1, cfg_template->template,
-               cfg_template->size_including_zero_terminator);
-    else
-    {
-        memcpy(filename + prefix_length + 1, fixed_name_for_wlan_config,
-               sizeof(fixed_name_for_wlan_config));
-
-        return filename;
-    }
-
-    char *const dest =
-        filename + prefix_length + 1 + cfg_template->replacement_start_offset;
-
-    for(size_t i = 0, j = 0; i < 6 * 2; i += 2, j += 3)
-    {
-        log_assert(dest[i + 0] == 'x');
-        log_assert(dest[i + 1] == 'x');
-
-        dest[i + 0] = tolower(iface->mac_address_string[j + 0]);
-        dest[i + 1] = tolower(iface->mac_address_string[j + 1]);
-    }
-
-    return filename;
-}
-
-static int complement_inifile_with_boilerplate(struct ini_file *ini,
-                                               const struct register_network_interface_t *iface)
-{
-    struct ini_section *section =
-        inifile_find_section(ini, global_section_name, sizeof(global_section_name) - 1);
-
-    if(section == NULL)
-        section = inifile_new_section(ini, global_section_name, sizeof(global_section_name) - 1);
-
-    if(section == NULL)
-        return -1;
-
-    if(inifile_section_store_value(section, "Name", 4, "StrBo", 0) == NULL)
-        return -1;
-
-    char string_buffer[128];
-
-    snprintf(string_buffer, sizeof(string_buffer),
-             "StrBo-managed %s %s interface",
-             iface->is_builtin ? "built-in" : "external",
-             iface->is_wired ? "wired" : "wireless");
-
-    if(inifile_section_store_value(section, "Description", 11,
-                                   string_buffer, 0) == NULL)
-        return -1;
-
-
-    section = inifile_find_section(ini, service_section_name, sizeof(service_section_name) - 1);
-
-    if(section == NULL)
-        section = inifile_new_section(ini, service_section_name, sizeof(service_section_name) - 1);
-
-    if(section == NULL)
-        return -1;
-
-    if(iface->is_wired &&
-       inifile_section_store_value(section, "MAC", 3, iface->mac_address_string, 0) == NULL)
-        return -1;
-
-    if(iface->is_builtin &&
-       inifile_section_store_value(section, "Type", 4,
-                                   iface->is_wired ? "ethernet" : "wifi", 0) == NULL)
-        return -1;
-
-    return 0;
-}
-
 static bool in_edit_mode(void)
 {
     return nwconfig_write_data.selected_interface != NULL;
@@ -301,20 +163,37 @@ get_network_iface_data(const struct register_configuration_t *config)
         : &config->builtin_ethernet_interface;
 }
 
+static struct ConnmanInterfaceData *
+find_active_primary_interface(const struct register_configuration_t *config,
+                              struct ConnmanInterfaceData **fallback)
+{
+    const enum NetworkPrefsTechnology default_tech =
+        get_network_iface_data(config)->is_wired
+        ? NWPREFSTECH_ETHERNET
+        : NWPREFSTECH_WLAN;
+
+    return connman_find_active_primary_interface(
+                network_prefs_get_mac_address_by_tech(default_tech)->address,
+                network_prefs_get_mac_address_by_tech(NWPREFSTECH_ETHERNET)->address,
+                network_prefs_get_mac_address_by_tech(NWPREFSTECH_WLAN)->address,
+                fallback);
+}
+
 static struct ConnmanInterfaceData *get_connman_iface_data(void)
 {
     const struct register_configuration_t *config = registers_get_data();
 
     if(in_edit_mode())
-        return connman_find_interface(
-                   nwconfig_write_data.selected_interface->mac_address_string);
-    else
-        return connman_find_active_primary_interface(
-                   get_network_iface_data(config)->mac_address_string,
-                   config->builtin_ethernet_interface.mac_address_string,
-                   config->builtin_wlan_interface.mac_address_string,
-                   NULL);
+    {
+        const enum NetworkPrefsTechnology tech =
+            nwconfig_write_data.selected_interface->is_wired
+            ? NWPREFSTECH_ETHERNET
+            : NWPREFSTECH_WLAN;
 
+        return connman_find_interface(network_prefs_get_mac_address_by_tech(tech)->address);
+    }
+    else
+        return find_active_primary_interface(config, NULL);
 }
 
 /*!
@@ -490,30 +369,25 @@ static bool query_dhcp_mode(void)
     return ret;
 }
 
-static int handle_set_dhcp_mode(struct ini_section *section,
-                                const struct register_network_interface_t *selected)
+static int handle_set_dhcp_mode(struct network_prefs *prefs)
 {
     if(!IS_REQUESTED(REQ_DHCP_MODE_55))
         return 0;
 
-    if(nwconfig_write_data.dhcpv4_mode)
-    {
-        if(inifile_section_store_value(section, "IPv4", 0, "dhcp", 0) == NULL)
-            return -1;
+    network_prefs_put_dhcp_mode(prefs, nwconfig_write_data.dhcpv4_mode);
 
+    if(nwconfig_write_data.dhcpv4_mode)
         nwconfig_write_data.requested_changes &=
             ~(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58 |
               REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
-    }
     else if(!IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
     {
         msg_error(0, LOG_WARNING,
                   "Disabling IPv4 on interface %s because DHCPv4 was "
                   "disabled and static IPv4 configuration was not sent",
-                  selected->mac_address_string);
+                  network_prefs_get_mac_address_by_prefs(prefs)->address);
 
-        if(inifile_section_store_value(section, "IPv4", 0, "off", 0) == NULL)
-            return -1;
+        network_prefs_disable_ipv4(prefs);
 
         nwconfig_write_data.requested_changes &=
             ~(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
@@ -522,8 +396,7 @@ static int handle_set_dhcp_mode(struct ini_section *section,
     return 0;
 }
 
-static int handle_set_static_ipv4_config(struct ini_section *section,
-                                         const struct register_network_interface_t *selected)
+static int handle_set_static_ipv4_config(struct network_prefs *prefs)
 {
     if(!IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
         return 0;
@@ -536,30 +409,21 @@ static int handle_set_static_ipv4_config(struct ini_section *section,
     }
 
     if(nwconfig_write_data.ipv4_address[0] != '\0')
-    {
-        char string_buffer[128];
-        snprintf(string_buffer, sizeof(string_buffer), "%s/%s/%s",
-                 nwconfig_write_data.ipv4_address,
-                 nwconfig_write_data.ipv4_netmask,
-                 nwconfig_write_data.ipv4_gateway);
-
-        if(inifile_section_store_value(section, "IPv4", 0, string_buffer, 0) == NULL)
-            return -1;
-    }
+        network_prefs_put_ipv4_config(prefs, nwconfig_write_data.ipv4_address,
+                                      nwconfig_write_data.ipv4_netmask,
+                                      nwconfig_write_data.ipv4_gateway);
     else
     {
         msg_info("Disabling IPv4 on interface %s",
-                 selected->mac_address_string);
+                 network_prefs_get_mac_address_by_prefs(prefs)->address);
 
-        if(inifile_section_store_value(section, "IPv4", 0, "off", 0) == NULL)
-            return -1;
+        network_prefs_put_ipv4_config(prefs, "", "", "");
     }
 
     return 0;
 }
 
-static int handle_set_dns_servers(struct ini_section *section,
-                                  const struct register_network_interface_t *selected)
+static int handle_set_dns_servers(struct network_prefs *prefs)
 {
     if(!IS_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63))
         return 0;
@@ -567,25 +431,16 @@ static int handle_set_dns_servers(struct ini_section *section,
     fill_in_missing_dns_server_config_requests();
 
     if(nwconfig_write_data.ipv4_dns_server1[0] != '\0')
-    {
-        const bool have_second =
-            (nwconfig_write_data.ipv4_dns_server2[0] != '\0');
+        network_prefs_put_nameservers(prefs,
+                                      nwconfig_write_data.ipv4_dns_server1,
+                                      nwconfig_write_data.ipv4_dns_server2);
 
-        char string_buffer[128];
-        snprintf(string_buffer, sizeof(string_buffer), "%s%s%s",
-                 nwconfig_write_data.ipv4_dns_server1,
-                 have_second ? "," : "",
-                 have_second ? nwconfig_write_data.ipv4_dns_server2 : "");
-
-        if(inifile_section_store_value(section, "Nameservers", 0, string_buffer, 0) == NULL)
-            return -1;
-    }
     else
     {
         msg_info("No nameservers on interface %s",
-                 selected->mac_address_string);
+                 network_prefs_get_mac_address_by_prefs(prefs)->address);
 
-        (void)inifile_section_remove_value(section, "Nameservers", 0);
+        network_prefs_put_nameservers(prefs, "", "");
     }
 
     return 0;
@@ -653,17 +508,20 @@ static bool is_known_security_mode_name(const char *name)
     return false;
 }
 
-static int handle_set_wireless_config(struct ini_section *section,
-                                      const struct register_network_interface_t *selected)
+static int handle_set_wireless_config(struct network_prefs *prefs)
 {
     if(!IS_REQUESTED(req_wireless_only_parameters))
         return 0;
 
-    if(selected->is_wired)
+    if(network_prefs_get_technology_by_prefs(prefs) != NWPREFSTECH_WLAN)
     {
         msg_info("Ignoring wireless parameters for active wired interface");
         return 0;
     }
+
+    const char *network_name;
+    const char *network_ssid;
+    const char *passphrase;
 
     if(IS_REQUESTED(REQ_WLAN_SECURITY_MODE_92))
     {
@@ -682,9 +540,13 @@ static int handle_set_wireless_config(struct ini_section *section,
     }
     else
     {
+        /* we need to know the security mode for some checks below, so we need
+         * to retrieve it from ConnMan */
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
-        if(iface_data != NULL)
+        if(iface_data == NULL)
+            nwconfig_write_data.wlan_security_mode[0] = '\0';
+        else
         {
             connman_get_wlan_security_type_string(iface_data,
                                                   nwconfig_write_data.wlan_security_mode,
@@ -700,30 +562,32 @@ static int handle_set_wireless_config(struct ini_section *section,
         return -1;
     }
 
-    if(inifile_section_store_value(section, "Security", 0,
-                                   nwconfig_write_data.wlan_security_mode, 0) == NULL)
-        return -1;
+    static const char empty_string[] = "";
 
-    if(IS_REQUESTED(REQ_WLAN_SSID_94) &&
-       nwconfig_write_data.wlan_ssid_length > 0)
+    char ssid_buffer[2 * (sizeof(nwconfig_write_data.wlan_ssid) - 1) + 1];
+
+    if(IS_REQUESTED(REQ_WLAN_SSID_94))
     {
-        if(is_wlan_ssid_simple_ascii(nwconfig_write_data.wlan_ssid,
-                                     nwconfig_write_data.wlan_ssid_length))
-        {
-            if(inifile_section_store_value(section, "Name", 0,
-                                           (char *)nwconfig_write_data.wlan_ssid,
-                                           nwconfig_write_data.wlan_ssid_length) == NULL)
-                return -1;
-        }
+        network_name = empty_string;
+        network_ssid = empty_string;
 
-        char buffer[2 * sizeof(nwconfig_write_data.wlan_ssid) + 1];
-
-        binary_to_hexdump(buffer, nwconfig_write_data.wlan_ssid,
-                          nwconfig_write_data.wlan_ssid_length);
-
-        if(inifile_section_store_value(section, "SSID", 0,
-                                       buffer, 0) == NULL)
-            return -1;
+       if(nwconfig_write_data.wlan_ssid_length > 0)
+       {
+           if(is_wlan_ssid_simple_ascii(nwconfig_write_data.wlan_ssid,
+                                        nwconfig_write_data.wlan_ssid_length))
+               network_name = (const char *)nwconfig_write_data.wlan_ssid;
+           else
+           {
+               binary_to_hexdump(ssid_buffer, nwconfig_write_data.wlan_ssid,
+                                 nwconfig_write_data.wlan_ssid_length);
+               network_ssid = ssid_buffer;
+           }
+       }
+    }
+    else
+    {
+        network_name = NULL;
+        network_ssid = NULL;
     }
 
     if(IS_REQUESTED(REQ_WLAN_WPA_PASSPHRASE_102))
@@ -733,40 +597,37 @@ static int handle_set_wireless_config(struct ini_section *section,
             ? 0
             : (nwconfig_write_data.wlan_wpa_passphrase_is_ascii
                ? strlen((const char *)nwconfig_write_data.wlan_wpa_passphrase)
-               : sizeof(nwconfig_write_data.wlan_wpa_passphrase));
+               : (sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1));
 
-        if(passphrase_length > 0 &&
-           inifile_section_store_value(section, "Passphrase", 0,
-                                       (const char *)nwconfig_write_data.wlan_wpa_passphrase,
-                                       passphrase_length) == NULL)
-        {
-            return -1;
-        }
-        else if(passphrase_length == 0)
-            inifile_section_remove_value(section, "Passphrase", 0);
+        if(passphrase_length > 0)
+            passphrase = (const char *)nwconfig_write_data.wlan_wpa_passphrase;
+        else
+            passphrase = "";
     }
+    else
+        passphrase = NULL;
+
+    network_prefs_put_wlan_config(prefs, network_name, network_ssid,
+                                  nwconfig_write_data.wlan_security_mode,
+                                  passphrase);
 
     return 0;
 }
 
-static int apply_changes_to_inifile(struct ini_file *ini,
-                                    const struct register_network_interface_t *selected)
+static int apply_changes_to_prefs(struct network_prefs *prefs)
 {
-    struct ini_section *section =
-        inifile_find_section(ini, service_section_name, sizeof(service_section_name) - 1);
+    log_assert(prefs != NULL);
 
-    log_assert(section != NULL);
-
-    if(handle_set_dhcp_mode(section, selected) < 0)
+    if(handle_set_dhcp_mode(prefs) < 0)
         return -1;
 
-    if(handle_set_static_ipv4_config(section, selected) < 0)
+    if(handle_set_static_ipv4_config(prefs) < 0)
         return -1;
 
-    if(handle_set_dns_servers(section, selected) < 0)
+    if(handle_set_dns_servers(prefs) < 0)
         return -1;
 
-    if(handle_set_wireless_config(section, selected) < 0)
+    if(handle_set_wireless_config(prefs) < 0)
         return -1;
 
     static const uint32_t not_implemented =
@@ -804,35 +665,26 @@ static int modify_network_configuration(const struct register_network_interface_
         return -1;
     }
 
-    char *filename =
-        generate_network_config_file_name(selected, registers_get_data()->connman_config_path);
+    struct network_prefs *ethernet_prefs;
+    struct network_prefs *wlan_prefs;
+    struct network_prefs_handle *cfg =
+        network_prefs_open_rw(&ethernet_prefs, &wlan_prefs);
 
-    if(filename == NULL)
+    if(cfg == NULL)
         return -1;
 
-    struct ini_file ini;
-    int ret = inifile_parse_from_file(&ini, filename);
+    struct network_prefs *selected_prefs =
+        selected->is_wired ? ethernet_prefs : wlan_prefs;
 
-    if(ret < 0)
-        goto exit_error_free_filename;
+    if(selected_prefs == NULL)
+        selected_prefs = network_prefs_add_prefs(cfg, selected->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN);
 
-    ret = -1;
+    int ret = apply_changes_to_prefs(selected_prefs);
 
-    if(complement_inifile_with_boilerplate(&ini, selected) < 0)
-        goto exit_error_free_inifile;
+    if(ret == 0)
+        ret = network_prefs_write_to_file(cfg);
 
-    if(apply_changes_to_inifile(&ini, selected) < 0)
-        goto exit_error_free_inifile;
-
-    ret = inifile_write_to_file(&ini, filename);
-
-    os_sync_dir(registers_get_data()->connman_config_path);
-
-exit_error_free_inifile:
-    inifile_free(&ini);
-
-exit_error_free_filename:
-    free(filename);
+    network_prefs_close(cfg);
 
     return ret;
 }
@@ -911,8 +763,12 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         return 0;
     }
 
+    const enum NetworkPrefsTechnology tech = selected->is_wired
+        ? NWPREFSTECH_ETHERNET
+        : NWPREFSTECH_WLAN;
+
     msg_info("Writing new network configuration for MAC address %s",
-             selected->mac_address_string);
+             network_prefs_get_mac_address_by_tech(tech)->address);
 
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
     int ret = modify_network_configuration(selected);
@@ -951,11 +807,7 @@ static void fill_network_status_register_response(uint8_t response[static 2])
 
     struct ConnmanInterfaceData *fallback_iface_data;
     struct ConnmanInterfaceData *iface_data =
-        connman_find_active_primary_interface(
-            get_network_iface_data(config)->mac_address_string,
-            config->builtin_ethernet_interface.mac_address_string,
-            config->builtin_wlan_interface.mac_address_string,
-            &fallback_iface_data);
+        find_active_primary_interface(config, &fallback_iface_data);
 
     if(iface_data != NULL)
     {
@@ -1015,16 +867,21 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
 
     const struct register_network_interface_t *const iface =
         get_network_iface_data(registers_get_data());
+    const struct network_prefs_mac_address *mac;
 
-    if(data_length_is_unexpected(length, sizeof(iface->mac_address_string)))
+    if(data_length_is_unexpected(length, sizeof(mac->address)))
         return -1;
 
-    if(length <  sizeof(iface->mac_address_string))
+    if(length < sizeof(mac->address))
         return -1;
 
-    memcpy(response, iface->mac_address_string, sizeof(iface->mac_address_string));
+    const enum NetworkPrefsTechnology tech =
+        iface->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN;
+    mac = network_prefs_get_mac_address_by_tech(tech);
 
-    return sizeof(iface->mac_address_string);
+    memcpy(response, mac->address, sizeof(mac->address));
+
+    return sizeof(mac->address);
 }
 
 ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
@@ -1404,6 +1261,7 @@ int dcpregs_write_94_ssid(const uint8_t *data, size_t length)
         return -1;
 
     memcpy(nwconfig_write_data.wlan_ssid, data, length);
+    nwconfig_write_data.wlan_ssid[length] = '\0';
     nwconfig_write_data.wlan_ssid_length = length;
     nwconfig_write_data.requested_changes |= REQ_WLAN_SSID_94;
 
@@ -1442,7 +1300,7 @@ int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length)
 
 ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
 {
-    if(data_length_is_unexpectedly_small(length, sizeof(nwconfig_write_data.wlan_wpa_passphrase)))
+    if(data_length_is_unexpectedly_small(length, sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1))
         return -1;
 
     if(!in_edit_mode())
@@ -1459,7 +1317,7 @@ ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
                         ? ((nwconfig_write_data.wlan_wpa_passphrase[0] == '\0')
                            ? 0
                            : strlen((const char *)nwconfig_write_data.wlan_wpa_passphrase) - 1)
-                        : sizeof(nwconfig_write_data.wlan_wpa_passphrase));
+                        : (sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1));
 
         if(copied_bytes > 0)
             memcpy(response, nwconfig_write_data.wlan_wpa_passphrase,
@@ -1484,7 +1342,7 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
     if(length > 0 &&
        data_length_is_in_unexpected_range(length,
                                           8,
-                                          sizeof(nwconfig_write_data.wlan_wpa_passphrase)))
+                                          sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1))
         return -1;
 
     if(!may_change_config())
@@ -1510,9 +1368,11 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
             }
         }
 
+        nwconfig_write_data.wlan_wpa_passphrase[length] = '\0';
+
         static const char invalid_passphrase_fmt[] = "Invalid passphrase: %s";
 
-        if(length == sizeof(nwconfig_write_data.wlan_wpa_passphrase))
+        if(length == sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1)
         {
             if(!passphrase_is_hex)
             {
@@ -1531,8 +1391,6 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
                           "expected ASCII passphrase");
                 return -1;
             }
-
-            nwconfig_write_data.wlan_wpa_passphrase[length] = '\0';
         }
     }
     else

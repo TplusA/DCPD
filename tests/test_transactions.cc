@@ -26,6 +26,7 @@
 
 #include "transactions.h"
 #include "registers.h"
+#include "networkprefs.h"
 #include "dcpdefs.h"
 
 #include "mock_dcpd_dbus.hh"
@@ -589,7 +590,10 @@ void test_register_read_request_size_1_transaction()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere", NULL);
+
+    network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
+                       "/somewhere", "/somewhere/cfg.rc");
+    register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -650,6 +654,7 @@ void test_register_read_request_size_1_transaction()
     cppcut_assert_null(t);
 
     register_deinit();
+    network_prefs_deinit();
 }
 
 /*!\test
@@ -661,7 +666,10 @@ void test_register_read_request_size_16_transaction()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0", "/somewhere", NULL);
+
+    network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
+                       "/somewhere", "/somewhere/cfg.rc");
+    register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -725,6 +733,7 @@ void test_register_read_request_size_16_transaction()
     cppcut_assert_null(t);
 
     register_deinit();
+    network_prefs_deinit();
 }
 
 /*!\test
@@ -735,7 +744,10 @@ void test_register_multi_step_read_request_transaction()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init("12:34:56:78:9A:BC", NULL, NULL, NULL);
+
+    network_prefs_init("12:34:56:78:9A:BC", NULL,
+                       "/somewhere", "/somewhere/cfg.rc");
+    register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -790,6 +802,7 @@ void test_register_multi_step_read_request_transaction()
     cppcut_assert_null(t);
 
     register_deinit();
+    network_prefs_deinit();
 }
 
 static constexpr const uint8_t big_data[] =
@@ -825,7 +838,10 @@ void test_big_data_is_sent_to_slave_in_fragments()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init("00:11:ff:ee:22:dd", "dd:22:ee:ff:11:00", "/somewhere", NULL);
+
+    network_prefs_init("00:11:ff:ee:22:dd", "dd:22:ee:ff:11:00",
+                       "/somewhere", "/somewhere/cfg.rc");
+    register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -944,6 +960,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
     transaction_free(&t);
 
     register_deinit();
+    network_prefs_deinit();
 }
 
 };
@@ -1024,12 +1041,15 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, NULL);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(NULL);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     mock_messages->check();
     mock_os->check();

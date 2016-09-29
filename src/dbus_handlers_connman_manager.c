@@ -415,7 +415,7 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
         }
 
         /* some service not managed by us has changed */
-        switch(network_prefs_get_technology_from_service_name(name))
+        switch(network_prefs_get_technology_by_service_name(name))
         {
           case NWPREFSTECH_UNKNOWN:
             msg_error(0, LOG_INFO,

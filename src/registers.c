@@ -20,12 +20,8 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
 
 #include "registers.h"
 #include "messages.h"
@@ -496,29 +492,7 @@ static int compare_register_address(const void *a, const void *b)
         return 1;
 }
 
-static const char *check_mac_address(const char *mac_address,
-                                     size_t required_length, bool is_wired)
-{
-    if(mac_address == NULL ||
-       strlen(mac_address) != required_length)
-    {
-        /* locally administered address, invalid in the wild */
-        return is_wired ? "02:00:00:00:00:00" : "03:00:00:00:00:00";
-    }
-    else
-        return mac_address;
-}
-
-static void copy_mac_address(char *dest, size_t dest_size, const char *src)
-{
-    strncpy(dest, src, dest_size);
-    dest[dest_size - 1] = '\0';
-}
-
-void register_init(const char *ethernet_mac_address,
-                   const char *wlan_mac_address,
-                   const char *connman_config_path,
-                   void (*register_changed_callback)(uint8_t reg_number))
+void register_init(void (*register_changed_callback)(uint8_t reg_number))
 {
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
@@ -527,28 +501,16 @@ void register_init(const char *ethernet_mac_address,
 
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
-    const char *temp;
 
     iface_data = &config->builtin_ethernet_interface;
     iface_data->is_builtin = true;
     iface_data->is_wired = true;
-    temp = check_mac_address(ethernet_mac_address,
-                             sizeof(iface_data->mac_address_string) - 1,
-                             iface_data->is_wired);
-    copy_mac_address(iface_data->mac_address_string,
-                     sizeof(iface_data->mac_address_string), temp);
 
     iface_data = &config->builtin_wlan_interface;
     iface_data->is_builtin = true;
     iface_data->is_wired = false;
-    temp = check_mac_address(wlan_mac_address,
-                             sizeof(iface_data->mac_address_string) - 1,
-                             iface_data->is_wired);
-    copy_mac_address(iface_data->mac_address_string,
-                     sizeof(iface_data->mac_address_string), temp);
 
     config->active_interface = NULL;
-    config->connman_config_path = connman_config_path;
     config->register_changed_notification_fn = register_changed_callback;
 
     register_zero_for_unit_tests = NULL;

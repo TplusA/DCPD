@@ -54,6 +54,7 @@ noinst_LTLIBRARIES = \
     libtransactions.la \
     libdynamic_buffer.la \
     libregisters.la \
+    libnetworkprefs.la \
     libinifile.la \
     libapplink.la \
     libdrcpdcomm.la \
@@ -100,6 +101,9 @@ libregisters_la_CFLAGS = $(AM_CFLAGS)
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
 
+libnetworkprefs_la_SOURCES = networkprefs.c networkprefs.h inifile.h
+libnetworkprefs_la_CFLAGS = $(AM_CFLAGS)
+
 libapplink_la_SOURCES = \
     applink.c applink.h \
     applink_variables.c applink_variables.h \
@@ -111,7 +115,7 @@ libdbus_handlers_la_SOURCES = \
     dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h \
     dbus_handlers_connman_manager.c dbus_handlers_connman_manager.h \
     dbus_handlers_connman_manager_data.h \
-    networkprefs.c networkprefs.h \
+    networkprefs.h \
     connman_dbus.h \
     actor_id.h \
     dcpregs_networkconfig.h \

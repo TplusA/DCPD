@@ -26,6 +26,7 @@
 
 #include "registers.h"
 #include "registers_priv.h"
+#include "networkprefs.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
@@ -299,12 +300,15 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, NULL);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(NULL);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     mock_messages->check();
     mock_dcpd_dbus->check();
@@ -853,12 +857,15 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(register_changed_callback);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     register_changed_data->check();
 
@@ -1142,10 +1149,6 @@ static constexpr char network_config_file[] = "/var/local/etc/network.rc";
 
 static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
 static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
-static constexpr char expected_ethernet_config_filename[] =
-    "/var/lib/connman/builtin_decafdeadbad.config";
-static constexpr char expected_wlan_config_filename[] =
-    "/var/lib/connman/wlan_device.config";
 static struct ConnmanInterfaceData *const dummy_connman_iface =
     reinterpret_cast<struct ConnmanInterfaceData *>(0xbeefbeef);
 
@@ -1205,13 +1208,16 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(ethernet_mac_address, wlan_mac_address, connman_config_path,
-                  register_changed_callback);
+
+    network_prefs_init(ethernet_mac_address, wlan_mac_address,
+                       network_config_path, network_config_file);
+    register_init(register_changed_callback);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     register_changed_data->check();
 
@@ -1272,11 +1278,14 @@ void test_read_mac_address()
 void test_read_mac_address_default()
 {
     register_deinit();
+    network_prefs_deinit();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, NULL);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(NULL);
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
@@ -1314,6 +1323,65 @@ static void commit_ipv4_config(bool add_message_expectation,
     cppcut_assert_equal(expected_return_value, reg->write_handler(&zero, 1));
 }
 
+static void move_os_write_buffer_to_file(struct os_mapped_file_data &mapped_file,
+                                         std::vector<char> &backing_buffer)
+{
+    backing_buffer.clear();
+    backing_buffer.swap(os_write_buffer);
+
+    mapped_file.fd = expected_os_map_file_to_memory_fd;
+    mapped_file.ptr = backing_buffer.data();
+    mapped_file.length = backing_buffer.size();
+}
+
+static const struct os_mapped_file_data *
+expect_create_default_network_preferences(struct os_mapped_file_data &file_with_written_default_contents,
+                                          std::vector<char> &written_default_contents)
+{
+    mock_messages->expect_msg_info("Creating default network preferences file");
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 2 * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir_callback(network_config_path,
+                                         std::bind(move_os_write_buffer_to_file,
+                                                   std::ref(file_with_written_default_contents),
+                                                   std::ref(written_default_contents)));
+
+    const struct os_mapped_file_data *mf = &file_with_written_default_contents;
+
+    mock_os->expect_os_map_file_to_memory(0, mf, network_config_file);
+    mock_os->expect_os_unmap_file(mf);
+
+    return mf;
+}
+
+static size_t expect_default_network_preferences_content(char *buffer_for_expected,
+                                                         size_t buffer_for_expected_size,
+                                                         const std::vector<char> &buffer)
+{
+    static const char expected_config_file_format[] =
+        "[ethernet]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n";
+
+    snprintf(buffer_for_expected, buffer_for_expected_size,
+             expected_config_file_format, ethernet_mac_address);
+
+    const size_t written_config_file_length = strlen(buffer_for_expected);
+
+    cut_assert_equal_memory(buffer_for_expected, written_config_file_length,
+                            buffer.data(), buffer.size());
+
+    return written_config_file_length;
+}
+
+static void expect_default_network_preferences_content(const std::vector<char> &buffer)
+{
+    char dummy[512];
+    expect_default_network_preferences_content(dummy, sizeof(dummy), buffer);
+}
+
 static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *existing_file,
                                              char *written_config_file,
                                              size_t written_config_file_size)
@@ -1341,30 +1409,38 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+
     if(existing_file == nullptr)
-        mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
+    {
+        mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+
+        existing_file =
+            expect_create_default_network_preferences(file_with_written_default_contents,
+                                                      written_default_contents);
+    }
     else
     {
-        mock_os->expect_os_map_file_to_memory(existing_file, expected_ethernet_config_filename);
+        mock_os->expect_os_map_file_to_memory(existing_file, network_config_file);
         mock_os->expect_os_unmap_file(existing_file);
     }
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 5 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
+        "[ethernet]\n"
         "MAC = %s\n"
-        "Type = ethernet\n"
-        "IPv4 = %s/%s/%s\n";
+        "DHCP = no\n"
+        "IPv4Address = %s\n"
+        "IPv4Netmask = %s\n"
+        "IPv4Gateway = %s\n";
 
     snprintf(written_config_file, written_config_file_size,
              expected_config_file_format,
@@ -1397,45 +1473,38 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+
     if(existing_file == nullptr)
-        mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
+    {
+        mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+
+        existing_file =
+            expect_create_default_network_preferences(file_with_written_default_contents,
+                                                      written_default_contents);
+    }
     else
     {
-        mock_os->expect_os_map_file_to_memory(existing_file, expected_ethernet_config_filename);
+        mock_os->expect_os_map_file_to_memory(existing_file, network_config_file);
         mock_os->expect_os_unmap_file(existing_file);
     }
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 2 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
-
+    mock_os->expect_os_sync_dir(network_config_path);
     commit_ipv4_config(false);
 
-    static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
-        "MAC = %s\n"
-        "Type = ethernet\n"
-        "IPv4 = dhcp\n";
-
-    snprintf(written_config_file, written_config_file_size,
-             expected_config_file_format, ethernet_mac_address);
-
-    size_t written_config_file_length = strlen(written_config_file);
-
-    cut_assert_equal_memory(written_config_file, written_config_file_length,
-                            os_write_buffer.data(), os_write_buffer.size());
-
-    return written_config_file_length;
+    return expect_default_network_preferences_content(written_config_file,
+                                                      written_config_file_size,
+                                                      os_write_buffer);
 }
 
 /*!\test
- * Initial setting of static IPv4 configuration generates a Connman
- * configuration file.
+ * Initial setting of static IPv4 configuration generates a network preferences
+ * file.
  */
 void test_set_initial_static_ipv4_configuration()
 {
@@ -1480,7 +1549,7 @@ void test_leading_zeros_are_removed_from_ipv4_addresses()
 }
 
 /*!\test
- * Initial enabling of DHCPv4 generates a Connman configuration file.
+ * Initial enabling of DHCPv4 generates a network preferences file.
  */
 void test_set_initial_dhcp_ipv4_configuration()
 {
@@ -1490,7 +1559,7 @@ void test_set_initial_dhcp_ipv4_configuration()
 
 /*!\test
  * Setting static IPv4 configuration while a DHCPv4 configuration is active
- * rewrites the corresponding Connman configuration file.
+ * rewrites the network preferences file.
  */
 void test_switch_to_dhcp_ipv4_configuration()
 {
@@ -1512,7 +1581,7 @@ void test_switch_to_dhcp_ipv4_configuration()
 
 /*!\test
  * Enabling DHCPv4 while a static IPv4 configuration is active rewrites the
- * corresponding Connman configuration file.
+ * network preferences file.
  */
 void test_switch_to_static_ipv4_configuration()
 {
@@ -1579,26 +1648,28 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted(
         "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_messages->expect_msg_error_formatted(0, LOG_WARNING,
         "Disabling IPv4 on interface DE:CA:FD:EA:DB:AD because DHCPv4 "
         "was disabled and static IPv4 configuration was not sent");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
-        "MAC = %s\n"
-        "Type = ethernet\n"
-        "IPv4 = off\n";
+        "[ethernet]\n"
+        "MAC = %s\n";
 
     char buffer[512];
     snprintf(buffer, sizeof(buffer),
@@ -1946,32 +2017,31 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
     mock_connman->expect_get_ipv4_primary_dns_string(old_primary_dns, dummy_connman_iface, false, 16);
     mock_connman->expect_get_ipv4_secondary_dns_string(old_secondary_dns, dummy_connman_iface, false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_ethernet_config_filename);
+    mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 6 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
+        "[ethernet]\n"
         "MAC = %s\n"
-        "Type = ethernet\n"
-        "IPv4 = %s/%s/%s\n"
-        "Nameservers = %s%s%s\n";
+        "DHCP = no\n"
+        "IPv4Address = %s\n"
+        "IPv4Netmask = %s\n"
+        "IPv4Gateway = %s\n"
+        "PrimaryDNS = %s\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
              expected_config_file_format,
              ethernet_mac_address, standard_ipv4_address,
              standard_ipv4_netmask, standard_ipv4_gateway,
-             dns_server_address, "", "");
+             dns_server_address);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2033,25 +2103,25 @@ void test_set_both_dns_servers()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_ethernet_config_filename);
+    mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 7 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
+        "[ethernet]\n"
         "MAC = %s\n"
-        "Type = ethernet\n"
-        "IPv4 = %s/%s/%s\n"
-        "Nameservers = %s,%s\n";
+        "DHCP = no\n"
+        "IPv4Address = %s\n"
+        "IPv4Netmask = %s\n"
+        "IPv4Gateway = %s\n"
+        "PrimaryDNS = %s\n"
+        "SecondaryDNS = %s\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
@@ -2146,7 +2216,13 @@ void test_replace_primary_dns_server_of_two_servers()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
@@ -2158,22 +2234,20 @@ void test_replace_primary_dns_server_of_two_servers()
                                                        dummy_connman_iface,
                                                        false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 4 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
+        "[ethernet]\n"
         "MAC = %s\n"
-        "Type = ethernet\n"
-        "Nameservers = %s,%s\n";
+        "DHCP = yes\n"
+        "PrimaryDNS = %s\n"
+        "SecondaryDNS = %s\n";
 
     char output_config_file[512];
 
@@ -2205,7 +2279,13 @@ void test_replace_secondary_dns_server_of_two_servers()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
@@ -2217,22 +2297,20 @@ void test_replace_secondary_dns_server_of_two_servers()
                                                        dummy_connman_iface,
                                                        false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 4 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
+        "[ethernet]\n"
         "MAC = %s\n"
-        "Type = ethernet\n"
-        "Nameservers = %s,%s\n";
+        "DHCP = yes\n"
+        "PrimaryDNS = %s\n"
+        "SecondaryDNS = %s\n";
 
     char output_config_file[512];
 
@@ -2263,7 +2341,13 @@ void test_add_secondary_dns_server_to_primary_server()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
@@ -2275,22 +2359,20 @@ void test_add_secondary_dns_server_to_primary_server()
                                                        dummy_connman_iface,
                                                        false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 4 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
+        "[ethernet]\n"
         "MAC = %s\n"
-        "Type = ethernet\n"
-        "Nameservers = %s,%s\n";
+        "DHCP = yes\n"
+        "PrimaryDNS = %s\n"
+        "SecondaryDNS = %s\n";
 
     char output_config_file[512];
 
@@ -2318,32 +2400,24 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_messages->expect_msg_info("Ignoring wireless parameters for active wired interface");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_ethernet_config_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_ethernet_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 2) * 4; ++i)
+
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 3 + 2 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
-    static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wired interface\n"
-        "[service_config]\n"
-        "MAC = %s\n"
-        "Type = ethernet\n";
-
-    char new_config_file_buffer[512];
-    snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, ethernet_mac_address);
-
-    size_t written_config_file_length = strlen(new_config_file_buffer);
-
-    cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
-                            os_write_buffer.data(), os_write_buffer.size());
+    expect_default_network_preferences_content(os_write_buffer);
 }
 
 /*!\test
@@ -2392,26 +2466,34 @@ static void set_wlan_security_mode(const char *requested_security_mode)
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 2) * 4; ++i)
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wireless interface\n"
-        "[service_config]\n"
-        "Type = wifi\n"
+        "[ethernet]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
         "Security = %s\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, requested_security_mode);
+             expected_config_file_format, ethernet_mac_address,
+             wlan_mac_address, requested_security_mode);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2467,7 +2549,13 @@ void test_set_wlan_security_mode_wep()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Support for insecure WLAN mode "
                                     "\"WEP\" not implemented yet");
@@ -2475,6 +2563,8 @@ void test_set_wlan_security_mode_wep()
                                     "Cannot set WLAN parameters, security mode missing");
 
     commit_ipv4_config(false, -1);
+
+    expect_default_network_preferences_content(written_default_contents);
 }
 
 /*!\test
@@ -2494,13 +2584,21 @@ void test_set_invalid_wlan_security_mode()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
                                               "Invalid WLAN security mode \"foo\" (Invalid argument)");
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
     commit_ipv4_config(false, -1);
+
+    expect_default_network_preferences_content(written_default_contents);
 }
 
 static void get_wlan_security_mode(const char *assumed_connman_security_mode,
@@ -2614,8 +2712,14 @@ static void set_passphrase_with_security_mode(const char *passphrase,
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
 
     if(strcmp(connman_security_mode, "none") == 0)
     {
@@ -2624,28 +2728,31 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     }
 
     const int expected_number_of_writes =
-        2 * 3 + (2 + 2 + ((passphrase_size == 0) ? 0 : 1)) * 4;
+        2 * 3 + (2 + 3 + ((passphrase_size == 0) ? 0 : 1)) * 4;
 
     for(int i = 0; i < expected_number_of_writes; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
 
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wireless interface\n"
-        "[service_config]\n"
-        "Type = wifi\n"
+        "[ethernet]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
         "Security = %s\n"
         "Passphrase = %s\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, connman_security_mode, passphrase);
+             expected_config_file_format, ethernet_mac_address,
+             wlan_mac_address,
+             connman_security_mode, passphrase);
 
     const size_t written_config_file_length =
         strlen(new_config_file_buffer) -
@@ -2803,7 +2910,13 @@ void test_set_passphrase_without_security_mode_does_not_work()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        wlan_mac_address,
                                                        ethernet_mac_address,
@@ -2814,6 +2927,8 @@ void test_set_passphrase_without_security_mode_does_not_work()
                                     "Cannot set WLAN parameters, security mode missing");
 
     commit_ipv4_config(false, -1);
+
+    expect_default_network_preferences_content(written_default_contents);
 }
 
 /*!\test
@@ -2906,8 +3021,8 @@ void test_get_wlan_passphrase_in_regular_mode()
  * In most cases, the SSID will be a rather simple ASCII string.
  *
  * Here, "simple" means regular ASCII characters and no spaces. If the SSID is
- * simple enough, it will be written to the "Name" field of the configuration
- * file, in addition to the "SSID" field (which is always written).
+ * simple enough, it will be written to the "NetworkName" field of the
+ * configuration file.
  *
  * The zero-terminator is usually not part of the SSID and must not be sent
  * over DCP (otherwise the SSID will be considered binary because it ends with
@@ -2924,39 +3039,45 @@ void test_set_simple_ascii_wlan_ssid()
                                                 dcpregs_write_94_ssid);
 
     static constexpr char ssid[] = "MyNiceWLAN";
-    static constexpr char ssid_as_hex_string[] = "4d794e696365574c414e";
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ssid)), sizeof(ssid) - 1));
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_connman->expect_find_active_primary_interface(
         dummy_connman_iface,
         wlan_mac_address, ethernet_mac_address, wlan_mac_address);
     mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 12);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wireless interface\n"
-        "[service_config]\n"
-        "Type = wifi\n"
-        "Security = none\n"
-        "Name = %s\n"
-        "SSID = %s\n";
+        "[ethernet]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        "NetworkName = %s\n"
+        "Security = none\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, ssid, ssid_as_hex_string);
+             expected_config_file_format, ethernet_mac_address,
+             wlan_mac_address, ssid);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2988,32 +3109,40 @@ void test_set_binary_wlan_ssid()
 
     mock_messages->expect_msg_info("write 53 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_wlan_config_filename);
+
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    std::vector<char> written_default_contents;
+    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    expect_create_default_network_preferences(file_with_written_default_contents,
+                                              written_default_contents);
+
     mock_connman->expect_find_active_primary_interface(
         dummy_connman_iface,
         wlan_mac_address, ethernet_mac_address, wlan_mac_address);
     mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 12);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_wlan_config_filename);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(connman_config_path);
+    mock_os->expect_os_sync_dir(network_config_path);
 
     commit_ipv4_config(false);
 
     static const char expected_config_file_format[] =
-        "[global]\n"
-        "Name = StrBo\n"
-        "Description = StrBo-managed built-in wireless interface\n"
-        "[service_config]\n"
-        "Type = wifi\n"
-        "Security = none\n"
-        "SSID = %s\n";
+        "[ethernet]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        "SSID = %s\n"
+        "Security = none\n";
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, ssid_as_hex_string);
+             expected_config_file_format, ethernet_mac_address,
+             wlan_mac_address, ssid_as_hex_string);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -3681,12 +3810,15 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, NULL);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(NULL);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     os_write_buffer.clear();
     os_write_buffer.shrink_to_fit();
@@ -3873,12 +4005,15 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(register_changed_callback);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     register_changed_data->check();
 
@@ -4317,7 +4452,9 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(register_changed_callback);
 
     dcpregs_playstream_init();
 }
@@ -4326,6 +4463,7 @@ void cut_teardown()
 {
     dcpregs_playstream_deinit();
     register_deinit();
+    network_prefs_deinit();
 
     register_changed_data->check();
 
@@ -5202,12 +5340,15 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(register_changed_callback);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     register_changed_data->check();
 
@@ -5577,12 +5718,14 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
 
-    register_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(NULL);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     mock_messages->check();
     mock_dcpd_dbus->check();
@@ -5817,12 +5960,15 @@ void cut_setup()
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
-    register_init(NULL, NULL, NULL, register_changed_callback);
+
+    network_prefs_init(NULL, NULL, NULL, NULL);
+    register_init(register_changed_callback);
 }
 
 void cut_teardown()
 {
     register_deinit();
+    network_prefs_deinit();
 
     register_changed_data->check();
 

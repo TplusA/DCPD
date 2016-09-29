@@ -34,7 +34,7 @@
 static const char service_prefix[] = "/net/connman/service/";
 
 enum NetworkPrefsTechnology
-network_prefs_get_technology_from_service_name(const char *name)
+network_prefs_get_technology_by_service_name(const char *name)
 {
     log_assert(name != NULL);
 
@@ -206,7 +206,43 @@ static inline const char *get_pref(const struct ini_section *prefs,
         : NULL;
 }
 
+static bool add_new_section_with_defaults(struct ini_file *inifile,
+                                          enum NetworkPrefsTechnology tech,
+                                          const char *mac_address)
+{
+    log_assert(inifile != NULL);
+    log_assert(mac_address != NULL);
+
+    struct ini_section *section = NULL;
+
+    switch(tech)
+    {
+      case NWPREFSTECH_UNKNOWN:
+        BUG("Attempted to create network configuration section for unknown technology");
+        return false;
+
+      case NWPREFSTECH_ETHERNET:
+        section = inifile_new_section(inifile, "ethernet", 8);
+        break;
+
+      case NWPREFSTECH_WLAN:
+        section = inifile_new_section(inifile, "wifi", 4);
+        break;
+    }
+
+    if(section == NULL ||
+       inifile_section_store_value(section, "MAC", 3, mac_address, 0) == NULL ||
+       inifile_section_store_value(section, "DHCP", 4, "yes", 3) == NULL)
+    {
+        msg_out_of_memory("network preferences file");
+        return false;
+    }
+
+    return true;
+}
+
 static void write_default_preferences(const char *filename,
+                                      const char *containing_directory,
                                       const char *ethernet_mac_address)
 {
     msg_info("Creating default network preferences file");
@@ -215,26 +251,16 @@ static void write_default_preferences(const char *filename,
 
     inifile_new(&inifile);
 
-    struct ini_section *section = inifile_new_section(&inifile, "ethernet", 8);
+    if(add_new_section_with_defaults(&inifile, NWPREFSTECH_ETHERNET,
+                                     ethernet_mac_address))
+    {
+        if(inifile_write_to_file(&inifile, filename) == 0)
+            os_sync_dir(containing_directory);
+    }
 
-    if(section == NULL)
-        goto error_oom_exit;
-
-    if(inifile_section_store_value(section, "MAC", 3, ethernet_mac_address, 0) == NULL ||
-       inifile_section_store_value(section, "DHCP", 4, "yes", 3) == NULL)
-        goto error_oom_exit;
-
-    inifile_write_to_file(&inifile, filename);
-    inifile_free(&inifile);
-
-    return;
-
-error_oom_exit:
-    msg_out_of_memory("network preferences file");
     inifile_free(&inifile);
 }
 
-/* TODO: Remove duplicate from registers.c */
 static const char *check_mac_address(const char *mac_address,
                                      size_t required_length, bool is_wired)
 {
@@ -248,7 +274,6 @@ static const char *check_mac_address(const char *mac_address,
         return mac_address;
 }
 
-/* TODO: Remove duplicate from registers.c */
 static void copy_mac_address(char *dest, size_t dest_size, const char *src)
 {
     strncpy(dest, src, dest_size);
@@ -263,12 +288,13 @@ struct network_prefs_handle
 struct network_prefs
 {
     struct ini_section *section;
+    enum NetworkPrefsTechnology technology;
 };
 
 static struct
 {
-    char ethernet_mac_address_string[6 * 3];
-    char wlan_mac_address_string[6 * 3];
+    struct network_prefs_mac_address ethernet_mac;
+    struct network_prefs_mac_address wlan_mac;
     const char *preferences_path;
     const char *preferences_filename;
 
@@ -282,6 +308,14 @@ static struct
 }
 networkprefs_data;
 
+enum NetworkPrefsTechnology
+network_prefs_get_technology_by_prefs(const struct network_prefs *prefs)
+{
+    log_assert(prefs != NULL);
+
+    return prefs->technology;
+}
+
 void network_prefs_init(const char *ethernet_mac_address,
                         const char *wlan_mac_address,
                         const char *network_config_path,
@@ -291,28 +325,37 @@ void network_prefs_init(const char *ethernet_mac_address,
 
     const char *temp;
     temp = check_mac_address(ethernet_mac_address,
-                             sizeof(networkprefs_data.ethernet_mac_address_string) - 1,
+                             sizeof(networkprefs_data.ethernet_mac.address) - 1,
                              true);
-    copy_mac_address(networkprefs_data.ethernet_mac_address_string,
-                     sizeof(networkprefs_data.ethernet_mac_address_string), temp);
+    copy_mac_address(networkprefs_data.ethernet_mac.address,
+                     sizeof(networkprefs_data.ethernet_mac.address), temp);
     temp = check_mac_address(wlan_mac_address,
-                             sizeof(networkprefs_data.wlan_mac_address_string) - 1,
+                             sizeof(networkprefs_data.wlan_mac.address) - 1,
                              false);
-    copy_mac_address(networkprefs_data.wlan_mac_address_string,
-                     sizeof(networkprefs_data.wlan_mac_address_string), temp);
+    copy_mac_address(networkprefs_data.wlan_mac.address,
+                     sizeof(networkprefs_data.wlan_mac.address), temp);
 
     networkprefs_data.preferences_path = network_config_path;
     networkprefs_data.preferences_filename = network_config_file;
+
+    networkprefs_data.network_ethernet_prefs.technology = NWPREFSTECH_ETHERNET;
+    networkprefs_data.network_wlan_prefs.technology = NWPREFSTECH_WLAN;
+
     g_mutex_init(&networkprefs_data.lock);
 }
 
-struct network_prefs_handle *
-network_prefs_open_ro(const struct network_prefs **ethernet,
-                      const struct network_prefs **wlan)
+void network_prefs_deinit(void)
+{
+    g_mutex_clear(&networkprefs_data.lock);
+}
+
+static struct network_prefs_handle *open_prefs_file(bool is_writable,
+                                                    struct network_prefs **ethernet,
+                                                    struct network_prefs **wlan)
 {
     g_mutex_lock(&networkprefs_data.lock);
 
-    networkprefs_data.is_writable = false;
+    networkprefs_data.is_writable = is_writable;
 
     for(int try = 0; try < 2; ++try)
     {
@@ -328,13 +371,16 @@ network_prefs_open_ro(const struct network_prefs **ethernet,
         {
             if(try == 0)
                 write_default_preferences(networkprefs_data.preferences_filename,
-                                          networkprefs_data.ethernet_mac_address_string);
+                                          networkprefs_data.preferences_path,
+                                          networkprefs_data.ethernet_mac.address);
             else
             {
                 msg_error(0, LOG_ERR, "Network preferences file not found");
                 return NULL;
             }
         }
+        else
+            break;
     }
 
     networkprefs_data.handle.file = &networkprefs_data.file;
@@ -353,10 +399,34 @@ network_prefs_open_ro(const struct network_prefs **ethernet,
     return &networkprefs_data.handle;
 }
 
+struct network_prefs_handle *
+network_prefs_open_ro(const struct network_prefs **ethernet,
+                      const struct network_prefs **wlan)
+{
+    /* use locals to avoid stupid type casts */
+    struct network_prefs *ethernet_nonconst;
+    struct network_prefs *wlan_nonconst;
+
+    struct network_prefs_handle *const handle =
+        open_prefs_file(false, &ethernet_nonconst, &wlan_nonconst);
+
+    *ethernet = ethernet_nonconst;
+    *wlan = wlan_nonconst;
+
+    return handle;
+}
+
+struct network_prefs_handle *
+network_prefs_open_rw(struct network_prefs **ethernet,
+                      struct network_prefs **wlan)
+{
+    return open_prefs_file(true, ethernet, wlan);
+}
+
 void network_prefs_close(struct network_prefs_handle *handle)
 {
-    log_assert(handle->file != NULL);
     log_assert(handle == &networkprefs_data.handle);
+    log_assert(handle->file != NULL);
 
     inifile_free(handle->file);
     handle->file = NULL;
@@ -364,6 +434,97 @@ void network_prefs_close(struct network_prefs_handle *handle)
     networkprefs_data.network_wlan_prefs.section = NULL;
 
     g_mutex_unlock(&networkprefs_data.lock);
+}
+
+static inline void assert_writable_file(const struct network_prefs_handle *handle)
+{
+    log_assert(handle == &networkprefs_data.handle);
+    log_assert(handle->file != NULL);
+    log_assert(networkprefs_data.is_writable);
+}
+
+struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handle,
+                                              enum NetworkPrefsTechnology tech)
+{
+    assert_writable_file(handle);
+
+    struct network_prefs *prefs = NULL;
+    const char *mac_address = NULL;
+
+    switch(tech)
+    {
+      case NWPREFSTECH_UNKNOWN:
+        break;
+
+      case NWPREFSTECH_ETHERNET:
+        log_assert(networkprefs_data.network_ethernet_prefs.section == NULL);
+        networkprefs_data.network_ethernet_prefs.section =
+            inifile_new_section(&networkprefs_data.file, "ethernet", 8);
+        prefs = &networkprefs_data.network_ethernet_prefs;
+        mac_address = networkprefs_data.ethernet_mac.address;
+        break;
+
+      case NWPREFSTECH_WLAN:
+        log_assert(networkprefs_data.network_wlan_prefs.section == NULL);
+        networkprefs_data.network_wlan_prefs.section =
+            inifile_new_section(&networkprefs_data.file, "wifi", 4);
+        prefs = &networkprefs_data.network_wlan_prefs;
+        mac_address = networkprefs_data.wlan_mac.address;
+        break;
+    }
+
+    if(prefs == NULL || prefs->section == NULL)
+        return NULL;
+
+    if(add_new_section_with_defaults(&networkprefs_data.file, tech, mac_address))
+        return prefs;
+
+    if(prefs->section != NULL)
+    {
+        BUG("Error occurred, should remove section from file");
+        prefs->section = NULL;
+    }
+
+    return NULL;
+}
+
+int network_prefs_write_to_file(struct network_prefs_handle *handle)
+{
+    assert_writable_file(handle);
+
+    if(inifile_write_to_file(&networkprefs_data.file,
+                             networkprefs_data.preferences_filename) < 0)
+        return -1;
+
+    os_sync_dir(networkprefs_data.preferences_path);
+
+    return 0;
+}
+
+const struct network_prefs_mac_address *
+network_prefs_get_mac_address_by_prefs(const struct network_prefs *prefs)
+{
+    log_assert(prefs != NULL);
+
+    return network_prefs_get_mac_address_by_tech(prefs->technology);
+}
+
+const struct network_prefs_mac_address *
+network_prefs_get_mac_address_by_tech(enum NetworkPrefsTechnology tech)
+{
+    switch(tech)
+    {
+      case NWPREFSTECH_UNKNOWN:
+        break;
+
+      case NWPREFSTECH_ETHERNET:
+        return &networkprefs_data.ethernet_mac;
+
+      case NWPREFSTECH_WLAN:
+        return &networkprefs_data.wlan_mac;
+    }
+
+    return NULL;
 }
 
 size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
@@ -435,8 +596,8 @@ bool network_prefs_get_ipv4_settings(const struct network_prefs *prefs,
     *address = get_pref(prefs->section, "IPv4Address");
     *netmask = get_pref(prefs->section, "IPv4Netmask");
     *gateway = get_pref(prefs->section, "IPv4Gateway");
-    *dns1 = get_pref(prefs->section, "IPv4PrimaryDNS");
-    *dns2 = get_pref(prefs->section, "IPv4SecondaryDNS");
+    *dns1 = get_pref(prefs->section, "PrimaryDNS");
+    *dns2 = get_pref(prefs->section, "SecondaryDNS");
 
     if(is_consistent)
     {
@@ -452,4 +613,87 @@ bool network_prefs_get_ipv4_settings(const struct network_prefs *prefs,
         is_consistent = (*dns1 != NULL || *dns2 == NULL);
 
     return is_consistent;
+}
+
+enum ModifyResult
+{
+    MODIFY_UNTOUCHED_DEFINED,
+    MODIFY_UNTOUCHED_UNDEFINED,
+    MODIFY_ADDED,
+    MODIFY_REMOVED,
+    MODIFY_FAILED_ADD,
+    MODIFY_FAILED_REMOVE,
+};
+
+static enum ModifyResult modify_pref(struct ini_section *section,
+                                     const char *key, const char *value)
+{
+    log_assert(section != NULL);
+    log_assert(key != NULL);
+
+    if(value == NULL)
+    {
+        return (inifile_section_lookup_kv_pair(section, key, 0) != NULL)
+            ? MODIFY_UNTOUCHED_DEFINED
+            : MODIFY_UNTOUCHED_UNDEFINED;
+    }
+
+    if(value[0] != '\0')
+    {
+        return (inifile_section_store_value(section, key, 0, value, 0) != NULL)
+            ? MODIFY_ADDED
+            : MODIFY_FAILED_ADD;
+    }
+    else
+    {
+        return inifile_section_remove_value(section, key, 0)
+            ? MODIFY_REMOVED
+            : MODIFY_FAILED_REMOVE;
+    }
+}
+
+void network_prefs_put_dhcp_mode(struct network_prefs *prefs, bool with_dhcp)
+{
+    modify_pref(prefs->section, "DHCP", with_dhcp ? "yes" : "no");
+
+    if(with_dhcp)
+    {
+        modify_pref(prefs->section, "IPv4Address", "");
+        modify_pref(prefs->section, "IPv4Netmask", "");
+        modify_pref(prefs->section, "IPv4Gateway", "");
+    }
+}
+
+void network_prefs_put_ipv4_config(struct network_prefs *prefs,
+                                   const char *address, const char *netmask,
+                                   const char *gateway)
+{
+    modify_pref(prefs->section, "DHCP", "no");
+    modify_pref(prefs->section, "IPv4Address", address);
+    modify_pref(prefs->section, "IPv4Netmask", netmask);
+    modify_pref(prefs->section, "IPv4Gateway", gateway);
+}
+
+void network_prefs_put_nameservers(struct network_prefs *prefs,
+                                   const char *primary, const char *secondary)
+{
+    modify_pref(prefs->section, "PrimaryDNS", primary);
+    modify_pref(prefs->section, "SecondaryDNS", secondary);
+}
+
+void network_prefs_put_wlan_config(struct network_prefs *prefs,
+                                   const char *network_name, const char *ssid,
+                                   const char *security,
+                                   const char *passphrase)
+{
+    modify_pref(prefs->section, "NetworkName", network_name);
+    modify_pref(prefs->section, "SSID", ssid);
+    modify_pref(prefs->section, "Security", security);
+    modify_pref(prefs->section, "Passphrase", passphrase);
+}
+
+void network_prefs_disable_ipv4(struct network_prefs *prefs)
+{
+    network_prefs_put_dhcp_mode(prefs, true);
+    modify_pref(prefs->section, "DHCP", "");
 }

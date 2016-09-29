@@ -34,22 +34,43 @@ enum NetworkPrefsTechnology
     NWPREFSTECH_WLAN,
 };
 
+struct network_prefs_mac_address
+{
+    char address[6 * 3];
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 enum NetworkPrefsTechnology
-network_prefs_get_technology_from_service_name(const char *name);
+network_prefs_get_technology_by_service_name(const char *name);
+
+enum NetworkPrefsTechnology
+network_prefs_get_technology_by_prefs(const struct network_prefs *prefs);
 
 void network_prefs_init(const char *ethernet_mac_address,
                         const char *wlan_mac_address,
                         const char *network_config_path,
                         const char *network_config_file);
+void network_prefs_deinit(void);
 
 struct network_prefs_handle *
 network_prefs_open_ro(const struct network_prefs **ethernet,
                       const struct network_prefs **wlan);
+struct network_prefs_handle *
+network_prefs_open_rw(struct network_prefs **ethernet,
+                      struct network_prefs **wlan);
 void network_prefs_close(struct network_prefs_handle *handle);
+struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handle,
+                                              enum NetworkPrefsTechnology tech);
+int network_prefs_write_to_file(struct network_prefs_handle *handle);
+
+const struct network_prefs_mac_address *
+network_prefs_get_mac_address_by_prefs(const struct network_prefs *prefs);
+
+const struct network_prefs_mac_address *
+network_prefs_get_mac_address_by_tech(enum NetworkPrefsTechnology tech);
 
 size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
                                            char *buffer, size_t buffer_size);
@@ -61,6 +82,18 @@ bool network_prefs_get_ipv4_settings(const struct network_prefs *prefs,
                                      const char **netmask,
                                      const char **gateway,
                                      const char **dns1, const char **dns2);
+
+void network_prefs_put_dhcp_mode(struct network_prefs *prefs, bool with_dhcp);
+void network_prefs_put_ipv4_config(struct network_prefs *prefs,
+                                   const char *address, const char *netmask,
+                                   const char *gateway);
+void network_prefs_put_nameservers(struct network_prefs *prefs,
+                                   const char *primary, const char *secondary);
+void network_prefs_put_wlan_config(struct network_prefs *prefs,
+                                   const char *network_name, const char *ssid,
+                                   const char *security,
+                                   const char *passphrase);
+void network_prefs_disable_ipv4(struct network_prefs *prefs);
 
 #ifdef __cplusplus
 }

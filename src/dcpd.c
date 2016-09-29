@@ -959,9 +959,7 @@ static bool main_loop_init(const struct parameters *parameters,
                        parameters->wlan_interface_mac_address,
                        network_preferences_dir, network_preferences_full_file);
 
-    register_init(parameters->ethernet_interface_mac_address,
-                  parameters->wlan_interface_mac_address,
-                  "/var/lib/connman", push_register_to_slave);
+    register_init(push_register_to_slave);
 
     transaction_init_allocator();
 
@@ -1277,6 +1275,7 @@ int main(int argc, char *argv[])
     dbus_unlock_shutdown_sequence();
     dbus_shutdown();
     register_deinit();
+    network_prefs_deinit();
 
     return EXIT_SUCCESS;
 }
