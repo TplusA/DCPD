@@ -39,6 +39,16 @@ extern "C" {
 
 void dbussignal_connman_manager_init(struct dbussignal_connman_manager_data *data,
                                      void (*schedule_connect_to_wlan_fn)(void));
+
+/*!
+ * Tell ConnMan to connect to WLAN service with name stored in passed data.
+ *
+ * This function blocks until the service is fully connected or until
+ * connection fails. Usually called from main context.
+ *
+ * \see
+ *     #dbussignal_connman_manager_data::schedule_connect_to_wlan()
+ */
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data);
 
 #ifdef __cplusplus

@@ -53,6 +53,9 @@
 #include "mock_messages.hh"
 #include "mock_os.hh"
 
+/* XXX: Temporary hack */
+#include "dbus_handlers_connman_manager_util.h"
+
 /*
  * Here. Here it is, right down there.
  *
@@ -64,6 +67,9 @@
  * Watch it fail later.
  */
 #include "dbus_common.c"
+
+/* XXX: Temporary hack */
+void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech) {}
 
 /*!
  * \addtogroup registers_tests Unit tests

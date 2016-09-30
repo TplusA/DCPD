@@ -29,6 +29,7 @@
 
 #include "networkprefs.h"
 #include "inifile.h"
+#include "dbus_iface_deep.h"
 #include "messages.h"
 
 static const char service_prefix[] = "/net/connman/service/";
@@ -552,12 +553,17 @@ size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
     memcpy(buffer, service_prefix, tech_offset);
     memcpy(buffer + tech_offset, section->name, namelen + 1);
 
-    return
+    const size_t len =
         generate_service_name(buffer, buffer_size, tech_offset, start_offset,
                               inifile_section_lookup_kv_pair(section, "MAC", 3),
                               inifile_section_lookup_kv_pair(section, "NetworkName", 11),
                               inifile_section_lookup_kv_pair(section, "SSID", 4),
                               inifile_section_lookup_kv_pair(section, "Security", 8));
+
+    if(len == 0)
+        buffer[0] = '\0';
+
+    return len;
 }
 
 const char *network_prefs_get_name(const struct network_prefs *prefs)

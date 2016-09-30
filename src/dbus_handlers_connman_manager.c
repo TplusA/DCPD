@@ -25,19 +25,11 @@
 
 #include "dbus_handlers_connman_manager.h"
 #include "dbus_handlers_connman_manager_data.h"
+#include "dbus_handlers_connman_manager_util.h"
 #include "dcpregs_networkconfig.h"
-#include "networkprefs.h"
 #include "connman.h"
 #include "connman_common.h"
 #include "messages.h"
-
-void dbussignal_connman_manager_init(struct dbussignal_connman_manager_data *data,
-                                     void (*schedule_connect_to_wlan_fn)(void))
-{
-    memset(data, 0, sizeof(*data));
-    g_mutex_init(&data->lock);
-    data->schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
-}
 
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data)
 {
@@ -286,6 +278,9 @@ static bool configure_our_wlan(const char *service_name,
     /* try connecting to our WLAN for the first time if there is no Ethernet
      * device or the Ethernet device is not up and running */
 
+    if(ethernet_service_name[0] == '\0')
+        return have_just_lost_ethernet_device;
+
     struct ConnmanInterfaceData *data =
         connman_find_interface_by_object_path(ethernet_service_name);
 
@@ -433,7 +428,31 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
         }
     }
 
+    if(have_just_lost_ethernet_device && wlan_service_name[0] != '\0')
+        need_to_schedule_wlan_connection = true;
+
     return need_to_schedule_wlan_connection;
+}
+
+static void schedule_wlan_connect_if_necessary(bool is_necessary,
+                                               struct dbussignal_connman_manager_data *data,
+                                               const char *service_name)
+{
+    g_mutex_lock(&data->lock);
+
+    if(is_necessary)
+    {
+        log_assert(service_name[0] != '\0');
+
+        strncpy(data->wlan_service_name, service_name,
+                sizeof(data->wlan_service_name));
+        data->wlan_service_name[sizeof(data->wlan_service_name) - 1] = '\0';
+        data->schedule_connect_to_wlan();
+    }
+    else
+        data->wlan_service_name[0] = '\0';
+
+    g_mutex_unlock(&data->lock);
 }
 
 void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
@@ -447,10 +466,10 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
     {
         check_parameter_assertions(parameters, 2);
 
-        const struct network_prefs *ethernet_section;
-        const struct network_prefs *wlan_section;
+        const struct network_prefs *ethernet_prefs;
+        const struct network_prefs *wlan_prefs;
         struct network_prefs_handle *handle =
-            network_prefs_open_ro(&ethernet_section, &wlan_section);
+            network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
 
         char wlan_service_name_buffer[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
         G_STATIC_ASSERT(sizeof(wlan_service_name_buffer) == sizeof(data->wlan_service_name));
@@ -465,7 +484,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
             need_to_schedule_wlan_connection =
                 react_to_service_changes(changes, removed,
                                          wlan_service_name_buffer,
-                                         ethernet_section, wlan_section);
+                                         ethernet_prefs, wlan_prefs);
 
             g_variant_unref(changes);
             g_variant_unref(removed);
@@ -475,19 +494,8 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 
         dcpregs_networkconfig_interfaces_changed();
 
-        g_mutex_lock(&data->lock);
-
-        if(need_to_schedule_wlan_connection)
-        {
-            log_assert(wlan_service_name_buffer[0] != '\0');
-            memcpy(data->wlan_service_name, wlan_service_name_buffer,
-                   sizeof(data->wlan_service_name));
-            data->schedule_connect_to_wlan();
-        }
-        else
-            data->wlan_service_name[0] = '\0';
-
-        g_mutex_unlock(&data->lock);
+        schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
+                                           data, wlan_service_name_buffer);
     }
     else if(strcmp(signal_name, "PropertyChanged") == 0)
     {
@@ -519,3 +527,68 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         unknown_signal(iface_name, signal_name, sender_name);
 }
 
+static struct dbussignal_connman_manager_data *global_dbussignal_connman_manager_data;
+
+void dbussignal_connman_manager_init(struct dbussignal_connman_manager_data *data,
+                                     void (*schedule_connect_to_wlan_fn)(void))
+{
+    memset(data, 0, sizeof(*data));
+    g_mutex_init(&data->lock);
+    data->schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
+    global_dbussignal_connman_manager_data = data;
+}
+
+void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech)
+{
+    if(tech == NWPREFSTECH_UNKNOWN)
+        return;
+
+    const struct network_prefs *ethernet_prefs;
+    const struct network_prefs *wlan_prefs;
+    struct network_prefs_handle *handle =
+        network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
+
+    if(handle == NULL)
+        return;
+
+    char ethernet_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
+    char wlan_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
+
+    network_prefs_generate_service_name(ethernet_prefs,
+                                        ethernet_service_name,
+                                        sizeof(ethernet_service_name));
+
+    bool need_to_schedule_wlan_connection  = false;
+
+    switch(tech)
+    {
+      case NWPREFSTECH_UNKNOWN:
+        break;
+
+      case NWPREFSTECH_ETHERNET:
+        wlan_service_name[0] = '\0';
+
+        if(ethernet_service_name[0] != '\0')
+            configure_our_lan(ethernet_service_name, ethernet_prefs);
+
+        break;
+
+      case NWPREFSTECH_WLAN:
+        if(network_prefs_generate_service_name(wlan_prefs,
+                                               wlan_service_name,
+                                               sizeof(wlan_service_name)))
+        {
+            if(configure_our_wlan(wlan_service_name, wlan_prefs,
+                                  ethernet_service_name, false))
+                need_to_schedule_wlan_connection = true;
+        }
+
+        break;
+    }
+
+    network_prefs_close(handle);
+
+    schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
+                                       global_dbussignal_connman_manager_data,
+                                       wlan_service_name);
+}

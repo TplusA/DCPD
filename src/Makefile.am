@@ -41,6 +41,7 @@ dcpd_SOURCES = \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.h \
     dbus_handlers_connman_manager.h dbus_handlers_connman_manager_data.h \
+    dbus_handlers_connman_manager_util.h \
     networkprefs.h
 
 DBUS_IFACES = $(top_srcdir)/dbus_interfaces
@@ -90,6 +91,7 @@ libregisters_la_SOURCES = \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \
     dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
+    dbus_handlers_connman_manager_util.h networkprefs.h \
     dbusdl_dbus.h \
     stream_id.h \
     actor_id.h \
@@ -114,7 +116,7 @@ libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
     dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h \
     dbus_handlers_connman_manager.c dbus_handlers_connman_manager.h \
-    dbus_handlers_connman_manager_data.h \
+    dbus_handlers_connman_manager_data.h dbus_handlers_connman_manager_util.h \
     networkprefs.h \
     connman_dbus.h \
     actor_id.h \

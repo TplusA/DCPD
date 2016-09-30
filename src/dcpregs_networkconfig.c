@@ -28,8 +28,8 @@
 
 #include "dcpregs_networkconfig.h"
 #include "registers_priv.h"
-#include "networkprefs.h"
 #include "connman.h"
+#include "dbus_handlers_connman_manager_util.h"
 #include "shutdown_guard.h"
 #include "messages.h"
 
@@ -773,6 +773,9 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
     int ret = modify_network_configuration(selected);
     shutdown_guard_unlock(nwstatus_data.shutdown_guard);
+
+    if(ret == 0)
+        dbussignal_connman_manager_connect_to_service(tech);
 
     return ret;
 }
