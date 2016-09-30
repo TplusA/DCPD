@@ -1,3 +1,14 @@
+2016-09-30  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.2 released.
+
+	* Networking: Enable use of ConnMan v1.33, supposedly fixing a few
+	  networking problems. We now use D-Bus to push configuration changes
+	  to ConnMan, and we implement the ConnMan agent API let ConnMan ask
+	  for credentials. Network configuration data is stored in our own
+	  configuration file, no more direct manipulation of files owned by
+	  ConnMan.
+
 2016-07-21  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.1 released.
