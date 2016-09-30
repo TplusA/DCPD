@@ -54,7 +54,7 @@
 #include "mock_os.hh"
 
 /* XXX: Temporary hack */
-#include "dbus_handlers_connman_manager_util.h"
+#include "dbus_handlers_connman_manager_glue.h"
 
 /*
  * Here. Here it is, right down there.

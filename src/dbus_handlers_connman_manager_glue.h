@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DBUS_HANDLERS_CONNMAN_MANAGER_UTIL_H
-#define DBUS_HANDLERS_CONNMAN_MANAGER_UTIL_H
+#ifndef DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
+#define DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
 
 #include "networkprefs.h"
 
@@ -30,6 +30,24 @@
 extern "C" {
 #endif
 
+struct dbussignal_connman_manager_data;
+
+struct dbussignal_connman_manager_data *
+dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
+
+/*!
+ * Tell ConnMan to connect to WLAN service with name stored in passed data.
+ *
+ * This function blocks until the service is fully connected or until
+ * connection fails.
+ *
+ * Usually called from main context.
+ *
+ * \see
+ *     #dbussignal_connman_manager_data::schedule_connect_to_wlan()
+ */
+void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data);
+
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech);
 
 #ifdef __cplusplus
@@ -38,4 +56,4 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 
 /*!@}*/
 
-#endif /* !DBUS_HANDLERS_CONNMAN_MANAGER_UTIL_H */
+#endif /* !DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H */

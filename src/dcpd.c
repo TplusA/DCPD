@@ -36,7 +36,7 @@
 #include "dynamic_buffer_util.h"
 #include "drcp.h"
 #include "dbus_iface.h"
-#include "dbus_handlers_connman_manager_data.h"
+#include "dbus_handlers_connman_manager_glue.h"
 #include "registers.h"
 #include "dcpregs_status.h"
 #include "connman.h"
@@ -944,7 +944,7 @@ struct parameters
 
 static bool main_loop_init(const struct parameters *parameters,
                            struct smartphone_app_connection_data *appconn,
-                           struct dbussignal_connman_manager_data *connman,
+                           struct dbussignal_connman_manager_data **connman,
                            struct dcp_over_tcp_data *dot)
 {
     static const char network_preferences_dir[] = "/var/local/etc";
@@ -963,7 +963,7 @@ static bool main_loop_init(const struct parameters *parameters,
 
     transaction_init_allocator();
 
-    dbussignal_connman_manager_init(connman, try_connect_to_managed_wlan);
+    *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan);
 
     applink_init();
 
@@ -1232,7 +1232,7 @@ int main(int argc, char *argv[])
     /*!
      * Data for net.connman.Manager D-Bus signal handlers.
      */
-    static struct dbussignal_connman_manager_data connman;
+    static struct dbussignal_connman_manager_data *connman;
 
     /*!
      * Data for handling DCP over TCP/IP.
@@ -1242,7 +1242,7 @@ int main(int argc, char *argv[])
     main_loop_init(&parameters, &appconn, &connman, &dot);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
-                  parameters.with_connman, &appconn, &connman) < 0)
+                  parameters.with_connman, &appconn, connman) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
@@ -1263,7 +1263,7 @@ int main(int argc, char *argv[])
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
-    main_loop(&files, &dot, &appconn, &connman,
+    main_loop(&files, &dot, &appconn, connman,
               primitive_queue_fd, register_changed_fd);
 
     msg_info("Shutting down");

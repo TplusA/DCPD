@@ -24,12 +24,18 @@
 #include <errno.h>
 
 #include "dbus_handlers_connman_manager.h"
-#include "dbus_handlers_connman_manager_data.h"
-#include "dbus_handlers_connman_manager_util.h"
+#include "dbus_handlers_connman_manager_glue.h"
 #include "dcpregs_networkconfig.h"
 #include "connman.h"
 #include "connman_common.h"
 #include "messages.h"
+
+struct dbussignal_connman_manager_data
+{
+    GMutex lock;
+    char wlan_service_name[512];
+    void (*schedule_connect_to_wlan)(void);
+};
 
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data)
 {
@@ -527,15 +533,18 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         unknown_signal(iface_name, signal_name, sender_name);
 }
 
-static struct dbussignal_connman_manager_data *global_dbussignal_connman_manager_data;
+static struct dbussignal_connman_manager_data global_dbussignal_connman_manager_data;
 
-void dbussignal_connman_manager_init(struct dbussignal_connman_manager_data *data,
-                                     void (*schedule_connect_to_wlan_fn)(void))
+struct dbussignal_connman_manager_data *
+dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void))
 {
-    memset(data, 0, sizeof(*data));
-    g_mutex_init(&data->lock);
-    data->schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
-    global_dbussignal_connman_manager_data = data;
+    memset(&global_dbussignal_connman_manager_data, 0,
+           sizeof(global_dbussignal_connman_manager_data));
+    g_mutex_init(&global_dbussignal_connman_manager_data.lock);
+    global_dbussignal_connman_manager_data.schedule_connect_to_wlan =
+        schedule_connect_to_wlan_fn;
+
+    return &global_dbussignal_connman_manager_data;
 }
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech)
@@ -589,6 +598,6 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     network_prefs_close(handle);
 
     schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
-                                       global_dbussignal_connman_manager_data,
+                                       &global_dbussignal_connman_manager_data,
                                        wlan_service_name);
 }

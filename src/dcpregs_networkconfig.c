@@ -29,7 +29,7 @@
 #include "dcpregs_networkconfig.h"
 #include "registers_priv.h"
 #include "connman.h"
-#include "dbus_handlers_connman_manager_util.h"
+#include "dbus_handlers_connman_manager_glue.h"
 #include "shutdown_guard.h"
 #include "messages.h"
 
