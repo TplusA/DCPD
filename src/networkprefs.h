@@ -83,7 +83,8 @@ bool network_prefs_get_ipv4_settings(const struct network_prefs *prefs,
                                      const char **gateway,
                                      const char **dns1, const char **dns2);
 
-void network_prefs_put_dhcp_mode(struct network_prefs *prefs, bool with_dhcp);
+void network_prefs_put_dhcp_mode(struct network_prefs *prefs, bool with_dhcp,
+                                 bool wipe_out_nameservers);
 void network_prefs_put_ipv4_config(struct network_prefs *prefs,
                                    const char *address, const char *netmask,
                                    const char *gateway);

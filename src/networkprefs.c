@@ -658,7 +658,8 @@ static enum ModifyResult modify_pref(struct ini_section *section,
     }
 }
 
-void network_prefs_put_dhcp_mode(struct network_prefs *prefs, bool with_dhcp)
+void network_prefs_put_dhcp_mode(struct network_prefs *prefs, bool with_dhcp,
+                                 bool wipe_out_nameservers)
 {
     modify_pref(prefs->section, "DHCP", with_dhcp ? "yes" : "no");
 
@@ -667,6 +668,12 @@ void network_prefs_put_dhcp_mode(struct network_prefs *prefs, bool with_dhcp)
         modify_pref(prefs->section, "IPv4Address", "");
         modify_pref(prefs->section, "IPv4Netmask", "");
         modify_pref(prefs->section, "IPv4Gateway", "");
+    }
+
+    if(wipe_out_nameservers)
+    {
+        modify_pref(prefs->section, "PrimaryDNS", "");
+        modify_pref(prefs->section, "SecondaryDNS", "");
     }
 }
 
@@ -700,6 +707,6 @@ void network_prefs_put_wlan_config(struct network_prefs *prefs,
 
 void network_prefs_disable_ipv4(struct network_prefs *prefs)
 {
-    network_prefs_put_dhcp_mode(prefs, true);
+    network_prefs_put_dhcp_mode(prefs, true, true);
     modify_pref(prefs->section, "DHCP", "");
 }

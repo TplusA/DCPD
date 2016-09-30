@@ -374,7 +374,7 @@ static int handle_set_dhcp_mode(struct network_prefs *prefs)
     if(!IS_REQUESTED(REQ_DHCP_MODE_55))
         return 0;
 
-    network_prefs_put_dhcp_mode(prefs, nwconfig_write_data.dhcpv4_mode);
+    network_prefs_put_dhcp_mode(prefs, nwconfig_write_data.dhcpv4_mode, true);
 
     if(nwconfig_write_data.dhcpv4_mode)
         nwconfig_write_data.requested_changes &=
