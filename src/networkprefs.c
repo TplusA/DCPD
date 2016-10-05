@@ -356,6 +356,9 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
 {
     g_mutex_lock(&networkprefs_data.lock);
 
+    *ethernet = NULL;
+    *wlan = NULL;
+
     networkprefs_data.is_writable = is_writable;
 
     for(int try = 0; try < 2; ++try)
