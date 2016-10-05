@@ -1203,7 +1203,7 @@ static MockOs *mock_os;
 
 static constexpr char connman_config_path[] = "/var/lib/connman";
 static constexpr char network_config_path[] = "/var/local/etc";
-static constexpr char network_config_file[] = "/var/local/etc/network.rc";
+static constexpr char network_config_file[] = "/var/local/etc/network.ini";
 
 static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
 static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";

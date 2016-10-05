@@ -948,7 +948,7 @@ static bool main_loop_init(const struct parameters *parameters,
                            struct dcp_over_tcp_data *dot)
 {
     static const char network_preferences_dir[] = "/var/local/etc";
-    static const char network_preferences_file[] = "network.rc";
+    static const char network_preferences_file[] = "network.ini";
     static char network_preferences_full_file[sizeof(network_preferences_dir) +
                                               sizeof(network_preferences_file)];
 
