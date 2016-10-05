@@ -4030,6 +4030,25 @@ static tdbuslogindManager *const dbus_logind_manager_iface_dummy =
 
 static RegisterChangedData *register_changed_data;
 
+static std::vector<char> os_write_buffer;
+static constexpr int expected_os_write_fd = 812;
+static constexpr int expected_os_map_file_to_memory_fd = 64;
+static constexpr const char feed_config_filename[] = "/var/local/etc/update_feeds.ini";
+static constexpr const char feed_config_path[] = "/var/local/etc";
+static constexpr const char opkg_configuration_path[] = "/etc/opkg";
+
+static int write_from_buffer_callback(const void *src, size_t count, int fd)
+{
+    cppcut_assert_equal(expected_os_write_fd, fd);
+    cppcut_assert_not_null(src);
+    cppcut_assert_operator(size_t(0), <, count);
+
+    std::copy_n(static_cast<const char *>(src), count,
+                std::back_inserter<std::vector<char>>(os_write_buffer));
+
+    return 0;
+}
+
 static void register_changed_callback(uint8_t reg_number)
 {
     register_changed_data->append(reg_number);
@@ -4064,6 +4083,8 @@ void cut_setup()
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
 
+    os_write_buffer.clear();
+
     register_changed_data->init();
 
     mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
@@ -4083,6 +4104,9 @@ void cut_teardown()
 
     delete register_changed_data;
     register_changed_data = nullptr;
+
+    os_write_buffer.clear();
+    os_write_buffer.shrink_to_fit();
 
     mock_messages->check();
     mock_os->check();
@@ -4454,6 +4478,401 @@ void test_shutdown_can_be_called_only_once()
 
     mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
     dcpregs_filetransfer_prepare_for_shutdown();
+}
+
+static int write_feed_conf_from_buffer_callback(const void *src, size_t count, int fd,
+                                                const char *expected_content)
+{
+    cppcut_assert_equal(expected_os_write_fd, fd);
+    cppcut_assert_not_null(src);
+    cppcut_assert_operator(size_t(0), <, count);
+
+    const size_t expected_content_size = strlen(expected_content);
+    cut_assert_equal_memory(expected_content, expected_content_size,
+                            src, count);
+
+    return 0;
+}
+
+/*!\test
+ * Update existing package feed configuration with new data.
+ */
+void test_set_update_package_feed_configuration()
+{
+    /* send new update feed configuration: opkg feed configuration files are
+     * deleted and new settings are written to configuration file (in this
+     * particular order!) */
+    static constexpr const char url[] = "http://updates.ta-hifi.de/StrBo testing";
+    uint8_t url_buffer[8 + sizeof(url) - 1];
+
+    memset(url_buffer, 0, 8);
+    url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
+    memcpy(url_buffer + 8, url, sizeof(url) - 1);
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Set package update URL \"http://updates.ta-hifi.de/StrBo\" for release \"testing\"");
+
+    static char config_file_buffer[] =
+        "[global]\n"
+        "release = stable\n"
+        "url = http://www.ta-hifi.de/fileadmin/auto_download/StrBo\n"
+        "method = src/gz\n"
+        "[feed all]\n"
+        "[feed arm1176jzfshf-vfp]\n"
+        "[feed raspberrypi]\n";
+
+    const struct os_mapped_file_data original_config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&original_config_file, feed_config_filename);
+    mock_os->expect_os_unmap_file(&original_config_file);
+
+    std::vector<MockOs::ForeachItemData> items_before;
+    items_before.emplace_back(MockOs::ForeachItemData("somedir", true));
+    items_before.emplace_back(MockOs::ForeachItemData("hello.conf"));
+    items_before.emplace_back(MockOs::ForeachItemData("all-feed.conf"));
+    items_before.emplace_back(MockOs::ForeachItemData("arm1176jzfshf-vfp-feed.conf"));
+    items_before.emplace_back(MockOs::ForeachItemData("raspberrypi-feed.conf"));
+    items_before.emplace_back(MockOs::ForeachItemData("-feed.conf"));
+    items_before.emplace_back(MockOs::ForeachItemData("extra-feed.conf"));
+    items_before.emplace_back(MockOs::ForeachItemData("not-a-feed.conf "));
+    items_before.emplace_back(MockOs::ForeachItemData("xyzfeed.conf"));
+    items_before.emplace_back(MockOs::ForeachItemData(".conf"));
+
+    std::vector<MockOs::ForeachItemData> items_after;
+    items_after.emplace_back(MockOs::ForeachItemData("somedir", true));
+    items_after.emplace_back(MockOs::ForeachItemData("hello.conf"));
+    items_after.emplace_back(MockOs::ForeachItemData("-feed.conf"));
+    items_after.emplace_back(MockOs::ForeachItemData("not-a-feed.conf "));
+    items_after.emplace_back(MockOs::ForeachItemData("xyzfeed.conf"));
+    items_after.emplace_back(MockOs::ForeachItemData(".conf"));
+
+    static constexpr std::array<const char *, 3> expected_generated_feed_file_names =
+    {
+        "/etc/opkg/all-feed.conf",
+        "/etc/opkg/arm1176jzfshf-vfp-feed.conf",
+        "/etc/opkg/raspberrypi-feed.conf",
+    };
+
+    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path, items_before);
+    mock_os->expect_os_file_delete(expected_generated_feed_file_names[0]);
+    mock_os->expect_os_file_delete(expected_generated_feed_file_names[1]);
+    mock_os->expect_os_file_delete(expected_generated_feed_file_names[2]);
+    mock_os->expect_os_file_delete("/etc/opkg/extra-feed.conf");
+    mock_os->expect_os_sync_dir(opkg_configuration_path);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
+    for(unsigned int i = 0; i < (expected_generated_feed_file_names.size() + 1) * 3 + 3 * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(feed_config_path);
+
+    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+
+    static char expected_config_file[] =
+        "[global]\n"
+        "release = testing\n"
+        "url = http://updates.ta-hifi.de/StrBo\n"
+        "method = src/gz\n"
+        "[feed all]\n"
+        "[feed arm1176jzfshf-vfp]\n"
+        "[feed raspberrypi]\n";
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+
+    os_write_buffer.clear();
+
+    mock_messages->check();
+    mock_os->check();
+
+
+    /* probe opkg feed configuration files, then read update feed configuration
+     * from our file, then generate opkg configuration files, then start the
+     * update */
+    mock_messages->expect_msg_info("write 40 handler %p %zu");
+    mock_messages->expect_msg_info("Attempting to START SYSTEM UPDATE");
+
+    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path, items_after);
+
+    const struct os_mapped_file_data modified_config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = expected_config_file,
+        .length = sizeof(expected_config_file) - 1,
+    };
+
+    static decltype(expected_generated_feed_file_names) expected_generated_feed_file_contents =
+    {
+        "# Generated file, do not edit!\n"
+        "src/gz testing-all http://updates.ta-hifi.de/StrBo/testing/all\n",
+        "# Generated file, do not edit!\n"
+        "src/gz testing-arm1176jzfshf-vfp http://updates.ta-hifi.de/StrBo/testing/arm1176jzfshf-vfp\n",
+        "# Generated file, do not edit!\n"
+        "src/gz testing-raspberrypi http://updates.ta-hifi.de/StrBo/testing/raspberrypi\n",
+    };
+
+    mock_os->expect_os_map_file_to_memory(&modified_config_file, feed_config_filename);
+    mock_os->expect_os_unmap_file(&modified_config_file);
+
+    for(size_t i = 0; i < expected_generated_feed_file_names.size(); ++i)
+    {
+        mock_os->expect_os_file_new(expected_os_write_fd, expected_generated_feed_file_names[i]);
+        mock_os->expect_os_write_from_buffer_callback(std::bind(write_feed_conf_from_buffer_callback,
+                                                                std::placeholders::_1,
+                                                                std::placeholders::_2,
+                                                                std::placeholders::_3,
+                                                                expected_generated_feed_file_contents[i]));
+        mock_os->expect_os_file_close(expected_os_write_fd);
+    }
+
+    mock_os->expect_os_sync_dir(opkg_configuration_path);
+
+    /* let's stop it at this point, we have tested what we wanted */
+    mock_messages->expect_msg_info("Update in progress, not starting again");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
+
+    reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+
+    static constexpr uint8_t hcr_command[] =
+        { HCR_COMMAND_CATEGORY_UPDATE_FROM_INET, HCR_COMMAND_UPDATE_MAIN_SYSTEM };
+
+    cppcut_assert_equal(-1, reg->write_handler(hcr_command, sizeof(hcr_command)));
+}
+
+/*!\test
+ * System update is possible even if neither our configuration file nor the
+ * opkg feed configuraton files exist.
+ *
+ * In case our configuraton file does not exist yet when the system update
+ * command comes in, a default file is generated in RAM. This is used to
+ * generate the opkg feed configuration files so that the update request may
+ * proceed.
+ */
+void test_feed_configuration_file_is_created_on_system_update_if_does_not_exist()
+{
+    mock_messages->expect_msg_info("write 40 handler %p %zu");
+    mock_messages->expect_msg_info("Attempting to START SYSTEM UPDATE");
+
+    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
+
+    static constexpr std::array<const char *, 3> expected_generated_feed_file_names =
+    {
+        "/etc/opkg/all-feed.conf",
+        "/etc/opkg/arm1176jzfshf-vfp-feed.conf",
+        "/etc/opkg/raspberrypi-feed.conf",
+    };
+
+    static decltype(expected_generated_feed_file_names) expected_generated_feed_file_contents =
+    {
+        "# Generated file, do not edit!\n"
+        "src/gz stable-all http://www.ta-hifi.de/fileadmin/auto_download/StrBo/stable/all\n",
+        "# Generated file, do not edit!\n"
+        "src/gz stable-arm1176jzfshf-vfp http://www.ta-hifi.de/fileadmin/auto_download/StrBo/stable/arm1176jzfshf-vfp\n",
+        "# Generated file, do not edit!\n"
+        "src/gz stable-raspberrypi http://www.ta-hifi.de/fileadmin/auto_download/StrBo/stable/raspberrypi\n",
+    };
+
+    mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
+
+    for(size_t i = 0; i < expected_generated_feed_file_names.size(); ++i)
+    {
+        mock_os->expect_os_file_new(expected_os_write_fd, expected_generated_feed_file_names[i]);
+        mock_os->expect_os_write_from_buffer_callback(std::bind(write_feed_conf_from_buffer_callback,
+                                                                std::placeholders::_1,
+                                                                std::placeholders::_2,
+                                                                std::placeholders::_3,
+                                                                expected_generated_feed_file_contents[i]));
+        mock_os->expect_os_file_close(expected_os_write_fd);
+    }
+
+    mock_os->expect_os_sync_dir(opkg_configuration_path);
+
+    /* let's stop it at this point, we have tested what we wanted */
+    mock_messages->expect_msg_info("Update in progress, not starting again");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
+
+    auto *reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+
+    static constexpr uint8_t hcr_command[] =
+        { HCR_COMMAND_CATEGORY_UPDATE_FROM_INET, HCR_COMMAND_UPDATE_MAIN_SYSTEM };
+
+    cppcut_assert_equal(-1, reg->write_handler(hcr_command, sizeof(hcr_command)));
+}
+
+/*!\test
+ * Setting feed configuration suceeds if there is no configuration file yet.
+ *
+ * In the configuration file does not exist, a default file is generated in
+ * RAM. This file is then updated according to the command and written to a
+ * real file.
+ */
+void test_feed_configuration_file_is_created_on_config_if_does_not_exist()
+{
+    /* send new update feed configuration: opkg feed configuration files are
+     * deleted and new settings are written to configuration file (in this
+     * particular order!) */
+    static constexpr const char url[] = "http://dev.tua.local/Test experimental";
+    uint8_t url_buffer[8 + sizeof(url) - 1];
+
+    memset(url_buffer, 0, 8);
+    url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
+    memcpy(url_buffer + 8, url, sizeof(url) - 1);
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Set package update URL \"http://dev.tua.local/Test\" for release \"experimental\"");
+
+    mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
+    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
+    mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
+    for(unsigned int i = 0; i < 4 * 3 + 3 * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(feed_config_path);
+
+    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+
+    static char expected_config_file[] =
+        "[global]\n"
+        "release = experimental\n"
+        "url = http://dev.tua.local/Test\n"
+        "method = src/gz\n"
+        "[feed all]\n"
+        "[feed arm1176jzfshf-vfp]\n"
+        "[feed raspberrypi]\n";
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+/*!\test
+ * Any zero byte tacked to the end of the input gets ignored.
+ */
+void test_feed_configurations_with_trailing_zero_bytes_are_accepted()
+{
+    static constexpr const char url[] = "http://dev.tua.local/foo bar\0\0\0";
+    uint8_t url_buffer[8 + sizeof(url) - 1];
+
+    memset(url_buffer, 0, 8);
+    url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
+    memcpy(url_buffer + 8, url, sizeof(url) - 1);
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+    mock_messages->expect_msg_info_formatted("Set package update URL \"http://dev.tua.local/foo\" for release \"bar\"");
+
+    mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
+    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
+    mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
+    for(unsigned int i = 0; i < 4 * 3 + 3 * 4; ++i)
+        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(feed_config_path);
+
+    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+
+    static char expected_config_file[] =
+        "[global]\n"
+        "release = bar\n"
+        "url = http://dev.tua.local/foo\n"
+        "method = src/gz\n"
+        "[feed all]\n"
+        "[feed arm1176jzfshf-vfp]\n"
+        "[feed raspberrypi]\n";
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+/*!\test
+ * In case the configuration is does not differ from what is already stored on
+ * configuration file, the file is neither rewritten nor are the opkg files
+ * deleted.
+ */
+void test_feed_configuration_file_remains_unchanged_if_passed_config_is_same()
+{
+    static constexpr const char url[] = "http://did.not.change/in/any way";
+    uint8_t url_buffer[8 + sizeof(url) - 1];
+
+    memset(url_buffer, 0, 8);
+    url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
+    memcpy(url_buffer + 8, url, sizeof(url) - 1);
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+
+    static char config_file_buffer[] =
+        "[global]\n"
+        "release = way\n"
+        "url = http://did.not.change/in/any\n"
+        "method = src/gz\n"
+        "[feed all]\n"
+        "[feed arm1176jzfshf-vfp]\n"
+        "[feed raspberrypi]\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, feed_config_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+}
+
+/*!\test
+ * For forward compatibility, multiple space-separated fields are accepted, but
+ * only the first two of them are actually used.
+ *
+ * In this test, the configuration is not expected to be updated because the
+ * first two fields are no different from what's already stored on file.
+ */
+void test_feed_configuration_with_more_than_two_fields_is_accepted()
+{
+    static constexpr const char url[] = "http://www.ta-hifi.de/StrBo testing beta";
+    uint8_t url_buffer[8 + sizeof(url) - 1];
+
+    memset(url_buffer, 0, 8);
+    url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
+    memcpy(url_buffer + 8, url, sizeof(url) - 1);
+
+    mock_messages->expect_msg_info("write 209 handler %p %zu");
+
+    static char config_file_buffer[] =
+        "[global]\n"
+        "release = testing\n"
+        "url = http://www.ta-hifi.de/StrBo\n"
+        "method = src/gz\n"
+        "[feed all]\n"
+        "[feed arm1176jzfshf-vfp]\n"
+        "[feed raspberrypi]\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, feed_config_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+
+    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
 }
 
 };

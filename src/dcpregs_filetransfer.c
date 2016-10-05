@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <errno.h>
 
 #include "messages.h"
@@ -31,6 +32,7 @@
 #include "dbus_iface_deep.h"
 #include "registers_priv.h"
 #include "xmodem.h"
+#include "inifile.h"
 #include "shutdown_guard.h"
 
 /*! Sane limit on URL length to cap DC traffic. */
@@ -38,6 +40,16 @@
 
 /*! Limit XMODEM progress reports so that only every N'th report is sent. */
 #define XMODEM_PROGRESS_RATE_LIMIT 5
+
+static const char feed_config_filename[] = "/var/local/etc/update_feeds.ini";
+static const char feed_config_path[] = "/var/local/etc";
+static const char feed_config_global_section_name[] = "global";
+static const char feed_config_url_key[] = "url";
+static const char feed_config_release_key[] = "release";
+static const char feed_config_method_key[] = "method";
+
+static const char opkg_configuration_path[] = "/etc/opkg";
+static const char opkg_feed_config_suffix[] = "-feed.conf";
 
 struct FileTransferData
 {
@@ -321,9 +333,228 @@ static int send_shutdown_request(void)
     return -1;
 }
 
+static size_t get_filename_length_if_is_opkg_feed_file(const char *path)
+{
+    const size_t path_len = strlen(path);
+
+    if(path_len < sizeof(opkg_feed_config_suffix))
+        return 0;
+
+    if(strcmp(&path[path_len - (sizeof(opkg_feed_config_suffix) - 1)],
+              opkg_feed_config_suffix) == 0)
+        return path_len;
+    else
+        return 0;
+}
+
+static char *generate_opkg_feed_filename(char *buffer, size_t buffer_size,
+                                         const char *name, size_t name_len)
+{
+    log_assert(buffer_size > 0);
+    log_assert(name_len > 0);
+
+    const size_t beyond = sizeof(opkg_configuration_path) + name_len;
+    log_assert(beyond <= buffer_size);
+
+    memcpy(buffer, opkg_configuration_path, sizeof(opkg_configuration_path) - 1);
+    buffer[sizeof(opkg_configuration_path) - 1] = '/';
+    memcpy(buffer + sizeof(opkg_configuration_path), name, name_len + 1);
+
+    return &buffer[beyond];
+}
+
+static void find_opkg_feed_configuration_file(const char *path,
+                                              void *user_data)
+{
+    const size_t name_len = get_filename_length_if_is_opkg_feed_file(path);
+
+    if(name_len > 0)
+        *(bool *)user_data = true;
+}
+
+static bool extract_updatable_objects(const struct ini_file *config,
+                                      struct ini_section **section,
+                                      const struct ini_key_value_pair **url,
+                                      const struct ini_key_value_pair **release)
+{
+    *section =
+        inifile_find_section(config, feed_config_global_section_name,
+                             sizeof(feed_config_global_section_name) - 1);
+
+    if(*section != NULL)
+    {
+        *url = inifile_section_lookup_kv_pair(*section,
+                                              feed_config_url_key,
+                                              sizeof(feed_config_url_key) - 1);
+        *release =
+            inifile_section_lookup_kv_pair(*section,
+                                           feed_config_release_key,
+                                           sizeof(feed_config_release_key) - 1);
+    }
+    else
+    {
+        *url = NULL;
+        *release = NULL;
+    }
+
+    return (*section != NULL && *url != NULL && *release != NULL);
+}
+
+static int mk_default_feed_config(struct ini_file *config)
+{
+    inifile_new(config);
+
+    struct ini_section *section = inifile_new_section(config, "global", 6);
+    if(section == NULL)
+        goto error_exit;
+
+    if(inifile_section_store_value(section,
+                                   "release", 7,
+                                   "stable", 6) == NULL)
+        goto error_exit;
+
+    if(inifile_section_store_value(section,
+                                   "url", 3,
+                                   "http://www.ta-hifi.de/fileadmin/auto_download/StrBo", 0) == NULL)
+        goto error_exit;
+
+    if(inifile_section_store_value(section,
+                                   "method", 6,
+                                   "src/gz", 6) == NULL)
+        goto error_exit;
+
+    if(inifile_new_section(config, "feed all", 0) == NULL)
+        goto error_exit;
+
+    if(inifile_new_section(config, "feed arm1176jzfshf-vfp", 0) == NULL)
+        goto error_exit;
+
+    if(inifile_new_section(config, "feed raspberrypi", 0) == NULL)
+        goto error_exit;
+
+    return 0;
+
+error_exit:
+    inifile_free(config);
+
+    return -1;
+}
+
+static int generate_opkg_feed_files_if_necessary(void)
+{
+    bool have_feeds = false;
+
+    if(os_foreach_in_path(opkg_configuration_path,
+                          find_opkg_feed_configuration_file, &have_feeds) < 0)
+        return -1;
+
+    if(have_feeds)
+        return 0;
+
+    /* no feed configuration files found, need to generate them */
+    struct ini_file config;
+    if(inifile_parse_from_file(&config, feed_config_filename) != 0 &&
+       mk_default_feed_config(&config) < 0)
+    {
+        msg_error(0, LOG_ERR, "Failed reading feed configuration, cannot start update");
+        return -1;
+    }
+
+    char path_buffer[1024];
+    char content_buffer[4096];
+    bool failed = false;
+
+    struct ini_section *global_section;
+    const struct ini_key_value_pair *url_kv;
+    const struct ini_key_value_pair *release_kv;
+    const struct ini_key_value_pair *method_kv;
+
+    if(!extract_updatable_objects(&config, &global_section, &url_kv, &release_kv) ||
+       (method_kv = inifile_section_lookup_kv_pair(global_section,
+                                                   feed_config_method_key,
+                                                   sizeof(feed_config_method_key) - 1)) == NULL)
+    {
+        msg_error(0, LOG_ERR,
+                  "Broken or incomplete feed configuration, cannot start update");
+        inifile_free(&config);
+        return -1;
+    }
+
+    for(const struct ini_section *section = config.sections_head;
+        section != NULL && !failed;
+        section = section->next)
+    {
+        static const char required_prefix[] = "feed ";
+
+        if(section->name_length < sizeof(required_prefix))
+            continue;
+
+        if(memcmp(section->name,
+                  required_prefix, sizeof(required_prefix) - 1) != 0)
+            continue;
+
+        const char *feed_name = section->name + sizeof(required_prefix) - 1;
+
+        if(strchr(feed_name, ' ') != NULL)
+            continue;
+
+        char *beyond_generated =
+            generate_opkg_feed_filename(path_buffer, sizeof(path_buffer),
+                                        feed_name,
+                                        section->name_length - (sizeof(required_prefix) - 1));
+
+        log_assert(*beyond_generated == '\0');
+
+        if(beyond_generated - path_buffer < (ptrdiff_t)sizeof(opkg_feed_config_suffix))
+        {
+            msg_error(ENOMEM, LOG_ERR,
+                      "Path of feed configuration file too long");
+            failed = true;
+            break;
+        }
+
+        strcpy(beyond_generated, opkg_feed_config_suffix);
+
+        const int fd = os_file_new(path_buffer);
+
+        if(fd < 0)
+        {
+            failed = true;
+            break;
+        }
+
+        static const char feed_file_format[] =
+            "# Generated file, do not edit!\n"
+            "%s %s-%s %s/%s/%s\n";
+
+        const int content_size =
+            snprintf(content_buffer, sizeof(content_buffer), feed_file_format,
+                     method_kv->value, release_kv->value, feed_name,
+                     url_kv->value, release_kv->value, feed_name);
+
+        if(content_size <= 0 ||
+           os_write_from_buffer(content_buffer, content_size, fd) < 0)
+            failed = true;
+
+        os_file_close(fd);
+    }
+
+    inifile_free(&config);
+
+    if(failed)
+        return -1;
+
+    os_sync_dir(opkg_configuration_path);
+
+    return 0;
+}
+
 static int try_start_system_update(void)
 {
     msg_info("Attempting to START SYSTEM UPDATE");
+
+    if(generate_opkg_feed_files_if_necessary() < 0)
+        return -1;
 
     static const char shell_script_file[] = "/tmp/do_update.sh";
     int fd = -1;
@@ -637,10 +868,240 @@ int dcpregs_write_45_xmodem_command(const uint8_t *data, size_t length)
     return was_successful ? 0 : -1;
 }
 
+enum UpdateFeedsResult
+{
+    /*! Bytes in input do not contain feed settings. */
+    UPDATE_FEEDS_NOT_A_SPEC,
+
+    /*! Bytes in input look like feed settings, but are not usable. */
+    UPDATE_FEEDS_INVALID_SPEC,
+
+    /*! Accepted input as feed settings, but nothing has changed. */
+    UPDATE_FEEDS_NOT_CHANGED,
+
+    /*! Accepted input as feed settings and updated them on file system. */
+    UPDATE_FEEDS_UPDATED,
+
+    /*! Accepted input as feed settings, but failed to process them. */
+    UPDATE_FEEDS_FAILED,
+};
+
+static enum UpdateFeedsResult
+update_feed_configuration_file(struct ini_file *config,
+                               const char *url, size_t url_len,
+                               const char *release, size_t release_len,
+                               const struct ini_key_value_pair **url_kv,
+                               const struct ini_key_value_pair **release_kv)
+{
+    *url_kv = NULL;
+    *release_kv = NULL;
+
+    const int err = inifile_parse_from_file(config, feed_config_filename);
+
+    if(err < 0)
+        return UPDATE_FEEDS_FAILED;
+    else if(err == 1)
+    {
+        if(mk_default_feed_config(config) < 0)
+            return UPDATE_FEEDS_FAILED;
+    }
+
+    struct ini_section *global_section;
+    const struct ini_key_value_pair *configured_url;
+    const struct ini_key_value_pair *configured_release;
+
+    if(!extract_updatable_objects(config, &global_section,
+                                  &configured_url, &configured_release))
+    {
+        log_assert(err == 0);
+
+        msg_error(0, LOG_NOTICE,
+                  "Feed configuration broken, resetting to defaults");
+
+        inifile_free(config);
+
+        if(mk_default_feed_config(config) < 0)
+            return UPDATE_FEEDS_FAILED;
+
+        extract_updatable_objects(config, &global_section,
+                                  &configured_url, &configured_release);
+    }
+
+    log_assert(global_section != NULL);
+    log_assert(configured_url != NULL);
+    log_assert(configured_release != NULL);
+
+    if(strncmp(configured_url->value, url, url_len) == 0 &&
+       configured_url->value[url_len] == '\0' &&
+       strncmp(configured_release->value, release, release_len) == 0 &&
+       configured_release->value[release_len] == '\0')
+    {
+        /* nothing has changed */
+        return UPDATE_FEEDS_NOT_CHANGED;
+    }
+    else
+    {
+        *url_kv =
+            inifile_section_store_value(global_section, feed_config_url_key,
+                                        sizeof(feed_config_url_key) - 1,
+                                        url, url_len);
+        *release_kv =
+            inifile_section_store_value(global_section,
+                                        feed_config_release_key,
+                                        sizeof(feed_config_release_key) - 1,
+                                        release, release_len);
+    }
+
+    if(*url_kv != NULL && *release_kv != NULL)
+        return UPDATE_FEEDS_UPDATED;
+
+    inifile_free(config);
+
+    return UPDATE_FEEDS_FAILED;
+}
+
+static void delete_opkg_feed_configuration_file(const char *path,
+                                                void *user_data)
+{
+    const size_t name_len = get_filename_length_if_is_opkg_feed_file(path);
+
+    if(name_len == 0)
+        return;
+
+    char buffer[sizeof(opkg_configuration_path) + 1 + name_len];
+
+    generate_opkg_feed_filename(buffer, sizeof(buffer), path, name_len);
+    os_file_delete(buffer);
+
+    *(bool *)user_data = true;
+}
+
+/*!
+ * Write repository feed settings to configuration file if necessary, delete
+ * opkg feed configuration files if necessary.
+ */
+static enum UpdateFeedsResult
+try_update_repository_feeds(const uint8_t *data, size_t length)
+{
+    /* chomp trailing zero bytes */
+    for(/* nothing */; length > 0; --length)
+    {
+        if(data[length - 1] != '\0')
+            break;
+    }
+
+    const uint8_t *separator_pos = NULL;
+
+    for(size_t i = 0; i < length; ++i)
+    {
+        if(data[i] == ' ')
+        {
+            if(separator_pos != NULL)
+            {
+                /* use only the first of the two fields */
+                length = i;
+                break;
+            }
+
+            separator_pos = &data[i];
+        }
+    }
+
+    if(separator_pos == NULL)
+        return UPDATE_FEEDS_NOT_A_SPEC;
+
+    const uint8_t *const release_name = separator_pos + 1;
+    const ptrdiff_t url_len = separator_pos - data;
+    const ptrdiff_t release_len = &data[length] - release_name;
+
+    if(url_len <= 0 || (size_t)url_len > MAXIMUM_URL_LENGTH)
+    {
+        msg_error(0, LOG_ERR, "Package feed URL too %s",
+                  (url_len <= 0) ? "short" : "long");
+        return UPDATE_FEEDS_INVALID_SPEC;
+    }
+
+    if(release_len <= 0)
+    {
+        msg_error(0, LOG_ERR, "Release name in feed specification too short");
+        return UPDATE_FEEDS_INVALID_SPEC;
+    }
+
+    struct ini_file config;
+    const struct ini_key_value_pair *url_kv;
+    const struct ini_key_value_pair *release_kv;
+    const enum UpdateFeedsResult update_result =
+        update_feed_configuration_file(&config, (const char *)data, url_len,
+                                       (const char *)release_name, release_len,
+                                       &url_kv, &release_kv);
+
+    switch(update_result)
+    {
+      case UPDATE_FEEDS_NOT_A_SPEC:
+      case UPDATE_FEEDS_INVALID_SPEC:
+      case UPDATE_FEEDS_FAILED:
+        return update_result;
+
+      case UPDATE_FEEDS_NOT_CHANGED:
+        inifile_free(&config);
+        return update_result;
+
+      case UPDATE_FEEDS_UPDATED:
+        break;
+    }
+
+    bool modified_directory = false;
+
+    if(os_foreach_in_path(opkg_configuration_path,
+                          delete_opkg_feed_configuration_file,
+                          &modified_directory) < 0)
+    {
+        inifile_free(&config);
+        return UPDATE_FEEDS_FAILED;
+    }
+
+    if(modified_directory)
+        os_sync_dir(opkg_configuration_path);
+
+    enum UpdateFeedsResult retval;
+
+    if(inifile_write_to_file(&config, feed_config_filename) == 0)
+    {
+        os_sync_dir(feed_config_path);
+        retval = UPDATE_FEEDS_UPDATED;
+
+        msg_info("Set package update URL \"%s\" for release \"%s\"",
+                 url_kv->value, release_kv->value);
+    }
+    else
+        retval = UPDATE_FEEDS_FAILED;
+
+    inifile_free(&config);
+
+    return retval;
+}
 
 int dcpregs_write_209_download_url(const uint8_t *data, size_t length)
 {
     msg_info("write 209 handler %p %zu", data, length);
+
+    if(length >= 8)
+    {
+        /* ignore cruft in first 8 bytes */
+        switch(try_update_repository_feeds(data + 8, length - 8))
+        {
+          case UPDATE_FEEDS_NOT_A_SPEC:
+            break;
+
+          case UPDATE_FEEDS_NOT_CHANGED:
+          case UPDATE_FEEDS_UPDATED:
+            return 0;
+
+          case UPDATE_FEEDS_INVALID_SPEC:
+          case UPDATE_FEEDS_FAILED:
+            return -1;
+        }
+    }
 
     cleanup_transfer();
     reset_xmodem_state(NULL, true);
