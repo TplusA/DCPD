@@ -579,23 +579,16 @@ static int try_start_system_update(void)
     if(fd < 0)
         return -1;
 
-    static const char shell_script_content[] =
-        "#! /bin/sh\n"
-        "LOG='/usr/bin/systemd-cat'\n"
-        "$LOG /usr/bin/sudo /usr/bin/opkg update && $LOG /usr/bin/sudo /usr/bin/opkg upgrade && "
-        "$LOG /usr/bin/dbus-send --system --print-reply --dest=org.freedesktop.login1 "
-        "/org/freedesktop/login1 org.freedesktop.login1.Manager.Reboot "
-        "boolean:false\n"
-        "test $? -eq 0 || $LOG /bin/rm $0";
-
-    static const char poor_mans_daemonize[] =
-        "/bin/sh -c 'exec /bin/sh %s </dev/null >/dev/null 2>/dev/null &'";
+#include "do_update_sh.h"
 
     const bool success =
         (os_write_from_buffer(shell_script_content,
                               sizeof(shell_script_content) - 1, fd) == 0);
 
     os_file_close(fd);
+
+    static const char poor_mans_daemonize[] =
+        "/bin/sh -c 'exec /bin/sh %s </dev/null >/dev/null 2>/dev/null &'";
 
     if(success &&
        os_system_formatted(poor_mans_daemonize, shell_script_file) == 0)

@@ -97,6 +97,7 @@ libregisters_la_SOURCES = \
     shutdown_guard.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \
     drcp_command_codes.h messages.h
+nodist_libregisters_la_SOURCES = do_update_sh.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
@@ -202,9 +203,12 @@ BUILT_SOURCES = \
     $(nodist_liblogind_dbus_la_SOURCES) \
     org_freedesktop_logind.h \
     org_freedesktop_logind.md \
-    logind_dbus.stamp
+    logind_dbus.stamp \
+    $(nodist_libregisters_la_SOURCES)
 
 CLEANFILES = $(BUILT_SOURCES)
+
+EXTRA_DIST = do_update.sh
 
 de_tahifi_dcpd.h: dcpd_dbus.stamp
 de_tahifi_dcpd.md: dcpd_dbus.stamp
@@ -268,3 +272,9 @@ logind_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_login1.xml
 	$(GDBUS_CODEGEN) --generate-c-code=logind_dbus --c-namespace tdbus_logind --interface-prefix org.freedesktop.login1. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_logind.md -H org_freedesktop_logind.h -c tdbus_logind -s org.freedesktop.login1. -n "$(PACKAGE_NAME)"
 	touch $@
+
+do_update_sh.h: do_update.sh
+	echo 'static const uint8_t shell_script_content[] =' >$@
+	echo '{' >>$@
+	xxd -i <$^ >>$@
+	echo '};' >>$@
