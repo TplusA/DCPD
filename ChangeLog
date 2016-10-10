@@ -1,3 +1,39 @@
+2016-10-21  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.4 released.
+
+	* Networking: Fixed a few quirks caused by the new way of interaction
+	  with ConnMan. There were all sorts of problems such as loss of WLAN
+	  connections, failure to switch between networks, and even failure to
+	  use WLAN at all (only possible with tricks). In particular, IPv6 is
+	  explicitly disabled now.
+
+	  WLAN connectivity should be OK by now.
+
+	* Networking: Replacing WLAN adapters works. There was a problem that
+	  prevented configuration of WLAN settings once the original WLAN
+	  adapter was exchanged.
+
+	* Networking: Waiting longer for very slow WLANs to connect.
+
+	* Networking: DCP registers for reading out the network configuration
+	  return more accurate data now. Before, the registers contained the
+	  configuration that dcpd put as request to ConnMan. Now, the
+	  registers contain what ConnMan has actually configured, independent
+	  of requests posed by dcpd.
+
+	* Updates: Enable installation of any release (back and forth between
+	  versions of the same release flavor such as stable or testing, and
+	  back and forth between the flavors).
+
+	  This feature adds a lot of maintanance and system test burden if the
+	  user is allowed to specify any arbitrary target version.
+
+	* Logging: Reduce amount of log messages to spare CPU cycles. The
+	  verbosity can be specified from the command line now, so despite
+	  reduced amount of logs, debugging is easier now.
+
+
 2016-10-05  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.3 released.
