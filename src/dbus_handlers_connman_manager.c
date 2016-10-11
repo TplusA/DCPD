@@ -89,7 +89,7 @@ static bool ipv4_settings_are_different(const char *service_name,
 
     char buffer[64];
 
-    enum ConnmanDHCPMode system_dhcp_mode = connman_get_dhcp_mode(data, false);
+    const enum ConnmanDHCPMode system_dhcp_mode = connman_get_dhcp_mode(data, false);
 
     switch(system_dhcp_mode)
     {
@@ -135,12 +135,12 @@ static bool ipv4_settings_are_different(const char *service_name,
 ipv4_check_done:
     connman_get_ipv4_primary_dns_string(data, buffer, sizeof(buffer));
     if((dns1 != NULL && strcmp(dns1, buffer) != 0) ||
-       (dns1 == NULL && buffer[0] != '\0'))
+       (dns1 == NULL && system_dhcp_mode != CONNMAN_DHCP_ON && buffer[0] != '\0'))
         goto dns_check_done;
 
     connman_get_ipv4_secondary_dns_string(data, buffer, sizeof(buffer));
     if((dns2 != NULL && strcmp(dns2, buffer) != 0) ||
-       (dns2 == NULL && buffer[0] != '\0'))
+       (dns2 == NULL && system_dhcp_mode != CONNMAN_DHCP_ON && buffer[0] != '\0'))
         goto dns_check_done;
 
     *different_nameservers = false;
