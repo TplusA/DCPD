@@ -151,6 +151,15 @@ dns_check_done:
     return *different_ipv4_config || *different_nameservers;
 }
 
+static void avoid_wlan_service(const char *service_name)
+{
+    connman_common_set_service_property(service_name,
+                                        "AutoConnect",
+                                        g_variant_new_variant(g_variant_new_boolean(false)));
+    connman_common_disconnect_service_by_object_path(service_name);
+    connman_common_remove_service_by_object_path(service_name);
+}
+
 static bool configure_our_ipv4_network_common(const char *service_name,
                                               const struct network_prefs *prefs,
                                               bool is_ethernet,
@@ -165,7 +174,7 @@ static bool configure_our_ipv4_network_common(const char *service_name,
         if(is_ethernet)
             connman_common_disconnect_service_by_object_path(service_name);
         else
-            connman_common_remove_service_by_object_path(service_name);
+            avoid_wlan_service(service_name);
 
         BUG("Cannot configure ConnMan service \"%s\": no preferences",
             service_name);
@@ -187,7 +196,7 @@ static bool configure_our_ipv4_network_common(const char *service_name,
         if(is_ethernet)
             connman_common_disconnect_service_by_object_path(service_name);
         else
-            connman_common_remove_service_by_object_path(service_name);
+            avoid_wlan_service(service_name);
 
         return false;
     }
@@ -423,23 +432,7 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
             continue;
         }
 
-        /* some service not managed by us has changed */
-        switch(network_prefs_get_technology_by_service_name(name))
-        {
-          case NWPREFSTECH_UNKNOWN:
-            msg_error(0, LOG_INFO,
-                      "ConnMan service %s changed, but cannot handle technology",
-                      name);
-            break;
-
-          case NWPREFSTECH_ETHERNET:
-            connman_common_disconnect_service_by_object_path(name);
-            break;
-
-          case NWPREFSTECH_WLAN:
-            connman_common_remove_service_by_object_path(name);
-            break;
-        }
+        /* some service not managed by us has changed---ignore for now */
     }
 
     if(have_just_lost_ethernet_device && wlan_service_name[0] != '\0')
@@ -555,7 +548,8 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void))
     return &global_dbussignal_connman_manager_data;
 }
 
-void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech)
+void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
+                                                   const char *service_to_be_disabled)
 {
     if(tech == NWPREFSTECH_UNKNOWN)
         return;
@@ -604,6 +598,9 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     }
 
     network_prefs_close(handle);
+
+    if(service_to_be_disabled != NULL && service_to_be_disabled[0] != '\0')
+        avoid_wlan_service(service_to_be_disabled);
 
     schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
                                        &global_dbussignal_connman_manager_data,

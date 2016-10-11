@@ -657,7 +657,9 @@ static int apply_changes_to_prefs(struct network_prefs *prefs)
  * \attention
  *     Must be called with the #ShutdownGuard from #nwstatus_data locked.
  */
-static int modify_network_configuration(const struct register_network_interface_t *selected)
+static int modify_network_configuration(const struct register_network_interface_t *selected,
+                                        char *previous_wlan_name_buffer,
+                                        size_t previous_wlan_name_buffer_size)
 {
     if(shutdown_guard_is_shutting_down_unlocked(nwstatus_data.shutdown_guard))
     {
@@ -675,6 +677,10 @@ static int modify_network_configuration(const struct register_network_interface_
 
     struct network_prefs *selected_prefs =
         selected->is_wired ? ethernet_prefs : wlan_prefs;
+
+    network_prefs_generate_service_name(selected->is_wired ? NULL : selected_prefs,
+                                        previous_wlan_name_buffer,
+                                        previous_wlan_name_buffer_size);
 
     if(selected_prefs == NULL)
         selected_prefs = network_prefs_add_prefs(cfg, selected->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN);
@@ -771,11 +777,14 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
              network_prefs_get_mac_address_by_tech(tech)->address);
 
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
-    int ret = modify_network_configuration(selected);
+    char current_wlan_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
+    int ret = modify_network_configuration(selected, current_wlan_service_name,
+                                           sizeof(current_wlan_service_name));
     shutdown_guard_unlock(nwstatus_data.shutdown_guard);
 
     if(ret == 0)
-        dbussignal_connman_manager_connect_to_service(tech);
+        dbussignal_connman_manager_connect_to_service(tech,
+                                                      current_wlan_service_name);
 
     return ret;
 }

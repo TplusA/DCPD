@@ -263,6 +263,7 @@ class ConnectToConnManServiceData
   private:
     bool is_expected_;
     enum NetworkPrefsTechnology expected_tech_;
+    std::string expected_service_;
 
     bool was_called_;
 
@@ -276,20 +277,24 @@ class ConnectToConnManServiceData
     {
         is_expected_ = false;
         expected_tech_ = NWPREFSTECH_UNKNOWN;
+        expected_service_.clear();
         was_called_ = false;
     }
 
-    void expect(enum NetworkPrefsTechnology expected_tech)
+    void expect(enum NetworkPrefsTechnology expected_tech,
+                const char *expected_service_to_be_disabled)
     {
         cppcut_assert_not_equal(NWPREFSTECH_UNKNOWN, expected_tech);
 
         is_expected_ = true;
         expected_tech_ = expected_tech;
+        expected_service_ = expected_service_to_be_disabled;
 
         was_called_ = false;
     }
 
-    void called(enum NetworkPrefsTechnology tech)
+    void called(enum NetworkPrefsTechnology tech,
+                const char *service_to_be_disabled)
     {
         cut_assert_true(is_expected_);
         cut_assert_false(was_called_);
@@ -297,6 +302,7 @@ class ConnectToConnManServiceData
         was_called_ = true;
 
         cppcut_assert_equal(expected_tech_, tech);
+        cppcut_assert_equal(expected_service_.c_str(), service_to_be_disabled);
     }
 
     void check()
@@ -310,9 +316,10 @@ static ConnectToConnManServiceData connect_to_connman_service_data;
 
 /* Instead of writing a full mock for the ConnMan D-Bus API, we'll just have
  * this little function as a poor, but quick replacement */
-void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech)
+void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
+                                                   const char *service_to_be_disabled)
 {
-    connect_to_connman_service_data.called(tech);
+    connect_to_connman_service_data.called(tech, service_to_be_disabled);
 }
 
 namespace spi_registers_tests
@@ -1381,7 +1388,12 @@ static void commit_ipv4_config(bool add_message_expectation,
         mock_messages->expect_msg_info("write 53 handler %p %zu");
 
     if(tech != NWPREFSTECH_UNKNOWN)
-        connect_to_connman_service_data.expect(tech);
+    {
+        /* XXX: The empty string passed as second parameter is most certainly
+         *      incorrect. Likely, there is something wrong with the test setup
+         *      and/or mocks. */
+        connect_to_connman_service_data.expect(tech, "");
+    }
 
     static const uint8_t zero = 0;
     cppcut_assert_equal(expected_return_value, reg->write_handler(&zero, 1));

@@ -48,7 +48,8 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
  */
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data);
 
-void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech);
+void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
+                                                   const char *service_to_be_disabled);
 
 #ifdef __cplusplus
 }
