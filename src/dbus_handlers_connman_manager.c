@@ -262,7 +262,8 @@ static inline void configure_our_lan(const char *service_name,
 static bool configure_our_wlan(const char *service_name,
                                const struct network_prefs *prefs,
                                const char *ethernet_service_name,
-                               bool have_just_lost_ethernet_device)
+                               bool have_just_lost_ethernet_device,
+                               bool make_it_favorite)
 {
     bool is_favorite;
     bool is_auto_connect;
@@ -281,8 +282,15 @@ static bool configure_our_wlan(const char *service_name,
         return false;
     }
 
-    /* try connecting to our WLAN for the first time if there is no Ethernet
-     * device or the Ethernet device is not up and running */
+    if(make_it_favorite)
+    {
+        /* if this function returns true, then the caller will schedule a WLAN
+         * connection attempt by calling #schedule_wlan_connect_if_necessary();
+         * so we are returning true */
+        return true;
+    }
+
+    /* fall back to Ethernet if possible */
 
     if(ethernet_service_name[0] == '\0')
         return have_just_lost_ethernet_device;
@@ -396,7 +404,7 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
              * configure it and we have to connect to it in case there is no
              * Ethernet connection */
             if(configure_our_wlan(name, wlan_prefs, ethernet_service_name,
-                                  have_just_lost_ethernet_device))
+                                  have_just_lost_ethernet_device, false))
                 need_to_schedule_wlan_connection = true;
 
             continue;
@@ -588,7 +596,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
                                                sizeof(wlan_service_name)))
         {
             if(configure_our_wlan(wlan_service_name, wlan_prefs,
-                                  ethernet_service_name, false))
+                                  ethernet_service_name, false, true))
                 need_to_schedule_wlan_connection = true;
         }
 
