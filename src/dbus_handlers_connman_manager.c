@@ -37,13 +37,30 @@ struct dbussignal_connman_manager_data
     void (*schedule_connect_to_wlan)(void);
 };
 
+static void service_connected(const char *service_name,
+                              enum ConnmanCommonConnectServiceCallbackResult result,
+                              void *user_data)
+{
+    switch(result)
+    {
+      case CONNMAN_SERVICE_CONNECT_CONNECTED:
+        msg_info("Connected to %s", service_name);
+        break;
+
+      case CONNMAN_SERVICE_CONNECT_FAILURE:
+        msg_info("Failed connecting to %s", service_name);
+        break;
+
+      case CONNMAN_SERVICE_CONNECT_DISCARDED:
+        break;
+    }
+}
+
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data)
 {
     g_mutex_lock(&data->lock);
-
-    if(data->wlan_service_name[0] != '\0')
-        connman_common_connect_service_by_object_path(data->wlan_service_name);
-
+    connman_common_connect_service_by_object_path(data->wlan_service_name,
+                                                  service_connected, NULL);
     g_mutex_unlock(&data->lock);
 }
 
