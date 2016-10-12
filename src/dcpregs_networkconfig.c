@@ -955,7 +955,7 @@ int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
 static ssize_t
 read_ipv4_parameter(uint32_t requested_mask,
                     const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
-                    void (*connman_query_fn)(struct ConnmanInterfaceData *, char *, size_t),
+                    bool (*connman_query_fn)(struct ConnmanInterfaceData *, char *, size_t),
                     uint8_t *response, size_t length)
 {
     if(data_length_is_unexpectedly_small(length, SIZE_OF_IPV4_ADDRESS_STRING))

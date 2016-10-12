@@ -115,15 +115,15 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
                                            bool from_user_config);
 enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
 enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_data);
-void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);
-void connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);
-void connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size);
-void connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
                                          char *dest, size_t dest_size);
-void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
                                            char *dest, size_t dest_size);
 bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
                                            char *dest, size_t dest_size);

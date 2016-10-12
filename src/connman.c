@@ -442,7 +442,7 @@ enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_da
     return retval;
 }
 
-static void get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
+static bool get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
                                       const char *parameter_name,
                                       char *dest, size_t dest_size)
 {
@@ -450,6 +450,8 @@ static void get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
     log_assert(parameter_name != NULL);
     log_assert(dest != NULL);
     log_assert(dest_size > 0);
+
+    dest[0] = '\0';
 
     GVariantDict dict;
     connman_common_init_subdict((GVariant *)iface_data, &dict, "IPv4");
@@ -466,31 +468,31 @@ static void get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
 
         g_variant_unref(ipv4_parameter_variant);
     }
-    else
-        dest[0] = '\0';
 
     g_variant_dict_clear(&dict);
+
+    return ipv4_parameter_variant != NULL;
 }
 
-void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size)
 {
-    get_ipv4_parameter_string(iface_data, "Address", dest, dest_size);
+    return get_ipv4_parameter_string(iface_data, "Address", dest, dest_size);
 }
 
-void connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size)
 {
-    get_ipv4_parameter_string(iface_data, "Netmask", dest, dest_size);
+    return get_ipv4_parameter_string(iface_data, "Netmask", dest, dest_size);
 }
 
-void connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size)
 {
-    get_ipv4_parameter_string(iface_data, "Gateway", dest, dest_size);
+    return get_ipv4_parameter_string(iface_data, "Gateway", dest, dest_size);
 }
 
-static void get_nameserver_string(struct ConnmanInterfaceData *iface_data,
+static bool get_nameserver_string(struct ConnmanInterfaceData *iface_data,
                                   size_t idx, char *dest, size_t dest_size)
 {
     log_assert(iface_data != NULL);
@@ -523,18 +525,20 @@ static void get_nameserver_string(struct ConnmanInterfaceData *iface_data,
     }
 
     g_variant_dict_clear(&dict);
+
+    return dns_array != NULL;
 }
 
-void connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
                                          char *dest, size_t dest_size)
 {
-    get_nameserver_string(iface_data, 0, dest, dest_size);
+    return get_nameserver_string(iface_data, 0, dest, dest_size);
 }
 
-void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
                                            char *dest, size_t dest_size)
 {
-    get_nameserver_string(iface_data, 1, dest, dest_size);
+    return get_nameserver_string(iface_data, 1, dest, dest_size);
 }
 
 bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,

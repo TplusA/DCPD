@@ -278,7 +278,7 @@ class MockConnman::Expectation
     explicit Expectation(ConnmanFn fn, const char *ret_string,
                          struct ConnmanInterfaceData *iface_data,
                          bool expect_null_pointer, size_t dest_size,
-                         bool ret = false):
+                         bool ret):
         d(fn)
     {
         if(ret_string != NULL)
@@ -402,31 +402,36 @@ void MockConnman::expect_get_dhcp_mode(enum ConnmanDHCPMode ret, struct ConnmanI
 void MockConnman::expect_get_ipv4_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
 {
     expectations_->add(Expectation(ConnmanFn::get_ipv4_address_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size));
+                                   ret_string, iface_data, expect_null_pointer, dest_size,
+                                   true));
 }
 
 void MockConnman::expect_get_ipv4_netmask_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
 {
     expectations_->add(Expectation(ConnmanFn::get_ipv4_netmask_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size));
+                                   ret_string, iface_data, expect_null_pointer, dest_size,
+                                   true));
 }
 
 void MockConnman::expect_get_ipv4_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
 {
     expectations_->add(Expectation(ConnmanFn::get_ipv4_gateway_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size));
+                                   ret_string, iface_data, expect_null_pointer, dest_size,
+                                   true));
 }
 
 void MockConnman::expect_get_ipv4_primary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size)
 {
     expectations_->add(Expectation(ConnmanFn::get_ipv4_primary_dns_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size));
+                                   ret_string, iface_data, expect_null_pointer, dest_size,
+                                   true));
 }
 
 void MockConnman::expect_get_ipv4_secondary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size)
 {
     expectations_->add(Expectation(ConnmanFn::get_ipv4_secondary_dns_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size));
+                                   ret_string, iface_data, expect_null_pointer, dest_size,
+                                   true));
 }
 
 void MockConnman::expect_get_wlan_security_type_string(bool ret, const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
@@ -585,49 +590,59 @@ static void get_ipv4_parameter_string(const MockConnman::Expectation &expect,
     }
 }
 
-void connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_address_string);
     get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+
+    return expect.d.ret_bool_;
 }
 
-void connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_netmask_string);
     get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+
+    return expect.d.ret_bool_;
 }
 
-void connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
                                      char *dest, size_t dest_size)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_gateway_string);
     get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+
+    return expect.d.ret_bool_;
 }
 
-void connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
                                          char *dest, size_t dest_size)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_primary_dns_string);
     get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+
+    return expect.d.ret_bool_;
 }
 
-void connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+bool connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
                                            char *dest, size_t dest_size)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_ipv4_secondary_dns_string);
     get_ipv4_parameter_string(expect, iface_data, dest, dest_size);
+
+    return expect.d.ret_bool_;
 }
 
 bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
