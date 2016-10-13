@@ -191,6 +191,8 @@ static size_t generate_service_name(char *const buffer,
         offset += sizeof(suffix) - 1;
     }
 
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "Generated service name: \"%s\"", buffer);
+
     return offset;
 
 #undef APPEND_TO_BUFFER

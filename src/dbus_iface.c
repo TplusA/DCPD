@@ -270,6 +270,8 @@ static void name_acquired(GDBusConnection *connection,
                                                      NULL, &error);
             (void)dbus_common_handle_dbus_error(&error);
 
+            msg_vinfo(MESSAGE_LEVEL_DEBUG, "Register as ConnMan agent");
+
             tdbus_connman_manager_call_register_agent_sync(connman_iface_data.connman_manager_iface,
                                                            "/de/tahifi/Dcpd",
                                                            NULL, &error);

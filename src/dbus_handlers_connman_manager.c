@@ -187,6 +187,9 @@ static bool configure_our_ipv4_network_common(const char *service_name,
                                               bool *is_favorite,
                                               bool *is_auto_connect)
 {
+    msg_vinfo(MESSAGE_LEVEL_DEBUG,
+              "Configure IPv4 parameters %p for service %s", prefs, service_name);
+
     *is_favorite = false;
     *is_auto_connect = false;
 
@@ -302,6 +305,11 @@ static bool configure_our_wlan(const char *service_name,
                                           &is_favorite, &is_auto_connect))
         return false;
 
+    msg_vinfo(MESSAGE_LEVEL_DEBUG,
+              "Our WLAN is %sa favorite, auto-connect %d, "
+              "make it auto-connect %d",
+              is_favorite ? "" : "not ", is_auto_connect, make_it_favorite);
+
     if(is_favorite)
     {
         if(!is_auto_connect)
@@ -412,6 +420,7 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
 
         while(g_variant_iter_loop(&iter, "&o", &name))
         {
+            msg_vinfo(MESSAGE_LEVEL_TRACE, "Service removed: \"%s\"", name);
             if(strcmp(name, ethernet_service_name) == 0)
                 have_just_lost_ethernet_device = true;
         }
@@ -427,6 +436,57 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
     {
         if(name[0] == '\0')
             continue;
+
+        msg_vinfo(MESSAGE_LEVEL_TRACE, "Service changed: \"%s\"", name);
+
+        if(msg_is_verbose(MESSAGE_LEVEL_TRACE))
+        {
+            const char *prop = NULL;
+            GVariant *value = NULL;
+            GVariantIter *iter_copy = g_variant_iter_copy(props_iter);
+
+            while(g_variant_iter_loop(iter_copy, "{&sv}", &prop, &value))
+            {
+                if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING))
+                    msg_info("- %s = %s", prop, g_variant_get_string(value, NULL));
+                if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
+                    msg_info("- %s = %s", prop, g_variant_get_boolean(value) ? "TRUE" : "FALSE");
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING_ARRAY))
+                {
+                    msg_info("- %s", prop);
+
+                    GVariantIter array_iter;
+                    g_variant_iter_init(&array_iter, value);
+
+                    const gchar *array_value = NULL;
+
+                    while(g_variant_iter_loop(&array_iter, "&s", &array_value))
+                        msg_info("`-- %s", array_value);
+                }
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_VARDICT))
+                {
+                    msg_info("- %s", prop);
+
+                    GVariantIter dict_iter;
+                    g_variant_iter_init(&dict_iter, value);
+
+                    const gchar *dict_key = NULL;
+                    GVariant *dict_value;
+
+                    while(g_variant_iter_loop(&dict_iter, "{&sv}", &dict_key, &dict_value))
+                    {
+                        if(g_variant_is_of_type(dict_value, G_VARIANT_TYPE_STRING))
+                            msg_info("`-- %s = %s", dict_key, g_variant_get_string(dict_value, NULL));
+                        else
+                            msg_info("`-- %s (type %s)", dict_key, g_variant_get_type_string(dict_value));
+                    }
+                }
+                else
+                    msg_info("- %s (type %s)", prop, g_variant_get_type_string(value));
+            }
+
+            g_variant_iter_free(iter_copy);
+        }
 
         if(strcmp(name, wlan_service_name) == 0)
         {
@@ -476,6 +536,9 @@ static void schedule_wlan_connect_if_necessary(bool is_necessary,
                 sizeof(data->wlan_service_name));
         data->wlan_service_name[sizeof(data->wlan_service_name) - 1] = '\0';
         data->schedule_connect_to_wlan();
+
+        msg_vinfo(MESSAGE_LEVEL_DEBUG,
+                  "***** Scheduled connect to WLAN *****");
     }
     else
         data->wlan_service_name[0] = '\0';
@@ -492,6 +555,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 
     if(strcmp(signal_name, "ServicesChanged") == 0)
     {
+        msg_vinfo(MESSAGE_LEVEL_DIAG, "ConnMan services changed");
         check_parameter_assertions(parameters, 2);
 
         const struct network_prefs *ethernet_prefs;
@@ -533,7 +597,14 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         log_assert(name != NULL);
 
         if(strcmp(g_variant_get_string(name, NULL), "State") == 0)
+        {
+            msg_vinfo(MESSAGE_LEVEL_DIAG, "ConnMan state changed");
             dcpregs_networkconfig_interfaces_changed();
+        }
+        else
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "ConnMan property \"%s\" changed",
+                      g_variant_get_string(name, NULL));
 
         g_variant_unref(name);
     }

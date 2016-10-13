@@ -50,6 +50,9 @@ void connman_common_set_service_property(const char *object_path,
     if(proxy == NULL)
         return;
 
+    msg_vinfo(MESSAGE_LEVEL_DEBUG,
+              "Set ConnMan property %s on %s", property_name, object_path);
+
     GError *error = NULL;
     tdbus_connman_service_call_set_property_sync(proxy, property_name, value,
                                                  NULL, &error);
@@ -187,6 +190,9 @@ static void connect_to_service_if_needed(bool need_start_connect,
      * expected---we may freely access the #ConnectToServiceData object passed
      * in \p data and start the asynchronous D-Bus call */
 
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Connecting to ConnMan service %s",
+             g_dbus_proxy_get_object_path(G_DBUS_PROXY(data->proxy)));
+
     tdbus_connman_service_call_connect(data->proxy, NULL,
                                        connect_to_service_done, data);
 }
@@ -227,6 +233,9 @@ void connman_common_disconnect_service_by_object_path(const char *object_path)
     if(proxy == NULL)
         return;
 
+    msg_vinfo(MESSAGE_LEVEL_DEBUG,
+              "Disconnect ConnMan service %s", object_path);
+
     GError *error = NULL;
     tdbus_connman_service_call_disconnect_sync(proxy, NULL, &error);
     (void)dbus_common_handle_dbus_error(&error);
@@ -242,9 +251,13 @@ void connman_common_remove_service_by_object_path(const char *object_path)
     if(proxy == NULL)
         return;
 
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Remove ConnMan service %s", object_path);
+
     GError *error = NULL;
     tdbus_connman_service_call_remove_sync(proxy, NULL, &error);
     (void)dbus_common_handle_dbus_error(&error);
+
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Removed ConnMan service");
 
     g_object_unref(proxy);
 }

@@ -175,6 +175,9 @@ static bool send_error_if_possible(GDBusMethodInvocation *invocation,
     if(error_message == NULL)
         return false;
 
+    msg_vinfo(MESSAGE_LEVEL_DEBUG,
+              "Error message for ConnMan: \"%s\"", error_message);
+
     g_dbus_method_invocation_return_error_literal(invocation,
                                                   NET_CONNMAN_AGENT_ERROR,
                                                   NET_CONNMAN_AGENT_ERROR_CANCELED,
@@ -418,6 +421,9 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
                                     enum RequestID related_id,
                                     const struct network_prefs *preferences)
 {
+    msg_vinfo(MESSAGE_LEVEL_TRACE,
+              "FIND ALTERNATE answer for unanswered request %u", related_id);
+
     if(requests[related_id].alternates != 0)
     {
         enum RequestID alternate_id = REQUEST_UNKNOWN;
@@ -442,12 +448,17 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
         }
     }
 
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %u", related_id);
+
     return false;
 }
 
 static void wipe_out_alternates(struct Request *requests, enum RequestID related_id)
 {
     uint32_t alternates = requests[related_id].alternates;
+
+    msg_vinfo(MESSAGE_LEVEL_TRACE,
+              "WIPE OUT alternates 0x%08x for %u", alternates, related_id);
 
     if(alternates == 0)
         return;
@@ -464,6 +475,9 @@ static void wipe_out_alternates(struct Request *requests, enum RequestID related
             continue;
 
         log_assert(alternate_id <= REQUEST_LAST_REQUEST_ID);
+
+        msg_vinfo(MESSAGE_LEVEL_TRACE,
+                  "Wipe out alternate %u for processed %u", alternate_id, related_id);
 
         requests[alternate_id].requirement = REQREQ_NOT_REQUESTED;
         wipe_out_alternates(requests, alternate_id);
@@ -532,6 +546,8 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
                                                 void *user_data)
 {
     enter_agent_handler(invocation);
+
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Got request for service \"%s\"", arg_service);
 
     struct network_prefs_handle *prefsfile;
     const struct network_prefs *preferences;
