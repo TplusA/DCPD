@@ -246,7 +246,8 @@ static void write_default_preferences(const char *filename,
                                       const char *containing_directory,
                                       const char *ethernet_mac_address)
 {
-    msg_info("Creating default network preferences file");
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+              "Creating default network preferences file");
 
     struct ini_file inifile;
 

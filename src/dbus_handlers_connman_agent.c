@@ -187,9 +187,9 @@ static void enter_agent_handler(GDBusMethodInvocation *invocation)
 {
     static const char iface_name[] = "net.connman.Agent";
 
-    msg_info("%s method invocation from '%s': %s",
-             iface_name, g_dbus_method_invocation_get_sender(invocation),
-             g_dbus_method_invocation_get_method_name(invocation));
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "%s method invocation from '%s': %s",
+              iface_name, g_dbus_method_invocation_get_sender(invocation),
+              g_dbus_method_invocation_get_method_name(invocation));
 }
 
 gboolean dbusmethod_connman_agent_release(tdbusconnmanAgent *object,
@@ -391,7 +391,8 @@ static bool insert_answer(GVariantBuilder *result_builder,
 
     if(prefgetters[request_id] == NULL)
     {
-        msg_info("ConnMan request %u not supported", request_id);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "ConnMan request %u not supported", request_id);
         return false;
     }
 
@@ -399,7 +400,8 @@ static bool insert_answer(GVariantBuilder *result_builder,
 
     if(value == NULL)
     {
-        msg_info("Have no answer for ConnMan request %u", request_id);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "Have no answer for ConnMan request %u", request_id);
         return false;
     }
 
@@ -578,7 +580,8 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
                     error_message = "Answer to mandatory request unknown";
                 }
                 else
-                    msg_info("Answer to optional request %u not known", i);
+                    msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                              "Answer to optional request %u not known", i);
             }
 
             if(error_message == NULL)

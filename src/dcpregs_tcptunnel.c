@@ -84,8 +84,9 @@ static int handle_peer_data(int fd, void *user_data)
     struct tcp_client *peer = user_data;
 
     if(queue_read_from_peer_event(peer))
-        msg_info("Queued push-to-slave for data from peer %u on port %u",
-                 get_peer_id(peer), peer->tunnel->port);
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "Queued push-to-slave for data from peer %u on port %u",
+                  get_peer_id(peer), peer->tunnel->port);
 
     return 0;
 }
@@ -365,7 +366,7 @@ static int open_tunnel(uint16_t port)
 
 int dcpregs_write_119_tcp_tunnel_control(const uint8_t *data, size_t length)
 {
-    msg_info("write 119 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 119 handler %p %zu", data, length);
 
     if(length < 2 || length > 3)
     {
@@ -400,7 +401,7 @@ int dcpregs_write_119_tcp_tunnel_control(const uint8_t *data, size_t length)
 
 ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length)
 {
-    msg_info("read 120 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 120 handler %p %zu", response, length);
 
     if(length < 4)
     {
@@ -411,7 +412,7 @@ ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length)
 
     if(register_status.peer_with_data == NULL)
     {
-        msg_info("No active peer, cannot read data");
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "No active peer, cannot read data");
         response[0] = response[1] = response[2] = 0;
         register_status.peer_with_data = NULL;
         return 3;
@@ -445,9 +446,10 @@ ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length)
             return -1;
         }
 
-        msg_info("Read %zd bytes of up to %zu bytes from network peer %u on port %u",
-                 len, length - 3,
-                 get_peer_id(register_status.peer_with_data), port);
+        msg_vinfo(MESSAGE_LEVEL_TRACE,
+                  "Read %zd bytes of up to %zu bytes from network peer %u on port %u",
+                  len, length - 3,
+                  get_peer_id(register_status.peer_with_data), port);
     }
     else
         len = 0;
@@ -468,7 +470,7 @@ int dcpregs_write_121_tcp_tunnel_write(const uint8_t *data, size_t length)
 {
     static const char what_error[] = "Write to";
 
-    msg_info("write 121 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 121 handler %p %zu", data, length);
 
     if(length < 4)
     {
@@ -513,8 +515,9 @@ int dcpregs_write_121_tcp_tunnel_write(const uint8_t *data, size_t length)
         return -1;
     }
 
-    msg_info("Sent %zu bytes to network peer %u on port %u",
-             length, requested_peer_id, requested_port);
+    msg_vinfo(MESSAGE_LEVEL_TRACE,
+              "Sent %zu bytes to network peer %u on port %u",
+              length, requested_peer_id, requested_port);
 
     return 0;
 }

@@ -159,9 +159,9 @@ static void show_version_info(void)
 
 static void log_version_info(void)
 {
-    msg_info("Rev %s%s, %s+%d, %s",
-             VCS_FULL_HASH, VCS_WC_MODIFIED ? " (tainted)" : "",
-             VCS_TAG, VCS_TICK, VCS_DATE);
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Rev %s%s, %s+%d, %s",
+              VCS_FULL_HASH, VCS_WC_MODIFIED ? " (tainted)" : "",
+              VCS_TAG, VCS_TICK, VCS_DATE);
 }
 
 static void schedule_transaction(struct state *state, struct transaction *t)
@@ -935,6 +935,7 @@ static void main_loop(struct files *files,
 
 struct parameters
 {
+    enum MessageVerboseLevel verbose_level;
     bool run_in_foreground;
     bool connect_to_session_dbus;
     bool with_connman;
@@ -985,6 +986,7 @@ static int setup(const struct parameters *parameters, struct files *files,
 {
     msg_enable_syslog(!parameters->run_in_foreground);
     msg_enable_glib_message_redirection();
+    msg_set_verbose_level(parameters->verbose_level);
 
     if(!parameters->run_in_foreground)
         openlog("dcpd", LOG_PID, LOG_DAEMON);
@@ -1000,7 +1002,7 @@ static int setup(const struct parameters *parameters, struct files *files,
 
     log_version_info();
 
-    msg_info("Attempting to open named pipes");
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Attempting to open named pipes");
 
     files->dcpspi_fifo.in_fd =
         fifo_open(files->dcpspi_fifo_in_name, false);
@@ -1078,6 +1080,8 @@ static void usage(const char *program_name)
            "  --help         Show this help.\n"
            "  --version      Print version information to stdout.\n"
            "  --fg           Run in foreground, don't run as daemon.\n"
+           "  --verbose lvl  Set verbosity level to given level.\n"
+           "  --quiet        Short for \"--verbose quite\".\n"
            "  --ethernet-mac MAC address of built-in Ethernet interface (mandatory).\n"
            "  --wlan-mac     MAC address of built-in W-LAN interface.\n"
            "  --ispi  name   Name of the named pipe the DCPSPI daemon writes to.\n"
@@ -1094,6 +1098,7 @@ static int process_command_line(int argc, char *argv[],
                                 struct parameters *parameters,
                                 struct files *files)
 {
+    parameters->verbose_level = MESSAGE_LEVEL_NORMAL;
     parameters->run_in_foreground = false;
     parameters->connect_to_session_dbus = true;
     parameters->with_connman = true;
@@ -1123,6 +1128,27 @@ static int process_command_line(int argc, char *argv[],
             return 2;
         else if(strcmp(argv[i], "--fg") == 0)
             parameters->run_in_foreground = true;
+        else if(strcmp(argv[i], "--verbose") == 0)
+        {
+            CHECK_ARGUMENT();
+            parameters->verbose_level = msg_verbose_level_name_to_level(argv[i]);
+
+            if(parameters->verbose_level == MESSAGE_LEVEL_IMPOSSIBLE)
+            {
+                fprintf(stderr,
+                        "Invalid verbosity \"%s\". "
+                        "Valid verbosity levels are:\n", argv[i]);
+
+                const char *const *names = msg_get_verbose_level_names();
+
+                for(const char *name = *names; name != NULL; name = *++names)
+                    fprintf(stderr, "    %s\n", name);
+
+                return -1;
+            }
+        }
+        else if(strcmp(argv[i], "--quiet") == 0)
+            parameters->verbose_level = MESSAGE_LEVEL_QUIET;
         else if(strcmp(argv[i], "--ispi") == 0)
         {
             CHECK_ARGUMENT();
@@ -1266,7 +1292,7 @@ int main(int argc, char *argv[])
     main_loop(&files, &dot, &appconn, connman,
               primitive_queue_fd, register_changed_fd);
 
-    msg_info("Shutting down");
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutting down");
 
     dot_close(&dot);
     appconn_close(&appconn);

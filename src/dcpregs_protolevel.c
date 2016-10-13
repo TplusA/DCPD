@@ -102,7 +102,7 @@ void dcpregs_protocol_level_init(void)
 
 ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length)
 {
-    msg_info("read 1 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 1 handler %p %zu", response, length);
 
     struct RegisterProtocolLevel level = { .code = REGISTER_MK_VERSION(0, 0, 0) };
 
@@ -136,7 +136,7 @@ ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length)
 
 int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length)
 {
-    msg_info("write 1 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 1 handler %p %zu", data, length);
 
     const struct RegisterProtocolLevel *supported_ranges;
     const size_t number_of_supported_ranges =

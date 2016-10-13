@@ -68,7 +68,8 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
         const struct dbussignal_shutdown_iface *const iface = user_data;
 
         if(!iface->is_inhibitor_lock_taken())
-            msg_info("Shutting down, but having no inhibit lock");
+            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                      "Shutting down, but having no inhibit lock");
 
         dcpregs_filetransfer_prepare_for_shutdown();
         dcpregs_networkconfig_prepare_for_shutdown();

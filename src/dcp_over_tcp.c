@@ -65,7 +65,7 @@ void dot_handle_outgoing(struct dcp_over_tcp_data *dot,
     if(can_read_from_peer)
     {
         log_assert(dot->peer_fd >= 0);
-        msg_info("DCP over TCP/IP");
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "DCP over TCP/IP");
     }
 
     if(peer_died)

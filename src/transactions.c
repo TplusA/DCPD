@@ -816,8 +816,9 @@ static bool process_nack(struct transaction *t, uint16_t serial, uint8_t ttl)
 {
     if(serial != t->dcpsync.serial)
     {
-        msg_info("Got NACK[%u] for 0x%04x while waiting for 0x%04x ACK",
-                 ttl, serial, t->dcpsync.serial);
+        msg_vinfo(MESSAGE_LEVEL_TRACE,
+                  "Got NACK[%u] for 0x%04x while waiting for 0x%04x ACK",
+                  ttl, serial, t->dcpsync.serial);
         return false;
     }
 
@@ -828,14 +829,16 @@ static bool process_nack(struct transaction *t, uint16_t serial, uint8_t ttl)
         t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
         t->dcpsync.serial = mk_serial();
 
-        msg_info("Got NACK[%u] for 0x%04x, resending packet as 0x%04x",
-                 ttl, serial, t->dcpsync.serial);
+        msg_vinfo(MESSAGE_LEVEL_TRACE,
+                  "Got NACK[%u] for 0x%04x, resending packet as 0x%04x",
+                  ttl, serial, t->dcpsync.serial);
     }
     else
     {
         t->state = TRANSACTION_STATE_SEND_TO_SLAVE_FAILED;
 
-        msg_info("Got final NACK for 0x%04x, aborting transaction", serial);
+        msg_vinfo(MESSAGE_LEVEL_TRACE,
+                  "Got final NACK for 0x%04x, aborting transaction", serial);
     }
 
     return true;
@@ -875,8 +878,9 @@ enum transaction_process_status transaction_process(struct transaction *t,
                 break;
 
               case DCPSYNC_PACKET_ACK:
-                msg_info("Got ACK for 0x%04x while waiting for new command packet",
-                         t->dcpsync.serial);
+                msg_vinfo(MESSAGE_LEVEL_TRACE,
+                          "Got ACK for 0x%04x while waiting for new command packet",
+                          t->dcpsync.serial);
 
                 set_ooo_ack_exception(e, t->dcpsync.serial);
 
@@ -886,8 +890,9 @@ enum transaction_process_status transaction_process(struct transaction *t,
                 return TRANSACTION_EXCEPTION;
 
               case DCPSYNC_PACKET_NACK:
-                msg_info("Got NACK[%u] for 0x%04x while waiting for new "
-                         "command packet", t->dcpsync.ttl, t->dcpsync.serial);
+                msg_vinfo(MESSAGE_LEVEL_TRACE,
+                          "Got NACK[%u] for 0x%04x while waiting for new "
+                          "command packet", t->dcpsync.ttl, t->dcpsync.serial);
 
                 set_ooo_nack_exception(e, t->dcpsync.serial, t->dcpsync.ttl);
 
@@ -1047,8 +1052,9 @@ enum transaction_process_status transaction_process(struct transaction *t,
                 return TRANSACTION_IN_PROGRESS;
 
               case DCPSYNC_PACKET_COMMAND:
-                msg_info("Collision: New packet 0x%04x while waiting for 0x%04x ACK",
-                         dh.serial, t->dcpsync.serial);
+                msg_vinfo(MESSAGE_LEVEL_DEBUG,
+                          "Collision: New packet 0x%04x while waiting for 0x%04x ACK",
+                          dh.serial, t->dcpsync.serial);
 
                 set_collision_exception(e,
                                         transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,

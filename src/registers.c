@@ -95,7 +95,7 @@ void dcpregs_status_set_reboot_required(void)
 
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
 {
-    msg_info("read 17 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 17 handler %p %zu", response, length);
     log_assert(length == 2);
 
     response[0] = registers_private_data.status_byte;
@@ -114,7 +114,7 @@ static size_t skip_to_eol(const char *str, size_t len, size_t offset)
 
 static ssize_t read_37_image_version(uint8_t *response, size_t length)
 {
-    msg_info("read 37 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 37 handler %p %zu", response, length);
 
     static const char osrelease_filename[] = "/etc/os-release";
     static const char key[] = "BUILD_ID=";

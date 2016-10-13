@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -551,7 +551,7 @@ static int generate_opkg_feed_files_if_necessary(void)
 
 static int try_start_system_update(void)
 {
-    msg_info("Attempting to START SYSTEM UPDATE");
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Attempting to START SYSTEM UPDATE");
 
     if(generate_opkg_feed_files_if_necessary() < 0)
         return -1;
@@ -661,7 +661,7 @@ static int do_write_download_control(const uint8_t *data)
 
 int dcpregs_write_40_download_control(const uint8_t *data, size_t length)
 {
-    msg_info("write 40 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 40 handler %p %zu", data, length);
 
     if(data_length_is_unexpected(length, 2))
         return -1;
@@ -710,7 +710,7 @@ static void fill_download_status_from_xmodem(uint8_t *response)
 
 ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length)
 {
-    msg_info("read 41 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 41 handler %p %zu", response, length);
 
     if(data_length_is_unexpected(length, 2))
         return -1;
@@ -736,7 +736,7 @@ ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length)
 
 ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
 {
-    msg_info("read 44 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 44 handler %p %zu", response, length);
 
     if(data_length_is_in_unexpected_range(length, 1, 3 + 128 + 2))
         return -1;
@@ -765,8 +765,9 @@ ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
 
             if(length > 1)
             {
-                msg_info("Send %zu bytes of XMODEM data, command 0x%02x, block %u",
-                         length, response[0], response[1]);
+                msg_vinfo(MESSAGE_LEVEL_DIAG,
+                          "Send %zu bytes of XMODEM data, command 0x%02x, block %u",
+                          length, response[0], response[1]);
                 if(--filetransfer_data.xmodem_status.progress_rate_limit <= 0)
                 {
                     filetransfer_data.xmodem_status.progress_rate_limit = XMODEM_PROGRESS_RATE_LIMIT;
@@ -776,7 +777,7 @@ ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
             else
             {
                 log_assert(response[0] == XMODEM_COMMAND_EOT);
-                msg_info("Send 1 byte of XMODEM data");
+                msg_vinfo(MESSAGE_LEVEL_DIAG, "Send 1 byte of XMODEM data");
 
                 /* report 100% progress */
                 filetransfer_data.xmodem_status.progress_rate_limit = 0;
@@ -799,7 +800,7 @@ ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
 
 int dcpregs_write_45_xmodem_command(const uint8_t *data, size_t length)
 {
-    msg_info("write 45 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 45 handler %p %zu", data, length);
 
     if(data_length_is_unexpected(length, 1))
         return -1;
@@ -1063,8 +1064,9 @@ try_update_repository_feeds(const uint8_t *data, size_t length)
         os_sync_dir(feed_config_path);
         retval = UPDATE_FEEDS_UPDATED;
 
-        msg_info("Set package update URL \"%s\" for release \"%s\"",
-                 url_kv->value, release_kv->value);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "Set package update URL \"%s\" for release \"%s\"",
+                  url_kv->value, release_kv->value);
     }
     else
         retval = UPDATE_FEEDS_FAILED;
@@ -1076,7 +1078,7 @@ try_update_repository_feeds(const uint8_t *data, size_t length)
 
 int dcpregs_write_209_download_url(const uint8_t *data, size_t length)
 {
-    msg_info("write 209 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 209 handler %p %zu", data, length);
 
     if(length >= 8)
     {
@@ -1102,7 +1104,7 @@ int dcpregs_write_209_download_url(const uint8_t *data, size_t length)
     if(length == 0)
     {
         filetransfer_data.url[0] = '\0';
-        msg_info("Cleared URL");
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
         return 0;
     }
 

@@ -268,7 +268,7 @@ void dcpregs_upnpname_deinit(void)
  */
 ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length)
 {
-    msg_info("read 88 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 88 handler %p %zu", response, length);
 
     ssize_t len = read_name_from_config_file(upnpname_private_data.rcfile,
                                              (char *)response, length);
@@ -296,12 +296,12 @@ ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length)
  */
 int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
 {
-    msg_info("write 88 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 88 handler %p %zu", data, length);
 
     if(is_stored_name_equal(upnpname_private_data.rcfile,
                             (const char *)data, length))
     {
-        msg_info("UPnP name unchanged");
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "UPnP name unchanged");
         return 0;
     }
 

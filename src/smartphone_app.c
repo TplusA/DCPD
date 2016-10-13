@@ -97,7 +97,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
     if(buffer_size == 0)
         return -1;
 
-    msg_info("App request: %s", command->variable->name);
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request: %s", command->variable->name);
 
     enum ApplinkSupportedVariables id = command->variable->variable_id;
 
@@ -213,7 +213,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
 
       case VAR_SERVICE_LOGGED_IN:
       case VAR_SERVICE_LOGGED_OUT:
-        msg_info("App request for \"%s\" ignored", command->variable->name);
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request for \"%s\" ignored", command->variable->name);
         break;
     }
 
@@ -229,7 +229,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
 
 static void process_applink_answer(const struct ApplinkCommand *const command)
 {
-    msg_info("App answer: %s", command->variable->name);
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "App answer: %s", command->variable->name);
 
     enum ApplinkSupportedVariables id = command->variable->variable_id;
 
@@ -253,8 +253,9 @@ static void process_applink_answer(const struct ApplinkCommand *const command)
             applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
             applink_command_get_parameter(command, 1, username_buffer, sizeof(username_buffer));
 
-            msg_info("App said it logged into \"%s\" with user \"%s\"",
-                     service_id_buffer, username_buffer);
+            msg_vinfo(MESSAGE_LEVEL_TRACE,
+                      "App said it logged into \"%s\" with user \"%s\"",
+                      service_id_buffer, username_buffer);
 
             tdbus_airable_call_external_service_login_sync(
                 dbus_get_airable_sec_iface(), service_id_buffer,
@@ -271,8 +272,9 @@ static void process_applink_answer(const struct ApplinkCommand *const command)
             applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
             applink_command_get_parameter(command, 1, url_buffer, sizeof(url_buffer));
 
-            msg_info("App said it logged out from \"%s\" using URL \"%s\"",
-                     service_id_buffer, url_buffer);
+            msg_vinfo(MESSAGE_LEVEL_TRACE,
+                      "App said it logged out from \"%s\" using URL \"%s\"",
+                      service_id_buffer, url_buffer);
 
             tdbus_airable_call_external_service_logout_sync(
                 dbus_get_airable_sec_iface(), service_id_buffer,
@@ -387,7 +389,7 @@ void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
     if(can_read_from_peer)
     {
         log_assert(appconn->peer_fd >= 0);
-        msg_info("Smartphone app over TCP/IP");
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "Smartphone app over TCP/IP");
 
         bool done = false;
 

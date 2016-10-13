@@ -291,13 +291,13 @@ static void name_lost(GDBusConnection *connection,
 {
     struct dbus_data *data = user_data;
 
-    msg_info("D-Bus name \"%s\" lost", name);
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "D-Bus name \"%s\" lost", name);
     data->acquired = -1;
 }
 
 static void destroy_notification(gpointer data)
 {
-    msg_info("Bus destroyed.");
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Bus destroyed.");
 }
 
 static bool is_shutdown_inhibited(void)
@@ -524,7 +524,8 @@ void dbus_lock_shutdown_sequence(const char *why)
     }
 
     if(is_shutdown_inhibited())
-        msg_info("D-Bus inhibitor lock fd is %d", login1_iface_data.lock_fd);
+        msg_vinfo(MESSAGE_LEVEL_DEBUG,
+                  "D-Bus inhibitor lock fd is %d", login1_iface_data.lock_fd);
     else
         msg_error(0, LOG_CRIT, "Failed taking inhibitor lock");
 }

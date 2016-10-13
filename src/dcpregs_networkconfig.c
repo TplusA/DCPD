@@ -414,8 +414,9 @@ static int handle_set_static_ipv4_config(struct network_prefs *prefs)
                                       nwconfig_write_data.ipv4_gateway);
     else
     {
-        msg_info("Disabling IPv4 on interface %s",
-                 network_prefs_get_mac_address_by_prefs(prefs)->address);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "Disabling IPv4 on interface %s",
+                  network_prefs_get_mac_address_by_prefs(prefs)->address);
 
         network_prefs_put_ipv4_config(prefs, "", "", "");
     }
@@ -437,8 +438,9 @@ static int handle_set_dns_servers(struct network_prefs *prefs)
 
     else
     {
-        msg_info("No nameservers on interface %s",
-                 network_prefs_get_mac_address_by_prefs(prefs)->address);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "No nameservers on interface %s",
+                  network_prefs_get_mac_address_by_prefs(prefs)->address);
 
         network_prefs_put_nameservers(prefs, "", "");
     }
@@ -515,7 +517,8 @@ static int handle_set_wireless_config(struct network_prefs *prefs)
 
     if(network_prefs_get_technology_by_prefs(prefs) != NWPREFSTECH_WLAN)
     {
-        msg_info("Ignoring wireless parameters for active wired interface");
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "Ignoring wireless parameters for active wired interface");
         return 0;
     }
 
@@ -747,7 +750,7 @@ static bool data_length_is_unexpectedly_small(size_t length,
 
 int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 {
-    msg_info("write 53 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 53 handler %p %zu", data, length);
 
     if(data_length_is_unexpected(length, 1))
         return -1;
@@ -773,8 +776,9 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         ? NWPREFSTECH_ETHERNET
         : NWPREFSTECH_WLAN;
 
-    msg_info("Writing new network configuration for MAC address %s",
-             network_prefs_get_mac_address_by_tech(tech)->address);
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+              "Writing new network configuration for MAC address %s",
+              network_prefs_get_mac_address_by_tech(tech)->address);
 
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
     char current_wlan_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
@@ -791,7 +795,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 
 int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
 {
-    msg_info("write 54 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 54 handler %p %zu", data, length);
 
     if(data_length_is_unexpected(length, 1))
         return -1;
@@ -862,7 +866,7 @@ static void fill_network_status_register_response(uint8_t response[static 2])
 
 ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
 {
-    msg_info("read 50 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 50 handler %p %zu", response, length);
 
     if(data_length_is_unexpected(length, 2))
         return -1;
@@ -875,7 +879,7 @@ ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
 
 ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
 {
-    msg_info("read 51 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 51 handler %p %zu", response, length);
 
     const struct register_network_interface_t *const iface =
         get_network_iface_data(registers_get_data());
@@ -898,7 +902,7 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
 
 ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
 {
-    msg_info("read 55 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 55 handler %p %zu", response, length);
 
     if(data_length_is_unexpected(length, 1))
         return -1;
@@ -913,7 +917,7 @@ ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
 
 int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
 {
-    msg_info("write 55 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 55 handler %p %zu", data, length);
 
     if(data_length_is_unexpected(length, 1))
         return -1;
@@ -980,7 +984,7 @@ read_ipv4_parameter(uint32_t requested_mask,
 
 ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
 {
-    msg_info("read 56 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 56 handler %p %zu", response, length);
 
     return read_ipv4_parameter(REQ_IP_ADDRESS_56,
                                nwconfig_write_data.ipv4_address,
@@ -990,7 +994,7 @@ ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
 
 ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length)
 {
-    msg_info("read 57 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 57 handler %p %zu", response, length);
 
     return read_ipv4_parameter(REQ_NETMASK_57,
                                nwconfig_write_data.ipv4_netmask,
@@ -1000,7 +1004,7 @@ ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length)
 
 ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
 {
-    msg_info("read 58 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 58 handler %p %zu", response, length);
 
     return read_ipv4_parameter(REQ_DEFAULT_GATEWAY_58,
                                nwconfig_write_data.ipv4_gateway,
@@ -1010,7 +1014,7 @@ ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
 
 ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length)
 {
-    msg_info("read 62 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 62 handler %p %zu", response, length);
 
     return read_ipv4_parameter(REQ_DNS_SERVER1_62,
                                nwconfig_write_data.ipv4_dns_server1,
@@ -1020,7 +1024,7 @@ ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length)
 
 ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length)
 {
-    msg_info("read 63 handler %p %zu", response, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 63 handler %p %zu", response, length);
 
     return read_ipv4_parameter(REQ_DNS_SERVER2_63,
                                nwconfig_write_data.ipv4_dns_server2,
@@ -1317,7 +1321,8 @@ ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
 
     if(!in_edit_mode())
     {
-        msg_info("Passphrase cannot be read out while in non-edit mode");
+        msg_error(0, LOG_NOTICE,
+                  "Passphrase cannot be read out while in non-edit mode");
         return -1;
     }
 

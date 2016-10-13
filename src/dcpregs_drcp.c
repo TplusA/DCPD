@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -371,7 +371,7 @@ int dcpregs_write_drcp_command(const uint8_t *data, size_t length)
 {
     log_assert(length >= 1);
 
-    msg_info("DRC: command code 0x%02x", data[0]);
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x%02x", data[0]);
 
     /* static because we want static initialization; only the code field is
      * ever changed */

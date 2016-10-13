@@ -105,7 +105,7 @@ static int set_credentials(const char *service_id,
 
 int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
 {
-    msg_info("write 106 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 106 handler %p %zu", data, length);
 
     if(length == 0)
     {
@@ -337,7 +337,7 @@ bool dcpregs_read_106_media_service_list(struct dynamic_buffer *buffer)
 {
     log_assert(dynamic_buffer_is_empty(buffer));
 
-    msg_info("read 106 handler");
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 106 handler");
 
     GVariant *service_ids_and_names_variant = NULL;
     GError *error = NULL;

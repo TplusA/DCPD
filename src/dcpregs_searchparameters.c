@@ -138,7 +138,7 @@ static int add_string_pairs_to_variant(GVariantBuilder *builder,
 
 int dcpregs_write_74_search_parameters(const uint8_t *data, size_t length)
 {
-    msg_info("write 74 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 74 handler %p %zu", data, length);
 
     size_t pos = check_and_skip_context_id(data, length);
 

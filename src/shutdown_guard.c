@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -48,7 +48,7 @@ struct ShutdownGuard *shutdown_guard_alloc(const char *name)
     sdg->is_shutting_down = false;
     sdg->name = name;
 
-    msg_info("Allocated shutdown guard \"%s\"", sdg->name);
+    msg_vinfo(MESSAGE_LEVEL_DIAG, "Allocated shutdown guard \"%s\"", sdg->name);
 
     return sdg;
 }
@@ -95,7 +95,7 @@ bool shutdown_guard_down(struct ShutdownGuard *sdg)
 {
     log_assert(sdg != NULL);
 
-    msg_info("Shutdown guard \"%s\" down", sdg->name);
+    msg_vinfo(MESSAGE_LEVEL_DIAG, "Shutdown guard \"%s\" down", sdg->name);
 
     g_mutex_lock(&sdg->lock);
     const bool ret = !sdg->is_shutting_down;
