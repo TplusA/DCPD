@@ -353,6 +353,13 @@ void network_prefs_deinit(void)
     g_mutex_clear(&networkprefs_data.lock);
 }
 
+static void patch_mac_address(struct ini_section *section,
+                              const char *mac_address)
+{
+    if(section != NULL && mac_address[0] != '\0')
+        inifile_section_store_value(section, "MAC", 3, mac_address, 0);
+}
+
 static struct network_prefs_handle *open_prefs_file(bool is_writable,
                                                     struct network_prefs **ethernet,
                                                     struct network_prefs **wlan)
@@ -402,6 +409,44 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
     *wlan = (networkprefs_data.network_wlan_prefs.section != NULL)
         ? &networkprefs_data.network_wlan_prefs
         : NULL;
+
+    /*
+     * This is kind of a hack that demands some explanation. It can be tracked
+     * down, once again, to the broken system design that requires there can be
+     * only a single "primary" Ethernet adapter or a single "primary" WLAN USB
+     * dongle in the system.
+     *
+     * To keep things generic and extensible, we store the MAC address along
+     * with our WLAN configuration. This allows representation of different
+     * settings organized by MAC address, regardless of devices present in the
+     * system at any time. We need the MAC address to generate service names
+     * for ConnMan, by the way. Safe, nice, well-organized.
+     *
+     * By system design, however, there can be only one fixed, known MAC for
+     * the Ethernet adapter and one for the WLAN adapter. Thus, storing the MAC
+     * address inside our configuration file is redundant and should actually
+     * be avoided. I, however, do not allow such poor design decisions to leak
+     * all the way down into our configuration files. Therefore, the MAC
+     * address stays right there. This simply works as long as the MAC
+     * addresses never change.
+     *
+     * Now, if a network adapter is replaced by another one (maybe because the
+     * old one has broken or there the new one provides better connectivity),
+     * the MAC address changes as well. Our configuration file still only knows
+     * about the old address in this case, so we are generating wrong service
+     * names and therefore fail to make any connection.
+     *
+     * Following the system design, it is safe to just always replace the
+     * stored MAC addresses by whatever non-empty address we got from the
+     * launcher script. This is hack, of course. A good fix would allow the
+     * user to select the exact networking adapter he wants to use. Changing
+     * the networking adapter could be supported by allowing the user to copy
+     * configuration settings.
+     */
+    patch_mac_address(networkprefs_data.network_ethernet_prefs.section,
+                      networkprefs_data.ethernet_mac.address);
+    patch_mac_address(networkprefs_data.network_wlan_prefs.section,
+                      networkprefs_data.wlan_mac.address);
 
     return &networkprefs_data.handle;
 }
