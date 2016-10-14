@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -81,6 +81,8 @@ void cut_setup()
     cppcut_assert_not_null(mock_os);
     mock_os->init();
     mock_os_singleton = mock_os;
+
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
     nwdispatch_init();
 }

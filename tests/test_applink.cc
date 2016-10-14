@@ -66,6 +66,8 @@ void cut_setup()
     mock_os->init();
     mock_os_singleton = mock_os;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     fill_buffer_data = new fill_buffer_data_t;
 
     applink_init();

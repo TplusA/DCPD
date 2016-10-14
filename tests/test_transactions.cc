@@ -108,6 +108,8 @@ void cut_setup()
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     register_zero_for_unit_tests = NULL;
     transaction_init_allocator();
 }
@@ -515,6 +517,8 @@ void cut_setup()
     mock_connman->init();
     mock_connman_singleton = mock_connman;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     register_zero_for_unit_tests = NULL;
 
     read_data = new read_data_t;
@@ -587,9 +591,12 @@ static void send_dcpsync_ack(uint16_t serial, struct transaction *t,
  */
 void test_register_read_request_size_1_transaction()
 {
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
                        "/somewhere", "/somewhere/cfg.rc");
@@ -618,7 +625,6 @@ void test_register_read_request_size_1_transaction()
     static auto *dummy_connman_iface_data =
         reinterpret_cast<struct ConnmanInterfaceData *>(123456);
 
-    mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
         "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface_data, true);
@@ -663,9 +669,12 @@ void test_register_read_request_size_1_transaction()
  */
 void test_register_read_request_size_16_transaction()
 {
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
                        "/somewhere", "/somewhere/cfg.rc");
@@ -694,7 +703,6 @@ void test_register_read_request_size_16_transaction()
     static auto *dummy_connman_iface_data =
         reinterpret_cast<struct ConnmanInterfaceData *>(123456);
 
-    mock_messages->expect_msg_info("read 56 handler %p %zu");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
         "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
     mock_connman->expect_get_ipv4_address_string("111.222.255.100",
@@ -741,9 +749,12 @@ void test_register_read_request_size_16_transaction()
  */
 void test_register_multi_step_read_request_transaction()
 {
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("12:34:56:78:9A:BC", NULL,
                        "/somewhere", "/somewhere/cfg.rc");
@@ -769,7 +780,6 @@ void test_register_multi_step_read_request_transaction()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
-    mock_messages->expect_msg_info("read 51 handler %p %zu");
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -835,9 +845,12 @@ static bool return_big_data(struct dynamic_buffer *buffer)
  */
 void test_big_data_is_sent_to_slave_in_fragments()
 {
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("00:11:ff:ee:22:dd", "dd:22:ee:ff:11:00",
                        "/somewhere", "/somewhere/cfg.rc");
@@ -1029,6 +1042,8 @@ void cut_setup()
     mock_dcpd_dbus->init();
     mock_dcpd_dbus_singleton = mock_dcpd_dbus;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     register_zero_for_unit_tests = NULL;
 
     read_data = new read_data_t;
@@ -1038,9 +1053,12 @@ void cut_setup()
 
     transaction_init_allocator();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(NULL);
@@ -1159,7 +1177,6 @@ void test_register_write_request_transaction()
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
-    mock_messages->expect_msg_info("write 54 handler %p %zu");
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -1329,6 +1346,8 @@ void test_small_master_transaction()
  */
 void test_master_transaction_retry_on_nack()
 {
+    mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
+
     static const uint8_t xml_data[] =
         "<view name=\"welcome\"><icon id=\"welcome\" text=\"Profile 1\">welcome</icon></view>";
     struct transaction *head =
@@ -1379,7 +1398,7 @@ void test_master_transaction_retry_on_nack()
 
     answer_written_to_fifo->clear();
 
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001, resending packet as 0x8002");
 
     send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, t);
@@ -1582,8 +1601,6 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
-    mock_messages->expect_msg_info("read 17 handler %p %zu");
-
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -1623,8 +1640,6 @@ void test_register_push_transaction()
 
     cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
     cppcut_assert_not_null(t);
-
-    mock_messages->expect_msg_info("read 17 handler %p %zu");
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -1668,7 +1683,8 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
         cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
         cppcut_assert_not_null(t);
 
-        mock_messages->expect_msg_info("read 17 handler %p %zu");
+        mock_messages->expect_msg_vinfo_if_not_ignored(MESSAGE_LEVEL_TRACE,
+                                                       "read 17 handler %p %zu");
 
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                             transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -1715,17 +1731,19 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
  */
 void test_register_push_transaction_can_be_rejected()
 {
+    mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
+
     /* first try fails */
     struct transaction *t =
         create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001, resending packet as 0x8002");
 
     send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, t);
 
     /* second try fails */
     create_master_transaction_that_waits_for_ack(t, DCPSYNC_MASTER_SERIAL_MIN + 1, 9);
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[8] for 0x8002, resending packet as 0x8003");
 
     send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN + 1, 8, t);
@@ -1796,13 +1814,15 @@ void test_bad_register_addresses_are_handled_in_fragmented_transactions()
  */
 void test_waiting_for_command_interrupted_by_ack()
 {
+    mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
+
     struct transaction *to_be_acked =
         create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got ACK for 0x8001 while waiting for new command packet");
 
     struct transaction_exception e = {};
@@ -1836,13 +1856,15 @@ void test_waiting_for_command_interrupted_by_ack()
  */
 void test_waiting_for_command_interrupted_by_nack()
 {
+    mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
+
     struct transaction *to_be_acked =
         create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
 
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001 while waiting for new command packet");
 
     struct transaction_exception e = {};
@@ -1854,7 +1876,7 @@ void test_waiting_for_command_interrupted_by_nack()
 
     /* caller must handle this NACK by finding the transaction for the given
      * serial and processing it */
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001, resending packet as 0x8002");
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process_out_of_order_nack(to_be_acked, &e.d.nack));
@@ -1917,12 +1939,14 @@ void test_waiting_for_master_ack_interrupted_by_ack_for_other_transaction()
  */
 void test_waiting_for_master_ack_interrupted_by_nack_for_other_transaction()
 {
+    mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
+
     struct transaction *to_be_acked =
         create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     struct transaction *t =
         create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN + 1, UINT8_MAX);
 
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001 while waiting for 0x8002 ACK");
 
     struct transaction_exception e = {};
@@ -1934,7 +1958,7 @@ void test_waiting_for_master_ack_interrupted_by_nack_for_other_transaction()
 
     /* caller must handle this NACK by finding the transaction for the given
      * serial and processing it */
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001, resending packet as 0x8003");
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process_out_of_order_nack(to_be_acked, &e.d.nack));
@@ -1972,7 +1996,7 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
     read_data->set(dcpsync_header);
     read_data->set(read_reg_87_appliance_id);
 
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
         "Collision: New packet 0x60c7 while waiting for 0x8001 ACK");
 
     cppcut_assert_equal(TRANSACTION_EXCEPTION,

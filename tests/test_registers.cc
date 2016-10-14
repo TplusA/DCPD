@@ -362,9 +362,14 @@ void cut_setup()
     mock_dcpd_dbus->init();
     mock_dcpd_dbus_singleton = mock_dcpd_dbus;
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(NULL);
@@ -538,6 +543,8 @@ void cut_setup()
     cppcut_assert_not_null(mock_dbus_iface);
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
+
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 }
 
 void cut_teardown()
@@ -589,7 +596,7 @@ void test_slave_drc_invalid_command()
 {
     static const uint8_t buffer[] = { 0xbe };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xbe");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xbe");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Received unsupported DRC command 0xbe (Invalid argument)");
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
@@ -601,7 +608,7 @@ void test_slave_drc_playback_start()
 {
     static const uint8_t buffer[] = { DRCP_PLAYBACK_START };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xb3");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xb3");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_start(dbus_dcpd_playback_iface_dummy);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -614,7 +621,7 @@ void test_slave_drc_playback_fast_find_set_speed()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(dbus_dcpd_playback_iface_dummy, 15.0);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -628,7 +635,7 @@ void test_slave_drc_playback_fast_find_set_speed_invalid_parameter()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_BROWSE_PLAY_VIEW_SET };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -642,7 +649,7 @@ void test_slave_drc_playback_fast_find_set_speed_without_parameter()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 0, expected 1 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -657,7 +664,7 @@ void test_slave_drc_playback_fast_find_set_speed_with_two_parameters()
 {
     static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4, DRCP_KEY_DIGIT_4 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xc4");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 2, expected 1 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -671,7 +678,7 @@ void test_slave_drc_views_goto_view_by_id_0()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "UPnP");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -684,7 +691,7 @@ void test_slave_drc_views_goto_view_by_id_1()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x01, DRCP_ACCEPT };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "TuneIn");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -697,7 +704,7 @@ void test_slave_drc_views_goto_view_by_id_2()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x02, DRCP_ACCEPT };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Filesystem");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -711,13 +718,13 @@ void test_slave_drc_views_goto_view_by_id_unknown_id()
     static const uint8_t buffer_lowest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x03, DRCP_ACCEPT };
     static const uint8_t buffer_highest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, UINT8_MAX, DRCP_ACCEPT };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0x03 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_lowest_unknown, sizeof(buffer_lowest_unknown)));
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0xff (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
@@ -731,7 +738,7 @@ void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT - 1U };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -744,7 +751,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 1, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
@@ -758,7 +765,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x9a");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 3, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
@@ -772,7 +779,7 @@ void test_slave_drc_views_goto_internet_radio()
 {
     static const uint8_t buffer[] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xaa");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xaa");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Internet Radio");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -785,7 +792,7 @@ void test_slave_drc_views_toggle_browse_and_play()
 {
     static const uint8_t buffer[] = { DRCP_BROWSE_PLAY_VIEW_TOGGLE, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0xba");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xba");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_toggle(dbus_dcpd_views_iface_dummy, "Browse", "Play");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -798,7 +805,7 @@ void test_slave_drc_list_navigation_scroll_one_line_up()
 {
     static const uint8_t buffer[] = { DRCP_SCROLL_UP_ONE, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x26");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x26");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, -1);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -811,7 +818,7 @@ void test_slave_drc_list_navigation_scroll_one_page_down()
 {
     static const uint8_t buffer[] = { DRCP_SCROLL_PAGE_DOWN, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x98");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x98");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_pages(dbus_dcpd_list_navigation_iface_dummy, 1);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -824,7 +831,7 @@ void test_slave_drc_list_navigation_scroll_10_lines_up()
 {
     static const uint8_t buffer[] = { DRCP_SCROLL_UP_MANY, 0x0a, DRCP_ACCEPT, };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x21");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x21");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, -10);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -837,7 +844,7 @@ void test_slave_drc_list_navigation_scroll_8_lines_down()
 {
     static const uint8_t buffer[] = { DRCP_SCROLL_DOWN_MANY, 0x08, DRCP_ACCEPT, };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x22");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x22");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, 8);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -851,12 +858,12 @@ void test_slave_drc_list_navigation_scroll_fast_by_0_lines_is_ignored()
     static const uint8_t buffer_up[]   = { DRCP_SCROLL_UP_MANY,   0x00, DRCP_ACCEPT, };
     static const uint8_t buffer_down[] = { DRCP_SCROLL_DOWN_MANY, 0x00, DRCP_ACCEPT, };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x21");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x21");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x21 failed: -1");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_up, sizeof(buffer_up)));
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x22");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x22");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x22 failed: -1");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_down, sizeof(buffer_down)));
@@ -871,7 +878,7 @@ void test_slave_drc_list_item_add_to_favorites()
 {
     static const uint8_t buffer[] = { DRCP_FAVORITES_ADD_ITEM, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x2d");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x2d");
     mock_dbus_iface->expect_dbus_get_list_item_iface(dbus_dcpd_list_item_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_item_emit_add_to_list(dbus_dcpd_list_item_iface_dummy, "Favorites", 0);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -884,7 +891,7 @@ void test_slave_drc_power_off()
 {
     static const uint8_t buffer[] = { DRCP_POWER_OFF, 0x00 };
 
-    mock_messages->expect_msg_info_formatted("DRC: command code 0x03");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x03");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_power_off_sync(true, dbus_logind_manager_iface_dummy, false);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
@@ -915,13 +922,18 @@ void cut_setup()
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     register_changed_data->init();
 
     dcpregs_protocol_level_init();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(register_changed_callback);
@@ -954,8 +966,6 @@ void test_read_out_protocol_level()
 
     uint8_t buffer[sizeof(redzone_content) + 3 + sizeof(redzone_content)];
     memset(buffer, 0xff, sizeof(buffer));
-
-    mock_messages->expect_msg_info("read 1 handler %p %zu");
 
     reg->read_handler(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
 
@@ -994,12 +1004,9 @@ void test_negotiate_protocol_level_single_range_with_match()
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
-        mock_messages->expect_msg_info("write 1 handler %p %zu");
-
         cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
         register_changed_data->check(1);
 
-        mock_messages->expect_msg_info("read 1 handler %p %zu");
         uint8_t buffer[3];
         cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
 
@@ -1047,12 +1054,9 @@ void test_negotiate_protocol_level_multiple_ranges_with_match()
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
-        mock_messages->expect_msg_info("write 1 handler %p %zu");
-
         cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(match_in_first_range)));
         register_changed_data->check(1);
 
-        mock_messages->expect_msg_info("read 1 handler %p %zu");
         uint8_t buffer[3];
         cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
 
@@ -1087,12 +1091,9 @@ void test_negotiate_protocol_level_single_range_with_mismatch()
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
-        mock_messages->expect_msg_info("write 1 handler %p %zu");
-
         cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
         register_changed_data->check(1);
 
-        mock_messages->expect_msg_info("read 1 handler %p %zu");
         uint8_t buffer[3];
         cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
         cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
@@ -1112,12 +1113,9 @@ void test_negotiate_protocol_level_multiple_ranges_with_mismatch()
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    mock_messages->expect_msg_info("write 1 handler %p %zu");
-
     cppcut_assert_equal(0, reg->write_handler(mismatch, sizeof(mismatch)));
     register_changed_data->check(1);
 
-    mock_messages->expect_msg_info("read 1 handler %p %zu");
     uint8_t buffer[3];
     cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
@@ -1137,12 +1135,9 @@ void test_maximum_level_of_multiple_overlapping_ranges_is_chosen()
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    mock_messages->expect_msg_info("write 1 handler %p %zu");
-
     cppcut_assert_equal(0, reg->write_handler(overlapping, sizeof(overlapping)));
     register_changed_data->check(1);
 
-    mock_messages->expect_msg_info("read 1 handler %p %zu");
     uint8_t buffer[3];
     cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
 
@@ -1166,12 +1161,9 @@ void test_broken_ranges_are_ignored()
 
     for(size_t i = 0; i < sizeof(broken) / sizeof(broken[0]); ++i)
     {
-        mock_messages->expect_msg_info("write 1 handler %p %zu");
-
         cppcut_assert_equal(0, reg->write_handler(broken[i], sizeof(broken[0])));
         register_changed_data->check(1);
 
-        mock_messages->expect_msg_info("read 1 handler %p %zu");
         uint8_t buffer[3];
         cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
         cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
@@ -1186,14 +1178,11 @@ void test_negotiation_requires_at_least_one_range()
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    mock_messages->expect_msg_info("write 1 handler %p %zu");
-
     cppcut_assert_equal(0, reg->write_handler(too_short, sizeof(too_short)));
     register_changed_data->check(1);
 
     /* because this register is really important, even broken requests generate
      * an answer */
-    mock_messages->expect_msg_info("read 1 handler %p %zu");
     uint8_t buffer[3];
     cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
@@ -1265,15 +1254,20 @@ void cut_setup()
     mock_connman->init();
     mock_connman_singleton = mock_connman;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     os_write_buffer.clear();
 
     survey_complete_notification_data.init();
     connect_to_connman_service_data.init();
     register_changed_data->init();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(ethernet_mac_address, wlan_mac_address,
                        network_config_path, network_config_file);
@@ -1327,8 +1321,6 @@ void test_read_mac_address()
     uint8_t buffer[sizeof(redzone_content) + 18 + sizeof(redzone_content)];
     memset(buffer, 0xff, sizeof(buffer));
 
-    mock_messages->expect_msg_info("read 51 handler %p %zu");
-
     reg->read_handler(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
 
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
@@ -1347,9 +1339,12 @@ void test_read_mac_address_default()
     register_deinit();
     network_prefs_deinit();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(NULL);
@@ -1358,8 +1353,6 @@ void test_read_mac_address_default()
                                                 dcpregs_read_51_mac_address,
                                                 NULL);
     uint8_t buffer[18];
-
-    mock_messages->expect_msg_info("read 51 handler %p %zu");
     reg->read_handler(buffer, sizeof(buffer));
 
     const char *buffer_ptr = static_cast<const char *>(static_cast<void *>(buffer));
@@ -1371,21 +1364,17 @@ static void start_ipv4_config()
     auto *reg = lookup_register_expect_handlers(54,
                                                 dcpregs_write_54_selected_ip_profile);
 
-    mock_messages->expect_msg_info("write 54 handler %p %zu");
-
     static const uint8_t zero = 0;
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
 }
 
+/* TODO: Remove add_message_expectation parameter */
 static void commit_ipv4_config(bool add_message_expectation,
                                enum NetworkPrefsTechnology tech,
                                int expected_return_value = 0)
 {
     auto *reg = lookup_register_expect_handlers(53,
                                                 dcpregs_write_53_active_ip_profile);
-
-    if(add_message_expectation)
-        mock_messages->expect_msg_info("write 53 handler %p %zu");
 
     if(tech != NWPREFSTECH_UNKNOWN)
     {
@@ -1414,7 +1403,8 @@ static const struct os_mapped_file_data *
 expect_create_default_network_preferences(struct os_mapped_file_data &file_with_written_default_contents,
                                           std::vector<char> &written_default_contents)
 {
-    mock_messages->expect_msg_info("Creating default network preferences file");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                                    "Creating default network preferences file");
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 3 + 2 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
@@ -1482,8 +1472,8 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_ipv4_gateway)), sizeof(standard_ipv4_gateway)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -1541,13 +1531,12 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Enable DHCP");
     static const uint8_t one = 1;
     cppcut_assert_equal(0, reg->write_handler(&one, 1));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -1613,8 +1602,6 @@ void test_leading_zeros_are_removed_from_ipv4_addresses()
     for(const auto &p : addresses_with_zeros)
     {
         cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(p.first)), strlen(p.first)));
-
-        mock_messages->expect_msg_info("read 56 handler %p %zu");
 
         uint8_t buffer[32];
         const ssize_t len = reg->read_handler(buffer, sizeof(buffer));
@@ -1690,14 +1677,12 @@ void test_dhcp_parameter_boundaries()
 
     uint8_t buffer = 2;
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Received invalid DHCP configuration parameter 0x02 (Invalid argument)");
     cppcut_assert_equal(-1, reg->write_handler(&buffer, 1));
 
     buffer = UINT8_MAX;
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Received invalid DHCP configuration parameter 0xff (Invalid argument)");
     cppcut_assert_equal(-1, reg->write_handler(&buffer, 1));
@@ -1717,12 +1702,10 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
 
     static const uint8_t zero = 0;
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Disable DHCP");
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted(
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
@@ -1767,7 +1750,6 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
 
-    mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
@@ -1791,7 +1773,6 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
 
-    mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
@@ -1817,7 +1798,6 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
 
-    mock_messages->expect_msg_info("read 55 handler %p %zu");
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface, true);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
@@ -1840,12 +1820,9 @@ void test_read_dhcp_mode_in_edit_mode_after_change()
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Enable DHCP");
     static const uint8_t one = 1;
     cppcut_assert_equal(0, reg->write_handler(&one, 1));
-
-    mock_messages->expect_msg_info("read 55 handler %p %zu");
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
@@ -1859,7 +1836,6 @@ struct RegisterTraits;
 template <>
 struct RegisterTraits<56U>
 {
-    static constexpr auto expected_read_handler_log_message = "read 56 handler %p %zu";
     static constexpr auto expected_read_handler = &dcpregs_read_56_ipv4_address;
     static constexpr auto expected_write_handler = &dcpregs_write_56_ipv4_address;
     static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_address_string;
@@ -1868,7 +1844,6 @@ struct RegisterTraits<56U>
 template <>
 struct RegisterTraits<57U>
 {
-    static constexpr auto expected_read_handler_log_message = "read 57 handler %p %zu";
     static constexpr auto expected_read_handler = &dcpregs_read_57_ipv4_netmask;
     static constexpr auto expected_write_handler = &dcpregs_write_57_ipv4_netmask;
     static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_netmask_string;
@@ -1877,7 +1852,6 @@ struct RegisterTraits<57U>
 template <>
 struct RegisterTraits<58U>
 {
-    static constexpr auto expected_read_handler_log_message = "read 58 handler %p %zu";
     static constexpr auto expected_read_handler = &dcpregs_read_58_ipv4_gateway;
     static constexpr auto expected_write_handler = &dcpregs_write_58_ipv4_gateway;
     static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
@@ -1908,7 +1882,6 @@ static void read_ipv4_parameter_in_normal_mode()
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
@@ -1936,7 +1909,6 @@ static void read_ipv4_parameter_in_edit_mode_before_any_changes()
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
     (mock_connman->*RegTraits::expect_get_string_memberfn)(standard_ipv4_address,
                                                            dummy_connman_iface, false,
@@ -1964,8 +1936,6 @@ static void read_ipv4_parameter_in_edit_mode_after_change()
     uint8_t buffer[4 + 16 + 4];
     memset(buffer, UINT8_MAX, sizeof(buffer));
     cppcut_assert_operator(sizeof(standard_ipv4_address), <=, sizeof(buffer));
-
-    mock_messages->expect_msg_info(RegTraits::expected_read_handler_log_message);
 
     cppcut_assert_equal(ssize_t(sizeof(standard_ipv4_address)),
                         reg->read_handler(buffer + 4, sizeof(standard_ipv4_address)));
@@ -2085,8 +2055,8 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
                                                 RegTraits::expected_write_handler);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(dns_server_address)), dns_server_size));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
     mock_connman->expect_find_active_primary_interface(
         dummy_connman_iface,
         ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
@@ -2177,8 +2147,8 @@ void test_set_both_dns_servers()
                                           dcpregs_write_63_secondary_dns);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns2_address)), sizeof(standard_dns2_address)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
@@ -2228,7 +2198,6 @@ void test_read_primary_dns_in_edit_mode_before_any_changes()
 
     char buffer[128];
 
-    mock_messages->expect_msg_info("read 62 handler %p %zu");
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
     mock_connman->expect_get_ipv4_primary_dns_string(assumed_primary_dns,
                                                      dummy_connman_iface,
@@ -2259,7 +2228,6 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes()
 
     char buffer[128];
 
-    mock_messages->expect_msg_info("read 63 handler %p %zu");
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
     mock_connman->expect_get_ipv4_secondary_dns_string(assumed_secondary_dns,
                                                        dummy_connman_iface,
@@ -2290,8 +2258,8 @@ void test_replace_primary_dns_server_of_two_servers()
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns1_address)), sizeof(standard_dns1_address)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2353,8 +2321,8 @@ void test_replace_secondary_dns_server_of_two_servers()
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns2_address)), sizeof(standard_dns2_address)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2415,8 +2383,8 @@ void test_add_secondary_dns_server_to_primary_server()
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns2_address)), sizeof(standard_dns2_address)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2474,8 +2442,8 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
                                                 dcpregs_write_92_wlan_security);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("none")), 4));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2483,7 +2451,8 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents);
 
-    mock_messages->expect_msg_info("Ignoring wireless parameters for active wired interface");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                                    "Ignoring wireless parameters for active wired interface");
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 3 + 2 * 4; ++i)
@@ -2540,8 +2509,8 @@ static void set_wlan_security_mode(const char *requested_security_mode)
                                                 dcpregs_write_92_wlan_security);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(requested_security_mode)), strlen(requested_security_mode)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2623,8 +2592,8 @@ void test_set_wlan_security_mode_wep()
                                                 dcpregs_write_92_wlan_security);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("wep")), 3));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2658,8 +2627,8 @@ void test_set_invalid_wlan_security_mode()
                                                 dcpregs_write_92_wlan_security);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("foo")), 3));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2786,8 +2755,8 @@ static void set_passphrase_with_security_mode(const char *passphrase,
                                           dcpregs_write_92_wlan_security);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(connman_security_mode)), strlen(connman_security_mode)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2984,8 +2953,8 @@ void test_set_passphrase_without_security_mode_does_not_work()
                                                 dcpregs_write_102_passphrase);
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(passphrase)), sizeof(passphrase) - 1));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3086,7 +3055,8 @@ void test_get_wlan_passphrase_in_regular_mode()
                                                 dcpregs_read_102_passphrase,
                                                 dcpregs_write_102_passphrase);
 
-    mock_messages->expect_msg_info("Passphrase cannot be read out while in non-edit mode");
+    mock_messages->expect_msg_error(0, LOG_NOTICE,
+                                    "Passphrase cannot be read out while in non-edit mode");
 
     cppcut_assert_equal(ssize_t(-1), reg->read_handler(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
@@ -3118,8 +3088,8 @@ void test_set_simple_ascii_wlan_ssid()
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ssid)), sizeof(ssid) - 1));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3183,8 +3153,8 @@ void test_set_binary_wlan_ssid()
 
     cppcut_assert_equal(0, reg->write_handler(ssid, sizeof(ssid)));
 
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3573,7 +3543,8 @@ void test_configuration_update_is_blocked_after_shutdown()
 {
     start_ipv4_config();
 
-    mock_messages->expect_msg_info_formatted("Shutdown guard \"networkconfig\" down");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Shutdown guard \"networkconfig\" down");
     dcpregs_networkconfig_prepare_for_shutdown();
 
     /* in-memory edits are still working... */
@@ -3582,13 +3553,12 @@ void test_configuration_update_is_blocked_after_shutdown()
                                                 dcpregs_write_55_dhcp_enabled);
     static const uint8_t zero = 0;
 
-    mock_messages->expect_msg_info("write 55 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Disable DHCP");
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
 
     /* ...but writing to file is blocked */
-    mock_messages->expect_msg_info("write 53 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
     mock_messages->expect_msg_info("Not writing network configuration during shutdown.");
     commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
 }
@@ -3598,10 +3568,12 @@ void test_configuration_update_is_blocked_after_shutdown()
  */
 void test_shutdown_can_be_called_only_once()
 {
-    mock_messages->expect_msg_info_formatted("Shutdown guard \"networkconfig\" down");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Shutdown guard \"networkconfig\" down");
     dcpregs_networkconfig_prepare_for_shutdown();
 
-    mock_messages->expect_msg_info_formatted("Shutdown guard \"networkconfig\" down");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Shutdown guard \"networkconfig\" down");
     dcpregs_networkconfig_prepare_for_shutdown();
 }
 
@@ -3881,11 +3853,16 @@ void cut_setup()
     mock_os->init();
     mock_os_singleton = mock_os;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     os_write_buffer.clear();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(NULL);
@@ -3919,7 +3896,6 @@ void test_read_out_default_friendly_name()
                                                 dcpregs_write_88_upnp_friendly_name);
     cppcut_assert_not_null(reg);
 
-    mock_messages->expect_msg_info("read 88 handler %p %zu");
     mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
 
     uint8_t buffer[64];
@@ -3942,7 +3918,6 @@ static void write_and_read_name(const char *name,
 
     const size_t name_length = strlen(name);
 
-    mock_messages->expect_msg_info("write 88 handler %p %zu");
     mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
     mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
@@ -3971,7 +3946,6 @@ static void write_and_read_name(const char *name,
         .length = size_t(config_len),
     };
 
-    mock_messages->expect_msg_info("read 88 handler %p %zu");
     mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
     mock_os->expect_os_unmap_file(&config_file);
 
@@ -4015,10 +3989,9 @@ void test_writing_same_name_does_not_change_files_nor_flagpole_service()
 
     static const char upnp_name[] = "My UPnP Device";
 
-    mock_messages->expect_msg_info("write 88 handler %p %zu");
     mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
     mock_os->expect_os_unmap_file(&config_file);
-    mock_messages->expect_msg_info("UPnP name unchanged");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "UPnP name unchanged");
 
     cppcut_assert_equal(0, reg->write_handler((const uint8_t *)upnp_name, sizeof(upnp_name)));
 }
@@ -4095,13 +4068,18 @@ void cut_setup()
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     os_write_buffer.clear();
 
     register_changed_data->init();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(register_changed_callback);
@@ -4159,27 +4137,21 @@ void test_download_url_length_restrictions()
     url_buffer[0] = HCR_FILE_TRANSFER_CRC_MODE_NONE;
     url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info("Cleared URL");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
     cppcut_assert_equal(0, reg->write_handler(url_buffer, 0));
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 1 (expected 9...1032) (Invalid argument)");
     cppcut_assert_equal(-1, reg->write_handler(url_buffer, 1));
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 8 (expected 9...1032) (Invalid argument)");
     cppcut_assert_equal(-1, reg->write_handler(url_buffer, 8));
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_info_formatted("Set URL \"x\"");
     cppcut_assert_equal(0, reg->write_handler(url_buffer, 9));
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 1033 (expected 9...1032) (Invalid argument)");
     cppcut_assert_equal(-1, reg->write_handler(url_buffer, sizeof(url_buffer)));
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_info("Set URL \"%s\"");
     cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer) - 1));
 }
@@ -4194,7 +4166,6 @@ static void start_download(const std::string &url, uint32_t download_id)
 
     auto *reg =
         lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
     mock_messages->expect_msg_info("Set URL \"%s\"");
 
     cppcut_assert_equal(0, reg->write_handler(url_buffer, 8 + url.length()));
@@ -4203,7 +4174,6 @@ static void start_download(const std::string &url, uint32_t download_id)
         { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD };
 
     reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
-    mock_messages->expect_msg_info("write 40 handler %p %zu");
 
     int expected_write_handler_retval;
 
@@ -4229,8 +4199,7 @@ static void cancel_download(uint32_t download_id)
 {
     auto *reg =
         lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info("Cleared URL");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
     mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
     mock_file_transfer_dbus->expect_tdbus_file_transfer_call_cancel_sync(
         TRUE, dbus_dcpd_file_transfer_iface_dummy, download_id);
@@ -4261,7 +4230,6 @@ void test_download_without_url_returns_error()
     auto *reg =
         lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
 
-    mock_messages->expect_msg_info("write 40 handler %p %zu");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE,
                                               "Download URL not configured (Invalid argument)");
 
@@ -4274,7 +4242,6 @@ static void get_download_status(uint8_t (&buffer)[2])
         lookup_register_expect_handlers(41, dcpregs_read_41_download_status,
                                         NULL);
 
-    mock_messages->expect_msg_info("read 41 handler %p %zu");
     cppcut_assert_equal(static_cast<ssize_t>(sizeof(buffer)),
                         reg->read_handler(buffer, sizeof(buffer)));
 }
@@ -4443,7 +4410,6 @@ void test_send_reboot_request()
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
 
-    mock_messages->expect_msg_info("write 40 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_reboot_sync(true, dbus_logind_manager_iface_dummy, false);
     cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
@@ -4456,9 +4422,9 @@ void test_transfer_is_interrupted_on_shutdown()
 {
     start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 99);
 
-    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info("Cleared URL");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Shutdown guard \"filetransfer\" down");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
     mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
     mock_file_transfer_dbus->expect_tdbus_file_transfer_call_cancel_sync(
         TRUE, dbus_dcpd_file_transfer_iface_dummy, 99);
@@ -4470,9 +4436,9 @@ void test_transfer_is_interrupted_on_shutdown()
  */
 void test_new_transfer_is_blocked_after_shutdown()
 {
-    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info("Cleared URL");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Shutdown guard \"filetransfer\" down");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
     dcpregs_filetransfer_prepare_for_shutdown();
 
     start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 0);
@@ -4483,12 +4449,13 @@ void test_new_transfer_is_blocked_after_shutdown()
  */
 void test_shutdown_can_be_called_only_once()
 {
-    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info("Cleared URL");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Shutdown guard \"filetransfer\" down");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
     dcpregs_filetransfer_prepare_for_shutdown();
 
-    mock_messages->expect_msg_info_formatted("Shutdown guard \"filetransfer\" down");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Shutdown guard \"filetransfer\" down");
     dcpregs_filetransfer_prepare_for_shutdown();
 }
 
@@ -4521,8 +4488,8 @@ void test_set_update_package_feed_configuration()
     url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
     memcpy(url_buffer + 8, url, sizeof(url) - 1);
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Set package update URL \"http://updates.ta-hifi.de/StrBo\" for release \"testing\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Set package update URL \"http://updates.ta-hifi.de/StrBo\" for release \"testing\"");
 
     static char config_file_buffer[] =
         "[global]\n"
@@ -4608,8 +4575,8 @@ void test_set_update_package_feed_configuration()
     /* probe opkg feed configuration files, then read update feed configuration
      * from our file, then generate opkg configuration files, then start the
      * update */
-    mock_messages->expect_msg_info("write 40 handler %p %zu");
-    mock_messages->expect_msg_info("Attempting to START SYSTEM UPDATE");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                                    "Attempting to START SYSTEM UPDATE");
 
     mock_os->expect_os_foreach_in_path(true, opkg_configuration_path, items_after);
 
@@ -4669,8 +4636,8 @@ void test_set_update_package_feed_configuration()
  */
 void test_feed_configuration_file_is_created_on_system_update_if_does_not_exist()
 {
-    mock_messages->expect_msg_info("write 40 handler %p %zu");
-    mock_messages->expect_msg_info("Attempting to START SYSTEM UPDATE");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                                    "Attempting to START SYSTEM UPDATE");
 
     mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
 
@@ -4737,8 +4704,8 @@ void test_feed_configuration_file_is_created_on_config_if_does_not_exist()
     url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
     memcpy(url_buffer + 8, url, sizeof(url) - 1);
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Set package update URL \"http://dev.tua.local/Test\" for release \"experimental\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Set package update URL \"http://dev.tua.local/Test\" for release \"experimental\"");
 
     mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
     mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
@@ -4777,8 +4744,8 @@ void test_feed_configurations_with_trailing_zero_bytes_are_accepted()
     url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
     memcpy(url_buffer + 8, url, sizeof(url) - 1);
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-    mock_messages->expect_msg_info_formatted("Set package update URL \"http://dev.tua.local/foo\" for release \"bar\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+        "Set package update URL \"http://dev.tua.local/foo\" for release \"bar\"");
 
     mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
     mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
@@ -4819,8 +4786,6 @@ void test_feed_configuration_file_remains_unchanged_if_passed_config_is_same()
     url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
     memcpy(url_buffer + 8, url, sizeof(url) - 1);
 
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
-
     static char config_file_buffer[] =
         "[global]\n"
         "release = way\n"
@@ -4860,8 +4825,6 @@ void test_feed_configuration_with_more_than_two_fields_is_accepted()
     memset(url_buffer, 0, 8);
     url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
     memcpy(url_buffer + 8, url, sizeof(url) - 1);
-
-    mock_messages->expect_msg_info("write 209 handler %p %zu");
 
     static char config_file_buffer[] =
         "[global]\n"
@@ -4942,11 +4905,16 @@ void cut_setup()
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     register_changed_data->init();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(register_changed_callback);
@@ -4990,8 +4958,6 @@ static void set_start_title(const uint8_t *title, size_t length)
 {
     const auto *const reg = register_lookup(78);
 
-    mock_messages->expect_msg_info("write 78 handler %p %zu");
-
     cppcut_assert_equal(0, reg->write_handler(title, length));
 }
 
@@ -4999,16 +4965,12 @@ static void set_start_title(const std::string title)
 {
     const auto *const reg = register_lookup(78);
 
-    mock_messages->expect_msg_info("write 78 handler %p %zu");
-
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
 }
 
 static void set_next_title(const std::string title)
 {
     const auto *const reg = register_lookup(238);
-
-    mock_messages->expect_msg_info("write 238 handler %p %zu");
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
 }
@@ -5022,7 +4984,6 @@ static void set_start_url(const std::string expected_artist,
 {
     const auto *const reg = register_lookup(79);
 
-    mock_messages->expect_msg_info("write 79 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
             dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
@@ -5047,7 +5008,6 @@ static void set_start_url(const std::string expected_artist,
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
 
     uint8_t buffer[8];
-    mock_messages->expect_msg_info("read 79 handler %p %zu");
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
 }
 
@@ -5094,8 +5054,6 @@ static void set_next_url(const std::string title, const std::string url,
 {
     const auto *const reg = register_lookup(239);
 
-    mock_messages->expect_msg_info("write 239 handler %p %zu");
-
     if(assume_is_app_mode)
     {
         mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -5126,8 +5084,6 @@ static void expect_current_title(const std::string &expected_title)
 {
     const auto *const reg = register_lookup(75);
 
-    mock_messages->expect_msg_info("read 75 handler %p %zu");
-
     char buffer[150];
     const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
     cppcut_assert_operator(ssize_t(sizeof(buffer)), >, len);
@@ -5139,8 +5095,6 @@ static void expect_current_title(const std::string &expected_title)
 static void expect_current_url(const std::string &expected_url)
 {
     const auto *const reg = register_lookup(76);
-
-    mock_messages->expect_msg_info("read 76 handler %p %zu");
 
     char buffer[600];
     const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
@@ -5160,8 +5114,6 @@ static void expect_current_title_and_url(const std::string &expected_title,
 static void expect_next_url_empty()
 {
     const auto *const reg = register_lookup(239);
-
-    mock_messages->expect_msg_info("read 239 handler %p %zu");
 
     uint8_t buffer[16];
     memset(buffer, UINT8_MAX, sizeof(buffer));
@@ -5192,7 +5144,6 @@ static void stop_stream()
 {
     const auto *const reg = register_lookup(79);
 
-    mock_messages->expect_msg_info("write 79 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
 
@@ -5830,11 +5781,16 @@ void cut_setup()
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     register_changed_data->init();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(register_changed_callback);
@@ -5885,7 +5841,6 @@ void test_read_out_empty_external_media_services()
 
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories;
 
-    mock_messages->expect_msg_info("read 106 handler");
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
 
@@ -5908,8 +5863,6 @@ void test_read_out_external_media_services()
                                                 dcpregs_write_106_media_service_list);
 
     /* survey */
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
-
     static const uint8_t dummy = 0;
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
@@ -5946,7 +5899,6 @@ void test_read_out_external_media_services()
         std::make_pair("Not the default", "funny&\"42>"),
     };
 
-    mock_messages->expect_msg_info("read 106 handler");
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
@@ -5996,8 +5948,6 @@ void test_read_out_unconfigured_external_media_services()
                                                 dcpregs_write_106_media_service_list);
 
     /* survey */
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
-
     static const uint8_t dummy = 0;
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
@@ -6015,7 +5965,6 @@ void test_read_out_unconfigured_external_media_services()
 
     const MockCredentialsDBus::ReadGetCredentialsData no_accounts;
 
-    mock_messages->expect_msg_info("read 106 handler");
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
@@ -6048,8 +5997,6 @@ void test_trigger_media_services_survey()
                                                 dcpregs_read_106_media_service_list,
                                                 dcpregs_write_106_media_service_list);
 
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
-
     static const uint8_t dummy = 0;
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
@@ -6067,7 +6014,6 @@ void test_set_service_credentials()
 
     static const uint8_t data[] = "tidal\0login email\0my password";
 
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
@@ -6095,7 +6041,6 @@ void test_password_may_be_zero_terminated()
 
     static const uint8_t data[] = "deezer\0login\0password\0";
 
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
@@ -6123,7 +6068,6 @@ void test_set_service_credentials_requires_service_id()
 
     static const uint8_t data[] = "\0login email\0my password";
 
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
     mock_messages->expect_msg_error(0, EINVAL, "Empty service ID sent to register 106");
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
@@ -6140,7 +6084,6 @@ void test_set_service_credentials_requires_login_for_password()
 
     static const uint8_t data[] = "tidal\0\0my password";
 
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
     mock_messages->expect_msg_error(0, EINVAL, "Empty login sent to register 106");
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
@@ -6157,7 +6100,6 @@ void test_set_service_credentials_requires_password_for_login()
 
     static const uint8_t data[] = "tidal\0login\0";
 
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
     mock_messages->expect_msg_error(0, EINVAL, "Empty password sent to register 106");
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
@@ -6174,7 +6116,6 @@ void test_no_junk_after_password_allowed()
 
     static const uint8_t data[] = "tidal\0login\0password\0\0";
 
-    mock_messages->expect_msg_info("write 106 handler %p %zu");
     mock_messages->expect_msg_error(0, EINVAL, "Malformed data written to register 106");
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
@@ -6209,9 +6150,14 @@ void cut_setup()
     mock_dbus_iface->init();
     mock_dbus_iface_singleton = mock_dbus_iface;
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(NULL);
@@ -6246,7 +6192,6 @@ void test_start_search_in_default_context()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
             dbus_dcpd_views_iface_dummy, "default", nullptr);
@@ -6269,7 +6214,6 @@ void test_search_single_string_in_default_context()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
             dbus_dcpd_views_iface_dummy, "default", key_value_table);
@@ -6296,7 +6240,6 @@ void test_search_with_multiple_parameters_in_usb_context()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
             dbus_dcpd_views_iface_dummy, "usb", key_value_table);
@@ -6319,7 +6262,6 @@ void test_search_parameter_value_must_not_be_empty()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing value in query");
 
     static const char query[] = "default\0text0=";
@@ -6334,7 +6276,6 @@ void test_search_parameter_variable_must_not_be_empty()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing ID in query");
 
     static const char query[] = "default\0=Some search string";
@@ -6349,7 +6290,6 @@ void test_context_must_not_be_empty()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "No search context defined");
 
     static const char query[] = "\0text0=Some search string";
@@ -6364,7 +6304,6 @@ void test_context_must_not_contain_equals_character()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Invalid characters in search context");
 
     static const char query[] = "default=yes\0text0=Some search string";
@@ -6379,7 +6318,6 @@ void test_search_parameter_specification_must_contain_equals_character()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing assignment in query");
 
     static const char query[] = "default\0text0 Some search string";
@@ -6394,7 +6332,6 @@ void test_search_parameter_specification_must_not_be_empty()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Empty query");
 
     static const char query[] = "default\0";
@@ -6409,7 +6346,6 @@ void test_embedded_search_parameter_specification_must_not_be_empty()
     auto *reg = lookup_register_expect_handlers(74,
                                                 dcpregs_write_74_search_parameters);
 
-    mock_messages->expect_msg_info("write 74 handler %p %zu");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Empty query");
 
     static const char query[] = "default\0text0=My Query\0";
@@ -6450,11 +6386,16 @@ void cut_setup()
     mock_os->init();
     mock_os_singleton = mock_os;
 
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
     register_changed_data->init();
 
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"networkconfig\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"filetransfer\"");
-    mock_messages->expect_msg_info_formatted("Allocated shutdown guard \"upnpname\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(register_changed_callback);
@@ -6518,7 +6459,6 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
 
     mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
-    mock_messages->expect_msg_info("read 37 handler %p %zu");
 
     if(expected_warning != nullptr)
         mock_messages->expect_msg_error_formatted(0, LOG_NOTICE, expected_warning);
@@ -6738,7 +6678,6 @@ void test_status_byte_without_ready_notification_is_all_zero()
 {
     auto *reg = register_lookup(17);
     uint8_t buffer[2];
-    mock_messages->expect_msg_info("read 17 handler %p %zu");
     cppcut_assert_equal((ssize_t)sizeof(buffer),
                         reg->read_handler(buffer, sizeof(buffer)));
 
@@ -6756,7 +6695,6 @@ void test_status_byte_after_ready_notification()
 
     auto *reg = register_lookup(17);
     uint8_t buffer[2];
-    mock_messages->expect_msg_info("read 17 handler %p %zu");
     cppcut_assert_equal((ssize_t)sizeof(buffer),
                         reg->read_handler(buffer, sizeof(buffer)));
 
@@ -6778,7 +6716,6 @@ void test_status_byte_after_shutdown_notification()
 
     auto *reg = register_lookup(17);
     uint8_t buffer[2];
-    mock_messages->expect_msg_info("read 17 handler %p %zu");
     cppcut_assert_equal((ssize_t)sizeof(buffer),
                         reg->read_handler(buffer, sizeof(buffer)));
 
@@ -6799,7 +6736,6 @@ void test_status_byte_after_reboot_required_notification()
 
     auto *reg = register_lookup(17);
     uint8_t buffer[2];
-    mock_messages->expect_msg_info("read 17 handler %p %zu");
     cppcut_assert_equal((ssize_t)sizeof(buffer),
                         reg->read_handler(buffer, sizeof(buffer)));
 
