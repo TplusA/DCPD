@@ -48,7 +48,7 @@ tdbuscredentialsWrite *dbus_get_credentials_write_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
 tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path);
-tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *path);
+tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *path, gint timeout_sec);
 
 tdbuslogindManager *dbus_get_logind_manager_iface(void);
 

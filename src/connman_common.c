@@ -45,7 +45,7 @@ void connman_common_set_service_property(const char *object_path,
                                          GVariant *value)
 {
     tdbusconnmanService *proxy =
-        dbus_get_connman_service_proxy_for_object_path(object_path);
+        dbus_get_connman_service_proxy_for_object_path(object_path, -1);
 
     if(proxy == NULL)
         return;
@@ -120,8 +120,11 @@ static bool prepare_service_connect_request(struct ConnectToServiceData *data,
         fn(object_path, CONNMAN_SERVICE_CONNECT_FAILURE, user_data);
     else
     {
+        static const int wlan_connect_timeout_seconds = 60;
+
         data->proxy =
-            dbus_get_connman_service_proxy_for_object_path(object_path);
+            dbus_get_connman_service_proxy_for_object_path(object_path,
+                                                           wlan_connect_timeout_seconds);
 
         if(data->proxy != NULL)
             return true;
@@ -228,7 +231,7 @@ void connman_common_connect_service_by_object_path(const char *object_path,
 void connman_common_disconnect_service_by_object_path(const char *object_path)
 {
     tdbusconnmanService *proxy =
-        dbus_get_connman_service_proxy_for_object_path(object_path);
+        dbus_get_connman_service_proxy_for_object_path(object_path, -1);
 
     if(proxy == NULL)
         return;
@@ -246,7 +249,7 @@ void connman_common_disconnect_service_by_object_path(const char *object_path)
 void connman_common_remove_service_by_object_path(const char *object_path)
 {
     tdbusconnmanService *proxy =
-        dbus_get_connman_service_proxy_for_object_path(object_path);
+        dbus_get_connman_service_proxy_for_object_path(object_path, -1);
 
     if(proxy == NULL)
         return;

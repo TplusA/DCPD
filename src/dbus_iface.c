@@ -613,7 +613,8 @@ tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const 
     return proxy;
 }
 
-tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *path)
+tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *path,
+                                                                    gint timeout_sec)
 {
     GDBusConnection *connection =
         g_dbus_proxy_get_connection(G_DBUS_PROXY(dbus_get_connman_manager_iface()));
@@ -625,7 +626,13 @@ tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *
                                              G_DBUS_PROXY_FLAGS_NONE,
                                              "net.connman", strdup(path),
                                              NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+
+    if(dbus_common_handle_dbus_error(&error) == 0)
+    {
+        if(timeout_sec > 0 && timeout_sec <= 600)
+            g_dbus_proxy_set_default_timeout(G_DBUS_PROXY(proxy),
+                                             timeout_sec * 1000);
+    }
 
     return proxy;
 }
