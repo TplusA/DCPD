@@ -204,6 +204,25 @@ static bool avoid_service_if_no_preferences(const char *service_name,
     return true;
 }
 
+static void configure_our_ipv6_network_common(const char *service_name)
+{
+    /* All we are doing about IPv6 is to disable it---sad. :( */
+    msg_vinfo(MESSAGE_LEVEL_DEBUG,
+              "Disable IPv6 for service %s", service_name);
+
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+
+    g_variant_builder_add(&builder, "{sv}", "Method", g_variant_new_string("off"));
+
+    GVariant *ipv6_config =
+        g_variant_new_variant(g_variant_builder_end(&builder));
+
+    if(ipv6_config != NULL)
+        connman_common_set_service_property(service_name,
+                                            "IPv6.Configuration", ipv6_config);
+}
+
 static bool configure_our_ipv4_network_common(const char *service_name,
                                               const struct network_prefs *prefs,
                                               bool is_ethernet,
@@ -297,6 +316,7 @@ static inline void configure_our_lan(const char *service_name,
 
     bool dummy1, dummy2;
 
+    configure_our_ipv6_network_common(service_name);
     configure_our_ipv4_network_common(service_name, prefs, true,
                                       &dummy1, &dummy2);
 }
@@ -312,6 +332,8 @@ static bool configure_our_wlan(const char *service_name,
 
     bool is_favorite;
     bool is_auto_connect;
+
+    configure_our_ipv6_network_common(service_name);
 
     if(!configure_our_ipv4_network_common(service_name, prefs, false,
                                           &is_favorite, &is_auto_connect))
