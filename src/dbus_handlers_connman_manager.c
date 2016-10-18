@@ -181,6 +181,29 @@ static void avoid_wlan_service(const char *service_name)
     connman_common_remove_service_by_object_path(service_name);
 }
 
+static void avoid_service(const char *service_name, bool is_ethernet)
+{
+    if(is_ethernet)
+        connman_common_disconnect_service_by_object_path(service_name);
+    else
+        avoid_wlan_service(service_name);
+}
+
+static bool avoid_service_if_no_preferences(const char *service_name,
+                                            const struct network_prefs *prefs,
+                                            bool is_ethernet)
+{
+    if(prefs != NULL)
+        return false;
+
+    avoid_service(service_name, is_ethernet);
+
+    BUG("Cannot configure ConnMan service \"%s\": no preferences",
+        service_name);
+
+    return true;
+}
+
 static bool configure_our_ipv4_network_common(const char *service_name,
                                               const struct network_prefs *prefs,
                                               bool is_ethernet,
@@ -193,19 +216,6 @@ static bool configure_our_ipv4_network_common(const char *service_name,
     *is_favorite = false;
     *is_auto_connect = false;
 
-    if(prefs == NULL)
-    {
-        if(is_ethernet)
-            connman_common_disconnect_service_by_object_path(service_name);
-        else
-            avoid_wlan_service(service_name);
-
-        BUG("Cannot configure ConnMan service \"%s\": no preferences",
-            service_name);
-
-        return false;
-    }
-
     bool want_dhcp;
     const char *want_address;
     const char *want_netmask;
@@ -217,11 +227,7 @@ static bool configure_our_ipv4_network_common(const char *service_name,
                                         &want_netmask, &want_gateway,
                                         &want_dns1, &want_dns2))
     {
-        if(is_ethernet)
-            connman_common_disconnect_service_by_object_path(service_name);
-        else
-            avoid_wlan_service(service_name);
-
+        avoid_service(service_name, is_ethernet);
         return false;
     }
 
@@ -286,6 +292,9 @@ static bool configure_our_ipv4_network_common(const char *service_name,
 static inline void configure_our_lan(const char *service_name,
                                      const struct network_prefs *prefs)
 {
+    if(avoid_service_if_no_preferences(service_name, prefs, true))
+        return;
+
     bool dummy1, dummy2;
 
     configure_our_ipv4_network_common(service_name, prefs, true,
@@ -298,6 +307,9 @@ static bool configure_our_wlan(const char *service_name,
                                bool have_just_lost_ethernet_device,
                                bool make_it_favorite)
 {
+    if(avoid_service_if_no_preferences(service_name, prefs, false))
+        return false;
+
     bool is_favorite;
     bool is_auto_connect;
 
