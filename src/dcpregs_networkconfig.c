@@ -363,7 +363,7 @@ static bool query_dhcp_mode(void)
     struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
     bool ret = (iface_data != NULL)
         ? (connman_get_dhcp_mode(iface_data,
-                                 CONNMAN_READ_CONFIG_SOURCE_REQUESTED) == CONNMAN_DHCP_ON)
+                                 CONNMAN_READ_CONFIG_SOURCE_CURRENT) == CONNMAN_DHCP_ON)
         : false;
     connman_free_interface_data(iface_data);
 
@@ -838,7 +838,7 @@ static void fill_network_status_register_response(uint8_t response[static 2])
 
         if(result[0] != '\0')
             response[0] = (connman_get_dhcp_mode(iface_data,
-                                                 CONNMAN_READ_CONFIG_SOURCE_REQUESTED) ==
+                                                 CONNMAN_READ_CONFIG_SOURCE_CURRENT) ==
                            CONNMAN_DHCP_ON) ? 0x02 : 0x01;
     }
     else if(fallback_iface_data != NULL)

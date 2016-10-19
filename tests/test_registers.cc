@@ -1755,7 +1755,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface,
-                                       CONNMAN_READ_CONFIG_SOURCE_REQUESTED);
+                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
@@ -1779,7 +1779,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
-                                       CONNMAN_READ_CONFIG_SOURCE_REQUESTED);
+                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
@@ -1802,7 +1802,7 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
 
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
-                                       CONNMAN_READ_CONFIG_SOURCE_REQUESTED);
+                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
