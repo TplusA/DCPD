@@ -106,7 +106,8 @@ static bool ipv4_settings_are_different(const char *service_name,
 
     char buffer[64];
 
-    const enum ConnmanDHCPMode system_dhcp_mode = connman_get_dhcp_mode(data, false);
+    const enum ConnmanDHCPMode system_dhcp_mode =
+        connman_get_dhcp_mode(data, CONNMAN_READ_CONFIG_SOURCE_CURRENT);
 
     switch(system_dhcp_mode)
     {
@@ -128,15 +129,21 @@ static bool ipv4_settings_are_different(const char *service_name,
         if(with_dhcp)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_address_string(data, buffer, sizeof(buffer)) &&
+        if(connman_get_ipv4_address_string(data,
+                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                           buffer, sizeof(buffer)) &&
            strcmp(address, buffer) != 0)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_netmask_string(data, buffer, sizeof(buffer)) &&
+        if(connman_get_ipv4_netmask_string(data,
+                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                           buffer, sizeof(buffer)) &&
            strcmp(nm, buffer) != 0)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_gateway_string(data, buffer, sizeof(buffer)) &&
+        if(connman_get_ipv4_gateway_string(data,
+                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                           buffer, sizeof(buffer)) &&
            strcmp(gw, buffer) != 0)
             goto ipv4_check_done;
 
@@ -150,14 +157,14 @@ static bool ipv4_settings_are_different(const char *service_name,
     *different_ipv4_config = false;
 
 ipv4_check_done:
-    if(connman_get_ipv4_primary_dns_string(data, buffer, sizeof(buffer)))
+    if(connman_get_primary_dns_string(data, buffer, sizeof(buffer)))
     {
         if((dns1 != NULL && strcmp(dns1, buffer) != 0) ||
            (dns1 == NULL && system_dhcp_mode != CONNMAN_DHCP_ON && buffer[0] != '\0'))
             goto dns_check_done;
     }
 
-    if(connman_get_ipv4_secondary_dns_string(data, buffer, sizeof(buffer)))
+    if(connman_get_secondary_dns_string(data, buffer, sizeof(buffer)))
     {
         if((dns2 != NULL && strcmp(dns2, buffer) != 0) ||
            (dns2 == NULL && system_dhcp_mode != CONNMAN_DHCP_ON && buffer[0] != '\0'))

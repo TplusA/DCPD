@@ -314,13 +314,15 @@ bool connman_get_auto_connect_mode(struct ConnmanInterfaceData *iface_data)
 }
 
 enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
-                                           bool from_user_config)
+                                           enum ConnmanReadConfigSource src)
 {
     log_assert(iface_data != NULL);
 
     GVariantDict dict;
     connman_common_init_subdict((GVariant *)iface_data, &dict,
-                                from_user_config ? "IPv4.Configuration" : "IPv4");
+                                (src == CONNMAN_READ_CONFIG_SOURCE_REQUESTED)
+                                ? "IPv4.Configuration"
+                                : "IPv4");
 
     GVariant *method_variant =
         g_variant_dict_lookup_value(&dict, "Method", G_VARIANT_TYPE_STRING);
@@ -344,7 +346,11 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
     else if(strcmp(method, "fixed") == 0)
         retval = CONNMAN_DHCP_FIXED;
     else
+    {
+        msg_error(0, LOG_WARNING,
+                  "IPv4 configuration method not specified by ConnMan");
         retval = CONNMAN_DHCP_NOT_SPECIFIED;
+    }
 
     g_variant_unref(method_variant);
     g_variant_dict_clear(&dict);
@@ -443,6 +449,7 @@ enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_da
 }
 
 static bool get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
+                                      enum ConnmanReadConfigSource src,
                                       const char *parameter_name,
                                       char *dest, size_t dest_size)
 {
@@ -454,7 +461,10 @@ static bool get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
     dest[0] = '\0';
 
     GVariantDict dict;
-    connman_common_init_subdict((GVariant *)iface_data, &dict, "IPv4");
+    connman_common_init_subdict((GVariant *)iface_data, &dict,
+                                (src == CONNMAN_READ_CONFIG_SOURCE_REQUESTED)
+                                ? "IPv4.Configuration"
+                                : "IPv4");
 
     GVariant *ipv4_parameter_variant =
         g_variant_dict_lookup_value(&dict, parameter_name, G_VARIANT_TYPE_STRING);
@@ -475,21 +485,24 @@ static bool get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
 }
 
 bool connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+                                     enum ConnmanReadConfigSource src,
                                      char *dest, size_t dest_size)
 {
-    return get_ipv4_parameter_string(iface_data, "Address", dest, dest_size);
+    return get_ipv4_parameter_string(iface_data, src, "Address", dest, dest_size);
 }
 
 bool connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
+                                     enum ConnmanReadConfigSource src,
                                      char *dest, size_t dest_size)
 {
-    return get_ipv4_parameter_string(iface_data, "Netmask", dest, dest_size);
+    return get_ipv4_parameter_string(iface_data, src, "Netmask", dest, dest_size);
 }
 
 bool connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
+                                     enum ConnmanReadConfigSource src,
                                      char *dest, size_t dest_size)
 {
-    return get_ipv4_parameter_string(iface_data, "Gateway", dest, dest_size);
+    return get_ipv4_parameter_string(iface_data, src, "Gateway", dest, dest_size);
 }
 
 static bool get_nameserver_string(struct ConnmanInterfaceData *iface_data,
@@ -529,14 +542,14 @@ static bool get_nameserver_string(struct ConnmanInterfaceData *iface_data,
     return dns_array != NULL;
 }
 
-bool connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                         char *dest, size_t dest_size)
+bool connman_get_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                    char *dest, size_t dest_size)
 {
     return get_nameserver_string(iface_data, 0, dest, dest_size);
 }
 
-bool connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                           char *dest, size_t dest_size)
+bool connman_get_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                      char *dest, size_t dest_size)
 {
     return get_nameserver_string(iface_data, 1, dest, dest_size);
 }

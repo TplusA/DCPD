@@ -39,6 +39,12 @@ enum ConnmanConnectionType
     CONNMAN_CONNECTION_TYPE_WLAN,
 };
 
+enum ConnmanReadConfigSource
+{
+    CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+    CONNMAN_READ_CONFIG_SOURCE_REQUESTED,
+};
+
 /*!
  * WLAN site survey result.
  *
@@ -112,19 +118,22 @@ connman_find_active_primary_interface(const char *default_mac_address,
 bool connman_get_favorite(struct ConnmanInterfaceData *iface_data);
 bool connman_get_auto_connect_mode(struct ConnmanInterfaceData *iface_data);
 enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
-                                           bool from_user_config);
+                                           enum ConnmanReadConfigSource src);
 enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
 enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_data);
 bool connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
+                                     enum ConnmanReadConfigSource src,
                                      char *dest, size_t dest_size);
 bool connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
+                                     enum ConnmanReadConfigSource src,
                                      char *dest, size_t dest_size);
 bool connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
+                                     enum ConnmanReadConfigSource src,
                                      char *dest, size_t dest_size);
-bool connman_get_ipv4_primary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                         char *dest, size_t dest_size);
-bool connman_get_ipv4_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                           char *dest, size_t dest_size);
+bool connman_get_primary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                    char *dest, size_t dest_size);
+bool connman_get_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
+                                      char *dest, size_t dest_size);
 bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
                                            char *dest, size_t dest_size);
 size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,

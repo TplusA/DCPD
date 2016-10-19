@@ -313,10 +313,10 @@ static void fill_in_missing_dns_server_config_requests(void)
         previous_primary[0] = previous_secondary[0] = '\0';
     else
     {
-        connman_get_ipv4_primary_dns_string(iface_data, previous_primary,
-                                            sizeof(previous_primary));
-        connman_get_ipv4_secondary_dns_string(iface_data, previous_secondary,
-                                              sizeof(previous_secondary));
+        connman_get_primary_dns_string(iface_data, previous_primary,
+                                       sizeof(previous_primary));
+        connman_get_secondary_dns_string(iface_data, previous_secondary,
+                                         sizeof(previous_secondary));
         connman_free_interface_data(iface_data);
     }
 
@@ -362,7 +362,8 @@ static bool query_dhcp_mode(void)
 {
     struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
     bool ret = (iface_data != NULL)
-        ? (connman_get_dhcp_mode(iface_data, true) == CONNMAN_DHCP_ON)
+        ? (connman_get_dhcp_mode(iface_data,
+                                 CONNMAN_READ_CONFIG_SOURCE_REQUESTED) == CONNMAN_DHCP_ON)
         : false;
     connman_free_interface_data(iface_data);
 
@@ -831,10 +832,14 @@ static void fill_network_status_register_response(uint8_t response[static 2])
 
         char result[2];
 
-        connman_get_ipv4_address_string(iface_data, result, sizeof(result));
+        connman_get_ipv4_address_string(iface_data,
+                                        CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                        result, sizeof(result));
 
         if(result[0] != '\0')
-            response[0] = (connman_get_dhcp_mode(iface_data, true) == CONNMAN_DHCP_ON) ? 0x02 : 0x01;
+            response[0] = (connman_get_dhcp_mode(iface_data,
+                                                 CONNMAN_READ_CONFIG_SOURCE_REQUESTED) ==
+                           CONNMAN_DHCP_ON) ? 0x02 : 0x01;
     }
     else if(fallback_iface_data != NULL)
     {
@@ -957,10 +962,11 @@ int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
 }
 
 static ssize_t
-read_ipv4_parameter(uint32_t requested_mask,
-                    const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
-                    bool (*connman_query_fn)(struct ConnmanInterfaceData *, char *, size_t),
-                    uint8_t *response, size_t length)
+read_ip_parameter(uint32_t requested_mask,
+                  const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
+                  bool (*connman_query_fn)(struct ConnmanInterfaceData *,
+                                           char *, size_t),
+                  uint8_t *response, size_t length)
 {
     if(data_length_is_unexpectedly_small(length, SIZE_OF_IPV4_ADDRESS_STRING))
         return -1;
@@ -973,6 +979,35 @@ read_ipv4_parameter(uint32_t requested_mask,
 
         if(iface_data != NULL)
             connman_query_fn(iface_data, (char *)response, length);
+        else
+            response[0] = '\0';
+
+        connman_free_interface_data(iface_data);
+    }
+
+    return strlen((char *)response) + 1;
+}
+
+static ssize_t
+read_ipv4_parameter(uint32_t requested_mask,
+                    const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
+                    bool (*connman_query_fn)(struct ConnmanInterfaceData *,
+                                             enum ConnmanReadConfigSource,
+                                             char *, size_t),
+                    uint8_t *response, size_t length)
+{
+    if(data_length_is_unexpectedly_small(length, SIZE_OF_IPV4_ADDRESS_STRING))
+        return -1;
+
+    if(in_edit_mode() && IS_REQUESTED(requested_mask))
+        memcpy(response, edited_ipv4_parameter, SIZE_OF_IPV4_ADDRESS_STRING);
+    else
+    {
+        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+
+        if(iface_data != NULL)
+            connman_query_fn(iface_data, CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                             (char *)response, length);
         else
             response[0] = '\0';
 
@@ -1016,20 +1051,20 @@ ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 62 handler %p %zu", response, length);
 
-    return read_ipv4_parameter(REQ_DNS_SERVER1_62,
-                               nwconfig_write_data.ipv4_dns_server1,
-                               connman_get_ipv4_primary_dns_string,
-                               response, length);
+    return read_ip_parameter(REQ_DNS_SERVER1_62,
+                             nwconfig_write_data.ipv4_dns_server1,
+                             connman_get_primary_dns_string,
+                             response, length);
 }
 
 ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 63 handler %p %zu", response, length);
 
-    return read_ipv4_parameter(REQ_DNS_SERVER2_63,
-                               nwconfig_write_data.ipv4_dns_server2,
-                               connman_get_ipv4_secondary_dns_string,
-                               response, length);
+    return read_ip_parameter(REQ_DNS_SERVER2_63,
+                             nwconfig_write_data.ipv4_dns_server2,
+                             connman_get_secondary_dns_string,
+                             response, length);
 }
 
 static size_t trim_trailing_zero_padding(const uint8_t *data, size_t length)

@@ -1754,7 +1754,8 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface, true);
+    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface,
+                                       CONNMAN_READ_CONFIG_SOURCE_REQUESTED);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
@@ -1777,7 +1778,8 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface, true);
+    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
+                                       CONNMAN_READ_CONFIG_SOURCE_REQUESTED);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
@@ -1799,7 +1801,8 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
                                                 dcpregs_write_55_dhcp_enabled);
 
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface, true);
+    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
+                                       CONNMAN_READ_CONFIG_SOURCE_REQUESTED);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
@@ -2060,8 +2063,8 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
     mock_connman->expect_find_active_primary_interface(
         dummy_connman_iface,
         ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_ipv4_primary_dns_string(old_primary_dns, dummy_connman_iface, false, 16);
-    mock_connman->expect_get_ipv4_secondary_dns_string(old_secondary_dns, dummy_connman_iface, false, 16);
+    mock_connman->expect_get_primary_dns_string(old_primary_dns, dummy_connman_iface, false, 16);
+    mock_connman->expect_get_secondary_dns_string(old_secondary_dns, dummy_connman_iface, false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
@@ -2199,9 +2202,9 @@ void test_read_primary_dns_in_edit_mode_before_any_changes()
     char buffer[128];
 
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_get_ipv4_primary_dns_string(assumed_primary_dns,
-                                                     dummy_connman_iface,
-                                                     false, sizeof(buffer));
+    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
+                                                dummy_connman_iface,
+                                                false, sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     ssize_t dns_server_size = reg->read_handler(static_cast<uint8_t *>(static_cast<void *>(buffer)), sizeof(buffer));
@@ -2229,9 +2232,9 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes()
     char buffer[128];
 
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_get_ipv4_secondary_dns_string(assumed_secondary_dns,
-                                                       dummy_connman_iface,
-                                                       false, sizeof(buffer));
+    mock_connman->expect_get_secondary_dns_string(assumed_secondary_dns,
+                                                  dummy_connman_iface,
+                                                  false, sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     ssize_t dns_server_size = reg->read_handler(static_cast<uint8_t *>(static_cast<void *>(buffer)), sizeof(buffer));
@@ -2271,12 +2274,12 @@ void test_replace_primary_dns_server_of_two_servers()
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_ipv4_primary_dns_string(assumed_primary_dns,
-                                                     dummy_connman_iface,
-                                                     false, 16);
-    mock_connman->expect_get_ipv4_secondary_dns_string(assumed_secondary_dns,
-                                                       dummy_connman_iface,
-                                                       false, 16);
+    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
+                                                dummy_connman_iface,
+                                                false, 16);
+    mock_connman->expect_get_secondary_dns_string(assumed_secondary_dns,
+                                                  dummy_connman_iface,
+                                                  false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 3 + 4 * 4; ++i)
@@ -2334,12 +2337,12 @@ void test_replace_secondary_dns_server_of_two_servers()
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_ipv4_primary_dns_string(assumed_primary_dns,
-                                                     dummy_connman_iface,
-                                                     false, 16);
-    mock_connman->expect_get_ipv4_secondary_dns_string(assumed_secondary_dns,
-                                                       dummy_connman_iface,
-                                                       false, 16);
+    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
+                                                dummy_connman_iface,
+                                                false, 16);
+    mock_connman->expect_get_secondary_dns_string(assumed_secondary_dns,
+                                                  dummy_connman_iface,
+                                                  false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 3 + 4 * 4; ++i)
@@ -2396,12 +2399,12 @@ void test_add_secondary_dns_server_to_primary_server()
                                                        ethernet_mac_address,
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
-    mock_connman->expect_get_ipv4_primary_dns_string(assumed_primary_dns,
-                                                     dummy_connman_iface,
-                                                     false, 16);
-    mock_connman->expect_get_ipv4_secondary_dns_string("",
-                                                       dummy_connman_iface,
-                                                       false, 16);
+    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
+                                                dummy_connman_iface,
+                                                false, 16);
+    mock_connman->expect_get_secondary_dns_string("",
+                                                  dummy_connman_iface,
+                                                  false, 16);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 3 + 4 * 4; ++i)
