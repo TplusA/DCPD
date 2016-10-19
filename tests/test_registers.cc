@@ -1755,6 +1755,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface,
+                                       CONNMAN_IP_VERSION_4,
                                        CONNMAN_READ_CONFIG_SOURCE_CURRENT);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
@@ -1779,6 +1780,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
+                                       CONNMAN_IP_VERSION_4,
                                        CONNMAN_READ_CONFIG_SOURCE_CURRENT);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
@@ -1802,6 +1804,7 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
 
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
+                                       CONNMAN_IP_VERSION_4,
                                        CONNMAN_READ_CONFIG_SOURCE_CURRENT);
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
@@ -1841,7 +1844,7 @@ struct RegisterTraits<56U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_56_ipv4_address;
     static constexpr auto expected_write_handler = &dcpregs_write_56_ipv4_address;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_address_string;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_address_string;
 };
 
 template <>
@@ -1849,7 +1852,7 @@ struct RegisterTraits<57U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_57_ipv4_netmask;
     static constexpr auto expected_write_handler = &dcpregs_write_57_ipv4_netmask;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_netmask_string;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_netmask_string;
 };
 
 template <>
@@ -1857,7 +1860,7 @@ struct RegisterTraits<58U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_58_ipv4_gateway;
     static constexpr auto expected_write_handler = &dcpregs_write_58_ipv4_gateway;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_gateway_string;
 };
 
 template <>
@@ -1865,7 +1868,7 @@ struct RegisterTraits<62U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_62_primary_dns;
     static constexpr auto expected_write_handler = &dcpregs_write_62_primary_dns;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_gateway_string;
 };
 
 template <>
@@ -1873,7 +1876,7 @@ struct RegisterTraits<63U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_63_secondary_dns;
     static constexpr auto expected_write_handler = &dcpregs_write_63_secondary_dns;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_ipv4_gateway_string;
+    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_gateway_string;
 };
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
@@ -1890,7 +1893,10 @@ static void read_ipv4_parameter_in_normal_mode()
                                                        ethernet_mac_address,
                                                        wlan_mac_address);
     (mock_connman->*RegTraits::expect_get_string_memberfn)(standard_ipv4_address,
-                                                           dummy_connman_iface, false,
+                                                           dummy_connman_iface,
+                                                           CONNMAN_IP_VERSION_4,
+                                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                                           false,
                                                            sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 
@@ -1914,7 +1920,10 @@ static void read_ipv4_parameter_in_edit_mode_before_any_changes()
 
     mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
     (mock_connman->*RegTraits::expect_get_string_memberfn)(standard_ipv4_address,
-                                                           dummy_connman_iface, false,
+                                                           dummy_connman_iface,
+                                                           CONNMAN_IP_VERSION_4,
+                                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                                           false,
                                                            sizeof(buffer));
     mock_connman->expect_free_interface_data(dummy_connman_iface);
 

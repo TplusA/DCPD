@@ -313,16 +313,40 @@ bool connman_get_auto_connect_mode(struct ConnmanInterfaceData *iface_data)
     return get_bool_value(iface_data, "AutoConnect");
 }
 
-enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
-                                           enum ConnmanReadConfigSource src)
+static const char *
+ipver_and_src_to_section_name(const enum ConnmanIPVersion ipver,
+                              const enum ConnmanReadConfigSource src)
 {
-    log_assert(iface_data != NULL);
+    static const char *const section_names_current[] = { "IPv4", "IPv6", };
+    static const char *const section_names_requested[] =
+    {
+        "IPv4.Configuration",
+        "IPv6.Configuration",
+    };
 
+    switch(src)
+    {
+      case CONNMAN_READ_CONFIG_SOURCE_CURRENT:
+        return section_names_current[ipver];
+
+      case CONNMAN_READ_CONFIG_SOURCE_REQUESTED:
+        return section_names_requested[ipver];
+
+      case CONNMAN_READ_CONFIG_SOURCE_ANY:
+        BUG("Cannot determine section name from source \"any\"");
+        break;
+    }
+
+    return NULL;
+}
+
+static enum ConnmanDHCPMode get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
+                                          enum ConnmanIPVersion ipver,
+                                          enum ConnmanReadConfigSource src)
+{
     GVariantDict dict;
     connman_common_init_subdict((GVariant *)iface_data, &dict,
-                                (src == CONNMAN_READ_CONFIG_SOURCE_REQUESTED)
-                                ? "IPv4.Configuration"
-                                : "IPv4");
+                                ipver_and_src_to_section_name(ipver, src));
 
     GVariant *method_variant =
         g_variant_dict_lookup_value(&dict, "Method", G_VARIANT_TYPE_STRING);
@@ -330,8 +354,6 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
     if(method_variant == NULL)
     {
         g_variant_dict_clear(&dict);
-        msg_vinfo(MESSAGE_LEVEL_DIAG,
-                  "IPv4 configuration method not provided in source %d", src);
         return CONNMAN_DHCP_NOT_AVAILABLE;
     }
 
@@ -350,7 +372,7 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
     else
     {
         msg_error(0, LOG_WARNING,
-                  "IPv4 configuration method \"%s\" unknown", method);
+                  "IP configuration method \"%s\" unknown", method);
         retval = CONNMAN_DHCP_UNKNOWN_METHOD;
     }
 
@@ -358,6 +380,54 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
     g_variant_dict_clear(&dict);
 
     return retval;
+}
+
+enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
+                                           enum ConnmanIPVersion ipver,
+                                           enum ConnmanReadConfigSource src)
+{
+    log_assert(iface_data != NULL);
+
+    enum ConnmanDHCPMode mode = CONNMAN_DHCP_NOT_AVAILABLE;
+
+    switch(src)
+    {
+      case CONNMAN_READ_CONFIG_SOURCE_CURRENT:
+      case CONNMAN_READ_CONFIG_SOURCE_REQUESTED:
+        mode = get_dhcp_mode(iface_data, ipver, src);
+        break;
+
+      case CONNMAN_READ_CONFIG_SOURCE_ANY:
+        mode = get_dhcp_mode(iface_data, ipver, CONNMAN_READ_CONFIG_SOURCE_CURRENT);
+
+        if(mode == CONNMAN_DHCP_NOT_AVAILABLE)
+            mode = get_dhcp_mode(iface_data, ipver, CONNMAN_READ_CONFIG_SOURCE_REQUESTED);
+
+        break;
+    }
+
+    if(mode == CONNMAN_DHCP_NOT_AVAILABLE)
+    {
+        switch(src)
+        {
+          case CONNMAN_READ_CONFIG_SOURCE_CURRENT:
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "IP method not provided in current configuration");
+            break;
+
+          case CONNMAN_READ_CONFIG_SOURCE_REQUESTED:
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "IP method not provided in requested configuration");
+            break;
+
+          case CONNMAN_READ_CONFIG_SOURCE_ANY:
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "IP configuration method not provided at all");
+            break;
+        }
+    }
+
+    return mode;
 }
 
 enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data)
@@ -450,61 +520,128 @@ enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_da
     return retval;
 }
 
-static bool get_ipv4_parameter_string(struct ConnmanInterfaceData *iface_data,
-                                      enum ConnmanReadConfigSource src,
-                                      const char *parameter_name,
-                                      char *dest, size_t dest_size)
+static bool get_parameter_string_from_source(struct ConnmanInterfaceData *iface_data,
+                                             enum ConnmanIPVersion ipver,
+                                             enum ConnmanReadConfigSource src,
+                                             const char *parameter_name,
+                                             char *dest, size_t dest_size)
+{
+    GVariantDict dict;
+    connman_common_init_subdict((GVariant *)iface_data, &dict,
+                                ipver_and_src_to_section_name(ipver, src));
+
+    GVariant *ip_parameter_variant =
+        g_variant_dict_lookup_value(&dict, parameter_name, G_VARIANT_TYPE_STRING);
+
+    if(ip_parameter_variant != NULL)
+    {
+        const char *ip_parameter = g_variant_get_string(ip_parameter_variant, NULL);
+
+        strncpy(dest, ip_parameter, dest_size);
+        dest[dest_size - 1] = '\0';
+
+        g_variant_unref(ip_parameter_variant);
+    }
+    else
+        dest[0] = '\0';
+
+    g_variant_dict_clear(&dict);
+
+    return ip_parameter_variant != NULL;
+}
+
+static bool get_parameter_string(struct ConnmanInterfaceData *iface_data,
+                                 enum ConnmanIPVersion ipver,
+                                 enum ConnmanReadConfigSource src,
+                                 const char *parameter_name,
+                                 char *dest, size_t dest_size)
 {
     log_assert(iface_data != NULL);
     log_assert(parameter_name != NULL);
     log_assert(dest != NULL);
     log_assert(dest_size > 0);
 
-    dest[0] = '\0';
+    bool succeeded = false;
 
-    GVariantDict dict;
-    connman_common_init_subdict((GVariant *)iface_data, &dict,
-                                (src == CONNMAN_READ_CONFIG_SOURCE_REQUESTED)
-                                ? "IPv4.Configuration"
-                                : "IPv4");
-
-    GVariant *ipv4_parameter_variant =
-        g_variant_dict_lookup_value(&dict, parameter_name, G_VARIANT_TYPE_STRING);
-
-    if(ipv4_parameter_variant != NULL)
+    switch(src)
     {
-        const char *ipv4_parameter = g_variant_get_string(ipv4_parameter_variant, NULL);
+      case CONNMAN_READ_CONFIG_SOURCE_CURRENT:
+      case CONNMAN_READ_CONFIG_SOURCE_REQUESTED:
+        succeeded =
+            get_parameter_string_from_source(iface_data, ipver, src,
+                                             parameter_name,
+                                             dest, dest_size);
+        break;
 
-        strncpy(dest, ipv4_parameter, dest_size);
-        dest[dest_size - 1] = '\0';
+      case CONNMAN_READ_CONFIG_SOURCE_ANY:
+        succeeded =
+            get_parameter_string_from_source(iface_data, ipver,
+                                             CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                             parameter_name,
+                                             dest, dest_size);
 
-        g_variant_unref(ipv4_parameter_variant);
+        if(!succeeded)
+            succeeded =
+                get_parameter_string_from_source(iface_data, ipver,
+                                                 CONNMAN_READ_CONFIG_SOURCE_REQUESTED,
+                                                 parameter_name,
+                                                 dest, dest_size);
+
+        break;
     }
 
-    g_variant_dict_clear(&dict);
+    if(!succeeded)
+    {
+        switch(src)
+        {
+          case CONNMAN_READ_CONFIG_SOURCE_CURRENT:
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "IP parameter \"%s\" not provided in current configuration",
+                      parameter_name);
+            break;
 
-    return ipv4_parameter_variant != NULL;
+          case CONNMAN_READ_CONFIG_SOURCE_REQUESTED:
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "IP parameter \"%s\" not provided in requested configuration",
+                      parameter_name);
+            break;
+
+          case CONNMAN_READ_CONFIG_SOURCE_ANY:
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "IP parameter \"%s\" not provided at all",
+                      parameter_name);
+            break;
+        }
+    }
+
+    return succeeded;
 }
 
-bool connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
-                                     enum ConnmanReadConfigSource src,
-                                     char *dest, size_t dest_size)
+bool connman_get_address_string(struct ConnmanInterfaceData *iface_data,
+                                enum ConnmanIPVersion ipver,
+                                enum ConnmanReadConfigSource src,
+                                char *dest, size_t dest_size)
 {
-    return get_ipv4_parameter_string(iface_data, src, "Address", dest, dest_size);
+    return get_parameter_string(iface_data, ipver, src, "Address",
+                                dest, dest_size);
 }
 
-bool connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
-                                     enum ConnmanReadConfigSource src,
-                                     char *dest, size_t dest_size)
+bool connman_get_netmask_string(struct ConnmanInterfaceData *iface_data,
+                                enum ConnmanIPVersion ipver,
+                                enum ConnmanReadConfigSource src,
+                                char *dest, size_t dest_size)
 {
-    return get_ipv4_parameter_string(iface_data, src, "Netmask", dest, dest_size);
+    return get_parameter_string(iface_data, ipver, src, "Netmask",
+                                dest, dest_size);
 }
 
-bool connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
-                                     enum ConnmanReadConfigSource src,
-                                     char *dest, size_t dest_size)
+bool connman_get_gateway_string(struct ConnmanInterfaceData *iface_data,
+                                enum ConnmanIPVersion ipver,
+                                enum ConnmanReadConfigSource src,
+                                char *dest, size_t dest_size)
 {
-    return get_ipv4_parameter_string(iface_data, src, "Gateway", dest, dest_size);
+    return get_parameter_string(iface_data, ipver, src, "Gateway",
+                                dest, dest_size);
 }
 
 static bool get_nameserver_string(struct ConnmanInterfaceData *iface_data,

@@ -230,7 +230,8 @@ static bool ipv4_settings_are_different(struct ConnmanInterfaceData *iface_data,
     char buffer[64];
 
     const enum ConnmanDHCPMode system_dhcp_mode =
-        connman_get_dhcp_mode(iface_data, CONNMAN_READ_CONFIG_SOURCE_CURRENT);
+        connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_4,
+                              CONNMAN_READ_CONFIG_SOURCE_ANY);
 
     switch(system_dhcp_mode)
     {
@@ -253,21 +254,21 @@ static bool ipv4_settings_are_different(struct ConnmanInterfaceData *iface_data,
         if(with_dhcp)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_address_string(iface_data,
-                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                           buffer, sizeof(buffer)) &&
+        if(connman_get_address_string(iface_data, CONNMAN_IP_VERSION_4,
+                                      CONNMAN_READ_CONFIG_SOURCE_ANY,
+                                      buffer, sizeof(buffer)) &&
            strcmp(address, buffer) != 0)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_netmask_string(iface_data,
-                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                           buffer, sizeof(buffer)) &&
+        if(connman_get_netmask_string(iface_data, CONNMAN_IP_VERSION_4,
+                                      CONNMAN_READ_CONFIG_SOURCE_ANY,
+                                      buffer, sizeof(buffer)) &&
            strcmp(nm, buffer) != 0)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_gateway_string(iface_data,
-                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                           buffer, sizeof(buffer)) &&
+        if(connman_get_gateway_string(iface_data, CONNMAN_IP_VERSION_4,
+                                      CONNMAN_READ_CONFIG_SOURCE_ANY,
+                                      buffer, sizeof(buffer)) &&
            strcmp(gw, buffer) != 0)
             goto ipv4_check_done;
 

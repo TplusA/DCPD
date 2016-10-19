@@ -362,7 +362,7 @@ static bool query_dhcp_mode(void)
 {
     struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
     bool ret = (iface_data != NULL)
-        ? (connman_get_dhcp_mode(iface_data,
+        ? (connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_4,
                                  CONNMAN_READ_CONFIG_SOURCE_CURRENT) == CONNMAN_DHCP_ON)
         : false;
     connman_free_interface_data(iface_data);
@@ -832,12 +832,12 @@ static void fill_network_status_register_response(uint8_t response[static 2])
 
         char result[2];
 
-        connman_get_ipv4_address_string(iface_data,
-                                        CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                        result, sizeof(result));
+        connman_get_address_string(iface_data, CONNMAN_IP_VERSION_4,
+                                   CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+                                   result, sizeof(result));
 
         if(result[0] != '\0')
-            response[0] = (connman_get_dhcp_mode(iface_data,
+            response[0] = (connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_4,
                                                  CONNMAN_READ_CONFIG_SOURCE_CURRENT) ==
                            CONNMAN_DHCP_ON) ? 0x02 : 0x01;
     }
@@ -992,6 +992,7 @@ static ssize_t
 read_ipv4_parameter(uint32_t requested_mask,
                     const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
                     bool (*connman_query_fn)(struct ConnmanInterfaceData *,
+                                             enum ConnmanIPVersion,
                                              enum ConnmanReadConfigSource,
                                              char *, size_t),
                     uint8_t *response, size_t length)
@@ -1006,7 +1007,8 @@ read_ipv4_parameter(uint32_t requested_mask,
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
         if(iface_data != NULL)
-            connman_query_fn(iface_data, CONNMAN_READ_CONFIG_SOURCE_CURRENT,
+            connman_query_fn(iface_data, CONNMAN_IP_VERSION_4,
+                             CONNMAN_READ_CONFIG_SOURCE_CURRENT,
                              (char *)response, length);
         else
             response[0] = '\0';
@@ -1023,7 +1025,7 @@ ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
 
     return read_ipv4_parameter(REQ_IP_ADDRESS_56,
                                nwconfig_write_data.ipv4_address,
-                               connman_get_ipv4_address_string,
+                               connman_get_address_string,
                                response, length);
 }
 
@@ -1033,7 +1035,7 @@ ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length)
 
     return read_ipv4_parameter(REQ_NETMASK_57,
                                nwconfig_write_data.ipv4_netmask,
-                               connman_get_ipv4_netmask_string,
+                               connman_get_netmask_string,
                                response, length);
 }
 
@@ -1043,7 +1045,7 @@ ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
 
     return read_ipv4_parameter(REQ_DEFAULT_GATEWAY_58,
                                nwconfig_write_data.ipv4_gateway,
-                               connman_get_ipv4_gateway_string,
+                               connman_get_gateway_string,
                                response, length);
 }
 

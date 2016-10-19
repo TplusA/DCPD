@@ -146,10 +146,10 @@ class MockConnman
 
     void expect_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address);
     void expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address, struct ConnmanInterfaceData *ret_fallback = nullptr);
-    void expect_get_dhcp_mode(enum ConnmanDHCPMode ret, struct ConnmanInterfaceData *iface_data, enum ConnmanReadConfigSource src);
-    void expect_get_ipv4_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
-    void expect_get_ipv4_netmask_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
-    void expect_get_ipv4_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
+    void expect_get_dhcp_mode(enum ConnmanDHCPMode ret, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src);
+    void expect_get_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size);
+    void expect_get_netmask_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size);
+    void expect_get_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size);
     void expect_get_primary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
     void expect_get_secondary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
     void expect_get_wlan_security_type_string(bool ret, const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);

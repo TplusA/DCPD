@@ -43,6 +43,13 @@ enum ConnmanReadConfigSource
 {
     CONNMAN_READ_CONFIG_SOURCE_CURRENT,
     CONNMAN_READ_CONFIG_SOURCE_REQUESTED,
+    CONNMAN_READ_CONFIG_SOURCE_ANY,
+};
+
+enum ConnmanIPVersion
+{
+    CONNMAN_IP_VERSION_4,
+    CONNMAN_IP_VERSION_6,
 };
 
 /*!
@@ -119,18 +126,22 @@ connman_find_active_primary_interface(const char *default_mac_address,
 bool connman_get_favorite(struct ConnmanInterfaceData *iface_data);
 bool connman_get_auto_connect_mode(struct ConnmanInterfaceData *iface_data);
 enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
+                                           enum ConnmanIPVersion ipver,
                                            enum ConnmanReadConfigSource src);
 enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
 enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_data);
-bool connman_get_ipv4_address_string(struct ConnmanInterfaceData *iface_data,
-                                     enum ConnmanReadConfigSource src,
-                                     char *dest, size_t dest_size);
-bool connman_get_ipv4_netmask_string(struct ConnmanInterfaceData *iface_data,
-                                     enum ConnmanReadConfigSource src,
-                                     char *dest, size_t dest_size);
-bool connman_get_ipv4_gateway_string(struct ConnmanInterfaceData *iface_data,
-                                     enum ConnmanReadConfigSource src,
-                                     char *dest, size_t dest_size);
+bool connman_get_address_string(struct ConnmanInterfaceData *iface_data,
+                                enum ConnmanIPVersion ipver,
+                                enum ConnmanReadConfigSource src,
+                                char *dest, size_t dest_size);
+bool connman_get_netmask_string(struct ConnmanInterfaceData *iface_data,
+                                enum ConnmanIPVersion ipver,
+                                enum ConnmanReadConfigSource src,
+                                char *dest, size_t dest_size);
+bool connman_get_gateway_string(struct ConnmanInterfaceData *iface_data,
+                                enum ConnmanIPVersion ipver,
+                                enum ConnmanReadConfigSource src,
+                                char *dest, size_t dest_size);
 bool connman_get_primary_dns_string(struct ConnmanInterfaceData *iface_data,
                                     char *dest, size_t dest_size);
 bool connman_get_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
