@@ -21,6 +21,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <string.h>
+#include <stdlib.h>
 #include <errno.h>
 
 #include "dbus_handlers_connman_manager.h"
@@ -30,12 +31,128 @@
 #include "connman_common.h"
 #include "messages.h"
 
+struct ServiceList
+{
+    struct ServiceList *next;
+
+    char *service_name;
+    bool is_state_known;
+    bool is_favorite;
+};
+
 struct dbussignal_connman_manager_data
 {
     GMutex lock;
     char wlan_service_name[512];
     void (*schedule_connect_to_wlan)(void);
+
+    struct ServiceList *services;
 };
+
+static struct ServiceList *lookup_service(struct ServiceList *head,
+                                          const char *service_name,
+                                          struct ServiceList **prev)
+{
+    struct ServiceList *p = NULL;
+
+    for(struct ServiceList *s = head; s != NULL; s = s->next)
+    {
+        if(strcmp(s->service_name, service_name) == 0)
+        {
+            if(prev != NULL)
+                *prev = p;
+
+            return s;
+        }
+
+        p = s;
+    }
+
+    if(prev != NULL)
+        *prev = p;
+
+    return NULL;
+}
+
+static bool insert_service(struct ServiceList **head, const char *service_name,
+                           struct ServiceList **list_entry)
+{
+    struct ServiceList *last = NULL;
+    struct ServiceList *service = (*head != NULL)
+        ? lookup_service(*head, service_name, &last)
+        : NULL;
+
+    if(list_entry != NULL)
+        *list_entry = service;
+
+    if(service != NULL)
+        return false;
+
+    service = malloc(sizeof(*service));
+
+    if(service == NULL)
+    {
+        msg_out_of_memory("service list entry");
+        return false;
+    }
+
+    service->next = NULL;
+    service->service_name = strdup(service_name);
+    service->is_state_known = false;
+    service->is_favorite = false;
+
+    if(service->service_name == NULL)
+    {
+        msg_out_of_memory("service name copy");
+        free(service);
+        return false;
+    }
+
+    if(last != NULL)
+    {
+        log_assert(last->next == NULL);
+        last->next = service;
+    }
+    else
+    {
+        log_assert(*head == NULL);
+        *head = service;
+    }
+
+    if(list_entry != NULL)
+        *list_entry = service;
+
+    return true;
+}
+
+static bool remove_service(struct ServiceList **head, const char *service_name)
+{
+    struct ServiceList *prev;
+    struct ServiceList *service = (*head != NULL)
+        ? lookup_service(*head, service_name, &prev)
+        : NULL;
+
+    if(service == NULL)
+        return false;
+
+    if(prev != NULL)
+    {
+        log_assert(prev->next == service);
+        prev->next = service->next;
+    }
+    else
+    {
+        log_assert(service == *head);
+        *head = service->next;
+    }
+
+    free(service->service_name);
+    service->service_name = NULL;
+    service->next = NULL;
+    free(service);
+
+    return true;
+}
 
 static void service_connected(const char *service_name,
                               enum ConnmanCommonConnectServiceCallbackResult result,
@@ -81,33 +198,39 @@ static void check_parameter_assertions(GVariant *parameters,
     log_assert(g_variant_n_children(parameters) == expected_number_of_parameters);
 }
 
-static bool ipv4_settings_are_different(const char *service_name,
-                                        bool with_dhcp, const char *address,
-                                        const char *nm, const char *gw,
-                                        const char *dns1, const char *dns2,
-                                        bool *different_ipv4_config,
-                                        bool *different_nameservers,
-                                        bool *is_favorite,
-                                        bool *is_auto_connect)
+static struct ConnmanInterfaceData *
+get_iface_data_by_service_name(const char *service_name, bool *is_favorite,
+                               bool *is_auto_connect)
 {
-    *different_ipv4_config = true;
-    *different_nameservers = true;
     *is_favorite = false;
     *is_auto_connect = false;
 
     struct ConnmanInterfaceData *data =
         connman_find_interface_by_object_path(service_name);
 
-    if(data == NULL)
-        return true;
+    if(data != NULL)
+    {
+        *is_favorite = connman_get_favorite(data);
+        *is_auto_connect = connman_get_auto_connect_mode(data);
+    }
 
-    *is_favorite = connman_get_favorite(data);
-    *is_auto_connect = connman_get_auto_connect_mode(data);
+    return data;
+}
+
+static bool ipv4_settings_are_different(struct ConnmanInterfaceData *iface_data,
+                                        bool with_dhcp, const char *address,
+                                        const char *nm, const char *gw,
+                                        const char *dns1, const char *dns2,
+                                        bool *different_ipv4_config,
+                                        bool *different_nameservers)
+{
+    *different_ipv4_config = true;
+    *different_nameservers = true;
 
     char buffer[64];
 
     const enum ConnmanDHCPMode system_dhcp_mode =
-        connman_get_dhcp_mode(data, CONNMAN_READ_CONFIG_SOURCE_CURRENT);
+        connman_get_dhcp_mode(iface_data, CONNMAN_READ_CONFIG_SOURCE_CURRENT);
 
     switch(system_dhcp_mode)
     {
@@ -129,19 +252,19 @@ static bool ipv4_settings_are_different(const char *service_name,
         if(with_dhcp)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_address_string(data,
+        if(connman_get_ipv4_address_string(iface_data,
                                            CONNMAN_READ_CONFIG_SOURCE_CURRENT,
                                            buffer, sizeof(buffer)) &&
            strcmp(address, buffer) != 0)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_netmask_string(data,
+        if(connman_get_ipv4_netmask_string(iface_data,
                                            CONNMAN_READ_CONFIG_SOURCE_CURRENT,
                                            buffer, sizeof(buffer)) &&
            strcmp(nm, buffer) != 0)
             goto ipv4_check_done;
 
-        if(connman_get_ipv4_gateway_string(data,
+        if(connman_get_ipv4_gateway_string(iface_data,
                                            CONNMAN_READ_CONFIG_SOURCE_CURRENT,
                                            buffer, sizeof(buffer)) &&
            strcmp(gw, buffer) != 0)
@@ -157,14 +280,14 @@ static bool ipv4_settings_are_different(const char *service_name,
     *different_ipv4_config = false;
 
 ipv4_check_done:
-    if(connman_get_primary_dns_string(data, buffer, sizeof(buffer)))
+    if(connman_get_primary_dns_string(iface_data, buffer, sizeof(buffer)))
     {
         if((dns1 != NULL && strcmp(dns1, buffer) != 0) ||
            (dns1 == NULL && system_dhcp_mode != CONNMAN_DHCP_ON && buffer[0] != '\0'))
             goto dns_check_done;
     }
 
-    if(connman_get_secondary_dns_string(data, buffer, sizeof(buffer)))
+    if(connman_get_secondary_dns_string(iface_data, buffer, sizeof(buffer)))
     {
         if((dns2 != NULL && strcmp(dns2, buffer) != 0) ||
            (dns2 == NULL && system_dhcp_mode != CONNMAN_DHCP_ON && buffer[0] != '\0'))
@@ -174,8 +297,6 @@ ipv4_check_done:
     *different_nameservers = false;
 
 dns_check_done:
-    connman_free_interface_data(data);
-
     return *different_ipv4_config || *different_nameservers;
 }
 
@@ -242,6 +363,12 @@ static bool configure_our_ipv4_network_common(const char *service_name,
     *is_favorite = false;
     *is_auto_connect = false;
 
+    struct ConnmanInterfaceData *iface_data =
+        get_iface_data_by_service_name(service_name, is_favorite, is_auto_connect);
+
+    if(iface_data == NULL)
+        return false;
+
     bool want_dhcp;
     const char *want_address;
     const char *want_netmask;
@@ -253,6 +380,7 @@ static bool configure_our_ipv4_network_common(const char *service_name,
                                         &want_netmask, &want_gateway,
                                         &want_dns1, &want_dns2))
     {
+        connman_free_interface_data(iface_data);
         avoid_service(service_name, is_ethernet);
         return false;
     }
@@ -260,13 +388,18 @@ static bool configure_our_ipv4_network_common(const char *service_name,
     bool different_ipv4_config;
     bool different_nameservers;
 
-    if(!ipv4_settings_are_different(service_name, want_dhcp,
+    if(!ipv4_settings_are_different(iface_data, want_dhcp,
                                     want_address, want_netmask, want_gateway,
                                     want_dns1, want_dns2,
                                     &different_ipv4_config,
-                                    &different_nameservers,
-                                    is_favorite, is_auto_connect))
+                                    &different_nameservers))
+    {
+        connman_free_interface_data(iface_data);
         return true;
+    }
+
+    connman_free_interface_data(iface_data);
+    iface_data = NULL;
 
     GVariant *ipv4_config = NULL;
     GVariant *dns_config = NULL;
@@ -358,6 +491,7 @@ static bool configure_our_wlan(const char *service_name,
                                                 "AutoConnect",
                                                 g_variant_new_variant(g_variant_new_boolean(true)));
 
+        /* rely on auto-connect */
         return false;
     }
 
@@ -398,7 +532,8 @@ static bool configure_our_wlan(const char *service_name,
     return false;
 }
 
-static bool react_to_service_changes(GVariant *changes, GVariant *removed,
+static bool react_to_service_changes(struct ServiceList **known_services_list,
+                                     GVariant *changes, GVariant *removed,
                                      char *wlan_service_name,
                                      const struct network_prefs *ethernet_prefs,
                                      const struct network_prefs *wlan_prefs)
@@ -452,24 +587,22 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
     bool have_just_lost_ethernet_device = false;
 
     GVariantIter iter;
+    g_variant_iter_init(&iter, removed);
+    const gchar *name;
 
-    if(have_ethernet_service_name)
+    while(g_variant_iter_loop(&iter, "&o", &name))
     {
-        g_variant_iter_init(&iter, removed);
+        msg_vinfo(MESSAGE_LEVEL_TRACE, "Service removed: \"%s\"", name);
 
-        const gchar *name;
+        remove_service(known_services_list, name);
 
-        while(g_variant_iter_loop(&iter, "&o", &name))
-        {
-            msg_vinfo(MESSAGE_LEVEL_TRACE, "Service removed: \"%s\"", name);
-            if(strcmp(name, ethernet_service_name) == 0)
-                have_just_lost_ethernet_device = true;
-        }
+        if(have_ethernet_service_name &&
+           strcmp(name, ethernet_service_name) == 0)
+            have_just_lost_ethernet_device = true;
     }
 
     g_variant_iter_init(&iter, changes);
 
-    const gchar *name;
     GVariantIter *props_iter;
     bool need_to_schedule_wlan_connection = false;
 
@@ -479,6 +612,9 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
             continue;
 
         msg_vinfo(MESSAGE_LEVEL_TRACE, "Service changed: \"%s\"", name);
+
+        struct ServiceList *service_list_entry;
+        insert_service(known_services_list, name, &service_list_entry);
 
         if(msg_is_verbose(MESSAGE_LEVEL_TRACE))
         {
@@ -529,6 +665,18 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
             g_variant_iter_free(iter_copy);
         }
 
+        const char *prop = NULL;
+        GVariant *value = NULL;
+
+        while(g_variant_iter_loop(props_iter, "{&sv}", &prop, &value))
+        {
+            if(strcmp(prop, "Favorite") == 0)
+            {
+                service_list_entry->is_favorite = !!g_variant_get_boolean(value);
+                service_list_entry->is_state_known = true;
+            }
+        }
+
         if(strcmp(name, wlan_service_name) == 0)
         {
             /* our WLAN service has changed, perhaps, so we may have to
@@ -541,20 +689,37 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
             continue;
         }
 
-        if(g_variant_iter_n_children(props_iter) == 0)
-        {
-            /* service is still there and has not changed, so there should be
-             * nothing to do for us */
-            continue;
-        }
-
         if(strcmp(name, ethernet_service_name) == 0)
         {
+            /* our LAN service may need some care */
             configure_our_lan(name, ethernet_prefs);
             continue;
         }
 
-        /* some service not managed by us has changed---ignore for now */
+        /* some service not managed by us */
+        if(service_list_entry->is_state_known && !service_list_entry->is_favorite)
+        {
+            /* we know each other already, and it's not a favorite */
+            continue;
+        }
+
+        /* new or favorite or both, or state unknown: smash it */
+        switch(network_prefs_get_technology_by_service_name(name))
+        {
+          case NWPREFSTECH_UNKNOWN:
+            msg_error(0, LOG_INFO,
+                      "ConnMan service %s changed, but cannot handle technology",
+                      name);
+            break;
+
+          case NWPREFSTECH_ETHERNET:
+            avoid_service(name, true);
+            break;
+
+          case NWPREFSTECH_WLAN:
+            avoid_service(name, false);
+            break;
+        }
     }
 
     if(have_just_lost_ethernet_device && wlan_service_name[0] != '\0')
@@ -615,7 +780,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
             GVariant *removed = g_variant_get_child_value(parameters, 1);
 
             need_to_schedule_wlan_connection =
-                react_to_service_changes(changes, removed,
+                react_to_service_changes(&data->services, changes, removed,
                                          wlan_service_name_buffer,
                                          ethernet_prefs, wlan_prefs);
 
