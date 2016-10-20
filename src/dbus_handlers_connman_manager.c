@@ -461,7 +461,7 @@ static bool react_to_service_changes(GVariant *changes, GVariant *removed,
             {
                 if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING))
                     msg_info("- %s = %s", prop, g_variant_get_string(value, NULL));
-                if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
                     msg_info("- %s = %s", prop, g_variant_get_boolean(value) ? "TRUE" : "FALSE");
                 else if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING_ARRAY))
                 {
