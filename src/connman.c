@@ -330,7 +330,9 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
     if(method_variant == NULL)
     {
         g_variant_dict_clear(&dict);
-        return CONNMAN_DHCP_NOT_SPECIFIED;
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "IPv4 configuration method not provided in source %d", src);
+        return CONNMAN_DHCP_NOT_AVAILABLE;
     }
 
     const char *method = g_variant_get_string(method_variant, NULL);
@@ -348,8 +350,8 @@ enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_da
     else
     {
         msg_error(0, LOG_WARNING,
-                  "IPv4 configuration method not specified by ConnMan");
-        retval = CONNMAN_DHCP_NOT_SPECIFIED;
+                  "IPv4 configuration method \"%s\" unknown", method);
+        retval = CONNMAN_DHCP_UNKNOWN_METHOD;
     }
 
     g_variant_unref(method_variant);

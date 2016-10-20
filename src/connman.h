@@ -66,7 +66,8 @@ typedef void (*ConnmanSurveyDoneFn)(enum ConnmanSiteScanResult result);
 
 enum ConnmanDHCPMode
 {
-    CONNMAN_DHCP_NOT_SPECIFIED,
+    CONNMAN_DHCP_NOT_AVAILABLE,
+    CONNMAN_DHCP_UNKNOWN_METHOD,
     CONNMAN_DHCP_ON,
     CONNMAN_DHCP_OFF,
     CONNMAN_DHCP_MANUAL,

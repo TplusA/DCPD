@@ -194,7 +194,7 @@ class MockConnman::Expectation
             ret_bytes_(nullptr),
             ret_bytes_size_(123456),
             ret_data_(nullptr),
-            ret_dhcp_mode_(CONNMAN_DHCP_NOT_SPECIFIED),
+            ret_dhcp_mode_(CONNMAN_DHCP_NOT_AVAILABLE),
             ret_fallback_data_(nullptr),
             arg_iface_data_(nullptr),
             arg_pointer_shall_be_null_(false),

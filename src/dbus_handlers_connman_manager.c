@@ -234,7 +234,8 @@ static bool ipv4_settings_are_different(struct ConnmanInterfaceData *iface_data,
 
     switch(system_dhcp_mode)
     {
-      case CONNMAN_DHCP_NOT_SPECIFIED:
+      case CONNMAN_DHCP_NOT_AVAILABLE:
+      case CONNMAN_DHCP_UNKNOWN_METHOD:
         break;
 
       case CONNMAN_DHCP_ON:
