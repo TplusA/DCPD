@@ -250,6 +250,9 @@ static bool ipv4_settings_are_different(struct ConnmanInterfaceData *iface_data,
 
         break;
 
+      case CONNMAN_DHCP_AUTO:
+        goto ipv4_check_done;
+
       case CONNMAN_DHCP_MANUAL:
         if(with_dhcp)
             goto ipv4_check_done;

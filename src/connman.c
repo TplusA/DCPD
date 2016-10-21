@@ -365,6 +365,8 @@ static enum ConnmanDHCPMode get_dhcp_mode(struct ConnmanInterfaceData *iface_dat
         retval = CONNMAN_DHCP_ON;
     else if(strcmp(method, "off") == 0)
         retval = CONNMAN_DHCP_OFF;
+    else if(strcmp(method, "auto") == 0)
+        retval = CONNMAN_DHCP_AUTO;
     else if(strcmp(method, "manual") == 0)
         retval = CONNMAN_DHCP_MANUAL;
     else if(strcmp(method, "fixed") == 0)
