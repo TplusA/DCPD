@@ -168,6 +168,14 @@ void connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter)
 const char *connman_security_iterator_get_security(struct ConnmanServiceSecurityIterator *iter);
 
 void connman_wlan_power_on(void);
+
+/*!
+ * Start WLAN site survey, call callback when done.
+ *
+ * The callback function may be called directly by this function, or it may be
+ * called within D-Bus context. Thus, the callback should be implemented in a
+ * thread-safe way.
+ */
 bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback);
 
 #ifdef __cplusplus

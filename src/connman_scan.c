@@ -30,9 +30,13 @@
 
 struct wifi_scan_data
 {
+    GMutex lock;
+
     tdbusconnmanTechnology *proxy;
     int remaining_tries;
-    ConnmanSurveyDoneFn callback;
+
+    ConnmanSurveyDoneFn callbacks[2];
+    size_t number_of_callbacks;
 };
 
 static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powered)
@@ -50,11 +54,32 @@ static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powe
     return true;
 }
 
+/*!
+ * Call and clear all registered callbacks for WLAN survey completion.
+ *
+ * Must be called while holding #wifi_scan_data::lock.
+ */
+static void call_all_callbacks(struct wifi_scan_data *data,
+                               enum ConnmanSiteScanResult result)
+{
+    for(size_t i = 0; i < data->number_of_callbacks; ++i)
+        (data->callbacks[i])(result);
+
+    data->number_of_callbacks = 0;
+}
+
 static gboolean do_initiate_scan(gpointer user_data);
 
+/*!
+ * D-Bus callback for WLAN survey completion.
+ *
+ * This function is called from GLib's D-Bus code, context basically unknown.
+ */
 static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
     struct wifi_scan_data *const data = user_data;
+
+    g_mutex_lock(&data->lock);
 
     log_assert(TDBUS_CONNMAN_TECHNOLOGY(source_object) == data->proxy);
 
@@ -66,7 +91,8 @@ static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer u
     if(success || --data->remaining_tries <= 0)
     {
         data->remaining_tries = 0;
-        data->callback(success ? CONNMAN_SITE_SCAN_OK : CONNMAN_SITE_SCAN_CONNMAN_ERROR);
+        call_all_callbacks(data,
+                           success ? CONNMAN_SITE_SCAN_OK : CONNMAN_SITE_SCAN_CONNMAN_ERROR);
         g_object_unref(data->proxy);
         data->proxy = NULL;
     }
@@ -79,8 +105,15 @@ static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer u
                  data->remaining_tries != 1 ? "ies" : "y");
         g_timeout_add(retry_interval_ms, do_initiate_scan, user_data);
     }
+
+    g_mutex_unlock(&data->lock);
 }
 
+/*!
+ * Start WLAN survey, asynchronously.
+ *
+ * Must be called while holding #wifi_scan_data::lock.
+ */
 static gboolean do_initiate_scan(gpointer user_data)
 {
     struct wifi_scan_data *const data = user_data;
@@ -90,13 +123,49 @@ static gboolean do_initiate_scan(gpointer user_data)
     return G_SOURCE_REMOVE;
 }
 
+/*!
+ * WLAN survey already in progress, take a free ride.
+ *
+ * Must be called while holding #wifi_scan_data::lock.
+ */
+static void free_ride(struct wifi_scan_data *data,
+                      ConnmanSurveyDoneFn callback)
+{
+    size_t i;
+
+    for(i = 0; i < data->number_of_callbacks; ++i)
+    {
+        if(data->callbacks[i] == callback)
+            break;
+    }
+
+    if(i == data->number_of_callbacks)
+    {
+        /* not registered yet */
+        if(data->number_of_callbacks < sizeof(data->callbacks) / sizeof(data->callbacks[0]))
+            data->callbacks[data->number_of_callbacks++] = callback;
+        else
+        {
+            BUG("Too many WLAN site survey callbacks registered");
+            callback(CONNMAN_SITE_SCAN_OUT_OF_MEMORY);
+        }
+    }
+}
+
+/*!
+ * Initiate WLAN scan or take a free ride on ongoing scan.
+ *
+ * Must be called while holding #wifi_scan_data::lock.
+ */
 static void scan_wifi(struct wifi_scan_data *data,
                       const char *object_path, bool is_powered,
                       ConnmanSurveyDoneFn callback)
 {
+    log_assert(callback != NULL);
+
     if(data->proxy != NULL)
     {
-        BUG("Attempted to ask Connman to scan WLAN, but is already in progress");
+        free_ride(data, callback);
         return;
     }
 
@@ -114,7 +183,8 @@ static void scan_wifi(struct wifi_scan_data *data,
     else
         data->remaining_tries = 1;
 
-    data->callback = callback;
+    data->callbacks[0] = callback;
+    data->number_of_callbacks = 1;
 
     do_initiate_scan(data);
 }
@@ -218,7 +288,10 @@ static bool site_survey_or_just_power_on(ConnmanSurveyDoneFn site_survey_callbac
     if(site_survey_callback != NULL)
     {
         static struct wifi_scan_data scan_data;
+
+        g_mutex_lock(&scan_data.lock);
         scan_wifi(&scan_data, object_path, is_powered, site_survey_callback);
+        g_mutex_unlock(&scan_data.lock);
     }
     else
     {
