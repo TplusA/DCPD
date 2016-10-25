@@ -753,6 +753,16 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
                     msg_info("- %s = %s", prop, g_variant_get_string(value, NULL));
                 else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
                     msg_info("- %s = %s", prop, g_variant_get_boolean(value) ? "TRUE" : "FALSE");
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BYTE))
+                    msg_info("- %s = %u", prop, g_variant_get_byte(value));
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT16))
+                    msg_info("- %s = %d", prop, g_variant_get_int16(value));
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT16))
+                    msg_info("- %s = %u", prop, g_variant_get_uint16(value));
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT32))
+                    msg_info("- %s = %d", prop, g_variant_get_int32(value));
+                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32))
+                    msg_info("- %s = %u", prop, g_variant_get_uint32(value));
                 else if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING_ARRAY))
                 {
                     msg_info("- %s", prop);
