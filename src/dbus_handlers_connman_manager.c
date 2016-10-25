@@ -728,7 +728,7 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
     g_variant_iter_init(&iter, changes);
 
     GVariantIter *props_iter;
-    bool need_to_schedule_wlan_connection = false;
+    bool want_to_switch_to_wlan = false;
     const struct ServiceList *our_ethernet_service = NULL;
     const struct ServiceList *our_wlan_service = NULL;
 
@@ -825,7 +825,7 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
             if(configure_our_wlan(wlan_prefs, service_list_entry,
                                   ethernet_service_name,
                                   have_just_lost_ethernet_device, false))
-                need_to_schedule_wlan_connection = true;
+                want_to_switch_to_wlan = true;
 
             our_wlan_service = service_list_entry;
 
@@ -869,23 +869,41 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
     }
 
     if(have_just_lost_ethernet_device && wlan_service_name[0] != '\0')
-        need_to_schedule_wlan_connection = true;
+        want_to_switch_to_wlan = true;
 
-    if(our_ethernet_service == NULL &&
-       (our_wlan_service != NULL &&
-        maybe_false(&our_wlan_service->is_connected) &&
-        maybe_false(&our_wlan_service->is_favorite)))
+    if(our_ethernet_service == NULL && our_wlan_service != NULL)
     {
-        /*
-         * There is no Ethernet interface (cable not plugged in), but there is
-         * a WLAN matching the configuration set by the user. We are not
-         * connected to that WLAN yet. Since the WLAN is also not marked as
-         * favorite, we need to connect to it by hand. Click.
-         */
-        need_to_schedule_wlan_connection = true;
+        /* there is no Ethernet interface (cable not plugged in), but there is
+         * a WLAN matching the configuration set by the user */
+        want_to_switch_to_wlan = true;
     }
 
-    return need_to_schedule_wlan_connection;
+    if(want_to_switch_to_wlan)
+    {
+        /* this is the least we should do so that ConnMan can find WLAN
+         * networks, manual connect may or may not be necessary (see below) */
+        connman_wlan_power_on();
+    }
+    else
+        return false;
+
+    /*
+     * We have determined that we should switch over to WLAN. If the WLAN is
+     * neither connected nor marked as auto-connect, then we need to connect to
+     * it by hand.
+     */
+
+    if(our_wlan_service == NULL)
+        return false;
+
+    if(maybe_true(&our_wlan_service->is_connected))
+        return false;
+
+    if(maybe_true(&our_wlan_service->is_auto_connect))
+        return false;
+
+    /* Click. */
+    return true;
 }
 
 static void schedule_wlan_connect_if_necessary(bool is_necessary,
