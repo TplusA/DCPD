@@ -31,17 +31,43 @@
 #include "connman_common.h"
 #include "messages.h"
 
+struct Maybe
+{
+    bool is_state_known;
+    bool state;
+};
+
+static inline void init_maybe(struct Maybe *maybe)
+{
+    maybe->state = false;
+    maybe->is_state_known = false;
+}
+
+static inline void set_maybe_value(struct Maybe *maybe, bool state)
+{
+    maybe->state = state;
+    maybe->is_state_known = true;
+}
+
+static inline bool maybe_true(const struct Maybe *maybe)
+{
+    return maybe->is_state_known ? maybe->state : false;
+}
+
+static inline bool maybe_false(const struct Maybe *maybe)
+{
+    return maybe->is_state_known ? !maybe->state : false;
+}
+
 struct ServiceList
 {
     struct ServiceList *next;
 
     char *service_name;
 
-    bool is_connected_state_known;
-    bool is_connected;
-
-    bool is_favorite_state_known;
-    bool is_favorite;
+    struct Maybe is_favorite;
+    struct Maybe is_auto_connect;
+    struct Maybe is_connected;
 };
 
 struct dbussignal_connman_manager_data
@@ -108,10 +134,9 @@ static bool insert_service(struct ServiceList **head, const char *service_name,
 
     service->next = NULL;
     service->service_name = strdup(service_name);
-    service->is_connected_state_known = false;
-    service->is_connected = false;
-    service->is_favorite_state_known = false;
-    service->is_favorite = false;
+    init_maybe(&service->is_favorite);
+    init_maybe(&service->is_auto_connect);
+    init_maybe(&service->is_connected);
 
     if(service->service_name == NULL)
     {
@@ -211,16 +236,18 @@ static void check_parameter_assertions(GVariant *parameters,
 }
 
 static struct ConnmanInterfaceData *
-get_iface_data_by_service_name(const char *service_name, bool *is_favorite,
-                               bool *is_auto_connect, bool *is_connected)
+get_iface_data_by_service_name(const char *service_name,
+                               struct Maybe *is_favorite,
+                               struct Maybe *is_auto_connect,
+                               struct Maybe *is_connected)
 {
     struct ConnmanInterfaceData *data =
         connman_find_interface_by_object_path(service_name);
 
     if(data != NULL)
     {
-        *is_favorite = connman_get_favorite(data);
-        *is_auto_connect = connman_get_auto_connect_mode(data);
+        set_maybe_value(is_favorite, connman_get_favorite(data));
+        set_maybe_value(is_auto_connect, connman_get_auto_connect_mode(data));
 
         switch(connman_get_state(data))
         {
@@ -228,14 +255,14 @@ get_iface_data_by_service_name(const char *service_name, bool *is_favorite,
           case CONNMAN_STATE_CONFIGURATION:
           case CONNMAN_STATE_READY:
           case CONNMAN_STATE_ONLINE:
-            *is_connected = true;
+            set_maybe_value(is_connected, true);
             break;
 
           case CONNMAN_STATE_NOT_SPECIFIED:
           case CONNMAN_STATE_IDLE:
           case CONNMAN_STATE_FAILURE:
           case CONNMAN_STATE_DISCONNECT:
-            *is_connected = false;
+            set_maybe_value(is_connected, false);
             break;
         }
     }
@@ -506,7 +533,7 @@ static bool configure_our_lan(const char *service_name,
     if(avoid_service_if_no_preferences(service_name, prefs, true))
         return false;
 
-    bool dummy;
+    struct Maybe dummy;
 
     struct ConnmanInterfaceData *iface_data =
         get_iface_data_by_service_name(service_name,
@@ -516,9 +543,6 @@ static bool configure_our_lan(const char *service_name,
 
     if(iface_data == NULL)
         return false;
-
-    service_list_entry->is_favorite_state_known = true;
-    service_list_entry->is_connected_state_known = true;
 
     configure_our_ipv6_network_common(iface_data, service_name);
 
@@ -552,19 +576,14 @@ static bool configure_our_wlan(const char *service_name,
     if(avoid_service_if_no_preferences(service_name, prefs, false))
         return false;
 
-    bool is_auto_connect;
-
     struct ConnmanInterfaceData *iface_data =
         get_iface_data_by_service_name(service_name,
                                        &service_list_entry->is_favorite,
-                                       &is_auto_connect,
+                                       &service_list_entry->is_auto_connect,
                                        &service_list_entry->is_connected);
 
     if(iface_data == NULL)
         return false;
-
-    service_list_entry->is_favorite_state_known = true;
-    service_list_entry->is_connected_state_known = true;
 
     configure_our_ipv6_network_common(iface_data, service_name);
 
@@ -579,14 +598,19 @@ static bool configure_our_wlan(const char *service_name,
     iface_data = NULL;
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
-              "Our WLAN is %sa favorite, auto-connect %d, "
+              "Our WLAN is %sa favorite, auto-connect %s, "
               "make it auto-connect %d",
-              service_list_entry->is_favorite ? "" : "not ",
-              is_auto_connect, make_it_favorite);
+              service_list_entry->is_favorite.is_state_known
+              ? (service_list_entry->is_favorite.state ? "" : "not ")
+              : "maybe ",
+              service_list_entry->is_auto_connect.is_state_known
+              ? (service_list_entry->is_auto_connect.state ? "yes" : "no")
+              : "maybe",
+              make_it_favorite);
 
-    if(service_list_entry->is_favorite)
+    if(maybe_true(&service_list_entry->is_favorite))
     {
-        if(!is_auto_connect)
+        if(maybe_false(&service_list_entry->is_auto_connect))
             connman_common_set_service_property(service_name,
                                                 "AutoConnect",
                                                 g_variant_new_variant(g_variant_new_boolean(true)));
@@ -647,8 +671,7 @@ static void disconnect_from_wlan_if_connected(const struct ServiceList *known_se
         lookup_service(known_services_list, wlan_service_name);
 
     if(service_list_entry != NULL &&
-       service_list_entry->is_connected_state_known &&
-       !service_list_entry->is_connected)
+       maybe_false(&service_list_entry->is_connected))
         return;
 
     connman_common_disconnect_service_by_object_path(wlan_service_name);
@@ -806,16 +829,11 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
         while(g_variant_iter_loop(props_iter, "{&sv}", &prop, &value))
         {
             if(strcmp(prop, "State") == 0)
-            {
-                service_list_entry->is_connected_state_known = true;
-                service_list_entry->is_connected =
-                    (strcmp(g_variant_get_string(value, NULL), "ready") == 0);
-            }
+                set_maybe_value(&service_list_entry->is_connected,
+                                strcmp(g_variant_get_string(value, NULL), "ready") == 0);
             else if(strcmp(prop, "Favorite") == 0)
-            {
-                service_list_entry->is_favorite_state_known = true;
-                service_list_entry->is_favorite = !!g_variant_get_boolean(value);
-            }
+                set_maybe_value(&service_list_entry->is_favorite,
+                                !!g_variant_get_boolean(value));
         }
 
         if(strcmp(name, wlan_service_name) == 0)
@@ -841,7 +859,7 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
         }
 
         /* some service not managed by us */
-        if(service_list_entry->is_favorite_state_known && !service_list_entry->is_favorite)
+        if(maybe_false(&service_list_entry->is_favorite))
         {
             /* we know each other already, and it's not a favorite */
             continue;
