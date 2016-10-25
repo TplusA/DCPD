@@ -619,7 +619,7 @@ static bool configure_our_wlan(const char *service_name,
         return false;
     }
 
-    if(make_it_favorite)
+    if(maybe_false(&service_list_entry->is_favorite) && make_it_favorite)
     {
         /* if this function returns true, then the caller will schedule a WLAN
          * connection attempt by calling #schedule_wlan_connect_if_necessary();
@@ -671,10 +671,8 @@ static void disconnect_from_wlan_if_connected(const struct ServiceList *known_se
         lookup_service(known_services_list, wlan_service_name);
 
     if(service_list_entry != NULL &&
-       maybe_false(&service_list_entry->is_connected))
-        return;
-
-    connman_common_disconnect_service_by_object_path(wlan_service_name);
+       maybe_true(&service_list_entry->is_connected))
+        connman_common_disconnect_service_by_object_path(wlan_service_name);
 }
 
 static bool react_to_service_changes(struct ServiceList **known_services_list,
@@ -750,6 +748,8 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
 
     GVariantIter *props_iter;
     bool need_to_schedule_wlan_connection = false;
+    const struct ServiceList *our_ethernet_service = NULL;
+    const struct ServiceList *our_wlan_service = NULL;
 
     while(g_variant_iter_loop(&iter, "(&oa{sv})", &name, &props_iter))
     {
@@ -846,6 +846,8 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
                                   have_just_lost_ethernet_device, false))
                 need_to_schedule_wlan_connection = true;
 
+            our_wlan_service = service_list_entry;
+
             continue;
         }
 
@@ -854,6 +856,8 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
             /* our LAN service may need some care */
             if(configure_our_lan(name, ethernet_prefs, service_list_entry))
                 disconnect_from_wlan_if_connected(*known_services_list, wlan_service_name);
+
+            our_ethernet_service = service_list_entry;
 
             continue;
         }
@@ -886,6 +890,20 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
 
     if(have_just_lost_ethernet_device && wlan_service_name[0] != '\0')
         need_to_schedule_wlan_connection = true;
+
+    if(our_ethernet_service == NULL &&
+       (our_wlan_service != NULL &&
+        maybe_false(&our_wlan_service->is_connected) &&
+        maybe_false(&our_wlan_service->is_favorite)))
+    {
+        /*
+         * There is no Ethernet interface (cable not plugged in), but there is
+         * a WLAN matching the configuration set by the user. We are not
+         * connected to that WLAN yet. Since the WLAN is also not marked as
+         * favorite, we need to connect to it by hand. Click.
+         */
+        need_to_schedule_wlan_connection = true;
+    }
 
     return need_to_schedule_wlan_connection;
 }
