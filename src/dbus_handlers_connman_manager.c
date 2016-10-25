@@ -104,12 +104,6 @@ static struct ServiceList *lookup_service_rw(struct ServiceList *head,
     return NULL;
 }
 
-static const struct ServiceList *lookup_service(const struct ServiceList *head,
-                                                const char *service_name)
-{
-    return lookup_service_rw((struct ServiceList *)head, service_name, NULL);
-}
-
 static bool insert_service(struct ServiceList **head, const char *service_name,
                            struct ServiceList **list_entry)
 {
@@ -367,25 +361,29 @@ static void avoid_wlan_service(const char *service_name)
     connman_common_remove_service_by_object_path(service_name);
 }
 
-static void avoid_service(const char *service_name, bool is_ethernet)
+static void avoid_service(const struct ServiceList *service_list_entry,
+                          bool is_ethernet)
 {
+    if(!maybe_true(&service_list_entry->is_connected))
+        return;
+
     if(is_ethernet)
-        connman_common_disconnect_service_by_object_path(service_name);
+        connman_common_disconnect_service_by_object_path(service_list_entry->service_name);
     else
-        avoid_wlan_service(service_name);
+        avoid_wlan_service(service_list_entry->service_name);
 }
 
-static bool avoid_service_if_no_preferences(const char *service_name,
+static bool avoid_service_if_no_preferences(const struct ServiceList *service_list_entry,
                                             const struct network_prefs *prefs,
                                             bool is_ethernet)
 {
     if(prefs != NULL)
         return false;
 
-    avoid_service(service_name, is_ethernet);
+    avoid_service(service_list_entry, is_ethernet);
 
     BUG("Cannot configure ConnMan service \"%s\": no preferences",
-        service_name);
+        service_list_entry->service_name);
 
     return true;
 }
@@ -435,12 +433,13 @@ static void configure_our_ipv6_network_common(struct ConnmanInterfaceData *iface
 }
 
 static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface_data,
-                                              const char *service_name,
+                                              const struct ServiceList *service_list_entry,
                                               const struct network_prefs *prefs,
                                               bool is_ethernet)
 {
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
-              "Configure IPv4 parameters for service %s", service_name);
+              "Configure IPv4 parameters for service %s",
+              service_list_entry->service_name);
 
     bool want_dhcp;
     const char *want_address;
@@ -453,7 +452,7 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
                                         &want_netmask, &want_gateway,
                                         &want_dns1, &want_dns2))
     {
-        avoid_service(service_name, is_ethernet);
+        avoid_service(service_list_entry, is_ethernet);
         return false;
     }
 
@@ -466,6 +465,9 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
                                     &different_ipv4_config,
                                     &different_nameservers))
     {
+        msg_vinfo(MESSAGE_LEVEL_DEBUG,
+                  "Not configuring IPv4 parameters for %s: up to date",
+                  service_list_entry->service_name);
         return true;
     }
 
@@ -505,11 +507,11 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
     }
 
     if(ipv4_config != NULL)
-        connman_common_set_service_property(service_name,
+        connman_common_set_service_property(service_list_entry->service_name,
                                             "IPv4.Configuration", ipv4_config);
 
     if(dns_config != NULL)
-        connman_common_set_service_property(service_name,
+        connman_common_set_service_property(service_list_entry->service_name,
                                             "Nameservers.Configuration",
                                             dns_config);
 
@@ -526,17 +528,16 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
  * \returns
  *     True in case the LAN has been configured, false in case it hasn't.
  */
-static bool configure_our_lan(const char *service_name,
-                              const struct network_prefs *prefs,
+static bool configure_our_lan(const struct network_prefs *prefs,
                               struct ServiceList *service_list_entry)
 {
-    if(avoid_service_if_no_preferences(service_name, prefs, true))
+    if(avoid_service_if_no_preferences(service_list_entry, prefs, true))
         return false;
 
     struct Maybe dummy;
 
     struct ConnmanInterfaceData *iface_data =
-        get_iface_data_by_service_name(service_name,
+        get_iface_data_by_service_name(service_list_entry->service_name,
                                        &service_list_entry->is_favorite,
                                        &dummy,
                                        &service_list_entry->is_connected);
@@ -544,10 +545,10 @@ static bool configure_our_lan(const char *service_name,
     if(iface_data == NULL)
         return false;
 
-    configure_our_ipv6_network_common(iface_data, service_name);
+    configure_our_ipv6_network_common(iface_data, service_list_entry->service_name);
 
     const bool ret =
-        configure_our_ipv4_network_common(iface_data, service_name,
+        configure_our_ipv4_network_common(iface_data, service_list_entry,
                                           prefs, true);
 
     connman_free_interface_data(iface_data);
@@ -566,18 +567,17 @@ static bool configure_our_lan(const char *service_name,
  *     True in case WLAN connection should be established by the caller, false
  *     in case nothing needs to be done.
  */
-static bool configure_our_wlan(const char *service_name,
-                               const struct network_prefs *prefs,
+static bool configure_our_wlan(const struct network_prefs *prefs,
                                struct ServiceList *service_list_entry,
                                const char *ethernet_service_name,
                                bool have_just_lost_ethernet_device,
                                bool make_it_favorite)
 {
-    if(avoid_service_if_no_preferences(service_name, prefs, false))
+    if(avoid_service_if_no_preferences(service_list_entry, prefs, false))
         return false;
 
     struct ConnmanInterfaceData *iface_data =
-        get_iface_data_by_service_name(service_name,
+        get_iface_data_by_service_name(service_list_entry->service_name,
                                        &service_list_entry->is_favorite,
                                        &service_list_entry->is_auto_connect,
                                        &service_list_entry->is_connected);
@@ -585,9 +585,9 @@ static bool configure_our_wlan(const char *service_name,
     if(iface_data == NULL)
         return false;
 
-    configure_our_ipv6_network_common(iface_data, service_name);
+    configure_our_ipv6_network_common(iface_data, service_list_entry->service_name);
 
-    if(!configure_our_ipv4_network_common(iface_data, service_name,
+    if(!configure_our_ipv4_network_common(iface_data, service_list_entry,
                                           prefs, false))
     {
         connman_free_interface_data(iface_data);
@@ -611,7 +611,7 @@ static bool configure_our_wlan(const char *service_name,
     if(maybe_true(&service_list_entry->is_favorite))
     {
         if(maybe_false(&service_list_entry->is_auto_connect))
-            connman_common_set_service_property(service_name,
+            connman_common_set_service_property(service_list_entry->service_name,
                                                 "AutoConnect",
                                                 g_variant_new_variant(g_variant_new_boolean(true)));
 
@@ -654,25 +654,6 @@ static bool configure_our_wlan(const char *service_name,
     }
 
     return false;
-}
-
-/*!
- * Manually disconnect from WLAN.
- *
- * Thank you for nothing, ConnMan...
- */
-static void disconnect_from_wlan_if_connected(const struct ServiceList *known_services_list,
-                                              const char *wlan_service_name)
-{
-    if(wlan_service_name[0] == '\0')
-        return;
-
-    const struct ServiceList *service_list_entry =
-        lookup_service(known_services_list, wlan_service_name);
-
-    if(service_list_entry != NULL &&
-       maybe_true(&service_list_entry->is_connected))
-        connman_common_disconnect_service_by_object_path(wlan_service_name);
 }
 
 static bool react_to_service_changes(struct ServiceList **known_services_list,
@@ -836,12 +817,12 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
                                 !!g_variant_get_boolean(value));
         }
 
-        if(strcmp(name, wlan_service_name) == 0)
+        if(strcmp(service_list_entry->service_name, wlan_service_name) == 0)
         {
             /* our WLAN service has changed, perhaps, so we may have to
              * configure it and we have to connect to it in case there is no
              * Ethernet connection */
-            if(configure_our_wlan(name, wlan_prefs, service_list_entry,
+            if(configure_our_wlan(wlan_prefs, service_list_entry,
                                   ethernet_service_name,
                                   have_just_lost_ethernet_device, false))
                 need_to_schedule_wlan_connection = true;
@@ -851,11 +832,10 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
             continue;
         }
 
-        if(strcmp(name, ethernet_service_name) == 0)
+        if(strcmp(service_list_entry->service_name, ethernet_service_name) == 0)
         {
             /* our LAN service may need some care */
-            if(configure_our_lan(name, ethernet_prefs, service_list_entry))
-                disconnect_from_wlan_if_connected(*known_services_list, wlan_service_name);
+            configure_our_lan(ethernet_prefs, service_list_entry);
 
             our_ethernet_service = service_list_entry;
 
@@ -870,20 +850,20 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
         }
 
         /* new or favorite or both, or state unknown: smash it */
-        switch(network_prefs_get_technology_by_service_name(name))
+        switch(network_prefs_get_technology_by_service_name(service_list_entry->service_name))
         {
           case NWPREFSTECH_UNKNOWN:
             msg_error(0, LOG_INFO,
                       "ConnMan service %s changed, but cannot handle technology",
-                      name);
+                      service_list_entry->service_name);
             break;
 
           case NWPREFSTECH_ETHERNET:
-            avoid_service(name, true);
+            avoid_service(service_list_entry, true);
             break;
 
           case NWPREFSTECH_WLAN:
-            avoid_service(name, false);
+            avoid_service(service_list_entry, false);
             break;
         }
     }
@@ -1066,8 +1046,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
             insert_service(&global_dbussignal_connman_manager_data.services,
                            ethernet_service_name,
                            &service_list_entry);
-            configure_our_lan(ethernet_service_name, ethernet_prefs,
-                              service_list_entry);
+            configure_our_lan(ethernet_prefs, service_list_entry);
         }
 
         break;
@@ -1082,8 +1061,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
             insert_service(&global_dbussignal_connman_manager_data.services,
                            wlan_service_name,
                            &service_list_entry);
-            if(configure_our_wlan(wlan_service_name, wlan_prefs,
-                                  service_list_entry,
+            if(configure_our_wlan(wlan_prefs, service_list_entry,
                                   ethernet_service_name, false, true))
                 need_to_schedule_wlan_connection = true;
         }
