@@ -46,6 +46,13 @@ static struct
 }
 nwwlan_survey_data;
 
+enum WifiServiceType
+{
+    WIFI_SERVICE_TYPE_NONE,
+    WIFI_SERVICE_TYPE_WLAN_WITH_SSID,
+    WIFI_SERVICE_TYPE_HIDDEN,
+};
+
 void dcpregs_wlansurvey_init(void)
 {
     memset(&nwwlan_survey_data, 0, sizeof(nwwlan_survey_data));
@@ -167,9 +174,14 @@ fill_buffer_with_security_entries(struct dynamic_buffer *const buffer,
     return retval;
 }
 
-static inline bool is_wifi_service(struct ConnmanServiceIterator *const iter)
+static inline enum WifiServiceType is_wifi_service(struct ConnmanServiceIterator *const iter)
 {
-    return strcmp(connman_service_iterator_get_technology_type(iter), "wifi") == 0;
+    if(strcmp(connman_service_iterator_get_technology_type(iter), "wifi") != 0)
+        return WIFI_SERVICE_TYPE_NONE;
+
+    return (connman_service_iterator_get_ssid(iter) != NULL
+            ? WIFI_SERVICE_TYPE_WLAN_WITH_SSID
+            : WIFI_SERVICE_TYPE_HIDDEN);
 }
 
 static size_t count_number_of_wifi_services(struct ConnmanServiceIterator *const iter)
@@ -181,8 +193,18 @@ static size_t count_number_of_wifi_services(struct ConnmanServiceIterator *const
 
     do
     {
-        if(is_wifi_service(iter))
+        switch(is_wifi_service(iter))
+        {
+          case WIFI_SERVICE_TYPE_NONE:
+            break;
+
+          case WIFI_SERVICE_TYPE_WLAN_WITH_SSID:
             ++count;
+            break;
+
+          case WIFI_SERVICE_TYPE_HIDDEN:
+            break;
+        }
     }
     while(connman_service_iterator_next(iter));
 
@@ -244,11 +266,20 @@ static bool fill_buffer_with_services(struct dynamic_buffer *const buffer)
     {
         log_assert(service != NULL);
 
-        if(is_wifi_service(service))
+        switch(is_wifi_service(service))
         {
+          case WIFI_SERVICE_TYPE_NONE:
+            break;
+
+          case WIFI_SERVICE_TYPE_WLAN_WITH_SSID:
             retval = fill_buffer_with_single_service(buffer, service, idx++);
             if(!retval)
                 goto exit_free_service_iter;
+
+            break;
+
+          case WIFI_SERVICE_TYPE_HIDDEN:
+            break;
         }
     }
     while(connman_service_iterator_next(service));
