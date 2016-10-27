@@ -1,3 +1,17 @@
+2016-11-04  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.6 released.
+
+	* Networking: Suppress hidden networks in WLAN scan results. They
+	  appeared as "(null)", but could not be used at all. Direct support
+	  of hidden networks requires support by the user interface.
+
+	* Updates: Attempt to fix up system update state if necessary. This
+	  means that interrupted or otherwise incomplete system updates are
+	  continued by running the generated upgrade script again. The user
+	  will not notice because the status updates usually sent to the ARM
+	  are suppressed in this case.
+
 2016-10-25  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.5 released.
