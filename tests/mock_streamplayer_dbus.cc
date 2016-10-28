@@ -272,10 +272,10 @@ gboolean tdbus_splay_urlfifo_call_clear_sync(tdbussplayURLFIFO *proxy, gint16 ar
         *out_playing_id = expect.d.ret_playing_id_.get_raw_id();
 
     if(out_queued_ids != NULL)
-        cut_fail("returning queued IDs as GVariant not implemented ye");
+        cut_fail("returning queued IDs as GVariant not implemented yet");
 
     if(out_removed_ids != NULL)
-        cut_fail("returning removed IDs as GVariant not implemented ye");
+        cut_fail("returning removed IDs as GVariant not implemented yet");
 
     if(error != NULL)
         *error = NULL;
