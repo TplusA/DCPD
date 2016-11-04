@@ -39,6 +39,8 @@
 #include "dbus_handlers_connman_manager_glue.h"
 #include "registers.h"
 #include "dcpregs_status.h"
+#include "dcpregs_filetransfer.h"
+#include "dcpregs_filetransfer_priv.h"
 #include "connman.h"
 #include "networkprefs.h"
 #include "os.h"
@@ -939,6 +941,8 @@ struct parameters
     bool run_in_foreground;
     bool connect_to_session_dbus;
     bool with_connman;
+    bool is_fixing_broken_update_state;
+    bool is_upgrade_enforced;
     const char *ethernet_interface_mac_address;
     const char *wlan_interface_mac_address;
 };
@@ -990,6 +994,11 @@ static int setup(const struct parameters *parameters, struct files *files,
 
     if(!parameters->run_in_foreground)
         openlog("dcpd", LOG_PID, LOG_DAEMON);
+
+    files->drcp_fifo.in_fd = files->drcp_fifo.out_fd =
+        files->dcpspi_fifo.in_fd = files->dcpspi_fifo.out_fd = -1;
+    *primitive_command_queue_read_fd = primitive_command_queue_write_fd = -1;
+    *reg_changed_read_fd = register_changed_write_fd = -1;
 
     if(!parameters->run_in_foreground)
     {
@@ -1064,6 +1073,51 @@ error_dcpspi_fifo_in:
     return -1;
 }
 
+/*!
+ * Check whether or not opkg state is consistent, trigger update if not.
+ */
+static bool is_system_update_required(void)
+{
+    if(os_path_get_type("/tmp/dcpd_avoid_update_check.stamp") == OS_PATH_TYPE_FILE)
+        return false;
+
+    const int result =
+        os_system("/bin/sh -c 'test -z \"$(sudo /usr/bin/opkg list-upgradable)\"'");
+
+    return result != 0;
+}
+
+static void push_register_to_nowhere(uint8_t reg_number) {}
+
+static int trigger_system_upgrade(bool is_enforced)
+{
+    msg_set_verbose_level(MESSAGE_LEVEL_INFO_MAX);
+
+    if(is_enforced)
+    {
+        msg_info("**** Forced system upgrade ****");
+        os_file_close(os_file_new("/tmp/force_system_upgrade.stamp"));
+    }
+    else
+        msg_info("**** Incomplete or broken upgrade state detected ****");
+
+    register_init(push_register_to_nowhere);
+
+    static const uint8_t update_command[] =
+    {
+        HCR_COMMAND_CATEGORY_UPDATE_FROM_INET,
+        HCR_COMMAND_UPDATE_MAIN_SYSTEM,
+    };
+
+    if(dcpregs_write_40_download_control(update_command,
+                                         sizeof(update_command)) != 0)
+        return EXIT_FAILURE;
+
+    sleep(60);
+
+    return EXIT_SUCCESS;
+}
+
 static void shutdown(struct files *files)
 {
     fifo_close_and_delete(&files->drcp_fifo.in_fd, files->drcp_fifo_in_name);
@@ -1089,6 +1143,7 @@ static void usage(const char *program_name)
            "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
            "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n"
            "  --no-connman   Disable use of Connman (no network support).\n"
+           "  --upgrade      Enforce upgrading the system.\n"
            "  --session-dbus Connect to session D-Bus.\n"
            "  --system-dbus  Connect to system D-Bus.\n",
            program_name);
@@ -1102,6 +1157,8 @@ static int process_command_line(int argc, char *argv[],
     parameters->run_in_foreground = false;
     parameters->connect_to_session_dbus = true;
     parameters->with_connman = true;
+    parameters->is_fixing_broken_update_state = false;
+    parameters->is_upgrade_enforced = false;
 
     files->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
     files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
@@ -1175,6 +1232,8 @@ static int process_command_line(int argc, char *argv[],
             parameters->connect_to_session_dbus = false;
         else if(strcmp(argv[i], "--no-connman") == 0)
             parameters->with_connman = false;
+        else if(strcmp(argv[i], "--upgrade") == 0)
+            parameters->is_upgrade_enforced = true;
         else if(strcmp(argv[i], "--ethernet-mac") == 0)
         {
             CHECK_ARGUMENT();
@@ -1248,7 +1307,15 @@ int main(int argc, char *argv[])
     int register_changed_fd;
 
     if(setup(&parameters, &files, &primitive_queue_fd, &register_changed_fd) < 0)
-        return EXIT_FAILURE;
+        parameters.is_fixing_broken_update_state = true;
+
+    if(!parameters.is_fixing_broken_update_state &&
+       !parameters.is_upgrade_enforced)
+        parameters.is_fixing_broken_update_state = is_system_update_required();
+
+    if(parameters.is_fixing_broken_update_state ||
+       parameters.is_upgrade_enforced)
+        return trigger_system_upgrade(parameters.is_upgrade_enforced);
 
     /*!
      * Data for smartphone connection.

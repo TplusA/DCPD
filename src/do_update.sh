@@ -1,5 +1,7 @@
 #! /bin/sh
 
+test "x$FORCE_SYSTEM_UPGRADE" = x && FORCE_SYSTEM_UPGRADE=
+
 set -eu
 
 LOG='/usr/bin/systemd-cat'
@@ -9,15 +11,23 @@ $LOG /usr/bin/sudo /usr/bin/opkg update
 
 INSTALLED_VERSION=$(/usr/bin/sudo /usr/bin/opkg list-installed os-release | sed -n '/^[^ ]/{s/^[^ ]\+ - \([^ ]\+\).*/\1/p}')
 
-if test $(echo "$INSTALLED_VERSION" | wc -w) -eq 1
+if test "x$FORCE_SYSTEM_UPGRADE" = 'xforce' || test -f '/tmp/force_system_upgrade.stamp'
+then
+    $LOG echo "UPDATE: Forced upgrade"
+elif test $(echo "$INSTALLED_VERSION" | wc -w) -eq 1
 then
     BOTH_VERSIONS=$(/usr/bin/sudo /usr/bin/opkg list os-release | sed -n '/^[^ ]/{s/^[^ ]\+ - \([^ ]\+\).*/\1/p}')
     VERSIONS_COUNT=$(echo "$BOTH_VERSIONS" | wc -w)
 
     if test $VERSIONS_COUNT -eq 1
     then
-        $LOG echo "UPDATE: Not upgrading to same version"
-        exit 0
+        if test -n "$(/usr/bin/sudo /usr/bin/opkg list-upgradable)"
+        then
+            $LOG echo "UPDATE: Continue incomplete upgrade"
+        else
+            $LOG echo "UPDATE: Not upgrading to same version"
+            exit 0
+        fi
     fi
 
     INSTALLED_VERSION=$(echo $INSTALLED_VERSION | cut -d '-' -f 2)
