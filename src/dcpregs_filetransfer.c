@@ -42,6 +42,7 @@
 #define XMODEM_PROGRESS_RATE_LIMIT 5
 
 static const char feed_config_filename[] = "/var/local/etc/update_feeds.ini";
+static const char feed_config_override_filename[] = "/var/local/etc/update_feeds_override.ini";
 static const char feed_config_path[] = "/var/local/etc";
 static const char feed_config_global_section_name[] = "global";
 static const char feed_config_url_key[] = "url";
@@ -456,7 +457,8 @@ static int generate_opkg_feed_files_if_necessary(void)
 
     /* no feed configuration files found, need to generate them */
     struct ini_file config;
-    if(inifile_parse_from_file(&config, feed_config_filename) != 0 &&
+    if(inifile_parse_from_file(&config, feed_config_override_filename) != 0 &&
+       inifile_parse_from_file(&config, feed_config_filename) != 0 &&
        mk_default_feed_config(&config) < 0)
     {
         msg_error(0, LOG_ERR, "Failed reading feed configuration, cannot start update");

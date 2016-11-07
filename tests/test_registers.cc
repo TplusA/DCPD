@@ -4031,6 +4031,7 @@ static std::vector<char> os_write_buffer;
 static constexpr int expected_os_write_fd = 812;
 static constexpr int expected_os_map_file_to_memory_fd = 64;
 static constexpr const char feed_config_filename[] = "/var/local/etc/update_feeds.ini";
+static constexpr const char feed_config_override_filename[] = "/var/local/etc/update_feeds_override.ini";
 static constexpr const char feed_config_path[] = "/var/local/etc";
 static constexpr const char opkg_configuration_path[] = "/etc/opkg";
 
@@ -4505,11 +4506,16 @@ static int write_feed_conf_from_buffer_callback(const void *src, size_t count, i
     return 0;
 }
 
-/*!\test
- * Update existing package feed configuration with new data.
- */
-void test_set_update_package_feed_configuration()
+static void set_update_package_feed_configuration(bool have_regular_inifile,
+                                                  bool have_override_inifile)
 {
+    static constexpr char old_release_name[] = "oldtest";
+    static constexpr char old_url[] = "http://attic.ta-hifi.de/StrBo";
+    static constexpr char updated_release_name[] = "testing";
+    static constexpr char updated_url[] = "http://updates.ta-hifi.de/StrBo";
+    static constexpr char override_release_name[] = "experimental";
+    static constexpr char override_url[] = "http://files.ta-hifi.de/override/StrBo";
+
     /* send new update feed configuration: opkg feed configuration files are
      * deleted and new settings are written to configuration file (in this
      * particular order!) */
@@ -4523,24 +4529,34 @@ void test_set_update_package_feed_configuration()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Set package update URL \"http://updates.ta-hifi.de/StrBo\" for release \"testing\"");
 
-    static char config_file_buffer[] =
+    static constexpr const char config_file_format[] =
         "[global]\n"
-        "release = stable\n"
-        "url = http://www.ta-hifi.de/fileadmin/auto_download/StrBo\n"
+        "release = %s\n"
+        "url = %s\n"
         "method = src/gz\n"
         "[feed all]\n"
         "[feed arm1176jzfshf-vfp]\n"
         "[feed raspberrypi]\n";
 
-    const struct os_mapped_file_data original_config_file =
+    static char existing_config_file_buffer[1024];
+    const size_t existing_config_file_length =
+        snprintf(existing_config_file_buffer, sizeof(existing_config_file_buffer),
+                 config_file_format, old_release_name, old_url);
+
+    const struct os_mapped_file_data existing_config_file =
     {
         .fd = expected_os_map_file_to_memory_fd,
-        .ptr = config_file_buffer,
-        .length = sizeof(config_file_buffer) - 1,
+        .ptr = existing_config_file_buffer,
+        .length = existing_config_file_length,
     };
 
-    mock_os->expect_os_map_file_to_memory(&original_config_file, feed_config_filename);
-    mock_os->expect_os_unmap_file(&original_config_file);
+    if(have_regular_inifile)
+    {
+        mock_os->expect_os_map_file_to_memory(&existing_config_file, feed_config_filename);
+        mock_os->expect_os_unmap_file(&existing_config_file);
+    }
+    else
+        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
 
     std::vector<MockOs::ForeachItemData> items_before;
     items_before.emplace_back(MockOs::ForeachItemData("somedir", true));
@@ -4586,16 +4602,15 @@ void test_set_update_package_feed_configuration()
 
     cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
 
-    static char expected_config_file[] =
-        "[global]\n"
-        "release = testing\n"
-        "url = http://updates.ta-hifi.de/StrBo\n"
-        "method = src/gz\n"
-        "[feed all]\n"
-        "[feed arm1176jzfshf-vfp]\n"
-        "[feed raspberrypi]\n";
+    /* the data passed to the register is always written straight to the
+     * regular configuration file (unless the content wasn't changed), the
+     * override file does not interfere */
+    static char expected_config_file_buffer[1024];
+    const size_t expected_config_file_length =
+        snprintf(expected_config_file_buffer, sizeof(expected_config_file_buffer),
+                 config_file_format, updated_release_name, updated_url);
 
-    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+    cut_assert_equal_memory(expected_config_file_buffer, expected_config_file_length,
                             os_write_buffer.data(), os_write_buffer.size());
 
     os_write_buffer.clear();
@@ -4615,22 +4630,57 @@ void test_set_update_package_feed_configuration()
     const struct os_mapped_file_data modified_config_file =
     {
         .fd = expected_os_map_file_to_memory_fd,
-        .ptr = expected_config_file,
-        .length = sizeof(expected_config_file) - 1,
+        .ptr = expected_config_file_buffer,
+        .length = expected_config_file_length,
     };
 
-    static decltype(expected_generated_feed_file_names) expected_generated_feed_file_contents =
+    static char override_config_file_buffer[1024];
+    const size_t override_config_file_length =
+        snprintf(override_config_file_buffer, sizeof(override_config_file_buffer),
+                 config_file_format, override_release_name, override_url);
+
+    const struct os_mapped_file_data override_config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = override_config_file_buffer,
+        .length = override_config_file_length,
+    };
+
+    static constexpr decltype(expected_generated_feed_file_names) expected_generated_feed_file_formats =
     {
         "# Generated file, do not edit!\n"
-        "src/gz testing-all http://updates.ta-hifi.de/StrBo/testing/all\n",
+        "src/gz %s-all %s/%s/all\n",
         "# Generated file, do not edit!\n"
-        "src/gz testing-arm1176jzfshf-vfp http://updates.ta-hifi.de/StrBo/testing/arm1176jzfshf-vfp\n",
+        "src/gz %s-arm1176jzfshf-vfp %s/%s/arm1176jzfshf-vfp\n",
         "# Generated file, do not edit!\n"
-        "src/gz testing-raspberrypi http://updates.ta-hifi.de/StrBo/testing/raspberrypi\n",
+        "src/gz %s-raspberrypi %s/%s/raspberrypi\n",
     };
 
-    mock_os->expect_os_map_file_to_memory(&modified_config_file, feed_config_filename);
-    mock_os->expect_os_unmap_file(&modified_config_file);
+    std::array<char[512], expected_generated_feed_file_formats.size()> expected_generated_feed_file_contents;
+
+    const char *expected_release_name =
+        have_override_inifile ? override_release_name : updated_release_name;
+    const char *expected_url =
+        have_override_inifile ? override_url : updated_url;
+
+    for(size_t i = 0; i < expected_generated_feed_file_formats.size(); ++i)
+        snprintf(expected_generated_feed_file_contents[i],
+                 sizeof(expected_generated_feed_file_contents[i]),
+                 expected_generated_feed_file_formats[i],
+                 expected_release_name, expected_url, expected_release_name);
+
+    if(have_override_inifile)
+    {
+        mock_os->expect_os_map_file_to_memory(&override_config_file,
+                                              feed_config_override_filename);
+        mock_os->expect_os_unmap_file(&override_config_file);
+    }
+    else
+    {
+        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_override_filename);
+        mock_os->expect_os_map_file_to_memory(&modified_config_file, feed_config_filename);
+        mock_os->expect_os_unmap_file(&modified_config_file);
+    }
 
     for(size_t i = 0; i < expected_generated_feed_file_names.size(); ++i)
     {
@@ -4658,20 +4708,81 @@ void test_set_update_package_feed_configuration()
 }
 
 /*!\test
- * System update is possible even if neither our configuration file nor the
- * opkg feed configuraton files exist.
- *
- * In case our configuraton file does not exist yet when the system update
- * command comes in, a default file is generated in RAM. This is used to
- * generate the opkg feed configuration files so that the update request may
- * proceed.
+ * Update existing package feed configuration with new data from regular
+ * configuration file.
  */
-void test_feed_configuration_file_is_created_on_system_update_if_does_not_exist()
+void test_set_update_package_feed_configuration()
+{
+    set_update_package_feed_configuration(true, false);
+}
+
+/*!\test
+ * Update existing package feed configuration with new data, override inifile
+ * is in place, but regular configuration file is not.
+ */
+void test_set_update_package_feed_configuration_with_override()
+{
+    set_update_package_feed_configuration(false, true);
+}
+
+/*!\test
+ * Update existing package feed configuration with new data, no configuration
+ * files exist.
+ *
+ * This is be similar to #test_set_update_package_feed_configuration(), but the
+ * default configuration file is generated.
+ */
+void test_set_update_package_feed_configuration_with_no_configs()
+{
+    set_update_package_feed_configuration(false, false);
+}
+
+/*!\test
+ * Update existing package feed configuration with new data, both override and
+ * regular inifiles are in place.
+ *
+ * The override inifile takes precedence over the regular file and over what
+ * has been written there.
+ */
+void test_set_update_package_feed_configuration_with_regular_and_override()
+{
+    set_update_package_feed_configuration(true, true);
+}
+
+static void feed_configuration_file_is_created_on_system_update(bool have_override_inifile)
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Attempting to START SYSTEM UPDATE");
 
     mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
+
+    static char override_config_file_buffer[] =
+        "[global]\n"
+        "release = alphaomega\n"
+        "url = http://alpha.ta-hifi.de/omega\n"
+        "method = src/gz\n"
+        "[feed all]\n"
+        "[feed arm1176jzfshf-vfp]\n"
+        "[feed raspberrypi]\n";
+
+    const struct os_mapped_file_data override_config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = override_config_file_buffer,
+        .length = sizeof(override_config_file_buffer) - 1,
+    };
+
+    if(have_override_inifile)
+    {
+        mock_os->expect_os_map_file_to_memory(&override_config_file,
+                                              feed_config_override_filename);
+        mock_os->expect_os_unmap_file(&override_config_file);
+    }
+    else
+    {
+        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_override_filename);
+        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
+    }
 
     static constexpr std::array<const char *, 3> expected_generated_feed_file_names =
     {
@@ -4680,17 +4791,30 @@ void test_feed_configuration_file_is_created_on_system_update_if_does_not_exist(
         "/etc/opkg/raspberrypi-feed.conf",
     };
 
-    static decltype(expected_generated_feed_file_names) expected_generated_feed_file_contents =
+    static constexpr decltype(expected_generated_feed_file_names) expected_generated_feed_file_formats =
     {
         "# Generated file, do not edit!\n"
-        "src/gz stable-all http://www.ta-hifi.de/fileadmin/auto_download/StrBo/stable/all\n",
+        "src/gz %s-all %s/%s/all\n",
         "# Generated file, do not edit!\n"
-        "src/gz stable-arm1176jzfshf-vfp http://www.ta-hifi.de/fileadmin/auto_download/StrBo/stable/arm1176jzfshf-vfp\n",
+        "src/gz %s-arm1176jzfshf-vfp %s/%s/arm1176jzfshf-vfp\n",
         "# Generated file, do not edit!\n"
-        "src/gz stable-raspberrypi http://www.ta-hifi.de/fileadmin/auto_download/StrBo/stable/raspberrypi\n",
+        "src/gz %s-raspberrypi %s/%s/raspberrypi\n",
     };
 
-    mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
+    std::array<char[512], expected_generated_feed_file_formats.size()> expected_generated_feed_file_contents;
+
+    const char *expected_release_name = have_override_inifile
+        ? "alphaomega"
+        : "stable";
+    const char *expected_url = have_override_inifile
+        ? "http://alpha.ta-hifi.de/omega"
+        : "http://www.ta-hifi.de/fileadmin/auto_download/StrBo";
+
+    for(size_t i = 0; i < expected_generated_feed_file_formats.size(); ++i)
+        snprintf(expected_generated_feed_file_contents[i],
+                 sizeof(expected_generated_feed_file_contents[i]),
+                 expected_generated_feed_file_formats[i],
+                 expected_release_name, expected_url, expected_release_name);
 
     for(size_t i = 0; i < expected_generated_feed_file_names.size(); ++i)
     {
@@ -4715,6 +4839,29 @@ void test_feed_configuration_file_is_created_on_system_update_if_does_not_exist(
         { HCR_COMMAND_CATEGORY_UPDATE_FROM_INET, HCR_COMMAND_UPDATE_MAIN_SYSTEM };
 
     cppcut_assert_equal(-1, reg->write_handler(hcr_command, sizeof(hcr_command)));
+}
+
+/*!\test
+ * System update is possible even if neither our configuration file nor the
+ * opkg feed configuraton files exist.
+ *
+ * In case our configuraton file does not exist yet when the system update
+ * command comes in, a default file is generated in RAM. This is used to
+ * generate the opkg feed configuration files so that the update request may
+ * proceed.
+ */
+void test_feed_configuration_file_is_created_on_system_update_if_does_not_exist()
+{
+    feed_configuration_file_is_created_on_system_update(false);
+}
+
+/*!\test
+ * System update is possible of only the override file exists, in which case
+ * its values are used.
+ */
+void test_feed_configuration_file_is_not_created_if_override_file_exists()
+{
+    feed_configuration_file_is_created_on_system_update(true);
 }
 
 /*!\test
