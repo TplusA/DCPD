@@ -319,9 +319,10 @@ static int try_start_xmodem(void)
     return ret;
 }
 
-static int send_shutdown_request(void)
+int dcpregs_hcr_send_shutdown_request(bool via_dcp_command)
 {
-    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutdown requested via DCP command");
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutdown requested%s",
+              via_dcp_command ? " via DCP command" : "");
 
     GError *error = NULL;
     tdbus_logind_manager_call_reboot_sync(dbus_get_logind_manager_iface(), false, NULL, &error);
@@ -666,7 +667,7 @@ static int do_write_download_control(const uint8_t *data)
                 return 0;
             }
             else
-                return send_shutdown_request();
+                return dcpregs_hcr_send_shutdown_request(true);
         }
         else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
             BUG("Restore to factory defaults not implemented");

@@ -48,6 +48,11 @@ void dcpregs_filetransfer_deinit(void);
  */
 bool dcpregs_hcr_is_system_update_in_progress(void);
 
+/*!
+ * Shut down (reboot system).
+ */
+int dcpregs_hcr_send_shutdown_request(bool via_dcp_command);
+
 int dcpregs_write_40_download_control(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length);
 ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length);
