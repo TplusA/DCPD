@@ -657,7 +657,16 @@ static int do_write_download_control(const uint8_t *data)
          *                   with file transfer control?
          */
         if(data[1] == HCR_COMMAND_REBOOT_SYSTEM)
-            return send_shutdown_request();
+        {
+            if(dcpregs_hcr_is_system_update_in_progress())
+            {
+                msg_error(0, LOG_ERR,
+                          "System reboot request ignored, we are in the middle of an update");
+                return 0;
+            }
+            else
+                return send_shutdown_request();
+        }
         else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
             BUG("Restore to factory defaults not implemented");
     }
