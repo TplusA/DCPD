@@ -665,6 +665,31 @@ static void handle_connman_manager_events(unsigned int wait_result,
         dbussignal_connman_manager_connect_our_wlan(data);
 }
 
+static struct
+{
+    bool is_filter_active;
+    uint32_t regs[8];
+}
+push_register_filter;
+
+static void push_register_filter_set(uint8_t reg_number)
+{
+    const uint32_t mask = 1U << (reg_number & 0x1f);
+
+    push_register_filter.is_filter_active = true;
+    push_register_filter.regs[reg_number >> 5] |= mask;
+}
+
+static inline bool push_register_filter_is_filtered(uint8_t reg_number)
+{
+    if(!push_register_filter.is_filter_active)
+        return false;
+
+    const uint32_t mask = 1U << (reg_number & 0x1f);
+
+    return (push_register_filter.regs[reg_number >> 5] & mask) != 0;
+}
+
 /*!
  * Callback from network status register implementation.
  *
@@ -672,6 +697,9 @@ static void handle_connman_manager_events(unsigned int wait_result,
  */
 static void push_register_to_slave(uint8_t reg_number)
 {
+    if(push_register_filter_is_filtered(reg_number))
+        return;
+
     ssize_t ret;
 
     while((ret = os_write(register_changed_write_fd, &reg_number, sizeof(reg_number))) < 0 && errno == EINTR)
@@ -1329,6 +1357,7 @@ int main(int argc, char *argv[])
          * normal conditions; only do it if really forced to */
         parameters.is_fixing_broken_update_state = false;
         parameters.is_upgrade_enforced = parameters.is_upgrade_strongly_enforced;
+        push_register_filter_set(17);
     }
 
     if(!parameters.is_fixing_broken_update_state &&
