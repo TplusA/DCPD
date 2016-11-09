@@ -20,6 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -317,7 +318,7 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
     if(result < 0)
         return -1;
 
-    if(os_system("/bin/systemctl restart flagpole") != 0)
+    if(os_system("/bin/systemctl restart flagpole") != EXIT_SUCCESS)
         return 0;
 
     return (result != 0) ? -1 : 0;

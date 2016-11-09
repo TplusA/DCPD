@@ -1118,7 +1118,7 @@ static bool is_system_update_required(void)
     const int result =
         os_system("/bin/sh -c 'test -z \"$(sudo /usr/bin/opkg list-upgradable)\"'");
 
-    return result != 0;
+    return result != EXIT_SUCCESS;
 }
 
 static void push_register_to_nowhere(uint8_t reg_number) {}
