@@ -1309,6 +1309,89 @@ static void signal_handler(int signum, siginfo_t *info, void *ucontext)
     keep_running = false;
 }
 
+static bool delay_seconds(int seconds)
+{
+    while(seconds > 0)
+    {
+        if(!keep_running)
+            return false;
+
+        static const struct timespec one_second = { .tv_sec = 1, };
+        os_nanosleep(&one_second);
+
+        --seconds;
+    }
+
+    return true;
+}
+
+static void *update_watchdog_main(void *user_data)
+{
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+              "UPDOG: Update in progress, watching opkg");
+
+    sigset_t sigset;
+
+    sigfillset(&sigset);
+    pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
+    bool is_opkg_running = true;
+
+    for(int tries = 90; tries > 0; --tries)
+    {
+        if(os_system("/usr/bin/pgrep opkg") != EXIT_SUCCESS)
+        {
+            is_opkg_running = false;
+            break;
+        }
+
+        if(!keep_running)
+            break;
+
+        if(tries > 1)
+        {
+            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                      "UPDOG: Opkg still running, check again later...");
+
+            if(!delay_seconds(10))
+                break;
+        }
+    }
+
+    if(keep_running)
+    {
+        if(is_opkg_running)
+            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                      "UPDOG: Opkg is STILL running, rebooting now");
+        else
+        {
+            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                      "UPDOG: Opkg is not running anymore, rebooting soon");
+
+            /* we should give the system some time to shut down by itself in
+             * case opkg has just finished and shutdown is already in progress
+             * anyway */
+            delay_seconds(60);
+        }
+    }
+
+    if(!keep_running)
+    {
+        /* we've been killed */
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "UPDOG: Killed, shutting down");
+        return NULL;
+    }
+
+    /*
+     * We have checked on that opkg process for 15 minutes, but it doesn't seem
+     * to make any progress. Also, no one has terminated us. Pull the emergency
+     * brake and restart.
+     */
+    dcpregs_hcr_send_shutdown_request(false);
+
+    return NULL;
+}
+
 int main(int argc, char *argv[])
 {
     static struct parameters parameters;
@@ -1369,6 +1452,19 @@ int main(int argc, char *argv[])
     if(parameters.is_fixing_broken_update_state ||
        parameters.is_upgrade_enforced)
         return trigger_system_upgrade(parameters.is_upgrade_enforced);
+
+    if(is_upgrading)
+    {
+        errno = 0;
+
+        static pthread_t th;
+
+        if(pthread_create(&th, NULL, update_watchdog_main, NULL) != 0)
+            msg_error(errno, LOG_ERR,
+                      "Failed creating update script watchdog thread");
+        else
+            pthread_detach(th);
+    }
 
     /*!
      * Data for smartphone connection.
