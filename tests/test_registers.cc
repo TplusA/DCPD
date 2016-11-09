@@ -4422,6 +4422,8 @@ void test_send_reboot_request()
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
+                                              "Shutdown requested via DCP command");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_reboot_sync(true, dbus_logind_manager_iface_dummy, false);
     cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));

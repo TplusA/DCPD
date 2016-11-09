@@ -321,6 +321,8 @@ static int try_start_xmodem(void)
 
 static int send_shutdown_request(void)
 {
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutdown requested via DCP command");
+
     GError *error = NULL;
     tdbus_logind_manager_call_reboot_sync(dbus_get_logind_manager_iface(), false, NULL, &error);
 
