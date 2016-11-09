@@ -43,6 +43,11 @@ void dcpregs_filetransfer_init(void);
  */
 void dcpregs_filetransfer_deinit(void);
 
+/*!
+ * Check whether or not opkg is in the middle of performing an update.
+ */
+bool dcpregs_hcr_is_system_update_in_progress(void);
+
 int dcpregs_write_40_download_control(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length);
 ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length);

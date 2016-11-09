@@ -551,6 +551,27 @@ static int generate_opkg_feed_files_if_necessary(void)
     return 0;
 }
 
+static const char update_shell_script_file[] = "/tmp/do_update.sh";
+
+bool dcpregs_hcr_is_system_update_in_progress(void)
+{
+    switch(os_path_get_type(update_shell_script_file))
+    {
+      case OS_PATH_TYPE_IO_ERROR:
+        return false;
+
+      case OS_PATH_TYPE_FILE:
+        return true;
+
+      case OS_PATH_TYPE_DIRECTORY:
+      case OS_PATH_TYPE_OTHER:
+        BUG("Update script exists, but is not a file");
+        break;
+    }
+
+    return false;
+}
+
 static int try_start_system_update(void)
 {
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Attempting to START SYSTEM UPDATE");
@@ -558,24 +579,14 @@ static int try_start_system_update(void)
     if(generate_opkg_feed_files_if_necessary() < 0)
         return -1;
 
-    static const char shell_script_file[] = "/tmp/do_update.sh";
     int fd = -1;
 
-    switch(os_path_get_type(shell_script_file))
-    {
-      case OS_PATH_TYPE_IO_ERROR:
-        /* Good. */
-        fd = os_file_new(shell_script_file);
-        break;
-
-      case OS_PATH_TYPE_FILE:
+    if(dcpregs_hcr_is_system_update_in_progress())
         msg_info("Update in progress, not starting again");
-        break;
-
-      case OS_PATH_TYPE_DIRECTORY:
-      case OS_PATH_TYPE_OTHER:
-        BUG("Update script exists, but is not a file");
-        break;
+    else
+    {
+        /* Good. */
+        fd = os_file_new(update_shell_script_file);
     }
 
     if(fd < 0)
@@ -593,13 +604,13 @@ static int try_start_system_update(void)
         "/bin/sh -c 'exec /bin/sh %s </dev/null >/dev/null 2>/dev/null &'";
 
     if(success &&
-       os_system_formatted(poor_mans_daemonize, shell_script_file) == 0)
+       os_system_formatted(poor_mans_daemonize, update_shell_script_file) == 0)
     {
         /* keep file around, used as a lock */
         return 0;
     }
 
-    os_file_delete(shell_script_file);
+    os_file_delete(update_shell_script_file);
 
     return -1;
 }

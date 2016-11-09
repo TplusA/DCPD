@@ -943,6 +943,7 @@ struct parameters
     bool with_connman;
     bool is_fixing_broken_update_state;
     bool is_upgrade_enforced;
+    bool is_upgrade_strongly_enforced;
     const char *ethernet_interface_mac_address;
     const char *wlan_interface_mac_address;
 };
@@ -1081,7 +1082,10 @@ error_dcpspi_fifo_in:
 static bool is_system_update_required(void)
 {
     if(os_path_get_type("/tmp/dcpd_avoid_update_check.stamp") == OS_PATH_TYPE_FILE)
+    {
+        /* someone doesn't want us to do this check */
         return false;
+    }
 
     const int result =
         os_system("/bin/sh -c 'test -z \"$(sudo /usr/bin/opkg list-upgradable)\"'");
@@ -1146,6 +1150,7 @@ static void usage(const char *program_name)
            "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n"
            "  --no-connman   Disable use of Connman (no network support).\n"
            "  --upgrade      Enforce upgrading the system.\n"
+           "  --force-upgrade  No, really do it regardless of circumstances.\n"
            "  --session-dbus Connect to session D-Bus.\n"
            "  --system-dbus  Connect to system D-Bus.\n",
            program_name);
@@ -1161,6 +1166,7 @@ static int process_command_line(int argc, char *argv[],
     parameters->with_connman = true;
     parameters->is_fixing_broken_update_state = false;
     parameters->is_upgrade_enforced = false;
+    parameters->is_upgrade_strongly_enforced = false;
 
     files->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
     files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
@@ -1236,6 +1242,11 @@ static int process_command_line(int argc, char *argv[],
             parameters->with_connman = false;
         else if(strcmp(argv[i], "--upgrade") == 0)
             parameters->is_upgrade_enforced = true;
+        else if(strcmp(argv[i], "--force-upgrade") == 0)
+        {
+            parameters->is_upgrade_enforced = true;
+            parameters->is_upgrade_strongly_enforced = true;
+        }
         else if(strcmp(argv[i], "--ethernet-mac") == 0)
         {
             CHECK_ARGUMENT();
@@ -1310,6 +1321,15 @@ int main(int argc, char *argv[])
 
     if(setup(&parameters, &files, &primitive_queue_fd, &register_changed_fd) < 0)
         parameters.is_fixing_broken_update_state = true;
+
+    if(dcpregs_hcr_is_system_update_in_progress())
+    {
+        /* revert the possible decision to fix a broken state as we are in the
+         * middle of an update and things may not be as they should be under
+         * normal conditions; only do it if really forced to */
+        parameters.is_fixing_broken_update_state = false;
+        parameters.is_upgrade_enforced = parameters.is_upgrade_strongly_enforced;
+    }
 
     if(!parameters.is_fixing_broken_update_state &&
        !parameters.is_upgrade_enforced)
