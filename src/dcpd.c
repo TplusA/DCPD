@@ -972,13 +972,15 @@ static bool main_loop_init(const struct parameters *parameters,
 
     applink_init();
 
+    bool ret = true;
+
     if(appconn_init(appconn, process_smartphone_outgoing_queue) < 0)
-        return false;
+        ret = false;
 
     if(dot_init(dot) < 0)
-        return false;
+        ret = false;
 
-    return true;
+    return ret;
 }
 
 /*!
