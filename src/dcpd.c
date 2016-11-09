@@ -1350,7 +1350,9 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files, &primitive_queue_fd, &register_changed_fd) < 0)
         parameters.is_fixing_broken_update_state = true;
 
-    if(dcpregs_hcr_is_system_update_in_progress())
+    const bool is_upgrading = dcpregs_hcr_is_system_update_in_progress();
+
+    if(is_upgrading)
     {
         /* revert the possible decision to fix a broken state as we are in the
          * middle of an update and things may not be as they should be under
@@ -1360,7 +1362,7 @@ int main(int argc, char *argv[])
         push_register_filter_set(17);
     }
 
-    if(!parameters.is_fixing_broken_update_state &&
+    if(!is_upgrading && !parameters.is_fixing_broken_update_state &&
        !parameters.is_upgrade_enforced)
         parameters.is_fixing_broken_update_state = is_system_update_required();
 
