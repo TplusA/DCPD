@@ -447,8 +447,8 @@ static int generate_opkg_feed_files_if_necessary(void)
 {
     bool have_feeds = false;
 
-    if(os_foreach_in_path(opkg_configuration_path,
-                          find_opkg_feed_configuration_file, &have_feeds) < 0)
+    if(!os_foreach_in_path(opkg_configuration_path,
+                           find_opkg_feed_configuration_file, &have_feeds))
         return -1;
 
     if(have_feeds)
@@ -1070,9 +1070,9 @@ try_update_repository_feeds(const uint8_t *data, size_t length)
 
     bool modified_directory = false;
 
-    if(os_foreach_in_path(opkg_configuration_path,
-                          delete_opkg_feed_configuration_file,
-                          &modified_directory) < 0)
+    if(!os_foreach_in_path(opkg_configuration_path,
+                           delete_opkg_feed_configuration_file,
+                           &modified_directory))
     {
         inifile_free(&config);
         return UPDATE_FEEDS_FAILED;
