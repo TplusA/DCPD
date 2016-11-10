@@ -1,5 +1,15 @@
 2016-11-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
+	* Version 2.8 released.
+
+	* Updates: Allow overriding the package repository configuration
+	  regardless of configuration sent by SPI slave (for testing).
+
+	* Updates: Fix update procedure for the case that nothing needs to be
+	  done. The system now always reboots after an update request.
+
+2016-11-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
 	* Version 2.7 released.
 
 	* Updates: Do not perform check for partial system update states
