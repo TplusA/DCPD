@@ -2,8 +2,6 @@
 
 test "x$FORCE_SYSTEM_UPGRADE" = x && FORCE_SYSTEM_UPGRADE=
 
-set -eu
-
 LOG='/usr/bin/systemd-cat'
 
 request_reboot_and_exit()
@@ -99,8 +97,6 @@ set -x
 REINSTALL_STATUS_FILTER="$(echo $REINSTALL | sed 's/ /\\|/g')"
 sed '/^Package: \('"$REINSTALL_STATUS_FILTER"'\)$/,/^\s*$/{d}' </var/lib/opkg/status >"${TEMPDIR}/update_patched_status.txt"
 $LOG /usr/bin/sudo /bin/mv "${TEMPDIR}/update_patched_status.txt" /var/lib/opkg/status
-
-set +e
 
 FAILED='no'
 
