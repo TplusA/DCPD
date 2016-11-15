@@ -501,11 +501,12 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
 
     const struct network_prefs *dummy;
     const struct network_prefs *prefs;
+    bool dummyflag;
 
     if(tech_length == 8 && memcmp(service, "ethernet", tech_length) == 0)
-        *prefsfile = network_prefs_open_ro(&prefs, &dummy);
+        *prefsfile = network_prefs_open_ro(&prefs, &dummy, &dummyflag);
     else if(tech_length == 4 && memcmp(service, "wifi", tech_length) == 0)
-        *prefsfile = network_prefs_open_ro(&dummy, &prefs);
+        *prefsfile = network_prefs_open_ro(&dummy, &prefs, &dummyflag);
     else
     {
         *prefsfile = NULL;

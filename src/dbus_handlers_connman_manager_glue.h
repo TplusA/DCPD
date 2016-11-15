@@ -33,7 +33,8 @@ extern "C" {
 struct dbussignal_connman_manager_data;
 
 struct dbussignal_connman_manager_data *
-dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
+dbussignal_connman_manager_init(void (*schedule_reconnect_to_lan_fn)(void),
+                                void (*schedule_connect_to_wlan_fn)(void));
 
 /*!
  * Tell ConnMan to connect to WLAN service with name stored in passed data.
@@ -47,6 +48,9 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
  *     #dbussignal_connman_manager_data::schedule_connect_to_wlan()
  */
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data);
+
+void dbussignal_connman_manager_disconnect_our_lan(struct dbussignal_connman_manager_data *data);
+void dbussignal_connman_manager_connect_our_lan(struct dbussignal_connman_manager_data *data);
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled);

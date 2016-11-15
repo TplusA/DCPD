@@ -673,8 +673,9 @@ static int modify_network_configuration(const struct register_network_interface_
 
     struct network_prefs *ethernet_prefs;
     struct network_prefs *wlan_prefs;
+    bool dummy;
     struct network_prefs_handle *cfg =
-        network_prefs_open_rw(&ethernet_prefs, &wlan_prefs);
+        network_prefs_open_rw(&ethernet_prefs, &wlan_prefs, &dummy);
 
     if(cfg == NULL)
         return -1;

@@ -57,10 +57,12 @@ void network_prefs_deinit(void);
 
 struct network_prefs_handle *
 network_prefs_open_ro(const struct network_prefs **ethernet,
-                      const struct network_prefs **wlan);
+                      const struct network_prefs **wlan,
+                      bool *is_new_configuration_file);
 struct network_prefs_handle *
 network_prefs_open_rw(struct network_prefs **ethernet,
-                      struct network_prefs **wlan);
+                      struct network_prefs **wlan,
+                      bool *is_new_configuration_file);
 void network_prefs_close(struct network_prefs_handle *handle);
 struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handle,
                                               enum NetworkPrefsTechnology tech);
