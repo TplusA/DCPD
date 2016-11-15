@@ -587,15 +587,15 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
 
     configure_our_ipv6_network_common(iface_data, service_list_entry->service_name);
 
-    if(!configure_our_ipv4_network_common(iface_data, service_list_entry,
-                                          prefs, false))
-    {
-        connman_free_interface_data(iface_data);
-        return false;
-    }
+    const bool ret =
+        configure_our_ipv4_network_common(iface_data, service_list_entry,
+                                          prefs, false);
 
     connman_free_interface_data(iface_data);
     iface_data = NULL;
+
+    if(!ret)
+        return false;
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
               "Our WLAN is %sa favorite, auto-connect %s, "
