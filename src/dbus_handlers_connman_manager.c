@@ -658,6 +658,7 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
 
 static bool react_to_service_changes(struct ServiceList **known_services_list,
                                      GVariant *changes, GVariant *removed,
+                                     char *ethernet_service_name,
                                      char *wlan_service_name,
                                      const struct network_prefs *ethernet_prefs,
                                      const struct network_prefs *wlan_prefs)
@@ -668,11 +669,9 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
         return false;
     }
 
-    char ethernet_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
-
     const bool have_ethernet_service_name =
         network_prefs_generate_service_name(ethernet_prefs, ethernet_service_name,
-                                            sizeof(ethernet_service_name)) > 0;
+                                            NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE) > 0;
     network_prefs_generate_service_name(wlan_prefs, wlan_service_name,
                                         NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE);
 
@@ -949,6 +948,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         struct network_prefs_handle *handle =
             network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
 
+        char ethernet_service_name_buffer[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
         char wlan_service_name_buffer[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
         G_STATIC_ASSERT(sizeof(wlan_service_name_buffer) == sizeof(data->wlan_service_name));
 
@@ -961,6 +961,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 
             need_to_schedule_wlan_connection =
                 react_to_service_changes(&data->services, changes, removed,
+                                         ethernet_service_name_buffer,
                                          wlan_service_name_buffer,
                                          ethernet_prefs, wlan_prefs);
 
