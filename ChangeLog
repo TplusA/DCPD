@@ -1,3 +1,13 @@
+2016-11-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.9 released.
+
+	* Networking: Work around a bug in ConnMan that prevented showing
+	  Airable listing on very first boot (or after recovery).
+
+	* DCP protocol: Updates to register 75 and 76 are only sent to SPI
+	  slave if their contents have actually changed.
+
 2016-11-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.8 released.
