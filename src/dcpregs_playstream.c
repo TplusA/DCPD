@@ -390,7 +390,7 @@ static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
     else
     {
         strncpy_terminated(dest_info->meta_data, title, sizeof(dest_info->meta_data));
-        strncpy_terminated(dest_info->url,   url,   sizeof(dest_info->url));
+        strncpy_terminated(dest_info->url,       url,   sizeof(dest_info->url));
         which = NOTIFY_STREAM_INFO_UNMODIFIED;
     }
 
@@ -408,7 +408,7 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
         do_notify_stream_info(data, NOTIFY_STREAM_INFO_PENDING);
     }
     else if(is_stream_with_valid_source(data->overwritten_pending_stream_id) &&
-       data->currently_playing_stream == data->overwritten_pending_stream_id)
+            data->currently_playing_stream == data->overwritten_pending_stream_id)
     {
         do_notify_stream_info(data, NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING);
     }
