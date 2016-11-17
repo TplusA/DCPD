@@ -625,6 +625,7 @@ play_stream_data =
 void dcpregs_playstream_init(void)
 {
     memset(&play_stream_data, 0, sizeof(play_stream_data));
+    g_mutex_init(&play_stream_data.lock);
     play_stream_data.app.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
 }
 
