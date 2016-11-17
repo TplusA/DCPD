@@ -5307,13 +5307,24 @@ static void expect_next_url_empty()
 
 static void send_title_and_url(const ID::Stream stream_id,
                                const char *expected_title,
-                               const char *expected_url)
+                               const char *expected_url,
+                               bool expecting_direct_slave_notification)
 {
     if(expected_title == NULL)
         expected_title = "";
 
     if(expected_url == NULL)
         expected_url = "";
+
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer),
+             "Received explicit title and URL information for stream %u",
+             stream_id.get_raw_id());
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, buffer);
+
+    if(expecting_direct_slave_notification)
+        mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
 
     dcpregs_playstream_set_title_and_url(stream_id.get_raw_id(),
                                          expected_title, expected_url);
@@ -5458,6 +5469,7 @@ void test_start_stream_then_start_another_stream()
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5469,6 +5481,7 @@ void test_start_stream_then_start_another_stream()
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5493,11 +5506,14 @@ void test_start_stream_then_quickly_start_another_stream()
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Got start notification for unknown app stream ID 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    mock_messages->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5517,6 +5533,7 @@ void test_app_can_start_stream_while_other_source_is_playing()
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5538,6 +5555,7 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5548,12 +5566,13 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
      *       the harsh log message. */
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
     dcpregs_playstream_start_notification(ui_stream_id.get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 
-    send_title_and_url(ui_stream_id, "UI stream", "http://ui-provided.url.org/loud.flac");
+    send_title_and_url(ui_stream_id, "UI stream", "http://ui-provided.url.org/loud.flac", true);
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
 }
@@ -5571,6 +5590,7 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5578,7 +5598,7 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
 
     const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
 
-    send_title_and_url(ui_stream_id, "UI stream", "http://ui-provided.url.org/loud.flac");
+    send_title_and_url(ui_stream_id, "UI stream", "http://ui-provided.url.org/loud.flac", false);
     register_changed_data->check();
 
     /* NOTE: In real life, there should have been a stop notification before
@@ -5586,6 +5606,7 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
      *       the harsh log message. */
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(ui_stream_id.get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
@@ -5596,23 +5617,29 @@ static void start_stop_single_stream(bool with_notifications)
     const auto stream_id(OurStream::make());
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, false);
     register_changed_data->check();
+    mock_messages->check();
 
     if(with_notifications)
     {
         mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+        mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
         register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+        mock_messages->check();
         expect_next_url_empty();
         expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
     }
 
     stop_stream();
+    mock_messages->check();
 
     if(with_notifications)
     {
         mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+        mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         dcpregs_playstream_stop_notification();
         register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+        mock_messages->check();
         expect_current_title_and_url("", "");
     }
 }
@@ -5641,10 +5668,12 @@ void test_quick_start_stop_single_stream()
                                               "Unexpected start of app stream 257");
     register_changed_data->check();
 
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN);
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     expect_current_title_and_url("", "");
@@ -5665,8 +5694,10 @@ void test_start_stream_and_queue_next()
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
@@ -5674,13 +5705,16 @@ void test_start_stream_and_queue_next()
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, true, true);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 
     /* after a while, the stream may finish */
     mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
@@ -5710,6 +5744,7 @@ void test_play_multiple_tracks_in_a_row()
 
     /* first track starts playing */
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5729,14 +5764,17 @@ void test_play_multiple_tracks_in_a_row()
         snprintf(buffer, sizeof(buffer),
                  "Next app stream %u", stream_id.get().get_raw_id());
         mock_messages->expect_msg_info_formatted(buffer);
+        mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
         register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+        mock_messages->check();
         expect_next_url_empty();
         expect_current_title_and_url(pair.first, pair.second);
     }
 
     /* after a while, the last stream finishes playing */
     mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
@@ -5765,12 +5803,14 @@ void test_start_stream_and_quickly_queue_next()
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5793,6 +5833,7 @@ void test_queue_next_after_stop_notification_is_ignored()
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5800,6 +5841,7 @@ void test_queue_next_after_stop_notification_is_ignored()
 
     /* the stream finishes... */
     mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
@@ -5843,6 +5885,7 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5863,7 +5906,10 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
+    mock_messages->check();
+
     mock_messages->expect_msg_info_formatted("Next app stream 260");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
@@ -5880,8 +5926,10 @@ void test_pause_and_continue()
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+    mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
@@ -5904,6 +5952,7 @@ void test_pause_and_continue()
 
     /* now assume the next stream has started */
     mock_messages->expect_msg_info_formatted("Next app stream 258");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();

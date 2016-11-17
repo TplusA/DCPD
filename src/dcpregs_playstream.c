@@ -55,6 +55,13 @@ enum NotifyStreamInfo
     NOTIFY_STREAM_INFO_DEV_NULL,
 };
 
+enum SendStreamUpdate
+{
+    SEND_STREAM_UPDATE_NONE,
+    SEND_STREAM_UPDATE_TITLE,
+    SEND_STREAM_UPDATE_URL_AND_TITLE,
+};
+
 struct SimplifiedStreamInfo
 {
     char meta_data[256 + 1];
@@ -209,10 +216,29 @@ static enum StreamIdType determine_stream_id_type(const stream_id_t raw_stream_i
         return STREAM_ID_TYPE_APP_UNKNOWN;
 }
 
-static inline void clear_stream_info(struct SimplifiedStreamInfo *info)
+static inline enum SendStreamUpdate
+determine_send_stream_update(bool title_changed, bool url_changed)
 {
+    if(!title_changed && !url_changed)
+        return SEND_STREAM_UPDATE_NONE;
+
+    if(!url_changed)
+        return SEND_STREAM_UPDATE_TITLE;
+
+    return SEND_STREAM_UPDATE_URL_AND_TITLE;
+}
+
+static inline enum SendStreamUpdate
+clear_stream_info(struct SimplifiedStreamInfo *info)
+{
+    const enum SendStreamUpdate ret =
+        determine_send_stream_update(info->meta_data[0] != '\0',
+                                     info->url[0] != '\0');
+
     info->meta_data[0] = '\0';
     info->url[0] = '\0';
+
+    return ret;
 }
 
 static inline void reset_to_idle_mode(struct PlayAppStreamData *data)
@@ -233,7 +259,8 @@ static inline void notify_ready_for_next_stream_from_slave(void)
 }
 
 static void do_notify_stream_info(struct PlayAnyStreamData *data,
-                                  const enum NotifyStreamInfo which)
+                                  const enum NotifyStreamInfo which,
+                                  const enum SendStreamUpdate update)
 {
     switch(which)
     {
@@ -266,8 +293,24 @@ static void do_notify_stream_info(struct PlayAnyStreamData *data,
             STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
     }
 
-    registers_get_data()->register_changed_notification_fn(75);
-    registers_get_data()->register_changed_notification_fn(76);
+    switch(update)
+    {
+      case SEND_STREAM_UPDATE_NONE:
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "Suppress sending title and URL to SPI slave");
+        break;
+
+      case SEND_STREAM_UPDATE_URL_AND_TITLE:
+        msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+        registers_get_data()->register_changed_notification_fn(75);
+        registers_get_data()->register_changed_notification_fn(76);
+        break;
+
+      case SEND_STREAM_UPDATE_TITLE:
+        msg_vinfo(MESSAGE_LEVEL_DIAG, "Send only new title to SPI slave");
+        registers_get_data()->register_changed_notification_fn(75);
+        break;
+    }
 }
 
 static void app_stream_started_playing(struct PlayAppStreamData *data,
@@ -381,14 +424,19 @@ static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
          : STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID);
 
     enum NotifyStreamInfo which;
+    enum SendStreamUpdate update;
 
     if((raw_stream_id & STREAM_ID_COOKIE_MASK) == STREAM_ID_COOKIE_INVALID)
     {
-        clear_stream_info(dest_info);
+        update = clear_stream_info(dest_info);
         which = NOTIFY_STREAM_INFO_DEV_NULL;
     }
     else
     {
+        update =
+            determine_send_stream_update(strcmp(dest_info->meta_data, title) != 0,
+                                         strcmp(dest_info->url, url) != 0);
+
         strncpy_terminated(dest_info->meta_data, title, sizeof(dest_info->meta_data));
         strncpy_terminated(dest_info->url,       url,   sizeof(dest_info->url));
         which = NOTIFY_STREAM_INFO_UNMODIFIED;
@@ -396,7 +444,7 @@ static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
 
     /* direct update */
     if(!is_stream_with_valid_source(any_stream_data->pending_stream_id))
-        do_notify_stream_info(any_stream_data, which);
+        do_notify_stream_info(any_stream_data, which, update);
 }
 
 static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
@@ -405,12 +453,14 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
     if(is_stream_with_valid_source(data->pending_stream_id) &&
        data->currently_playing_stream == data->pending_stream_id)
     {
-        do_notify_stream_info(data, NOTIFY_STREAM_INFO_PENDING);
+        do_notify_stream_info(data, NOTIFY_STREAM_INFO_PENDING,
+                              SEND_STREAM_UPDATE_URL_AND_TITLE);
     }
     else if(is_stream_with_valid_source(data->overwritten_pending_stream_id) &&
             data->currently_playing_stream == data->overwritten_pending_stream_id)
     {
-        do_notify_stream_info(data, NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING);
+        do_notify_stream_info(data, NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING,
+                              SEND_STREAM_UPDATE_URL_AND_TITLE);
     }
     else if(switched_to_nonapp_mode)
     {
@@ -418,7 +468,8 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
          * has failed to deliver title and URL up to this point, then we need
          * to wipe out the currently stored, outdated information. The external
          * source may send the missing information later in this case. */
-        do_notify_stream_info(data, NOTIFY_STREAM_INFO_DEV_NULL);
+        do_notify_stream_info(data, NOTIFY_STREAM_INFO_DEV_NULL,
+                              SEND_STREAM_UPDATE_URL_AND_TITLE);
     }
 }
 
@@ -741,6 +792,10 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
                                           const char *title, const char *url)
 {
+    msg_vinfo(MESSAGE_LEVEL_DIAG,
+              "Received explicit title and URL information for stream %u",
+              raw_stream_id);
+
     g_mutex_lock(&play_stream_data.lock);
 
     log_assert((raw_stream_id & STREAM_ID_SOURCE_MASK) != STREAM_ID_SOURCE_INVALID);
@@ -866,7 +921,8 @@ void dcpregs_playstream_stop_notification(void)
     play_stream_data.other.currently_playing_stream =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
 
-    do_notify_stream_info(&play_stream_data.other, NOTIFY_STREAM_INFO_DEV_NULL);
+    do_notify_stream_info(&play_stream_data.other, NOTIFY_STREAM_INFO_DEV_NULL,
+                          SEND_STREAM_UPDATE_URL_AND_TITLE);
 
     g_mutex_unlock(&play_stream_data.lock);
 }
