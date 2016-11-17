@@ -5680,6 +5680,85 @@ void test_quick_start_stop_single_stream()
 }
 
 /*!\test
+ * If new title and URL information are received, but only title is different,
+ * then only the title is forwarded to SPI slave.
+ *
+ * Doesn't work for app streams (attempts to set stream information are
+ * filtered out and result in a bug message).
+ */
+void test_url_is_not_sent_to_spi_slave_if_unchanged()
+{
+    static constexpr char url[] = "http://my.url.org/stream.m3u";
+    const auto stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
+
+    dcpregs_playstream_start_notification(stream_id.get_raw_id());
+
+    register_changed_data->check();
+    mock_messages->check();
+    expect_current_title_and_url("", "");
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+             "Received explicit title and URL information for stream 129");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+
+    dcpregs_playstream_set_title_and_url(stream_id.get_raw_id(), "My stream", url);
+
+    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    mock_messages->check();
+    expect_current_title_and_url("My stream", url);
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+             "Received explicit title and URL information for stream 129");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send only new title to SPI slave");
+
+    dcpregs_playstream_set_title_and_url(stream_id.get_raw_id(), "Other title", url);
+
+    register_changed_data->check(75);
+    expect_current_title_and_url("Other title", url);
+}
+
+/*!\test
+ * Repetitively received same title and URL are forwarded to SPI slave only
+ * once.
+ *
+ * Doesn't work for app streams (attempts to set stream information are
+ * filtered out and result in a bug message).
+ */
+void test_nothing_is_sent_to_spi_slave_if_title_and_url_unchanged()
+{
+    static constexpr char url[] = "http://my.url.org/stream.m3u";
+    static constexpr char title[] = "Stream Me";
+    const auto stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
+
+    dcpregs_playstream_start_notification(stream_id.get_raw_id());
+
+    register_changed_data->check();
+    mock_messages->check();
+    expect_current_title_and_url("", "");
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+             "Received explicit title and URL information for stream 129");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
+                                    "Send title and URL to SPI slave");
+
+    dcpregs_playstream_set_title_and_url(stream_id.get_raw_id(), title, url);
+
+    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    mock_messages->check();
+    expect_current_title_and_url(title, url);
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+             "Received explicit title and URL information for stream 129");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
+                                    "Suppress sending title and URL to SPI slave");
+
+    dcpregs_playstream_set_title_and_url(stream_id.get_raw_id(), title, url);
+
+    register_changed_data->check();
+    expect_current_title_and_url(title, url);
+}
+
+/*!\test
  * App starts stream and then sends another stream to play after the first one.
  *
  * The second stream is not played immediately.
