@@ -1,3 +1,11 @@
+2016-11-18  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.10 released.
+
+	* Networking: Revert the workaround applied in v2.9. We are now
+	  relying on an improved version of ConnMan which doesn't require such
+	  silly things anymore.
+
 2016-11-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.9 released.
