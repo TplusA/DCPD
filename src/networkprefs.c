@@ -362,8 +362,7 @@ static void patch_mac_address(struct ini_section *section,
 
 static struct network_prefs_handle *open_prefs_file(bool is_writable,
                                                     struct network_prefs **ethernet,
-                                                    struct network_prefs **wlan,
-                                                    bool *is_new_configuration_file)
+                                                    struct network_prefs **wlan)
 {
     g_mutex_lock(&networkprefs_data.lock);
 
@@ -371,7 +370,6 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
     *wlan = NULL;
 
     networkprefs_data.is_writable = is_writable;
-    *is_new_configuration_file = false;
 
     for(int try = 0; try < 2; ++try)
     {
@@ -386,12 +384,9 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
         else if(ret > 0)
         {
             if(try == 0)
-            {
                 write_default_preferences(networkprefs_data.preferences_filename,
                                           networkprefs_data.preferences_path,
                                           networkprefs_data.ethernet_mac.address);
-                *is_new_configuration_file = true;
-            }
             else
             {
                 msg_error(0, LOG_ERR, "Network preferences file not found");
@@ -458,16 +453,14 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
 
 struct network_prefs_handle *
 network_prefs_open_ro(const struct network_prefs **ethernet,
-                      const struct network_prefs **wlan,
-                      bool *is_new_configuration_file)
+                      const struct network_prefs **wlan)
 {
     /* use locals to avoid stupid type casts */
     struct network_prefs *ethernet_nonconst;
     struct network_prefs *wlan_nonconst;
 
     struct network_prefs_handle *const handle =
-        open_prefs_file(false, &ethernet_nonconst, &wlan_nonconst,
-                        is_new_configuration_file);
+        open_prefs_file(false, &ethernet_nonconst, &wlan_nonconst);
 
     *ethernet = ethernet_nonconst;
     *wlan = wlan_nonconst;
@@ -477,10 +470,9 @@ network_prefs_open_ro(const struct network_prefs **ethernet,
 
 struct network_prefs_handle *
 network_prefs_open_rw(struct network_prefs **ethernet,
-                      struct network_prefs **wlan,
-                      bool *is_new_configuration_file)
+                      struct network_prefs **wlan)
 {
-    return open_prefs_file(true, ethernet, wlan, is_new_configuration_file);
+    return open_prefs_file(true, ethernet, wlan);
 }
 
 void network_prefs_close(struct network_prefs_handle *handle)

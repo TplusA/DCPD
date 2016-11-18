@@ -70,13 +70,11 @@
 #define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
 #define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 13)
 #define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 14)
-#define WAITEVENT_RECONNECT_TO_LAN_REQUESTED            (1U << 31)
 
 enum PrimitiveQueueCommand
 {
     PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
     PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
-    PRIMITIVE_QUEUECMD_RECONNECT_TO_MANAGED_LAN__CONNMAN_BUG_WORKAROUND,
 };
 
 /*!
@@ -380,10 +378,6 @@ static unsigned int handle_primqueue_events(int fd, short revents)
                     result |= WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS;
                     break;
 
-                  case PRIMITIVE_QUEUECMD_RECONNECT_TO_MANAGED_LAN__CONNMAN_BUG_WORKAROUND:
-                    result |= WAITEVENT_RECONNECT_TO_LAN_REQUESTED;
-                    break;
-
                   case PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN:
                     result |= WAITEVENT_CONNECT_TO_WLAN_REQUESTED;
                     break;
@@ -667,12 +661,6 @@ static void handle_register_change(unsigned int wait_result, int fd,
 static void handle_connman_manager_events(unsigned int wait_result,
                                           struct dbussignal_connman_manager_data *data)
 {
-    if((wait_result & WAITEVENT_RECONNECT_TO_LAN_REQUESTED) != 0)
-    {
-        dbussignal_connman_manager_disconnect_our_lan(data);
-        dbussignal_connman_manager_connect_our_lan(data);
-    }
-
     if((wait_result & WAITEVENT_CONNECT_TO_WLAN_REQUESTED) != 0)
         dbussignal_connman_manager_connect_our_wlan(data);
 }
@@ -747,12 +735,6 @@ static void process_smartphone_outgoing_queue(void)
 {
     primitive_queue_send(PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
                          "processing smartphone queue");
-}
-
-static void reconnect_to_managed_lan(void)
-{
-    primitive_queue_send(PRIMITIVE_QUEUECMD_RECONNECT_TO_MANAGED_LAN__CONNMAN_BUG_WORKAROUND,
-                         "reconnecting to LAN");
 }
 
 static void try_connect_to_managed_wlan(void)
@@ -1015,8 +997,7 @@ static bool main_loop_init(const struct parameters *parameters,
 
     transaction_init_allocator();
 
-    *connman = dbussignal_connman_manager_init(reconnect_to_managed_lan,
-                                               try_connect_to_managed_wlan);
+    *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan);
 
     applink_init();
 

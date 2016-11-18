@@ -73,8 +73,6 @@ struct ServiceList
 struct dbussignal_connman_manager_data
 {
     GMutex lock;
-    char ethernet_service_name[512];
-    void (*schedule_reconnect_to_lan)(void);
     char wlan_service_name[512];
     void (*schedule_connect_to_wlan)(void);
 
@@ -204,21 +202,6 @@ static void service_connected(const char *service_name,
       case CONNMAN_SERVICE_CONNECT_DISCARDED:
         break;
     }
-}
-
-void dbussignal_connman_manager_disconnect_our_lan(struct dbussignal_connman_manager_data *data)
-{
-    g_mutex_lock(&data->lock);
-    connman_common_disconnect_service_by_object_path(data->ethernet_service_name);
-    g_mutex_unlock(&data->lock);
-}
-
-void dbussignal_connman_manager_connect_our_lan(struct dbussignal_connman_manager_data *data)
-{
-    g_mutex_lock(&data->lock);
-    connman_common_connect_service_by_object_path(data->ethernet_service_name,
-                                                  service_connected, NULL);
-    g_mutex_unlock(&data->lock);
 }
 
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data)
@@ -673,23 +656,17 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
     return false;
 }
 
-static void react_to_service_changes(struct ServiceList **known_services_list,
+static bool react_to_service_changes(struct ServiceList **known_services_list,
                                      GVariant *changes, GVariant *removed,
                                      char *ethernet_service_name,
                                      char *wlan_service_name,
                                      const struct network_prefs *ethernet_prefs,
-                                     const struct network_prefs *wlan_prefs,
-                                     bool is_first_time_configuration,
-                                     bool *need_to_schedule_wlan_connection,
-                                     bool *need_to_reconnect_ethernet)
+                                     const struct network_prefs *wlan_prefs)
 {
-    *need_to_schedule_wlan_connection = false;
-    *need_to_reconnect_ethernet = false;
-
     if(changes == NULL && removed == NULL)
     {
         /* ignore unlikely, but possible funny data from ConnMan */
-        return;
+        return false;
     }
 
     const bool have_ethernet_service_name =
@@ -857,17 +834,7 @@ static void react_to_service_changes(struct ServiceList **known_services_list,
         if(strcmp(service_list_entry->service_name, ethernet_service_name) == 0)
         {
             /* our LAN service may need some care */
-            if(configure_our_lan(ethernet_prefs, service_list_entry) &&
-               is_first_time_configuration)
-            {
-                /* ConnMan thinks the networking state is idle after IPv6
-                 * configuration has been disabled, but *only* in case this is
-                 * the first time the service configuration is done. As soon as
-                 * ConnMan has registered the service in its own set of
-                 * configuration files, it works every time. */
-                msg_info("Applying silly workaround for ConnMan connection state bug");
-                *need_to_reconnect_ethernet = true;
-            }
+            configure_our_lan(ethernet_prefs, service_list_entry);
 
             our_ethernet_service = service_list_entry;
 
@@ -917,7 +884,7 @@ static void react_to_service_changes(struct ServiceList **known_services_list,
         connman_wlan_power_on();
     }
     else
-        return;
+        return false;
 
     /*
      * We have determined that we should switch over to WLAN. If the WLAN is
@@ -926,40 +893,16 @@ static void react_to_service_changes(struct ServiceList **known_services_list,
      */
 
     if(our_wlan_service == NULL)
-        return;
+        return false;
 
     if(maybe_true(&our_wlan_service->is_connected))
-        return;
+        return false;
 
     if(maybe_true(&our_wlan_service->is_auto_connect))
-        return;
+        return false;
 
     /* Click. */
-    *need_to_schedule_wlan_connection = true;
-}
-
-static void schedule_lan_reconnect_if_necessary(bool is_necessary,
-                                                struct dbussignal_connman_manager_data *data,
-                                                const char *service_name)
-{
-    g_mutex_lock(&data->lock);
-
-    if(is_necessary)
-    {
-        log_assert(service_name[0] != '\0');
-
-        strncpy(data->ethernet_service_name, service_name,
-                sizeof(data->ethernet_service_name));
-        data->ethernet_service_name[sizeof(data->ethernet_service_name) - 1] = '\0';
-        data->schedule_reconnect_to_lan();
-
-        msg_vinfo(MESSAGE_LEVEL_DEBUG,
-                  "***** Scheduled reconnect to LAN *****");
-    }
-    else
-        data->ethernet_service_name[0] = '\0';
-
-    g_mutex_unlock(&data->lock);
+    return true;
 }
 
 static void schedule_wlan_connect_if_necessary(bool is_necessary,
@@ -1002,31 +945,25 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 
         const struct network_prefs *ethernet_prefs;
         const struct network_prefs *wlan_prefs;
-        bool is_new_configuration_file;
         struct network_prefs_handle *handle =
-            network_prefs_open_ro(&ethernet_prefs, &wlan_prefs, &is_new_configuration_file);
+            network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
 
         char ethernet_service_name_buffer[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
-        G_STATIC_ASSERT(sizeof(ethernet_service_name_buffer) == sizeof(data->ethernet_service_name));
-
         char wlan_service_name_buffer[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
         G_STATIC_ASSERT(sizeof(wlan_service_name_buffer) == sizeof(data->wlan_service_name));
 
         bool need_to_schedule_wlan_connection = false;
-        bool need_to_reconnect_ethernet = false;
 
         if(handle != NULL)
         {
             GVariant *changes = g_variant_get_child_value(parameters, 0);
             GVariant *removed = g_variant_get_child_value(parameters, 1);
 
-            react_to_service_changes(&data->services, changes, removed,
-                                     ethernet_service_name_buffer,
-                                     wlan_service_name_buffer,
-                                     ethernet_prefs, wlan_prefs,
-                                     is_new_configuration_file,
-                                     &need_to_schedule_wlan_connection,
-                                     &need_to_reconnect_ethernet);
+            need_to_schedule_wlan_connection =
+                react_to_service_changes(&data->services, changes, removed,
+                                         ethernet_service_name_buffer,
+                                         wlan_service_name_buffer,
+                                         ethernet_prefs, wlan_prefs);
 
             g_variant_unref(changes);
             g_variant_unref(removed);
@@ -1036,8 +973,6 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 
         dcpregs_networkconfig_interfaces_changed();
 
-        schedule_lan_reconnect_if_necessary(need_to_reconnect_ethernet,
-                                            data, ethernet_service_name_buffer);
         schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
                                            data, wlan_service_name_buffer);
     }
@@ -1081,14 +1016,11 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 static struct dbussignal_connman_manager_data global_dbussignal_connman_manager_data;
 
 struct dbussignal_connman_manager_data *
-dbussignal_connman_manager_init(void (*schedule_reconnect_to_lan_fn)(void),
-                                void (*schedule_connect_to_wlan_fn)(void))
+dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void))
 {
     memset(&global_dbussignal_connman_manager_data, 0,
            sizeof(global_dbussignal_connman_manager_data));
     g_mutex_init(&global_dbussignal_connman_manager_data.lock);
-    global_dbussignal_connman_manager_data.schedule_reconnect_to_lan =
-        schedule_reconnect_to_lan_fn;
     global_dbussignal_connman_manager_data.schedule_connect_to_wlan =
         schedule_connect_to_wlan_fn;
 
@@ -1103,9 +1035,8 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 
     const struct network_prefs *ethernet_prefs;
     const struct network_prefs *wlan_prefs;
-    bool dummy;
     struct network_prefs_handle *handle =
-        network_prefs_open_ro(&ethernet_prefs, &wlan_prefs, &dummy);
+        network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
 
     if(handle == NULL)
         return;
