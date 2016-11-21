@@ -796,6 +796,7 @@ RECURSIVE              = YES
 EXCLUDE                = \
     @abs_builddir@/src/dcpd_dbus.c \
     @abs_builddir@/src/dbusdl_dbus.c \
+    @abs_builddir@/src/debug_dbus.c \
     @abs_builddir@/src/streamplayer_dbus.c \
     @abs_builddir@/src/airable_dbus.c \
     @abs_builddir@/src/credentials_dbus.c \

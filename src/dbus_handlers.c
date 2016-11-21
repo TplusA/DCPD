@@ -254,3 +254,83 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
     else
         unknown_signal(iface_name, signal_name, sender_name);
 }
+
+static enum MessageVerboseLevel do_set_debug_level(const char *new_level_name,
+                                                   bool must_be_proper_name)
+{
+    static enum MessageVerboseLevel default_level = MESSAGE_LEVEL_IMPOSSIBLE;
+
+    if(default_level == MESSAGE_LEVEL_IMPOSSIBLE)
+        default_level = msg_get_verbose_level();
+
+    enum MessageVerboseLevel old_level = msg_get_verbose_level();
+    enum MessageVerboseLevel new_level;
+
+    if(new_level_name == NULL || new_level_name[0] == '\0')
+    {
+        if(must_be_proper_name)
+            new_level = old_level = MESSAGE_LEVEL_IMPOSSIBLE;
+        else
+        {
+            new_level = old_level;
+            new_level_name = msg_verbose_level_to_level_name(new_level);
+        }
+    }
+    else if(strcmp(new_level_name, "default") == 0)
+    {
+        new_level = default_level;
+        new_level_name = msg_verbose_level_to_level_name(new_level);
+    }
+    else
+    {
+        new_level = msg_verbose_level_name_to_level(new_level_name);
+
+        if(new_level == MESSAGE_LEVEL_IMPOSSIBLE)
+            old_level = MESSAGE_LEVEL_IMPOSSIBLE;
+    }
+
+    if(new_level != old_level)
+    {
+        msg_vinfo(MESSAGE_LEVEL_INFO_MIN,
+                  "Set debug level \"%s\"", new_level_name);
+        msg_set_verbose_level(new_level);
+    }
+    else if(old_level == MESSAGE_LEVEL_IMPOSSIBLE)
+        msg_error(0, LOG_ERR, "Log level \"%s\" invalid", new_level_name);
+
+    return old_level;
+}
+
+gboolean dbusmethod_debug_logging_debug_level(tdbusdebugLogging *object,
+                                              GDBusMethodInvocation *invocation,
+                                              const gchar *arg_new_level,
+                                              void *user_data)
+{
+    const enum MessageVerboseLevel old_level =
+        do_set_debug_level(arg_new_level, false);
+    const char *name = msg_verbose_level_to_level_name(old_level);
+
+    if(name == NULL)
+        name = "";
+
+    tdbus_debug_logging_complete_debug_level(object, invocation, name);
+
+    return TRUE;
+}
+
+gboolean dbusmethod_debug_logging_config_set_level(tdbusdebugLoggingConfig *object,
+                                                   GDBusMethodInvocation *invocation,
+                                                   const gchar *arg_new_level,
+                                                   void *user_data)
+{
+    const enum MessageVerboseLevel old_level =
+        do_set_debug_level(arg_new_level, true);
+
+    tdbus_debug_logging_config_complete_set_global_debug_level(object, invocation);
+
+    if(old_level != MESSAGE_LEVEL_IMPOSSIBLE)
+        tdbus_debug_logging_config_emit_global_debug_level_changed(object,
+                                                                   arg_new_level);
+
+    return TRUE;
+}

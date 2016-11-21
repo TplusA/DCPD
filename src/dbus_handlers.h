@@ -23,6 +23,7 @@
 #include <gio/gio.h>
 
 #include "dcpd_dbus.h"
+#include "debug_dbus.h"
 
 /*!
  * \addtogroup dbus_handlers DBus handlers for signals
@@ -57,6 +58,15 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     GDBusMethodInvocation *invocation,
                                     guint16 raw_stream_id,
                                     const gchar *title, const gchar *url);
+
+gboolean dbusmethod_debug_logging_debug_level(tdbusdebugLogging *object,
+                                              GDBusMethodInvocation *invocation,
+                                              const gchar *arg_new_level,
+                                              void *user_data);
+gboolean dbusmethod_debug_logging_config_set_level(tdbusdebugLoggingConfig *object,
+                                                   GDBusMethodInvocation *invocation,
+                                                   const gchar *arg_new_level,
+                                                   void *user_data);
 
 #ifdef __cplusplus
 }

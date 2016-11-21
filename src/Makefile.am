@@ -68,7 +68,8 @@ noinst_LTLIBRARIES = \
     libairable_dbus.la \
     libcredentials_dbus.la \
     libconnman_dbus.la \
-    liblogind_dbus.la
+    liblogind_dbus.la \
+    libdebug_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
@@ -149,6 +150,9 @@ libairable_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libcredentials_dbus_la_SOURCES = credentials_dbus.c credentials_dbus.h
 libcredentials_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libdebug_dbus_la_SOURCES = debug_dbus.c debug_dbus.h
+libdebug_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 libdrcpdcomm_la_SOURCES = \
     drcp.c drcp.h \
     named_pipe.h \
@@ -204,6 +208,10 @@ BUILT_SOURCES = \
     org_freedesktop_logind.h \
     org_freedesktop_logind.md \
     logind_dbus.stamp \
+    $(nodist_libdebug_dbus_la_SOURCES) \
+    de_tahifi_debug.h \
+    de_tahifi_debug.md \
+    debug_dbus.stamp \
     $(nodist_libregisters_la_SOURCES)
 
 CLEANFILES = $(BUILT_SOURCES)
@@ -253,6 +261,15 @@ credentials_dbus.h: credentials_dbus.stamp
 credentials_dbus.stamp: $(DBUS_IFACES)/de_tahifi_credentials.xml
 	$(GDBUS_CODEGEN) --generate-c-code=credentials_dbus --c-namespace tdbus_credentials --interface-prefix de.tahifi.Credentials. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_credentials.md -H de_tahifi_credentials.h -c tdbus_credentials -s de.tahifi.Credentials. -n "$(PACKAGE_NAME) (passing credentials around)"
+	touch $@
+
+de_tahifi_debug.h: debug_dbus.stamp
+de_tahifi_debug.md: debug_dbus.stamp
+debug_dbus.c: debug_dbus.stamp
+debug_dbus.h: debug_dbus.stamp
+debug_dbus.stamp: $(DBUS_IFACES)/de_tahifi_debug.xml
+	$(GDBUS_CODEGEN) --generate-c-code=debug_dbus --c-namespace tdbus_debug --interface-prefix de.tahifi.Debug. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_debug.md -H de_tahifi_debug.h -c tdbus_debug -s de.tahifi.Debug. -n "$(PACKAGE_NAME)"
 	touch $@
 
 net_connman.h: connman_dbus.stamp

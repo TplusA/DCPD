@@ -61,6 +61,8 @@ static struct
     tdbusdcpdViews *views_iface;
     tdbusdcpdListNavigation *list_navigation_iface;
     tdbusdcpdListItem *list_item_iface;
+    tdbusdebugLogging *debug_logging_iface;
+    tdbusdebugLoggingConfig *debug_logging_config_iface;
 }
 dcpd_iface_data;
 
@@ -145,14 +147,24 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.views_iface = tdbus_dcpd_views_skeleton_new();
         dcpd_iface_data.list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
         dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
+        dcpd_iface_data.debug_logging_iface = tdbus_debug_logging_skeleton_new();
+        dcpd_iface_data.debug_logging_config_iface = tdbus_debug_logging_config_skeleton_new();
 
         g_signal_connect(dcpd_iface_data.playback_iface, "handle-set-stream-info",
                          G_CALLBACK(dbusmethod_set_stream_info), NULL);
+        g_signal_connect(dcpd_iface_data.debug_logging_iface,
+                         "handle-debug-level",
+                         G_CALLBACK(dbusmethod_debug_logging_debug_level), NULL);
+        g_signal_connect(dcpd_iface_data.debug_logging_config_iface,
+                         "handle-set-global-debug-level",
+                         G_CALLBACK(dbusmethod_debug_logging_config_set_level), NULL);
 
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.playback_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.views_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_item_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_config_iface));
     }
 
     if(!is_session_bus)
@@ -397,6 +409,8 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(dcpd_iface_data.views_iface != NULL);
     log_assert(dcpd_iface_data.list_navigation_iface != NULL);
     log_assert(dcpd_iface_data.list_item_iface != NULL);
+    log_assert(dcpd_iface_data.debug_logging_iface != NULL);
+    log_assert(dcpd_iface_data.debug_logging_config_iface != NULL);
     log_assert(filetransfer_iface_data.iface != NULL);
     log_assert(streamplayer_iface_data.playback_iface != NULL);
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
@@ -457,6 +471,8 @@ void dbus_shutdown(void)
     g_object_unref(dcpd_iface_data.views_iface);
     g_object_unref(dcpd_iface_data.list_navigation_iface);
     g_object_unref(dcpd_iface_data.list_item_iface);
+    g_object_unref(dcpd_iface_data.debug_logging_iface);
+    g_object_unref(dcpd_iface_data.debug_logging_config_iface);
 
     g_object_unref(filetransfer_iface_data.iface);
     g_object_unref(streamplayer_iface_data.playback_iface);
