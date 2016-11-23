@@ -6,10 +6,19 @@ LOG='/usr/bin/systemd-cat'
 
 request_reboot_and_exit()
 {
-    $LOG echo "Exiting with code $1, rebooting"
+    $LOG echo "UPDATE: Exiting with code $1, rebooting"
     $LOG /usr/bin/dbus-send --system --print-reply --dest=org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager.Reboot boolean:false
     exit $1
 }
+
+while [ true ]
+do
+    $LOG echo "UPDATE: Waiting for online state..."
+    if test "x$(/usr/bin/connmanctl state | grep 'State = online')" != x; then break; fi
+    sleep 2
+done
+
+$LOG echo "UPDATE: Starting"
 
 $LOG /usr/bin/sudo /usr/bin/opkg clean
 $LOG /usr/bin/sudo /usr/bin/opkg update
