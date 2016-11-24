@@ -43,6 +43,7 @@ check_LTLIBRARIES = \
     test_drcpdcomm.la \
     test_transactions.la \
     test_xmodem.la \
+    test_networkprefs.la \
     test_network_dispatcher.la \
     test_applink.la
 
@@ -118,6 +119,18 @@ test_xmodem_la_SOURCES = \
 test_xmodem_la_LIBADD = $(top_builddir)/src/libxmodem.la
 test_xmodem_la_CFLAGS = $(AM_CFLAGS)
 test_xmodem_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_networkprefs_la_SOURCES = \
+    test_networkprefs.cc \
+    ../src/networkprefs.h \
+    mock_os.hh mock_os.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_networkprefs_la_LIBADD = \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libinifile.la
+test_networkprefs_la_CFLAGS = $(AM_CFLAGS)
+test_networkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 test_network_dispatcher_la_SOURCES = \
     test_network_dispatcher.cc \

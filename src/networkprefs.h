@@ -96,6 +96,9 @@ void network_prefs_put_wlan_config(struct network_prefs *prefs,
                                    const char *passphrase);
 void network_prefs_disable_ipv4(struct network_prefs *prefs);
 
+void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path,
+                                                           const char *ethernet_mac);
+
 #ifdef __cplusplus
 }
 #endif

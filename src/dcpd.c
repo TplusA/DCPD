@@ -979,10 +979,11 @@ struct parameters
 static bool main_loop_init(const struct parameters *parameters,
                            struct smartphone_app_connection_data *appconn,
                            struct dbussignal_connman_manager_data **connman,
-                           struct dcp_over_tcp_data *dot)
+                           struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
     static const char network_preferences_dir[] = "/var/local/etc";
     static const char network_preferences_file[] = "network.ini";
+    static const char connman_config_dir[] = "/var/local/etc/connman";
     static char network_preferences_full_file[sizeof(network_preferences_dir) +
                                               sizeof(network_preferences_file)];
 
@@ -992,6 +993,10 @@ static bool main_loop_init(const struct parameters *parameters,
     network_prefs_init(parameters->ethernet_interface_mac_address,
                        parameters->wlan_interface_mac_address,
                        network_preferences_dir, network_preferences_full_file);
+
+    if(!is_upgrading)
+        network_prefs_migrate_old_network_configuration_files(connman_config_dir,
+                                                              parameters->ethernet_interface_mac_address);
 
     register_init(push_register_to_slave);
 
@@ -1481,7 +1486,7 @@ int main(int argc, char *argv[])
      */
     static struct dcp_over_tcp_data dot;
 
-    main_loop_init(&parameters, &appconn, &connman, &dot);
+    main_loop_init(&parameters, &appconn, &connman, &dot, is_upgrading);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, connman) < 0)
