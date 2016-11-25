@@ -1,3 +1,17 @@
+2016-11-25  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.1 released.
+
+	* Updates: Migration of network configuration data stored in old
+	  format to new network.ini format. This allows updates from older
+	  stable versions to the current version to succeed when done over
+	  WLAN or specific non-DHCP Ethernet setups.
+
+	* Updates: Wait for online state before telling opkg to start
+	  downloading anything.
+
+	* Debugging: Allow setting verbosity level over D-Bus.
+
 2016-11-18  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.10 released.
