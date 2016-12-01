@@ -215,7 +215,7 @@ gboolean dbusmethod_connman_agent_report_error(tdbusconnmanAgent *object,
 {
     enter_agent_handler(invocation);
 
-    BUG("%s(): not implemented yet", __func__);
+    msg_error(0, LOG_ERR, "Agent error for service %s: %s", arg_service, arg_error);
     tdbus_connman_agent_complete_report_error(object, invocation);
 
     return TRUE;
@@ -229,7 +229,7 @@ gboolean dbusmethod_connman_agent_report_peer_error(tdbusconnmanAgent *object,
 {
     enter_agent_handler(invocation);
 
-    BUG("%s(): not implemented yet", __func__);
+    msg_error(0, LOG_ERR, "Agent error for peer %s: %s", arg_peer, arg_error);
     tdbus_connman_agent_complete_report_peer_error(object, invocation);
 
     return TRUE;
