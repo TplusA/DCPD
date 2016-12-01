@@ -1,6 +1,15 @@
+2016-12-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.12 released.
+
+	* Networking: WLAN connect is only triggered if neither a connection
+	  attempt is in progress nor the connection attempt has failed before.
+
+	* WLAN: Passwords shorter than 8 characters are accepted now.
+
 2016-11-25  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
-	* Version 2.1 released.
+	* Version 2.11 released.
 
 	* Updates: Migration of network configuration data stored in old
 	  format to new network.ini format. This allows updates from older
