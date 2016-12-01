@@ -70,11 +70,19 @@ struct ServiceList
     struct Maybe is_connected;
 };
 
+struct WLANConnectionState
+{
+    bool is_connecting;
+    struct Maybe has_failed;
+};
+
 struct dbussignal_connman_manager_data
 {
     GMutex lock;
+
     char wlan_service_name[512];
     void (*schedule_connect_to_wlan)(void);
+    struct WLANConnectionState wlan_connection_state;
 
     struct ServiceList *services;
 };
@@ -189,26 +197,41 @@ static void service_connected(const char *service_name,
                               enum ConnmanCommonConnectServiceCallbackResult result,
                               void *user_data)
 {
+    struct dbussignal_connman_manager_data *data = user_data;
+
+    g_mutex_lock(&data->lock);
+
+    data->wlan_connection_state.is_connecting = false;
+
     switch(result)
     {
       case CONNMAN_SERVICE_CONNECT_CONNECTED:
         msg_info("Connected to %s", service_name);
+        set_maybe_value(&data->wlan_connection_state.has_failed, false);
         break;
 
       case CONNMAN_SERVICE_CONNECT_FAILURE:
         msg_info("Failed connecting to %s", service_name);
+        set_maybe_value(&data->wlan_connection_state.has_failed, true);
         break;
 
       case CONNMAN_SERVICE_CONNECT_DISCARDED:
         break;
     }
+
+    g_mutex_unlock(&data->lock);
 }
 
 void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data)
 {
     g_mutex_lock(&data->lock);
+
+    data->wlan_connection_state.is_connecting = true;
+    init_maybe(&data->wlan_connection_state.has_failed);
+
     connman_common_connect_service_by_object_path(data->wlan_service_name,
-                                                  service_connected, NULL);
+                                                  service_connected, data);
+
     g_mutex_unlock(&data->lock);
 }
 
@@ -556,6 +579,12 @@ static bool configure_our_lan(const struct network_prefs *prefs,
     return ret;
 }
 
+static bool is_wlan_connecting_or_has_failed(const struct WLANConnectionState *wlan_conn_state)
+{
+    return wlan_conn_state->is_connecting ||
+           maybe_true(&wlan_conn_state->has_failed);
+}
+
 /*!
  * Set network configuration for our WLAN.
  *
@@ -569,11 +598,15 @@ static bool configure_our_lan(const struct network_prefs *prefs,
  */
 static bool configure_our_wlan(const struct network_prefs *prefs,
                                struct ServiceList *service_list_entry,
+                               struct WLANConnectionState *wlan_conn_state,
                                const char *ethernet_service_name,
                                bool have_just_lost_ethernet_device,
                                bool make_it_favorite)
 {
     if(avoid_service_if_no_preferences(service_list_entry, prefs, false))
+        return false;
+
+    if(is_wlan_connecting_or_has_failed(wlan_conn_state))
         return false;
 
     struct ConnmanInterfaceData *iface_data =
@@ -611,9 +644,12 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
     if(maybe_true(&service_list_entry->is_favorite))
     {
         if(maybe_false(&service_list_entry->is_auto_connect))
-            connman_common_set_service_property(service_list_entry->service_name,
-                                                "AutoConnect",
-                                                g_variant_new_variant(g_variant_new_boolean(true)));
+        {
+            if(connman_common_set_service_property(service_list_entry->service_name,
+                                                   "AutoConnect",
+                                                   g_variant_new_variant(g_variant_new_boolean(true))))
+                wlan_conn_state->is_connecting = true;
+        }
 
         /* rely on auto-connect */
         return false;
@@ -659,6 +695,7 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
 static bool react_to_service_changes(struct ServiceList **known_services_list,
                                      GVariant *changes, GVariant *removed,
                                      char *wlan_service_name,
+                                     struct WLANConnectionState *wlan_conn_state,
                                      const struct network_prefs *ethernet_prefs,
                                      const struct network_prefs *wlan_prefs)
 {
@@ -723,6 +760,11 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
         if(have_ethernet_service_name &&
            strcmp(name, ethernet_service_name) == 0)
             have_just_lost_ethernet_device = true;
+        else if(strcmp(name, wlan_service_name) == 0)
+        {
+            wlan_conn_state->is_connecting = false;
+            init_maybe(&wlan_conn_state->has_failed);
+        }
     }
 
     g_variant_iter_init(&iter, changes);
@@ -823,7 +865,7 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
              * configure it and we have to connect to it in case there is no
              * Ethernet connection */
             if(configure_our_wlan(wlan_prefs, service_list_entry,
-                                  ethernet_service_name,
+                                  wlan_conn_state, ethernet_service_name,
                                   have_just_lost_ethernet_device, false))
                 want_to_switch_to_wlan = true;
 
@@ -902,6 +944,9 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
     if(maybe_true(&our_wlan_service->is_auto_connect))
         return false;
 
+    if(is_wlan_connecting_or_has_failed(wlan_conn_state))
+        return false;
+
     /* Click. */
     return true;
 }
@@ -962,6 +1007,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
             need_to_schedule_wlan_connection =
                 react_to_service_changes(&data->services, changes, removed,
                                          wlan_service_name_buffer,
+                                         &data->wlan_connection_state,
                                          ethernet_prefs, wlan_prefs);
 
             g_variant_unref(changes);
@@ -1047,7 +1093,9 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
                                         ethernet_service_name,
                                         sizeof(ethernet_service_name));
 
-    bool need_to_schedule_wlan_connection  = false;
+    g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
+
+    bool need_to_schedule_wlan_connection = false;
 
     switch(tech)
     {
@@ -1079,13 +1127,20 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
             insert_service(&global_dbussignal_connman_manager_data.services,
                            wlan_service_name,
                            &service_list_entry);
+
+            global_dbussignal_connman_manager_data.wlan_connection_state.is_connecting = false;
+            init_maybe(&global_dbussignal_connman_manager_data.wlan_connection_state.has_failed);
+
             if(configure_our_wlan(wlan_prefs, service_list_entry,
+                                  &global_dbussignal_connman_manager_data.wlan_connection_state,
                                   ethernet_service_name, false, true))
                 need_to_schedule_wlan_connection = true;
         }
 
         break;
     }
+
+    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
 
     network_prefs_close(handle);
 

@@ -40,7 +40,7 @@ GVariant *connman_common_query_services(tdbusconnmanManager *iface)
     return result;
 }
 
-void connman_common_set_service_property(const char *object_path,
+bool connman_common_set_service_property(const char *object_path,
                                          const char *property_name,
                                          GVariant *value)
 {
@@ -48,7 +48,7 @@ void connman_common_set_service_property(const char *object_path,
         dbus_get_connman_service_proxy_for_object_path(object_path, -1);
 
     if(proxy == NULL)
-        return;
+        return false;
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
               "Set ConnMan property %s on %s", property_name, object_path);
@@ -56,9 +56,13 @@ void connman_common_set_service_property(const char *object_path,
     GError *error = NULL;
     tdbus_connman_service_call_set_property_sync(proxy, property_name, value,
                                                  NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error, "Set ConnMan service property");
+    const bool ret =
+        dbus_common_handle_dbus_error(&error,
+                                      "Set ConnMan service property") == 0;
 
     g_object_unref(proxy);
+
+    return ret;
 }
 
 struct ConnectToServiceDoneFn
@@ -135,7 +139,7 @@ static bool prepare_service_connect_request(struct ConnectToServiceData *data,
     return false;
 }
 
-static void connect_to_service_if_needed(bool need_start_connect,
+static bool connect_to_service_if_needed(bool need_start_connect,
                                          struct ConnectToServiceData *data);
 
 static void connect_to_service_done(GObject *source_object, GAsyncResult *res,
@@ -183,11 +187,11 @@ static void connect_to_service_done(GObject *source_object, GAsyncResult *res,
     connect_to_service_if_needed(need_start_connect, data);
 }
 
-static void connect_to_service_if_needed(bool need_start_connect,
+static bool connect_to_service_if_needed(bool need_start_connect,
                                          struct ConnectToServiceData *data)
 {
     if(!need_start_connect)
-        return;
+        return false;
 
     /* so we have just created our proxy object, no async callbacks to be
      * expected---we may freely access the #ConnectToServiceData object passed
@@ -198,11 +202,13 @@ static void connect_to_service_if_needed(bool need_start_connect,
 
     tdbus_connman_service_call_connect(data->proxy, NULL,
                                        connect_to_service_done, data);
+
+    return true;
 }
 
 static struct ConnectToServiceData connect_to_service_data;
 
-void connman_common_connect_service_by_object_path(const char *object_path,
+bool connman_common_connect_service_by_object_path(const char *object_path,
                                                    ConnmanCommonConnectServiceCallback done_fn,
                                                    void *user_data)
 {
@@ -225,7 +231,8 @@ void connman_common_connect_service_by_object_path(const char *object_path,
 
     g_rec_mutex_unlock(&connect_to_service_data.lock);
 
-    connect_to_service_if_needed(need_start_connect, &connect_to_service_data);
+    return connect_to_service_if_needed(need_start_connect,
+                                        &connect_to_service_data);
 }
 
 void connman_common_disconnect_service_by_object_path(const char *object_path)

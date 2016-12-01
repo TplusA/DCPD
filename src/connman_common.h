@@ -19,6 +19,8 @@
 #ifndef CONNMAN_COMMON_H
 #define CONNMAN_COMMON_H
 
+#include <stdbool.h>
+
 #include "connman_dbus.h"
 
 enum ConnmanCommonConnectServiceCallbackResult
@@ -33,10 +35,10 @@ typedef void (*ConnmanCommonConnectServiceCallback)(const char *service_name,
                                                     void *user_data);
 
 GVariant *connman_common_query_services(tdbusconnmanManager *iface);
-void connman_common_set_service_property(const char *object_path,
+bool connman_common_set_service_property(const char *object_path,
                                          const char *property_name,
                                          GVariant *value);
-void connman_common_connect_service_by_object_path(const char *object_path,
+bool connman_common_connect_service_by_object_path(const char *object_path,
                                                    ConnmanCommonConnectServiceCallback done_fn,
                                                    void *user_data);
 void connman_common_disconnect_service_by_object_path(const char *object_path);
