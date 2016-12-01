@@ -2868,17 +2868,18 @@ void test_ascii_passphrase_minimum_and_maximum_length()
                                                 dcpregs_read_102_passphrase,
                                                 dcpregs_write_102_passphrase);
 
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Unexpected data length 1 (expected 8...64) (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(passphrase_arg, 1));
-
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Unexpected data length 7 (expected 8...64) (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(passphrase_arg, 7));
+    cppcut_assert_equal(0, reg->write_handler(passphrase_arg, 0));
+    cppcut_assert_equal(0, reg->write_handler(passphrase_arg, 1));
+    cppcut_assert_equal(0, reg->write_handler(passphrase_arg, 63));
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Invalid passphrase: not a hex-string (Invalid argument)");
     cppcut_assert_equal(-1, reg->write_handler(passphrase_arg, 64));
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
+        "Unexpected data length 65 (expected 0...64) (Invalid argument)");
+    cppcut_assert_equal(-1, reg->write_handler(passphrase_arg,
+                                               sizeof(passphrase)));
 }
 
 struct StringWithLength

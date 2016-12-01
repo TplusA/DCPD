@@ -1393,9 +1393,8 @@ ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
 
 int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
 {
-    if(length > 0 &&
-       data_length_is_in_unexpected_range(length,
-                                          8,
+    if(data_length_is_in_unexpected_range(length,
+                                          0,
                                           sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1))
         return -1;
 
