@@ -23,15 +23,20 @@
 #include "dbus_common.h"
 #include "messages.h"
 
-int dbus_common_handle_dbus_error(GError **error)
+int dbus_common_handle_dbus_error(GError **error, const char *what)
 {
     if(*error == NULL)
         return 0;
 
+    if(what == NULL)
+        what = "<UNKNOWN>";
+
     if((*error)->message != NULL)
-        msg_error(0, LOG_EMERG, "Got D-Bus error: %s", (*error)->message);
+        msg_error(0, LOG_EMERG,
+                  "%s: Got D-Bus error: %s", what, (*error)->message);
     else
-        msg_error(0, LOG_EMERG, "Got D-Bus error without any message");
+        msg_error(0, LOG_EMERG,
+                  "%s: Got D-Bus error without any message", what);
 
     g_error_free(*error);
     *error = NULL;

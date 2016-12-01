@@ -49,7 +49,7 @@ static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powe
     tdbus_connman_technology_call_set_property_sync(proxy,
                                                     "Powered", bool_variant,
                                                     NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Enable WLAN");
 
     return true;
 }
@@ -86,7 +86,7 @@ static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer u
     GError *error = NULL;
     (void)tdbus_connman_technology_call_scan_finish(data->proxy, res, &error);
 
-    const bool success = (dbus_common_handle_dbus_error(&error) == 0);
+    const bool success = (dbus_common_handle_dbus_error(&error, "WLAN survey done") == 0);
 
     if(success || --data->remaining_tries <= 0)
     {
@@ -199,7 +199,7 @@ static GVariant *find_technology_by_name(tdbusconnmanManager *iface,
     GError *error = NULL;
     tdbus_connman_manager_call_get_technologies_sync(iface, &technologies,
                                                      NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Find network technology");
 
     if(technologies == NULL)
     {

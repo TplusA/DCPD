@@ -546,7 +546,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
     {
         BUG("Failed pushing stream %u, URL %s to stream player",
             stream_id, url);
-        dbus_common_handle_dbus_error(&error);
+        dbus_common_handle_dbus_error(&error, "Push stream to player");
         return;
     }
 
@@ -574,7 +574,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
                                              NULL, &error))
     {
         msg_error(0, LOG_NOTICE, "Failed starting stream");
-        dbus_common_handle_dbus_error(&error);
+        dbus_common_handle_dbus_error(&error, "Start stream");
 
         reset_to_idle_mode(data);
 
@@ -583,7 +583,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
                                                 NULL, &error))
         {
             msg_error(0, LOG_NOTICE, "Failed clearing stream player FIFO");
-            dbus_common_handle_dbus_error(&error);
+            dbus_common_handle_dbus_error(&error, "Clear URLFIFO");
         }
     }
     else
@@ -707,7 +707,7 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
                                                 NULL, &error))
         {
             msg_error(0, LOG_NOTICE, "Failed stopping stream player");
-            dbus_common_handle_dbus_error(&error);
+            dbus_common_handle_dbus_error(&error, "Stop stream");
             reset_to_idle_mode(&play_stream_data.app);
         }
     }

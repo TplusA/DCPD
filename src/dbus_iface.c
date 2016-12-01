@@ -128,7 +128,7 @@ static void try_export_iface(GDBusConnection *connection,
 
     g_dbus_interface_skeleton_export(iface, connection, "/de/tahifi/Dcpd", &error);
 
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Export D-Bus interface");
 }
 
 static void bus_acquired(GDBusConnection *connection,
@@ -210,7 +210,7 @@ static void name_acquired(GDBusConnection *connection,
                                                G_DBUS_PROXY_FLAGS_NONE,
                                                "de.tahifi.DBusDL", "/de/tahifi/DBusDL",
                                                NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error, "Create DBusDL proxy");
     }
 
     if(is_session_bus == streamplayer_iface_data.connect_to_session_bus)
@@ -223,7 +223,7 @@ static void name_acquired(GDBusConnection *connection,
                                                 "de.tahifi.Streamplayer",
                                                 "/de/tahifi/Streamplayer",
                                                 NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error, "Create Streamplayer playback proxy");
 
         streamplayer_iface_data.urlfifo_iface =
             tdbus_splay_urlfifo_proxy_new_sync(connection,
@@ -231,7 +231,7 @@ static void name_acquired(GDBusConnection *connection,
                                                "de.tahifi.Streamplayer",
                                                "/de/tahifi/Streamplayer",
                                                NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error, "Create Streamplayer URLFIFO proxy");
     }
 
     if(is_session_bus == airable_iface_data.connect_to_session_bus)
@@ -244,7 +244,7 @@ static void name_acquired(GDBusConnection *connection,
                                          "de.tahifi.TuneInBroker",
                                          "/de/tahifi/TuneInBroker",
                                          NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error, "Create Airable sec proxy");
     }
 
     if(is_session_bus == credentials_iface_data.connect_to_session_bus)
@@ -257,7 +257,7 @@ static void name_acquired(GDBusConnection *connection,
                                                   "de.tahifi.TuneInBroker",
                                                   "/de/tahifi/TuneInBroker",
                                                   NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error, "Create Airable credread proxy");
 
         credentials_iface_data.cred_write_iface =
             tdbus_credentials_write_proxy_new_sync(connection,
@@ -265,7 +265,7 @@ static void name_acquired(GDBusConnection *connection,
                                                    "de.tahifi.TuneInBroker",
                                                    "/de/tahifi/TuneInBroker",
                                                    NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error, "Create Airable credwrite proxy");
     }
 
     if(!is_session_bus)
@@ -280,14 +280,14 @@ static void name_acquired(GDBusConnection *connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      "net.connman", "/",
                                                      NULL, &error);
-            (void)dbus_common_handle_dbus_error(&error);
+            (void)dbus_common_handle_dbus_error(&error, "Create ConnMan manager proxy");
 
             msg_vinfo(MESSAGE_LEVEL_DEBUG, "Register as ConnMan agent");
 
             tdbus_connman_manager_call_register_agent_sync(connman_iface_data.connman_manager_iface,
                                                            "/de/tahifi/Dcpd",
                                                            NULL, &error);
-            (void)dbus_common_handle_dbus_error(&error);
+            (void)dbus_common_handle_dbus_error(&error, "Create ConnMan agent proxy");
         }
 
         login1_iface_data.login1_manager_iface =
@@ -296,7 +296,7 @@ static void name_acquired(GDBusConnection *connection,
                                                 "org.freedesktop.login1",
                                                 "/org/freedesktop/login1",
                                                 NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error);
+        (void)dbus_common_handle_dbus_error(&error, "Create login1 proxy");
     }
 }
 
@@ -506,7 +506,7 @@ void dbus_lock_shutdown_sequence(const char *why)
         "shutdown", PACKAGE, why, "delay",
         NULL, &out_fd, &out_fd_list, NULL, &error);
 
-    if(dbus_common_handle_dbus_error(&error) < 0)
+    if(dbus_common_handle_dbus_error(&error, "Shutdown request") < 0)
         return;
 
     if(out_fd == NULL)
@@ -534,7 +534,7 @@ void dbus_lock_shutdown_sequence(const char *why)
             login1_iface_data.lock_fd =
                 g_unix_fd_list_get(out_fd_list, 0, &error);
 
-            if(dbus_common_handle_dbus_error(&error))
+            if(dbus_common_handle_dbus_error(&error, "FD list get (not a D-Bus error)"))
                 login1_iface_data.lock_fd = -1;
         }
 
@@ -624,7 +624,7 @@ tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const 
                                                 G_DBUS_PROXY_FLAGS_NONE,
                                                 "net.connman", strdup(path),
                                                 NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Create ConnMan tech proxy");
 
     return proxy;
 }
@@ -643,7 +643,7 @@ tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *
                                              "net.connman", strdup(path),
                                              NULL, &error);
 
-    if(dbus_common_handle_dbus_error(&error) == 0)
+    if(dbus_common_handle_dbus_error(&error, "Create ConnMan service proxy") == 0)
     {
         if(timeout_sec > 0 && timeout_sec <= 600)
             g_dbus_proxy_set_default_timeout(G_DBUS_PROXY(proxy),

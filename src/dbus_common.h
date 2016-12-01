@@ -25,7 +25,7 @@
 extern "C" {
 #endif
 
-int dbus_common_handle_dbus_error(GError **error);
+int dbus_common_handle_dbus_error(GError **error, const char *what);
 
 #ifdef __cplusplus
 }

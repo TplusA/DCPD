@@ -60,7 +60,7 @@ static int delete_credentials(const char *service_id, bool logout_on_failure)
                                                          "", &dummy,
                                                          NULL, &error);
 
-    const int delete_ret = dbus_common_handle_dbus_error(&error);
+    const int delete_ret = dbus_common_handle_dbus_error(&error, "Delete credentials");
 
     if(delete_ret < 0)
     {
@@ -80,7 +80,7 @@ static int delete_credentials(const char *service_id, bool logout_on_failure)
                                                     true, ACTOR_ID_LOCAL_UI,
                                                     NULL, &error);
 
-    const int logout_ret = dbus_common_handle_dbus_error(&error);
+    const int logout_ret = dbus_common_handle_dbus_error(&error, "Service logout");
 
     if(logout_ret != 0)
         return logout_ret;
@@ -100,7 +100,7 @@ static int set_credentials(const char *service_id,
                                                       login, password, TRUE,
                                                       NULL, &error);
 
-    return dbus_common_handle_dbus_error(&error);
+    return dbus_common_handle_dbus_error(&error, "Set credentials");
 }
 
 int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
@@ -277,7 +277,7 @@ static bool fill_buffer_with_services(struct dynamic_buffer *buffer,
                                                          &default_user,
                                                          NULL, &error);
 
-        if(dbus_common_handle_dbus_error(&error) < 0)
+        if(dbus_common_handle_dbus_error(&error, "Get credentials") < 0)
         {
             g_variant_unref(id_and_name);
             retval = false;
@@ -345,7 +345,7 @@ bool dcpregs_read_106_media_service_list(struct dynamic_buffer *buffer)
     tdbus_credentials_read_call_get_known_categories_sync(dbus_get_credentials_read_iface(),
                                                           &service_ids_and_names_variant,
                                                           NULL, &error);
-    if(dbus_common_handle_dbus_error(&error) < 0)
+    if(dbus_common_handle_dbus_error(&error, "Get categories") < 0)
         return false;
 
     bool ret = fill_buffer_with_services(buffer, service_ids_and_names_variant);

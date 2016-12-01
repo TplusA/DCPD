@@ -35,7 +35,7 @@ GVariant *connman_common_query_services(tdbusconnmanManager *iface)
     GVariant *result = NULL;
     GError *error = NULL;
     tdbus_connman_manager_call_get_services_sync(iface, &result, NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Query ConnMan services");
 
     return result;
 }
@@ -56,7 +56,7 @@ void connman_common_set_service_property(const char *object_path,
     GError *error = NULL;
     tdbus_connman_service_call_set_property_sync(proxy, property_name, value,
                                                  NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Set ConnMan service property");
 
     g_object_unref(proxy);
 }
@@ -150,7 +150,7 @@ static void connect_to_service_done(GObject *source_object, GAsyncResult *res,
     GError *error = NULL;
     (void)tdbus_connman_service_call_connect_finish(data->proxy, res, &error);
 
-    const bool success = (dbus_common_handle_dbus_error(&error) == 0);
+    const bool success = (dbus_common_handle_dbus_error(&error, "Connect ConnMan service") == 0);
 
     if(data->queued_service_name[0] == '\0')
         data->connect_done_fn.fn(g_dbus_proxy_get_object_path(G_DBUS_PROXY(data->proxy)),
@@ -241,7 +241,7 @@ void connman_common_disconnect_service_by_object_path(const char *object_path)
 
     GError *error = NULL;
     tdbus_connman_service_call_disconnect_sync(proxy, NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Disconnect ConnMan service");
 
     g_object_unref(proxy);
 }
@@ -258,7 +258,7 @@ void connman_common_remove_service_by_object_path(const char *object_path)
 
     GError *error = NULL;
     tdbus_connman_service_call_remove_sync(proxy, NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error);
+    (void)dbus_common_handle_dbus_error(&error, "Remove ConnMan service");
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "Removed ConnMan service");
 

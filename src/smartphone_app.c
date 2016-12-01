@@ -127,7 +127,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                                                                 locale_buffer,
                                                                 &answer,
                                                                 NULL, &error);
-            if(dbus_common_handle_dbus_error(&error) < 0)
+            if(dbus_common_handle_dbus_error(&error, "Generate Airable auth URL") < 0)
                 break;
 
             len = applink_make_answer_for_var(buffer, buffer_size,
@@ -151,7 +151,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                                                       token_buffer,
                                                       timestamp_buffer,
                                                       &answer, NULL, &error);
-            if(dbus_common_handle_dbus_error(&error) < 0)
+            if(dbus_common_handle_dbus_error(&error, "Generate Airable password") < 0)
                 break;
 
             len = applink_make_answer_for_var(buffer, buffer_size,
@@ -163,7 +163,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
       case VAR_AIRABLE_ROOT_URL:
         tdbus_airable_call_get_root_url_sync(dbus_get_airable_sec_iface(),
                                              &answer, NULL, &error);
-        if(dbus_common_handle_dbus_error(&error) < 0)
+        if(dbus_common_handle_dbus_error(&error, "Get Airable root URL") < 0)
             break;
 
         len = applink_make_answer_for_var(buffer, buffer_size,
@@ -186,7 +186,7 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                 dbus_get_credentials_read_iface(),
                 service_id_buffer, &answer, &password,
                 NULL, &error);
-            if(dbus_common_handle_dbus_error(&error) < 0)
+            if(dbus_common_handle_dbus_error(&error, "Get default credentials") < 0)
                 break;
 
             const char *const is_known =
