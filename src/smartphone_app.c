@@ -55,7 +55,7 @@ int appconn_init(struct smartphone_app_connection_data *appconn,
     appconn->out_queue.notification_fn = send_notification_fn;
 
     /*
-     * The port number is ASCII "TB" (meaning T + A) + 1.
+     * The port number is ASCII "TB" (meaning T + A + 1).
      */
     appconn->server_fd = network_create_socket(8466, SOMAXCONN);
 
