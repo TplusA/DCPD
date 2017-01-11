@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -174,7 +174,8 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
 
         dcpregs_playstream_start_notification(stream_id);
     }
-    else if(strcmp(signal_name, "Stopped") == 0)
+    else if(strcmp(signal_name, "Stopped") == 0 ||
+            strcmp(signal_name, "StoppedWithError") == 0)
     {
         /* stream stopped playing */
         dcpregs_playstream_stop_notification();
