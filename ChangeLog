@@ -1,3 +1,20 @@
+2017-01-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 2.13 released.
+
+	* Playback: Handle new stop signal emitted by streamplayer v2.0.
+	  Required to keep the SPI slave informed about stopped streams.
+
+	* Playback: Maximum bit rate can be configured from SPI slave via
+	  register 95.
+
+	* DCP protocol: Protocol level bumped to 1.0.2.
+
+	* Misc: Configuration values can be distributed over D-Bus to the
+	  various daemons using pairs of structured keys and values.
+	  Configuration key owners must register with dcpd to make use of this
+	  new feature.
+
 2016-12-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.12 released.
