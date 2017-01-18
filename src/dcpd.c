@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -43,6 +43,7 @@
 #include "dcpregs_filetransfer_priv.h"
 #include "connman.h"
 #include "networkprefs.h"
+#include "configproxy.h"
 #include "os.h"
 #include "versioninfo.h"
 
@@ -981,6 +982,8 @@ static bool main_loop_init(const struct parameters *parameters,
                            struct dbussignal_connman_manager_data **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
+    configproxy_init();
+
     static const char network_preferences_dir[] = "/var/local/etc";
     static const char network_preferences_file[] = "network.ini";
     static const char connman_config_dir[] = "/var/local/etc/connman";
@@ -1523,6 +1526,7 @@ int main(int argc, char *argv[])
     dbus_shutdown();
     register_deinit();
     network_prefs_deinit();
+    configproxy_deinit();
 
     return EXIT_SUCCESS;
 }

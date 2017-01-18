@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -41,6 +41,7 @@ dcpd_SOURCES = \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.h \
     dbus_handlers_connman_manager.h dbus_handlers_connman_manager_glue.h \
+    configproxy.h \
     networkprefs.h
 
 DBUS_IFACES = $(top_srcdir)/dbus_interfaces
@@ -67,6 +68,8 @@ noinst_LTLIBRARIES = \
     libstreamplayer_dbus.la \
     libairable_dbus.la \
     libcredentials_dbus.la \
+    libconfigproxy.la \
+    libconfiguration_dbus.la \
     libconnman_dbus.la \
     liblogind_dbus.la \
     libdebug_dbus.la
@@ -103,6 +106,9 @@ libregisters_la_CFLAGS = $(AM_CFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
+
+libconfigproxy_la_SOURCES = configproxy.c configproxy.h
+libconfigproxy_la_CFLAGS = $(AM_CFLAGS)
 
 libnetworkprefs_la_SOURCES = networkprefs.c networkprefs.h inifile.h
 libnetworkprefs_la_CFLAGS = $(AM_CFLAGS)
@@ -149,6 +155,9 @@ libairable_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 nodist_libcredentials_dbus_la_SOURCES = credentials_dbus.c credentials_dbus.h
 libcredentials_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
+nodist_libconfiguration_dbus_la_SOURCES = configuration_dbus.c configuration_dbus.h
+libconfiguration_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 nodist_libdebug_dbus_la_SOURCES = debug_dbus.c debug_dbus.h
 libdebug_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
@@ -200,6 +209,10 @@ BUILT_SOURCES = \
     de_tahifi_credentials.h \
     de_tahifi_credentials.md \
     credentials_dbus.stamp \
+    $(nodist_libconfiguration_dbus_la_SOURCES) \
+    de_tahifi_configuration.h \
+    de_tahifi_configuration.md \
+    configuration_dbus.stamp \
     $(nodist_libconnman_dbus_la_SOURCES) \
     net_connman.h \
     net_connman.md \
@@ -261,6 +274,15 @@ credentials_dbus.h: credentials_dbus.stamp
 credentials_dbus.stamp: $(DBUS_IFACES)/de_tahifi_credentials.xml
 	$(GDBUS_CODEGEN) --generate-c-code=credentials_dbus --c-namespace tdbus_credentials --interface-prefix de.tahifi.Credentials. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_credentials.md -H de_tahifi_credentials.h -c tdbus_credentials -s de.tahifi.Credentials. -n "$(PACKAGE_NAME) (passing credentials around)"
+	touch $@
+
+de_tahifi_configuration.h: configuration_dbus.stamp
+de_tahifi_configuration.md: configuration_dbus.stamp
+configuration_dbus.c: configuration_dbus.stamp
+configuration_dbus.h: configuration_dbus.stamp
+configuration_dbus.stamp: $(DBUS_IFACES)/de_tahifi_configuration.xml
+	$(GDBUS_CODEGEN) --generate-c-code=configuration_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_configuration.md -H de_tahifi_configuration.h -c tdbus -s de.tahifi. -n "Configuration"
 	touch $@
 
 de_tahifi_debug.h: debug_dbus.stamp

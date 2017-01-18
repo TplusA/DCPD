@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,6 +24,7 @@
 #include "streamplayer_dbus.h"
 #include "airable_dbus.h"
 #include "credentials_dbus.h"
+#include "configuration_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
 
@@ -35,6 +36,7 @@ tdbusdcpdPlayback *dbus_get_playback_iface(void);
 tdbusdcpdViews *dbus_get_views_iface(void);
 tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void);
 tdbusdcpdListItem *dbus_get_list_item_iface(void);
+tdbusConfigurationProxy *dbus_get_configuration_proxy_iface(void);
 
 tdbusFileTransfer *dbus_get_file_transfer_iface(void);
 
@@ -45,6 +47,9 @@ tdbusAirable *dbus_get_airable_sec_iface(void);
 
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void);
 tdbuscredentialsWrite *dbus_get_credentials_write_iface(void);
+
+tdbusConfigurationRead *dbus_get_configuration_read_iface(const char *dest, const char *path);
+tdbusConfigurationWrite *dbus_get_configuration_write_iface(const char *dest, const char *path);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
 tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path);

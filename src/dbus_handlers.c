@@ -30,6 +30,7 @@
 #include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
 #include "smartphone_app_send.h"
+#include "configproxy.h"
 #include "stream_id.h"
 #include "actor_id.h"
 #include "messages.h"
@@ -254,6 +255,25 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
     }
     else
         unknown_signal(iface_name, signal_name, sender_name);
+}
+
+gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,
+                                         GDBusMethodInvocation *invocation,
+                                         const gchar *id, const gchar *path,
+                                         void *user_data)
+{
+    const char *dest =
+        g_dbus_message_get_sender(g_dbus_method_invocation_get_message(invocation));
+
+    if(configproxy_register_configuration_owner(id, dest, path))
+        tdbus_configuration_proxy_complete_register(object, invocation);
+    else
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR, G_DBUS_ERROR,
+                                              "Failed registering configuration owner \"%s\"",
+                                              id);
+
+    return TRUE;
 }
 
 static enum MessageVerboseLevel do_set_debug_level(const char *new_level_name,

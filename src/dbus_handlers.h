@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -23,6 +23,7 @@
 #include <gio/gio.h>
 
 #include "dcpd_dbus.h"
+#include "configuration_dbus.h"
 #include "debug_dbus.h"
 
 /*!
@@ -58,6 +59,11 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     GDBusMethodInvocation *invocation,
                                     guint16 raw_stream_id,
                                     const gchar *title, const gchar *url);
+
+gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,
+                                         GDBusMethodInvocation *invocation,
+                                         const gchar *id, const gchar *path,
+                                         void *user_data);
 
 gboolean dbusmethod_debug_logging_debug_level(tdbusdebugLogging *object,
                                               GDBusMethodInvocation *invocation,

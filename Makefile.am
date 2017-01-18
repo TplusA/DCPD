@@ -30,6 +30,7 @@ CLEANFILES = README.html
 EXTRA_DIST += \
     dbus_interfaces/extract_documentation.py \
     dbus_interfaces/de_tahifi_dcpd.xml \
+    dbus_interfaces/de_tahifi_configuration.xml \
     dbus_interfaces/de_tahifi_debug.xml \
     dbus_interfaces/de_tahifi_filetransfer.xml \
     dbus_interfaces/de_tahifi_streamplayer.xml \

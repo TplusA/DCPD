@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -35,6 +35,7 @@
 #include "streamplayer_dbus.h"
 #include "airable_dbus.h"
 #include "credentials_dbus.h"
+#include "configuration_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
 #include "messages.h"
@@ -61,6 +62,7 @@ static struct
     tdbusdcpdViews *views_iface;
     tdbusdcpdListNavigation *list_navigation_iface;
     tdbusdcpdListItem *list_item_iface;
+    tdbusConfigurationProxy *configproxy_iface;
     tdbusdebugLogging *debug_logging_iface;
     tdbusdebugLoggingConfig *debug_logging_config_iface;
 }
@@ -147,11 +149,14 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.views_iface = tdbus_dcpd_views_skeleton_new();
         dcpd_iface_data.list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
         dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
+        dcpd_iface_data.configproxy_iface = tdbus_configuration_proxy_skeleton_new();
         dcpd_iface_data.debug_logging_iface = tdbus_debug_logging_skeleton_new();
         dcpd_iface_data.debug_logging_config_iface = tdbus_debug_logging_config_skeleton_new();
 
         g_signal_connect(dcpd_iface_data.playback_iface, "handle-set-stream-info",
                          G_CALLBACK(dbusmethod_set_stream_info), NULL);
+        g_signal_connect(dcpd_iface_data.configproxy_iface, "handle-register",
+                         G_CALLBACK(dbusmethod_configproxy_register), NULL);
         g_signal_connect(dcpd_iface_data.debug_logging_iface,
                          "handle-debug-level",
                          G_CALLBACK(dbusmethod_debug_logging_debug_level), NULL);
@@ -163,6 +168,7 @@ static void bus_acquired(GDBusConnection *connection,
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.views_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_item_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configproxy_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_config_iface));
     }
@@ -409,6 +415,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(dcpd_iface_data.views_iface != NULL);
     log_assert(dcpd_iface_data.list_navigation_iface != NULL);
     log_assert(dcpd_iface_data.list_item_iface != NULL);
+    log_assert(dcpd_iface_data.configproxy_iface != NULL);
     log_assert(dcpd_iface_data.debug_logging_iface != NULL);
     log_assert(dcpd_iface_data.debug_logging_config_iface != NULL);
     log_assert(filetransfer_iface_data.iface != NULL);
@@ -471,6 +478,7 @@ void dbus_shutdown(void)
     g_object_unref(dcpd_iface_data.views_iface);
     g_object_unref(dcpd_iface_data.list_navigation_iface);
     g_object_unref(dcpd_iface_data.list_item_iface);
+    g_object_unref(dcpd_iface_data.configproxy_iface);
     g_object_unref(dcpd_iface_data.debug_logging_iface);
     g_object_unref(dcpd_iface_data.debug_logging_config_iface);
 
@@ -577,6 +585,11 @@ tdbusdcpdListItem *dbus_get_list_item_iface(void)
     return dcpd_iface_data.list_item_iface;
 }
 
+tdbusConfigurationProxy *dbus_get_configuration_proxy_iface(void)
+{
+    return dcpd_iface_data.configproxy_iface;
+}
+
 tdbusFileTransfer *dbus_get_file_transfer_iface(void)
 {
     return filetransfer_iface_data.iface;
@@ -605,6 +618,40 @@ tdbuscredentialsRead *dbus_get_credentials_read_iface(void)
 tdbuscredentialsWrite *dbus_get_credentials_write_iface(void)
 {
     return credentials_iface_data.cred_write_iface;
+}
+
+tdbusConfigurationRead *dbus_get_configuration_read_iface(const char *dest, const char *path)
+{
+    GDBusConnection *connection =
+        g_dbus_interface_skeleton_get_connection(G_DBUS_INTERFACE_SKELETON(dbus_get_configuration_proxy_iface()));
+
+    GError *error = NULL;
+
+    tdbusConfigurationRead *proxy =
+        tdbus_configuration_read_proxy_new_sync(connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                dest, path,
+                                                NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error, "Create Configuration.Read proxy");
+
+    return proxy;
+}
+
+tdbusConfigurationWrite *dbus_get_configuration_write_iface(const char *dest, const char *path)
+{
+    GDBusConnection *connection =
+        g_dbus_interface_skeleton_get_connection(G_DBUS_INTERFACE_SKELETON(dbus_get_configuration_proxy_iface()));
+
+    GError *error = NULL;
+
+    tdbusConfigurationWrite *proxy =
+        tdbus_configuration_write_proxy_new_sync(connection,
+                                                 G_DBUS_PROXY_FLAGS_NONE,
+                                                 dest, path,
+                                                 NULL, &error);
+    (void)dbus_common_handle_dbus_error(&error, "Create Configuration.Write proxy");
+
+    return proxy;
 }
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)
