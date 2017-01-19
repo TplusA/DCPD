@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -27,6 +27,7 @@
 #include "messages.h"
 
 #include "dcpdefs.h"
+#include "dcpregs_common.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
@@ -39,6 +40,7 @@
 #include "dcpregs_searchparameters.h"
 #include "dcpregs_status.h"
 #include "registers_priv.h"
+#include "configproxy.h"
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -193,6 +195,36 @@ static int write_87_appliance_id(const uint8_t *data, size_t length)
 {
     /* FIXME: Dummy implementation that accepts anything and does nothing */
     return 0;
+}
+
+static const char max_bitrate_key[] = "@drcpd::maximum_stream_bit_rate";
+
+static ssize_t read_95_max_bitrate(uint8_t *response, size_t length)
+{
+    return configproxy_get_value_as_string(max_bitrate_key,
+                                           (char *)response, length);
+}
+
+static int write_95_max_bitrate(const uint8_t *data, size_t length)
+{
+    length = dcpregs_trim_trailing_zero_padding(data, length);
+
+    if(length == 0)
+        return -1;
+
+    static const char unlimited_value[] = "unlimited";
+
+    if(length == sizeof(unlimited_value) - 1 &&
+       memcmp(data, unlimited_value, sizeof(unlimited_value) - 1) == 0)
+    {
+        if(configproxy_set_string(NULL, max_bitrate_key, unlimited_value))
+            return 0;
+    }
+    else if(configproxy_set_uint32_from_string(NULL, max_bitrate_key,
+                                               (const char *)data, length))
+        return 0;
+
+    return -1;
 }
 
 /*!
@@ -401,6 +433,13 @@ static const struct dcp_register_t register_map[] =
         .read_handler = dcpregs_read_94_ssid,
     },
     {
+        /* Maximum bandwidth available for streaming */
+        REGISTER(95, REGISTER_MK_VERSION(1, 0, 2)),
+        .max_data_size = 64,
+        .write_handler = write_95_max_bitrate,
+        .read_handler = read_95_max_bitrate,
+    },
+    {
         /* WPA cipher type */
         REGISTER(101, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 8,
@@ -497,7 +536,7 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
     registers_private_data.configured_protocol_level.code =
-        REGISTER_MK_VERSION(1, 0, 1);
+        REGISTER_MK_VERSION(1, 0, 2);
 
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
@@ -563,7 +602,7 @@ size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel
     {
 #define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
 
-        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 1)),
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 2)),
 
 #undef MK_RANGE
     };

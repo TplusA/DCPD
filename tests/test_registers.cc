@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -350,6 +350,11 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_1 =
     87, 88,
 };
 
+static const std::array<uint8_t, 1> existing_registers_v1_0_2 =
+{
+    95,
+};
+
 void cut_setup()
 {
     mock_messages = new MockMessages;
@@ -446,6 +451,20 @@ void test_lookup_all_existing_registers()
         cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
                                <=, reg->minimum_protocol_version.code);
     }
+
+    cut_assert_true(register_set_protocol_level(1, 0, 2));
+
+    for(auto r : existing_registers_v1_0_2)
+    {
+        const struct dcp_register_t *reg = register_lookup(r);
+
+        cppcut_assert_not_null(reg);
+        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
+        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
+        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
+        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 2)),
+                               <=, reg->minimum_protocol_version.code);
+    }
 }
 
 /*!\test
@@ -459,6 +478,8 @@ void test_lookup_all_nonexistent_registers()
             std::find(existing_registers_v1_0_0.begin(), existing_registers_v1_0_0.end(), r);
         auto found_v1_0_1 =
             std::find(existing_registers_v1_0_1.begin(), existing_registers_v1_0_1.end(), r);
+        auto found_v1_0_2 =
+            std::find(existing_registers_v1_0_2.begin(), existing_registers_v1_0_2.end(), r);
 
         cut_assert_true(register_set_protocol_level(1, 0, 0));
 
@@ -486,6 +507,23 @@ void test_lookup_all_nonexistent_registers()
 
             cppcut_assert_not_null(reg);
             cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
+                                   <=, reg->minimum_protocol_version.code);
+        }
+
+        cut_assert_true(register_set_protocol_level(1, 0, 2));
+
+        if(found_v1_0_2 == existing_registers_v1_0_2.end())
+        {
+            if(found_v1_0_0 == existing_registers_v1_0_0.end() &&
+               found_v1_0_1 == existing_registers_v1_0_1.end())
+                cppcut_assert_null(register_lookup(r));
+        }
+        else
+        {
+            const struct dcp_register_t *reg = register_lookup(r);
+
+            cppcut_assert_not_null(reg);
+            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 2)),
                                    <=, reg->minimum_protocol_version.code);
         }
     }
