@@ -254,7 +254,8 @@ static GVariant *get(const struct ConfigurationOwner *owner, const char *key)
     return value;
 }
 
-static bool parse_uint32(const char *string, size_t len, uint32_t *dest)
+static bool parse_uint32(const char *string, size_t len,
+                         PatchUint32Fn patcher, uint32_t *dest)
 {
     if(len == 0)
         goto error_exit_no_value;
@@ -287,7 +288,7 @@ static bool parse_uint32(const char *string, size_t len, uint32_t *dest)
 
     *dest = temp;
 
-    return true;
+    return patcher == NULL || patcher(dest);
 
 error_exit_no_value:
     msg_error(0, LOG_NOTICE, "No number to parse");
@@ -307,9 +308,12 @@ static bool is_buffer_big_enough(size_t dest_size, size_t src_size,
     return false;
 }
 
-static ssize_t write_uint32(uint32_t value, char *dest, size_t dest_size,
-                            const char *key)
+static ssize_t write_uint32(uint32_t value, PatchUint32Fn patcher,
+                            char *dest, size_t dest_size, const char *key)
 {
+    if(patcher != NULL && !patcher(&value))
+        return -1;
+
     const int len = snprintf(dest, dest_size, "%" PRIu32, value);
     return is_buffer_big_enough(dest_size, len + 1, key) ? len : -1;
 }
@@ -399,11 +403,12 @@ bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value)
 }
 
 bool configproxy_set_uint32_from_string(const char *origin, const char *key,
-                                        const char *string, size_t len)
+                                        const char *string, size_t len,
+                                        PatchUint32Fn patcher)
 {
     uint32_t value;
 
-    if(parse_uint32(string, len, &value))
+    if(parse_uint32(string, len, patcher, &value))
         return configproxy_set_uint32(origin, key, value);
 
     return false;
@@ -438,7 +443,8 @@ struct ConfigProxyVariant *configproxy_get_value(const char *key)
 }
 
 ssize_t configproxy_get_value_as_string(const char *key,
-                                        char *buffer, size_t buffer_size)
+                                        char *buffer, size_t buffer_size,
+                                        PatchUint32Fn patcher)
 {
     log_assert(buffer != NULL);
     log_assert(buffer_size > 0);
@@ -475,7 +481,7 @@ ssize_t configproxy_get_value_as_string(const char *key,
         }
     }
     else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32))
-        retval = write_uint32(g_variant_get_uint32(value),
+        retval = write_uint32(g_variant_get_uint32(value), patcher,
                               buffer, buffer_size, key);
     else
         BUG("Unsupported type %s for key \"%s\"",

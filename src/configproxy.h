@@ -41,15 +41,19 @@ bool configproxy_register_configuration_owner(const char *id,
                                               const char *dbus_dest,
                                               const char *dbus_path);
 
+typedef bool (*PatchUint32Fn)(uint32_t *value);
+
 bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value);
 bool configproxy_set_uint32_from_string(const char *origin, const char *key,
-                                        const char *string, size_t len);
+                                        const char *string, size_t len,
+                                        PatchUint32Fn patcher);
 bool configproxy_set_string(const char *origin, const char *key, const char *value);
 bool configproxy_set_value(const char *origin, const char *key, struct ConfigProxyVariant *value);
 
 struct ConfigProxyVariant *configproxy_get_value(const char *key);
 ssize_t configproxy_get_value_as_string(const char *key,
-                                        char *buffer, size_t buffer_size);
+                                        char *buffer, size_t buffer_size,
+                                        PatchUint32Fn patcher);
 
 #ifdef __cplusplus
 }

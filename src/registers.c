@@ -199,10 +199,32 @@ static int write_87_appliance_id(const uint8_t *data, size_t length)
 
 static const char max_bitrate_key[] = "@drcpd::maximum_stream_bit_rate";
 
+static bool to_kbits(uint32_t *value)
+{
+    *value /= 1000U;
+    return true;
+}
+
+static bool from_kbits(uint32_t *value)
+{
+    static const uint32_t max = UINT32_MAX / 1000U;
+
+    if(*value <= max)
+    {
+        *value *= 1000U;
+        return true;
+    }
+
+    msg_error(0, LOG_NOTICE, "Bit rate limit overflow (%" PRIu32 ")", *value);
+
+    return false;
+}
+
 static ssize_t read_95_max_bitrate(uint8_t *response, size_t length)
 {
     return configproxy_get_value_as_string(max_bitrate_key,
-                                           (char *)response, length);
+                                           (char *)response, length,
+                                           to_kbits);
 }
 
 static int write_95_max_bitrate(const uint8_t *data, size_t length)
@@ -221,7 +243,8 @@ static int write_95_max_bitrate(const uint8_t *data, size_t length)
             return 0;
     }
     else if(configproxy_set_uint32_from_string(NULL, max_bitrate_key,
-                                               (const char *)data, length))
+                                               (const char *)data, length,
+                                               from_kbits))
         return 0;
 
     return -1;
