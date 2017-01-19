@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -27,6 +27,7 @@
 #include <arpa/inet.h>
 
 #include "dcpregs_networkconfig.h"
+#include "dcpregs_common.h"
 #include "registers_priv.h"
 #include "connman.h"
 #include "dbus_handlers_connman_manager_glue.h"
@@ -1069,19 +1070,11 @@ ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length)
                              response, length);
 }
 
-static size_t trim_trailing_zero_padding(const uint8_t *data, size_t length)
-{
-    while(length > 0 && data[length - 1] == '\0')
-        --length;
-
-    return length;
-}
-
 static int copy_ipv4_address(char *const dest, const uint32_t requested_change,
                              const uint8_t *const data, size_t length,
                              bool is_empty_ok)
 {
-    length = trim_trailing_zero_padding(data, length);
+    length = dcpregs_trim_trailing_zero_padding(data, length);
 
     if(length == 0)
     {
