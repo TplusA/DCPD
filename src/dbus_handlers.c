@@ -269,7 +269,7 @@ gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,
         tdbus_configuration_proxy_complete_register(object, invocation);
     else
         g_dbus_method_invocation_return_error(invocation,
-                                              G_DBUS_ERROR, G_DBUS_ERROR,
+                                              G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
                                               "Failed registering configuration owner \"%s\"",
                                               id);
 
