@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1064,7 +1064,8 @@ static void migrate_old_config(struct network_prefs_handle *prefs,
 /*!
  * Callback for #os_foreach_in_path().
  */
-static void delete_old_config(const char *path, void *user_data)
+static int delete_old_config(const char *path, unsigned char dtype,
+                             void *user_data)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE,
               "Check whether to delete file \"%s\"", path);
@@ -1077,19 +1078,21 @@ static void delete_old_config(const char *path, void *user_data)
     const size_t name_length = strlen(name);
 
     if(name_length != sizeof(config_filename_template_for_builtin_interfaces) - 1)
-        return;
+        return 0;
 
     if(strncmp(name, required_prefix, sizeof(required_prefix) - 1) != 0)
-        return;
+        return 0;
 
     if(strcmp(name + name_length - (sizeof(required_suffix) - 1),
               required_suffix) != 0)
-        return;
+        return 0;
 
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "Deleting residual configuration file: \"%s\"", name);
 
     os_file_delete(path);
+
+    return 0;
 }
 
 static void delete_old_config_files(const char *connman_config_path,

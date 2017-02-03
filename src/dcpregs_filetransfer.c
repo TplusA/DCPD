@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -367,13 +367,11 @@ static char *generate_opkg_feed_filename(char *buffer, size_t buffer_size,
     return &buffer[beyond];
 }
 
-static void find_opkg_feed_configuration_file(const char *path,
-                                              void *user_data)
+static int find_opkg_feed_configuration_file(const char *path,
+                                             unsigned char dtype,
+                                             void *user_data)
 {
-    const size_t name_len = get_filename_length_if_is_opkg_feed_file(path);
-
-    if(name_len > 0)
-        *(bool *)user_data = true;
+    return (get_filename_length_if_is_opkg_feed_file(path) > 0) ? 1 : 0;
 }
 
 static bool extract_updatable_objects(const struct ini_file *config,
@@ -446,13 +444,13 @@ error_exit:
 
 static int generate_opkg_feed_files_if_necessary(void)
 {
-    bool have_feeds = false;
+    int have_feeds =
+        os_foreach_in_path(opkg_configuration_path,
+                           find_opkg_feed_configuration_file, NULL);
 
-    if(!os_foreach_in_path(opkg_configuration_path,
-                           find_opkg_feed_configuration_file, &have_feeds))
+    if(have_feeds < 0)
         return -1;
-
-    if(have_feeds)
+    else if(have_feeds > 0)
         return 0;
 
     /* no feed configuration files found, need to generate them */
@@ -980,13 +978,14 @@ update_feed_configuration_file(struct ini_file *config,
     return UPDATE_FEEDS_FAILED;
 }
 
-static void delete_opkg_feed_configuration_file(const char *path,
-                                                void *user_data)
+static int delete_opkg_feed_configuration_file(const char *path,
+                                               unsigned char dtype,
+                                               void *user_data)
 {
     const size_t name_len = get_filename_length_if_is_opkg_feed_file(path);
 
     if(name_len == 0)
-        return;
+        return 0;
 
     char buffer[sizeof(opkg_configuration_path) + 1 + name_len];
 
@@ -994,6 +993,8 @@ static void delete_opkg_feed_configuration_file(const char *path,
     os_file_delete(buffer);
 
     *(bool *)user_data = true;
+
+    return 0;
 }
 
 /*!
@@ -1072,9 +1073,9 @@ try_update_repository_feeds(const uint8_t *data, size_t length)
 
     bool modified_directory = false;
 
-    if(!os_foreach_in_path(opkg_configuration_path,
-                           delete_opkg_feed_configuration_file,
-                           &modified_directory))
+    if(os_foreach_in_path(opkg_configuration_path,
+                          delete_opkg_feed_configuration_file,
+                          &modified_directory) < 0)
     {
         inifile_free(&config);
         return UPDATE_FEEDS_FAILED;

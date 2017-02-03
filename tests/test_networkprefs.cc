@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -210,7 +210,7 @@ static void do_migration(const char *const old_ethernet_config_name,
     items.emplace_back(MockOs::ForeachItemData("/connman/settings", false));
     items.emplace_back(MockOs::ForeachItemData("/connman/wifi_00e1b0534115_5441557064617465536572766572_managed_psk", true));
 
-    mock_os->expect_os_foreach_in_path(true, default_path_to_connman, items);
+    mock_os->expect_os_foreach_in_path(0, default_path_to_connman, items);
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Deleting residual configuration file: \"builtin_00f00d1f00d1.config\"");
     mock_os->expect_os_file_delete("/connman/builtin_00f00d1f00d1.config");

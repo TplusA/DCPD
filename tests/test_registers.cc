@@ -4624,7 +4624,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
         "/etc/opkg/raspberrypi-feed.conf",
     };
 
-    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path, items_before);
+    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path, items_before);
     mock_os->expect_os_file_delete(expected_generated_feed_file_names[0]);
     mock_os->expect_os_file_delete(expected_generated_feed_file_names[1]);
     mock_os->expect_os_file_delete(expected_generated_feed_file_names[2]);
@@ -4664,7 +4664,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Attempting to START SYSTEM UPDATE");
 
-    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path, items_after);
+    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path, items_after);
 
     const struct os_mapped_file_data modified_config_file =
     {
@@ -4793,7 +4793,7 @@ static void feed_configuration_file_is_created_on_system_update(bool have_overri
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Attempting to START SYSTEM UPDATE");
 
-    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
+    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path);
 
     static char override_config_file_buffer[] =
         "[global]\n"
@@ -4926,7 +4926,7 @@ void test_feed_configuration_file_is_created_on_config_if_does_not_exist()
         "Set package update URL \"http://dev.tua.local/Test\" for release \"experimental\"");
 
     mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
-    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
+    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path);
     mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
     for(unsigned int i = 0; i < 4 * 3 + 3 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
@@ -4966,7 +4966,7 @@ void test_feed_configurations_with_trailing_zero_bytes_are_accepted()
         "Set package update URL \"http://dev.tua.local/foo\" for release \"bar\"");
 
     mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
-    mock_os->expect_os_foreach_in_path(true, opkg_configuration_path);
+    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path);
     mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
     for(unsigned int i = 0; i < 4 * 3 + 3 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
