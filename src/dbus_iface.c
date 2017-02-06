@@ -33,6 +33,7 @@
 #include "dbus_common.h"
 #include "dcpd_dbus.h"
 #include "streamplayer_dbus.h"
+#include "artcache_dbus.h"
 #include "airable_dbus.h"
 #include "credentials_dbus.h"
 #include "configuration_dbus.h"
@@ -89,6 +90,14 @@ static struct
     tdbusAirable *airable_sec_iface;
 }
 airable_iface_data;
+
+static struct
+{
+    bool connect_to_session_bus;
+    tdbusartcacheRead *artcache_read_iface;
+    tdbusartcacheMonitor *artcache_monitor_iface;
+}
+artcache_iface_data;
 
 static struct
 {
@@ -253,6 +262,27 @@ static void name_acquired(GDBusConnection *connection,
         (void)dbus_common_handle_dbus_error(&error, "Create Airable sec proxy");
     }
 
+    if(is_session_bus == artcache_iface_data.connect_to_session_bus)
+    {
+        GError *error = NULL;
+
+        artcache_iface_data.artcache_read_iface =
+            tdbus_artcache_read_proxy_new_sync(connection,
+                                               G_DBUS_PROXY_FLAGS_NONE,
+                                               "de.tahifi.TACAMan",
+                                               "/de/tahifi/TACAMan",
+                                               NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error, "Create tacaman read proxy");
+
+        artcache_iface_data.artcache_monitor_iface =
+            tdbus_artcache_monitor_proxy_new_sync(connection,
+                                                  G_DBUS_PROXY_FLAGS_NONE,
+                                                  "de.tahifi.TACAMan",
+                                                  "/de/tahifi/TACAMan",
+                                                  NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error, "Create tacaman monitor proxy");
+    }
+
     if(is_session_bus == credentials_iface_data.connect_to_session_bus)
     {
         GError *error = NULL;
@@ -347,6 +377,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     memset(&filetransfer_iface_data, 0, sizeof(filetransfer_iface_data));
     memset(&streamplayer_iface_data, 0, sizeof(streamplayer_iface_data));
     memset(&airable_iface_data, 0, sizeof(airable_iface_data));
+    memset(&artcache_iface_data, 0, sizeof(artcache_iface_data));
     memset(&credentials_iface_data, 0, sizeof(credentials_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&login1_iface_data, 0, sizeof(login1_iface_data));
@@ -366,6 +397,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.connect_to_session_bus = connect_to_session_bus;
+    artcache_iface_data.connect_to_session_bus = connect_to_session_bus;
     credentials_iface_data.connect_to_session_bus = connect_to_session_bus;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
@@ -422,6 +454,8 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(streamplayer_iface_data.playback_iface != NULL);
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
     log_assert(airable_iface_data.airable_sec_iface != NULL);
+    log_assert(artcache_iface_data.artcache_read_iface != NULL);
+    log_assert(artcache_iface_data.artcache_monitor_iface != NULL);
     log_assert(credentials_iface_data.cred_read_iface != NULL);
     log_assert(credentials_iface_data.cred_write_iface != NULL);
     log_assert(connman_iface_data.connman_agent_iface != NULL);
@@ -434,6 +468,9 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
 
     g_signal_connect(airable_iface_data.airable_sec_iface, "g-signal",
                      G_CALLBACK(dbussignal_airable), appconn_data);
+
+    g_signal_connect(artcache_iface_data.artcache_monitor_iface, "g-signal",
+                     G_CALLBACK(dbussignal_artcache_monitor), NULL);
 
     if(connman_iface_data.is_enabled)
     {
@@ -486,6 +523,8 @@ void dbus_shutdown(void)
     g_object_unref(streamplayer_iface_data.playback_iface);
     g_object_unref(streamplayer_iface_data.urlfifo_iface);
     g_object_unref(airable_iface_data.airable_sec_iface);
+    g_object_unref(artcache_iface_data.artcache_read_iface);
+    g_object_unref(artcache_iface_data.artcache_monitor_iface);
     g_object_unref(credentials_iface_data.cred_read_iface);
     g_object_unref(credentials_iface_data.cred_write_iface);
     g_object_unref(connman_iface_data.connman_agent_iface);

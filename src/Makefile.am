@@ -66,6 +66,7 @@ noinst_LTLIBRARIES = \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
     libstreamplayer_dbus.la \
+    libartcache_dbus.la \
     libairable_dbus.la \
     libcredentials_dbus.la \
     libconfigproxy.la \
@@ -151,6 +152,9 @@ libdbusdl_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libstreamplayer_dbus_la_SOURCES = streamplayer_dbus.c streamplayer_dbus.h
 libstreamplayer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libartcache_dbus_la_SOURCES = artcache_dbus.c artcache_dbus.h
+libartcache_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 nodist_libairable_dbus_la_SOURCES = airable_dbus.c airable_dbus.h
 libairable_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
@@ -202,6 +206,10 @@ BUILT_SOURCES = \
     de_tahifi_streamplayer.h \
     de_tahifi_streamplayer.md \
     streamplayer_dbus.stamp \
+    $(nodist_libartcache_dbus_la_SOURCES) \
+    de_tahifi_artcache.h \
+    de_tahifi_artcache.md \
+    artcache_dbus.stamp \
     $(nodist_libairable_dbus_la_SOURCES) \
     de_tahifi_airable.h \
     de_tahifi_airable.md \
@@ -257,6 +265,15 @@ streamplayer_dbus.h: streamplayer_dbus.stamp
 streamplayer_dbus.stamp: $(DBUS_IFACES)/de_tahifi_streamplayer.xml
 	$(GDBUS_CODEGEN) --generate-c-code=streamplayer_dbus --c-namespace tdbus_splay --interface-prefix de.tahifi.Streamplayer. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_streamplayer.md -H de_tahifi_streamplayer.h -c tdbus_splay -s de.tahifi.Streamplayer. -n 'Streamplayer'
+	touch $@
+
+de_tahifi_artcache.h: artcache_dbus.stamp
+de_tahifi_artcache.md: artcache_dbus.stamp
+artcache_dbus.c: artcache_dbus.stamp
+artcache_dbus.h: artcache_dbus.stamp
+artcache_dbus.stamp: $(DBUS_IFACES)/de_tahifi_artcache.xml
+	$(GDBUS_CODEGEN) --generate-c-code=artcache_dbus --c-namespace tdbus_artcache --interface-prefix de.tahifi.ArtCache. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_artcache.md -H de_tahifi_artcache.h -c tdbus_artcache -s de.tahifi.ArtCache. -n "$(PACKAGE_NAME) (cover art)"
 	touch $@
 
 de_tahifi_airable.h: airable_dbus.stamp

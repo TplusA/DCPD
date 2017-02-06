@@ -257,6 +257,14 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
         unknown_signal(iface_name, signal_name, sender_name);
 }
 
+void dbussignal_artcache_monitor(GDBusProxy *proxy, const gchar *sender_name,
+                                 const gchar *signal_name, GVariant *parameters,
+                                 gpointer user_data)
+{
+    static const char iface_name[] = "de.tahifi.ArtCache.Monitor";
+    unknown_signal(iface_name, signal_name, sender_name);
+}
+
 gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,
                                          GDBusMethodInvocation *invocation,
                                          const gchar *id, const gchar *path,
