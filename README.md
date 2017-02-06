@@ -18,7 +18,7 @@ The _dcpd_ daemon implements a subset of DCP, the Device Control Protocol. This
 daemon does not implement the SPI physical layer communcation, but only knows
 about the high-level structure of DCP.
 
-The program is written in C11.
+The program is written in C++11.
 
 ## Communication with other system process
 
