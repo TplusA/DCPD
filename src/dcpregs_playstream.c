@@ -143,7 +143,7 @@ struct PlayAnyStreamData
     struct SimplifiedStreamInfo overwritten_pending_data;
 };
 
-static inline bool is_our_stream(const stream_id_t raw_stream_id)
+static inline bool is_app_stream(const stream_id_t raw_stream_id)
 {
     return (raw_stream_id & STREAM_ID_SOURCE_MASK) == STREAM_ID_SOURCE_APP;
 }
@@ -153,9 +153,9 @@ static inline bool is_stream_with_valid_source(const stream_id_t raw_stream_id)
     return (raw_stream_id & STREAM_ID_SOURCE_MASK) != STREAM_ID_SOURCE_INVALID;
 }
 
-static inline bool is_our_stream_and_valid(stream_id_t raw_stream_id)
+static inline bool is_app_stream_and_valid(stream_id_t raw_stream_id)
 {
-    if(!is_our_stream(raw_stream_id))
+    if(!is_app_stream(raw_stream_id))
         return false;
 
     raw_stream_id &= STREAM_ID_COOKIE_MASK;
@@ -395,7 +395,7 @@ static void strncpy_terminated(char *dest, const char *src, size_t n)
 
 static stream_id_t get_next_stream_id(stream_id_t *const next_free_id)
 {
-    log_assert(is_our_stream_and_valid(*next_free_id));
+    log_assert(is_app_stream_and_valid(*next_free_id));
 
     const stream_id_t ret = *next_free_id;
 
@@ -556,7 +556,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
         return;
     }
 
-    if(is_our_stream_and_valid(any_stream_data->pending_stream_id) &&
+    if(is_app_stream_and_valid(any_stream_data->pending_stream_id) &&
        any_stream_data->pending_stream_id == data->last_pushed_stream_id)
     {
         /* slave sent the next stream very quickly after the first stream,
@@ -803,7 +803,7 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
     log_assert(title != NULL);
     log_assert(url != NULL);
 
-    if(!is_our_stream(raw_stream_id))
+    if(!is_app_stream(raw_stream_id))
         unchecked_set_meta_data_and_url(raw_stream_id, title, url,
                                         &play_stream_data.other);
     else
