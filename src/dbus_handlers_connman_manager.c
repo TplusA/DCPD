@@ -147,6 +147,7 @@ static bool insert_service(struct ServiceList **head, const char *service_name,
         return false;
     }
 
+    /* cppcheck-suppress knownConditionTrueFalse */
     if(last != NULL)
     {
         log_assert(last->next == NULL);

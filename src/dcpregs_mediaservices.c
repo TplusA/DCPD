@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -69,7 +69,7 @@ static int delete_credentials(const char *service_id, bool logout_on_failure)
     }
     else
     {
-        if(dummy == NULL || (dummy != NULL && dummy[0] != '\0'))
+        if(dummy == NULL || dummy[0] != '\0')
             BUG("Expected empty default user");
 
         g_free(dummy);

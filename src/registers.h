@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -129,7 +129,8 @@ size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel
 /*!
  * Extract version components from version code.
  */
-void register_unpack_protocol_level(const struct RegisterProtocolLevel level,
+void register_unpack_protocol_level(/* cppcheck-suppress passedByValue */
+                                    const struct RegisterProtocolLevel level,
                                     uint8_t *major, uint8_t *minor,
                                     uint8_t *micro);
 

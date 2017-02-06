@@ -20,10 +20,10 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdio.h>
-#include <string.h>
-#include <signal.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstring>
+#include <csignal>
+#include <cerrno>
 
 #include "named_pipe.h"
 #include "dcp_over_tcp.h"
@@ -371,7 +371,8 @@ static unsigned int handle_primqueue_events(int fd, short revents)
 
             for(ssize_t i = 0; i < number_of_commands; ++i)
             {
-                const enum PrimitiveQueueCommand cmd = commands[i];
+                const enum PrimitiveQueueCommand cmd =
+                    static_cast<const enum PrimitiveQueueCommand>(commands[i]);
 
                 switch(cmd)
                 {
@@ -1498,11 +1499,10 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    static struct sigaction action =
-    {
-        .sa_sigaction = signal_handler,
-        .sa_flags = SA_SIGINFO | SA_RESETHAND,
-    };
+    static struct sigaction action;
+
+    action.sa_sigaction = signal_handler;
+    action.sa_flags = SA_SIGINFO | SA_RESETHAND;
 
     sigemptyset(&action.sa_mask);
     sigaction(SIGINT, &action, NULL);

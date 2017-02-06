@@ -1,4 +1,4 @@
-dnl Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+dnl Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
 dnl
 dnl This file is part of DCPD.
 dnl
@@ -19,7 +19,7 @@ AC_INIT([DCPD], [2.13], [r.tiemann@ta-hifi.com])
 AC_CONFIG_AUX_DIR([config])
 AM_INIT_AUTOMAKE([1.11 -Wall -Werror foreign])
 AM_SILENT_RULES([yes])
-AC_CONFIG_SRCDIR([src/dcpd.c])
+AC_CONFIG_SRCDIR([src/dcpd.cc])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 

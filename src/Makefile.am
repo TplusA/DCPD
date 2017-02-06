@@ -21,7 +21,7 @@ ACLOCAL_AMFLAGS = -I ../m4
 bin_PROGRAMS = dcpd
 
 dcpd_SOURCES = \
-    dcpd.c os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
+    dcpd.cc os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
     dcp_over_tcp.c dcp_over_tcp.h \
     smartphone_app.c smartphone_app.h \
     smartphone_app_send.c smartphone_app_send.h \
@@ -47,6 +47,8 @@ dcpd_SOURCES = \
 DBUS_IFACES = $(top_srcdir)/dbus_interfaces
 
 AM_CFLAGS = $(CWARNINGS)
+
+AM_CXXFLAGS = $(CXXWARNINGS)
 
 AM_CPPFLAGS = $(DCPD_DEPENDENCIES_CFLAGS)
 AM_CPPFLAGS += -I$(DBUS_IFACES)
@@ -81,6 +83,7 @@ libdynamic_buffer_la_SOURCES = \
     dynamic_buffer.c dynamic_buffer.h \
     dynamic_buffer_util.c dynamic_buffer_util.h
 libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
+libdynamic_buffer_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libregisters_la_SOURCES = \
     registers.c registers.h registers_priv.h \
@@ -105,21 +108,26 @@ libregisters_la_SOURCES = \
     drcp_command_codes.h messages.h
 nodist_libregisters_la_SOURCES = do_update_sh.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
+libregisters_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
+libinifile_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libconfigproxy_la_SOURCES = configproxy.c configproxy.h
 libconfigproxy_la_CFLAGS = $(AM_CFLAGS)
+libconfigproxy_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libnetworkprefs_la_SOURCES = networkprefs.c networkprefs.h inifile.h
 libnetworkprefs_la_CFLAGS = $(AM_CFLAGS)
+libnetworkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libapplink_la_SOURCES = \
     applink.c applink.h \
     applink_variables.c applink_variables.h \
     dynamic_buffer.h dynamic_buffer_util.h
 libapplink_la_CFLAGS = $(AM_CFLAGS)
+libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
@@ -136,6 +144,7 @@ libdbus_handlers_la_SOURCES = \
     dcpregs_playstream.h \
     dcpregs_status.h
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
+libdbus_handlers_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
@@ -173,25 +182,30 @@ libdrcpdcomm_la_SOURCES = \
     dynamic_buffer.h dynamic_buffer_util.h \
     messages.h
 libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
+libdrcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libtransactions_la_SOURCES = \
     transactions.c transactions.h os.h \
     dynamic_buffer.h registers.h named_pipe.h dcpdefs.h messages.h
 libtransactions_la_CFLAGS = $(AM_CFLAGS)
+libtransactions_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libxmodem_la_SOURCES = xmodem.c xmodem.h crc16.h os.h
 libxmodem_la_CFLAGS = $(AM_CFLAGS)
+libxmodem_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libnetwork_dispatcher_la_SOURCES = \
     network_dispatcher.c network_dispatcher.h \
     network.c network.h \
     messages.h
 libnetwork_dispatcher_la_CFLAGS = $(AM_CFLAGS)
+libnetwork_dispatcher_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libshutdown_guard_la_SOURCES = \
     shutdown_guard.c shutdown_guard.h \
     messages.h
 libshutdown_guard_la_CFLAGS = $(AM_CFLAGS)
+libshutdown_guard_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 BUILT_SOURCES = \
     $(nodist_libdcpd_dbus_la_SOURCES) \
