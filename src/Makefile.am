@@ -255,7 +255,7 @@ dbusdl_dbus.c: dbusdl_dbus.stamp
 dbusdl_dbus.h: dbusdl_dbus.stamp
 dbusdl_dbus.stamp: $(DBUS_IFACES)/de_tahifi_filetransfer.xml
 	$(GDBUS_CODEGEN) --generate-c-code=dbusdl_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dbusdl.md -H de_tahifi_dbusdl.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME)"
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dbusdl.md -H de_tahifi_dbusdl.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (file download)"
 	touch $@
 
 de_tahifi_streamplayer.h: streamplayer_dbus.stamp
@@ -264,7 +264,7 @@ streamplayer_dbus.c: streamplayer_dbus.stamp
 streamplayer_dbus.h: streamplayer_dbus.stamp
 streamplayer_dbus.stamp: $(DBUS_IFACES)/de_tahifi_streamplayer.xml
 	$(GDBUS_CODEGEN) --generate-c-code=streamplayer_dbus --c-namespace tdbus_splay --interface-prefix de.tahifi.Streamplayer. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_streamplayer.md -H de_tahifi_streamplayer.h -c tdbus_splay -s de.tahifi.Streamplayer. -n 'Streamplayer'
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_streamplayer.md -H de_tahifi_streamplayer.h -c tdbus_splay -s de.tahifi.Streamplayer. -n '$(PACKAGE_NAME) (stream player)'
 	touch $@
 
 de_tahifi_artcache.h: artcache_dbus.stamp
@@ -300,7 +300,7 @@ configuration_dbus.c: configuration_dbus.stamp
 configuration_dbus.h: configuration_dbus.stamp
 configuration_dbus.stamp: $(DBUS_IFACES)/de_tahifi_configuration.xml
 	$(GDBUS_CODEGEN) --generate-c-code=configuration_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_configuration.md -H de_tahifi_configuration.h -c tdbus -s de.tahifi. -n "Configuration"
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_configuration.md -H de_tahifi_configuration.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (configuration management)"
 	touch $@
 
 de_tahifi_debug.h: debug_dbus.stamp
@@ -309,7 +309,7 @@ debug_dbus.c: debug_dbus.stamp
 debug_dbus.h: debug_dbus.stamp
 debug_dbus.stamp: $(DBUS_IFACES)/de_tahifi_debug.xml
 	$(GDBUS_CODEGEN) --generate-c-code=debug_dbus --c-namespace tdbus_debug --interface-prefix de.tahifi.Debug. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_debug.md -H de_tahifi_debug.h -c tdbus_debug -s de.tahifi.Debug. -n "$(PACKAGE_NAME)"
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_debug.md -H de_tahifi_debug.h -c tdbus_debug -s de.tahifi.Debug. -n "$(PACKAGE_NAME) (debug levels)"
 	touch $@
 
 net_connman.h: connman_dbus.stamp
@@ -318,7 +318,7 @@ connman_dbus.c: connman_dbus.stamp
 connman_dbus.h: connman_dbus.stamp
 connman_dbus.stamp: $(DBUS_IFACES)/net_connman.xml
 	$(GDBUS_CODEGEN) --generate-c-code=connman_dbus --c-namespace tdbus_connman --interface-prefix net.connman. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o net_connman.md -H net_connman.h -c tdbus_connman -s net.connman. -n "$(PACKAGE_NAME)"
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o net_connman.md -H net_connman.h -c tdbus_connman -s net.connman. -n "$(PACKAGE_NAME) (ConnMan integration)"
 	touch $@
 
 org_freedesktop_logind.h: logind_dbus.stamp
@@ -327,7 +327,7 @@ logind_dbus.c: logind_dbus.stamp
 logind_dbus.h: logind_dbus.stamp
 logind_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_login1.xml
 	$(GDBUS_CODEGEN) --generate-c-code=logind_dbus --c-namespace tdbus_logind --interface-prefix org.freedesktop.login1. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_logind.md -H org_freedesktop_logind.h -c tdbus_logind -s org.freedesktop.login1. -n "$(PACKAGE_NAME)"
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_logind.md -H org_freedesktop_logind.h -c tdbus_logind -s org.freedesktop.login1. -n "$(PACKAGE_NAME) (shutdown via systemd)"
 	touch $@
 
 do_update_sh.h: do_update.sh
