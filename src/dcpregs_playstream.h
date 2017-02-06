@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -54,7 +54,9 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length);
 
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
                                           const char *title, const char *url);
-void dcpregs_playstream_start_notification(stream_id_t raw_stream_id);
+void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
+                                           const uint8_t *stream_key,
+                                           size_t stream_key_length);
 void dcpregs_playstream_stop_notification(void);
 
 #ifdef __cplusplus

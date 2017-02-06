@@ -42,6 +42,7 @@
 #include "dbus_handlers_connman_manager_glue.h"
 #include "stream_id.hh"
 #include "actor_id.h"
+#include "md5.hh"
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_file_transfer_dbus.hh"
@@ -5094,6 +5095,9 @@ using OurStream = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
 
 static RegisterChangedData *register_changed_data;
 
+const static MD5::Hash hash_dummy{ 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                                   0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, };
+
 static void register_changed_callback(uint8_t reg_number)
 {
     register_changed_data->append(reg_number);
@@ -5198,8 +5202,14 @@ static void set_start_url(const std::string expected_artist,
                           const std::string expected_title,
                           const std::string expected_alttrack,
                           const std::string url,
-                          const OurStream stream_id, bool assume_already_playing)
+                          const OurStream stream_id, bool assume_already_playing,
+                          MD5::Hash &expected_stream_key)
 {
+    MD5::Context ctx;
+    MD5::init(ctx);
+    MD5::update(ctx, reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
+    MD5::finish(ctx, expected_stream_key);
+
     const auto *const reg = register_lookup(79);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -5211,7 +5221,7 @@ static void set_start_url(const std::string expected_artist,
     mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
         TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-        stream_id.get().get_raw_id(), url.c_str(),
+        stream_id.get().get_raw_id(), url.c_str(), expected_stream_key,
         0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
 
     if(!assume_already_playing)
@@ -5235,11 +5245,12 @@ static void set_start_meta_data_and_url(const std::string meta_data,
                                         const std::string expected_album,
                                         const std::string expected_title,
                                         const OurStream stream_id,
-                                        bool assume_already_playing)
+                                        bool assume_already_playing,
+                                        MD5::Hash &expected_stream_key)
 {
     set_start_title(meta_data);
     set_start_url(expected_artist, expected_album, expected_title, meta_data,
-                  url, stream_id, assume_already_playing);
+                  url, stream_id, assume_already_playing, expected_stream_key);
 }
 
 static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_data_length,
@@ -5248,32 +5259,40 @@ static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_da
                                         const std::string expected_album,
                                         const std::string expected_title,
                                         const OurStream stream_id,
-                                        bool assume_already_playing)
+                                        bool assume_already_playing,
+                                        MD5::Hash &expected_stream_key)
 {
     set_start_title(meta_data, meta_data_length);
     set_start_url(expected_artist, expected_album, expected_title,
                   std::string(static_cast<const char *>(static_cast<const void *>(meta_data)),
                               meta_data_length),
-                  url, stream_id, assume_already_playing);
+                  url, stream_id, assume_already_playing, expected_stream_key);
 }
 
 static void set_start_title_and_url(const std::string title, const std::string url,
                                     const OurStream stream_id,
-                                    bool assume_already_playing)
+                                    bool assume_already_playing,
+                                    MD5::Hash &expected_stream_key)
 {
     set_start_title(title);
     set_start_url("", "", title, title, url,
-                  stream_id, assume_already_playing);
+                  stream_id, assume_already_playing, expected_stream_key);
 }
 
 static void set_next_url(const std::string title, const std::string url,
                          const OurStream stream_id,
-                         bool assume_is_app_mode, bool assume_already_playing)
+                         bool assume_is_app_mode, bool assume_already_playing,
+                         MD5::Hash &expected_stream_key)
 {
     const auto *const reg = register_lookup(239);
 
     if(assume_is_app_mode)
     {
+        MD5::Context ctx;
+        MD5::init(ctx);
+        MD5::update(ctx, reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
+        MD5::finish(ctx, expected_stream_key);
+
         mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
         mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
             dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
@@ -5281,21 +5300,25 @@ static void set_next_url(const std::string title, const std::string url,
         mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-            stream_id.get().get_raw_id(), url.c_str(),
+            stream_id.get().get_raw_id(), url.c_str(), expected_stream_key,
             0, "ms", 0, "ms", 0, FALSE, assume_already_playing);
     }
     else
+    {
         mock_messages->expect_msg_error(0, LOG_ERR, "Can't queue next stream, didn't receive a start stream");
+        expected_stream_key.fill(0);
+    }
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
 }
 
 static void set_next_title_and_url(const std::string title, const std::string url,
                                    const OurStream stream_id,
-                                   bool assume_is_app_mode, bool assume_already_playing)
+                                   bool assume_is_app_mode, bool assume_already_playing,
+                                   MD5::Hash &expected_stream_key)
 {
     set_next_title(title);
-    set_next_url(title, url, stream_id, assume_is_app_mode, assume_already_playing);
+    set_next_url(title, url, stream_id, assume_is_app_mode, assume_already_playing, expected_stream_key);
 }
 
 static void expect_current_title(const std::string &expected_title)
@@ -5385,7 +5408,9 @@ static void stop_stream()
  */
 void test_start_stream()
 {
-    set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac", OurStream::make(), false);
+    MD5::Hash hash;
+    set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
+                            OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5395,10 +5420,11 @@ void test_start_stream()
  */
 void test_start_stream_with_meta_data()
 {
+    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5410,10 +5436,11 @@ void test_start_stream_with_unterminated_meta_data()
 {
     static const uint8_t evil[] = { 'T', 'i', 't', 'l', 'e', 0x1d, };
 
+    MD5::Hash hash;
     set_start_meta_data_and_url(evil, sizeof(evil),
                                 "http://app-provided.url.org/stream.aac",
                                 "", "", "Title",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5423,10 +5450,11 @@ void test_start_stream_with_unterminated_meta_data()
  */
 void test_start_stream_with_partial_meta_data()
 {
+    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist on that album",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist on that album", "", "The title",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5436,10 +5464,11 @@ void test_start_stream_with_partial_meta_data()
  */
 void test_start_stream_with_too_many_meta_data()
 {
+    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat I like",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5449,10 +5478,11 @@ void test_start_stream_with_too_many_meta_data()
  */
 void test_start_stream_with_way_too_many_meta_data()
 {
+    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat\x1dI\x1dlike",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5462,10 +5492,11 @@ void test_start_stream_with_way_too_many_meta_data()
  */
 void test_start_stream_with_title_name()
 {
+    MD5::Hash hash;
     set_start_meta_data_and_url("The Title\x1d\x1d",
                                 "http://app-provided.url.org/stream.aac",
                                 "", "", "The Title",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5475,10 +5506,11 @@ void test_start_stream_with_title_name()
  */
 void test_start_stream_with_artist_name()
 {
+    MD5::Hash hash;
     set_start_meta_data_and_url("\x1dThe Artist\x1d",
                                 "http://app-provided.url.org/stream.aac",
                                 "The Artist", "", "",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5488,10 +5520,11 @@ void test_start_stream_with_artist_name()
  */
 void test_start_stream_with_album_name()
 {
+    MD5::Hash hash;
     set_start_meta_data_and_url("\x1d\x1dThe Album",
                                 "http://app-provided.url.org/stream.aac",
                                 "", "The Album", "",
-                                OurStream::make(), false);
+                                OurStream::make(), false, hash);
 
     expect_current_title_and_url("", "");
 }
@@ -5504,24 +5537,30 @@ void test_start_stream_then_start_another_stream()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url("First", "http://app-provided.url.org/first.flac", stream_id_first, false);
+    MD5::Hash hash_first;
+    set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
+                            stream_id_first, false, hash_first);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    set_start_title_and_url("Second", "http://app-provided.url.org/second.flac", stream_id_second, true);
+    MD5::Hash hash_second;
+    set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
+                            stream_id_second, true, hash_second);
     register_changed_data->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
+                                          hash_second.data(), hash_second.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
@@ -5535,25 +5574,31 @@ void test_start_stream_then_quickly_start_another_stream()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url("First", "http://app-provided.url.org/first.flac", stream_id_first, false);
+    MD5::Hash hash_first;
+    set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
+                            stream_id_first, false, hash_first);
     register_changed_data->check();
 
     const auto stream_id_second(++next_stream_id);
-    set_start_title_and_url("Second", "http://app-provided.url.org/second.flac", stream_id_second, false);
+    MD5::Hash hash_second;
+    set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
+                            stream_id_second, false, hash_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Got start notification for unknown app stream ID 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     mock_messages->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
+                                          hash_second.data(), hash_second.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
@@ -5564,16 +5609,20 @@ void test_start_stream_then_quickly_start_another_stream()
  */
 void test_app_can_start_stream_while_other_source_is_playing()
 {
-    dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id());
+    dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id(),
+                                          hash_dummy.data(), hash_dummy.size());
     expect_current_title_and_url("", "");
 
     const auto stream_id(OurStream::make());
-    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, true);
+    MD5::Hash hash;
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
+                            stream_id, true, hash);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
+                                          hash.data(), hash.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
@@ -5590,12 +5639,15 @@ void test_app_can_start_stream_while_other_source_is_playing()
 void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 {
     const auto stream_id(OurStream::make());
-    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, false);
+    MD5::Hash hash;
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
+                            stream_id, false, hash);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
+                                          hash.data(), hash.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
@@ -5607,7 +5659,8 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
-    dcpregs_playstream_start_notification(ui_stream_id.get_raw_id());
+    dcpregs_playstream_start_notification(ui_stream_id.get_raw_id(),
+                                          hash_dummy.data(), hash_dummy.size());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 
@@ -5625,12 +5678,15 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
 {
     const auto stream_id(OurStream::make());
-    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, false);
+    MD5::Hash hash;
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
+                            stream_id, false, hash);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
+                                          hash.data(), hash.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
@@ -5646,7 +5702,8 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(ui_stream_id.get_raw_id());
+    dcpregs_playstream_start_notification(ui_stream_id.get_raw_id(),
+                                          hash_dummy.data(), hash_dummy.size());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
 }
@@ -5654,7 +5711,9 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
 static void start_stop_single_stream(bool with_notifications)
 {
     const auto stream_id(OurStream::make());
-    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac", stream_id, false);
+    MD5::Hash hash;
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
+                            stream_id, false, hash);
     register_changed_data->check();
     mock_messages->check();
 
@@ -5662,7 +5721,8 @@ static void start_stop_single_stream(bool with_notifications)
     {
         mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-        dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+        dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
+                                              hash.data(), hash.size());
         register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
         mock_messages->check();
         expect_next_url_empty();
@@ -5708,7 +5768,8 @@ void test_quick_start_stop_single_stream()
     register_changed_data->check();
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN);
+    dcpregs_playstream_start_notification(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
+                                          hash_dummy.data(), hash_dummy.size());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
@@ -5730,7 +5791,8 @@ void test_url_is_not_sent_to_spi_slave_if_unchanged()
     static constexpr char url[] = "http://my.url.org/stream.m3u";
     const auto stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
 
-    dcpregs_playstream_start_notification(stream_id.get_raw_id());
+    dcpregs_playstream_start_notification(stream_id.get_raw_id(),
+                                          hash_dummy.data(), hash_dummy.size());
 
     register_changed_data->check();
     mock_messages->check();
@@ -5769,7 +5831,8 @@ void test_nothing_is_sent_to_spi_slave_if_title_and_url_unchanged()
     static constexpr char title[] = "Stream Me";
     const auto stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
 
-    dcpregs_playstream_start_notification(stream_id.get_raw_id());
+    dcpregs_playstream_start_notification(stream_id.get_raw_id(),
+                                          hash_dummy.data(), hash_dummy.size());
 
     register_changed_data->check();
     mock_messages->check();
@@ -5807,24 +5870,30 @@ void test_start_stream_and_queue_next()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
+    MD5::Hash hash_first;
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
+                            stream_id_first, false, hash_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, true, true);
+    MD5::Hash hash_second;
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
+                           stream_id_second, true, true, hash_second);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
+                                          hash_second.data(), hash_second.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     mock_messages->check();
     expect_next_url_empty();
@@ -5856,14 +5925,17 @@ void test_play_multiple_tracks_in_a_row()
 
     /* queue first track */
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url(title_and_url[0].first, title_and_url[0].second, stream_id_first, false);
+    MD5::Hash hash;
+    set_start_title_and_url(title_and_url[0].first, title_and_url[0].second,
+                            stream_id_first, false, hash);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     /* first track starts playing */
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash.data(), hash.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url(title_and_url[0].first, title_and_url[0].second);
@@ -5874,7 +5946,7 @@ void test_play_multiple_tracks_in_a_row()
 
         /* queue next track */
         const auto stream_id(++next_stream_id);
-        set_next_title_and_url(pair.first, pair.second, stream_id, true, true);
+        set_next_title_and_url(pair.first, pair.second, stream_id, true, true, hash);
         register_changed_data->check();
 
         /* next track starts playing */
@@ -5883,7 +5955,8 @@ void test_play_multiple_tracks_in_a_row()
                  "Next app stream %u", stream_id.get().get_raw_id());
         mock_messages->expect_msg_info_formatted(buffer);
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-        dcpregs_playstream_start_notification(stream_id.get().get_raw_id());
+        dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
+                                              hash.data(), hash.size());
         register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
         mock_messages->check();
         expect_next_url_empty();
@@ -5911,25 +5984,31 @@ void test_start_stream_and_quickly_queue_next()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
+    MD5::Hash hash_first;
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
+                            stream_id_first, false, hash_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     const auto stream_id_second(++next_stream_id);
-    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, true, true);
+    MD5::Hash hash_second;
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
+                           stream_id_second, true, true, hash_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
+                                          hash_second.data(), hash_second.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
@@ -5946,13 +6025,16 @@ void test_queue_next_after_stop_notification_is_ignored()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
+    MD5::Hash hash_first;
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
+                            stream_id_first, false, hash_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
@@ -5966,7 +6048,9 @@ void test_queue_next_after_stop_notification_is_ignored()
 
     /* ...but the slave sends another stream just in that moment */
     const auto stream_id_second(++next_stream_id);
-    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, false, false);
+    MD5::Hash hash_second;
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
+                           stream_id_second, false, false, hash_second);
     expect_current_title_and_url("", "");
 }
 
@@ -5975,7 +6059,9 @@ void test_queue_next_after_stop_notification_is_ignored()
  */
 void test_queue_next_with_prior_start_is_ignored()
 {
-    set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac", OurStream::make(), false, false);
+    MD5::Hash hash;
+    set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
+                           OurStream::make(), false, false, hash);
     expect_current_title_and_url("", "");
 }
 
@@ -5985,7 +6071,9 @@ void test_queue_next_with_prior_start_is_ignored()
  */
 void test_queue_next_with_prior_start_by_us_is_ignored()
 {
-    set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac", OurStream::make(), false, true);
+    MD5::Hash hash;
+    set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
+                           OurStream::make(), false, true, hash);
     expect_current_title_and_url("", "");
 }
 
@@ -5998,29 +6086,38 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3", stream_id_first, false);
+    MD5::Hash hash_first;
+    set_start_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3",
+                            stream_id_first, false, hash_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_second(++next_stream_id);
-    set_next_title_and_url("Stream 2", "http://app-provided.url.org/2.mp3", stream_id_second, true, true);
+    MD5::Hash hash_second;
+    set_next_title_and_url("Stream 2", "http://app-provided.url.org/2.mp3",
+                           stream_id_second, true, true, hash_second);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_third(++next_stream_id);
-    set_next_title_and_url("Stream 3", "http://app-provided.url.org/3.mp3", stream_id_third, true, true);
+    MD5::Hash hash_third;
+    set_next_title_and_url("Stream 3", "http://app-provided.url.org/3.mp3",
+                           stream_id_third, true, true, hash_third);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_fourth(++next_stream_id);
-    set_next_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3", stream_id_fourth, true, true);
+    MD5::Hash hash_fourth;
+    set_next_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3",
+                           stream_id_fourth, true, true, hash_fourth);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
@@ -6028,7 +6125,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
 
     mock_messages->expect_msg_info_formatted("Next app stream 260");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id(),
+                                          hash_fourth.data(), hash_fourth.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3");
@@ -6039,39 +6137,47 @@ void test_pause_and_continue()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac", stream_id_first, false);
+    MD5::Hash hash_first;
+    set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
+                            stream_id_first, false, hash_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac", stream_id_second, true, true);
+    MD5::Hash hash_second;
+    set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
+                           stream_id_second, true, true, hash_second);
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* the pause signal itself is caught, but ignored by dcpd; however,
      * starting the same stream is treated as continue from pause */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* also works a second time */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
-    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
+                                          hash_first.data(), hash_first.size());
     register_changed_data->check();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* now assume the next stream has started */
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id());
+    dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
+                                          hash_second.data(), hash_second.size());
     register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");

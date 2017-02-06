@@ -167,13 +167,19 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
     if(strcmp(signal_name, "NowPlaying") == 0)
     {
         /* some stream started or continued playing---is it ours? */
-        check_parameter_assertions(parameters, 4);
+        check_parameter_assertions(parameters, 5);
 
         GVariant *val = g_variant_get_child_value(parameters, 0);
         uint16_t stream_id = g_variant_get_uint16(val);
         g_variant_unref(val);
 
-        dcpregs_playstream_start_notification(stream_id);
+        val = g_variant_get_child_value(parameters, 1);
+        gsize len;
+        gconstpointer key = g_variant_get_fixed_array(val, &len, sizeof(uint8_t));
+
+        dcpregs_playstream_start_notification(stream_id, key, len);
+
+        g_variant_unref(val);
     }
     else if(strcmp(signal_name, "Stopped") == 0 ||
             strcmp(signal_name, "StoppedWithError") == 0)

@@ -37,6 +37,8 @@ dcpd_SOURCES = \
     dcpregs_upnpname.h dcpregs_searchparameters.h \
     connman.c connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
+    stream_id.h \
+    coverart.hh md5.hh \
     dbus_common.c dbus_common.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.h \
@@ -95,13 +97,14 @@ libregisters_la_SOURCES = \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
     dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
-    dcpregs_playstream.c dcpregs_playstream.h \
+    dcpregs_playstream.cc dcpregs_playstream.h \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \
     dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
     dbus_handlers_connman_manager_glue.h networkprefs.h \
     dbusdl_dbus.h \
     stream_id.h \
+    coverart.cc coverart.hh md5.cc md5.hh \
     actor_id.h \
     shutdown_guard.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \

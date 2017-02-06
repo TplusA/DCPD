@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,6 +24,7 @@
 
 #include "dcpregs_playstream.h"
 #include "registers_priv.h"
+#include "coverart.hh"
 #include "streamplayer_dbus.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
@@ -105,12 +106,25 @@ struct PlayAppStreamData
     struct SimplifiedStreamInfo inbuffer_next_stream;
 };
 
+enum CoverArtDataState
+{
+    COVER_ART_HAVE_NOTHING,
+    COVER_ART_HAVE_TRACKED_STREAM_KEY,
+    COVER_ART_PENDING,
+    COVER_ART_AVAILABLE,
+};
+
 struct PlayAnyStreamData
 {
     /*!
      * The ID that arrived in through start/stop notifications.
      */
     stream_id_t currently_playing_stream;
+
+    /*!
+     * The cover art meta data of the currently playing stream, if any.
+     */
+    CoverArt::Tracker tracked_stream_key;
 
     /*!
      * Register values in #PlayAnyStreamData::pending_data are for this ID.
@@ -358,8 +372,8 @@ static inline void other_stream_started_playing(struct PlayAppStreamData *data,
     data->next_stream_id = 0;
 }
 
-static size_t copy_string_to_slave(const char *const restrict src,
-                                   char *const restrict dest, size_t dest_size)
+static size_t copy_string_to_slave(const char *const __restrict src,
+                                   char *const __restrict dest, size_t dest_size)
 {
     if(dest_size == 0)
         return 0;
@@ -474,7 +488,7 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
 }
 
 static void tokenize_meta_data(char *dest, const char *src,
-                               const char *artist_and_album[static 2])
+                               const char *(&artist_and_album)[2])
 {
     static const char empty[] = "";
 
@@ -529,6 +543,9 @@ static void try_start_stream(struct PlayAppStreamData *const data,
     char meta_data_buffer[sizeof(data->inbuffer_new_stream.meta_data)];
     const char *artist_and_album[2];
 
+    CoverArt::StreamKey stream_key;
+    CoverArt::generate_stream_key_for_app(stream_key, url);
+
     tokenize_meta_data(meta_data_buffer, meta_data, artist_and_album);
 
     tdbus_dcpd_playback_emit_stream_info(dbus_get_playback_iface(), stream_id,
@@ -539,6 +556,10 @@ static void try_start_stream(struct PlayAppStreamData *const data,
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
                                            stream_id, url,
+                                           g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                                                     stream_key.key_,
+                                                                     sizeof(stream_key.key_),
+                                                                     sizeof(stream_key.key_[0])),
                                            0, "ms", 0, "ms",
                                            is_restart ? -2 : 0,
                                            &fifo_overflow, &is_playing,
@@ -614,13 +635,7 @@ static struct
     struct PlayAppStreamData app;
     struct PlayAnyStreamData other;
 }
-play_stream_data =
-{
-    .app =
-    {
-        .next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
-    },
-};
+play_stream_data;
 
 void dcpregs_playstream_init(void)
 {
@@ -817,7 +832,15 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
     g_mutex_unlock(&play_stream_data.lock);
 }
 
-void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
+static void try_notify_cover_art_changed(const CoverArt::Tracker &tracked_key,
+                                         bool has_stream_key_changed)
+{
+    /* TODO: Implementation */
+}
+
+void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
+                                           const uint8_t *stream_key,
+                                           size_t stream_key_length)
 {
     g_mutex_lock(&play_stream_data.lock);
 
@@ -828,6 +851,10 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
         play_stream_data.other.currently_playing_stream != raw_stream_id;
 
     play_stream_data.other.currently_playing_stream = raw_stream_id;
+
+    const bool has_stream_key_changed =
+        play_stream_data.other.tracked_stream_key.set(stream_key,
+                                                      stream_key_length);
 
     bool switched_to_nonapp_mode = false;
 
@@ -901,6 +928,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 
     try_notify_pending_stream_info(&play_stream_data.other,
                                    switched_to_nonapp_mode);
+    try_notify_cover_art_changed(play_stream_data.other.tracked_stream_key,
+                                 has_stream_key_changed);
 
     g_mutex_unlock(&play_stream_data.lock);
 }
@@ -908,6 +937,9 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id)
 void dcpregs_playstream_stop_notification(void)
 {
     g_mutex_lock(&play_stream_data.lock);
+
+    const bool has_stream_key_changed =
+        play_stream_data.other.tracked_stream_key.clear();
 
     if(is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -924,6 +956,8 @@ void dcpregs_playstream_stop_notification(void)
 
     do_notify_stream_info(&play_stream_data.other, NOTIFY_STREAM_INFO_DEV_NULL,
                           SEND_STREAM_UPDATE_URL_AND_TITLE);
+    try_notify_cover_art_changed(play_stream_data.other.tracked_stream_key,
+                                 has_stream_key_changed);
 
     g_mutex_unlock(&play_stream_data.lock);
 }
