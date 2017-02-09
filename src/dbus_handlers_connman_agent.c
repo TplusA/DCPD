@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -497,7 +497,10 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
     const size_t tech_length = after_tech - service;
 
     if(before_service == NULL || after_tech == NULL || tech_length == 0)
+    {
+        *prefsfile = NULL;
         return "Malformed service name";
+    }
 
     const struct network_prefs *dummy;
     const struct network_prefs *prefs;
