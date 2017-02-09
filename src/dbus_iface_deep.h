@@ -23,6 +23,7 @@
 #include "dbusdl_dbus.h"
 #include "streamplayer_dbus.h"
 #include "airable_dbus.h"
+#include "artcache_dbus.h"
 #include "credentials_dbus.h"
 #include "configuration_dbus.h"
 #include "connman_dbus.h"
@@ -44,6 +45,8 @@ tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void);
 tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void);
 
 tdbusAirable *dbus_get_airable_sec_iface(void);
+
+tdbusartcacheRead *dbus_get_artcache_read_iface(void);
 
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void);
 tdbuscredentialsWrite *dbus_get_credentials_write_iface(void);

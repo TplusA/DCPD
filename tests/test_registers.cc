@@ -23,6 +23,7 @@
 #include <cppcutter.h>
 #include <array>
 #include <algorithm>
+#include <glib.h>
 
 #include "registers.h"
 #include "registers_priv.h"
@@ -43,12 +44,14 @@
 #include "stream_id.hh"
 #include "actor_id.h"
 #include "md5.hh"
+#include "gvariantwrapper.hh"
 
 #include "mock_dcpd_dbus.hh"
 #include "mock_file_transfer_dbus.hh"
 #include "mock_streamplayer_dbus.hh"
 #include "mock_credentials_dbus.hh"
 #include "mock_airable_dbus.hh"
+#include "mock_artcache_dbus.hh"
 #include "mock_logind_manager_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
@@ -351,9 +354,9 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_1 =
     87, 88,
 };
 
-static const std::array<uint8_t, 1> existing_registers_v1_0_2 =
+static const std::array<uint8_t, 2> existing_registers_v1_0_2 =
 {
-    95,
+    95, 210,
 };
 
 void cut_setup()
@@ -5076,6 +5079,7 @@ namespace spi_registers_play_app_stream
 
 static MockMessages *mock_messages;
 static MockStreamplayerDBus *mock_streamplayer_dbus;
+static MockArtCacheDBus *mock_artcache_dbus;
 static MockDcpdDBus *mock_dcpd_dbus;
 static MockDBusIface *mock_dbus_iface;
 
@@ -5091,11 +5095,14 @@ static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
 static tdbusdcpdViews *const dbus_dcpd_views_iface_dummy =
     reinterpret_cast<tdbusdcpdViews *>(0x87654321);
 
+static tdbusartcacheRead *const dbus_artcache_read_iface_dummy =
+    reinterpret_cast<tdbusartcacheRead *>(0x3bcb891a);
+
 using OurStream = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
 
 static RegisterChangedData *register_changed_data;
 
-const static MD5::Hash hash_dummy{ 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+const static MD5::Hash skey_dummy{ 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
                                    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, };
 
 static void register_changed_callback(uint8_t reg_number)
@@ -5116,6 +5123,11 @@ void cut_setup()
     cppcut_assert_not_null(mock_streamplayer_dbus);
     mock_streamplayer_dbus->init();
     mock_streamplayer_dbus_singleton = mock_streamplayer_dbus;
+
+    mock_artcache_dbus = new MockArtCacheDBus();
+    cppcut_assert_not_null(mock_artcache_dbus);
+    mock_artcache_dbus->init();
+    mock_artcache_dbus_singleton = mock_artcache_dbus;
 
     mock_dcpd_dbus = new MockDcpdDBus();
     cppcut_assert_not_null(mock_dcpd_dbus);
@@ -5157,21 +5169,25 @@ void cut_teardown()
 
     mock_messages->check();
     mock_streamplayer_dbus->check();
+    mock_artcache_dbus->check();
     mock_dcpd_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_streamplayer_dbus_singleton = nullptr;
+    mock_artcache_dbus_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_streamplayer_dbus;
+    delete mock_artcache_dbus;
     delete mock_dcpd_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_streamplayer_dbus = nullptr;
+    mock_artcache_dbus = nullptr;
     mock_dcpd_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
@@ -5197,18 +5213,29 @@ static void set_next_title(const std::string title)
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
 }
 
+static GVariantWrapper hash_to_variant(const MD5::Hash &hash)
+{
+    return GVariantWrapper(g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                                     hash.data(), hash.size(),
+                                                     sizeof(hash[0])));
+}
+
 static void set_start_url(const std::string expected_artist,
                           const std::string expected_album,
                           const std::string expected_title,
                           const std::string expected_alttrack,
                           const std::string url,
                           const OurStream stream_id, bool assume_already_playing,
-                          MD5::Hash &expected_stream_key)
+                          GVariantWrapper *expected_stream_key)
 {
     MD5::Context ctx;
     MD5::init(ctx);
     MD5::update(ctx, reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
-    MD5::finish(ctx, expected_stream_key);
+    MD5::Hash hash;
+    MD5::finish(ctx, hash);
+
+    if(expected_stream_key != nullptr)
+        *expected_stream_key = std::move(hash_to_variant(hash));
 
     const auto *const reg = register_lookup(79);
 
@@ -5221,7 +5248,7 @@ static void set_start_url(const std::string expected_artist,
     mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
         TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-        stream_id.get().get_raw_id(), url.c_str(), expected_stream_key,
+        stream_id.get().get_raw_id(), url.c_str(), hash,
         0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
 
     if(!assume_already_playing)
@@ -5246,7 +5273,7 @@ static void set_start_meta_data_and_url(const std::string meta_data,
                                         const std::string expected_title,
                                         const OurStream stream_id,
                                         bool assume_already_playing,
-                                        MD5::Hash &expected_stream_key)
+                                        GVariantWrapper *expected_stream_key)
 {
     set_start_title(meta_data);
     set_start_url(expected_artist, expected_album, expected_title, meta_data,
@@ -5260,7 +5287,7 @@ static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_da
                                         const std::string expected_title,
                                         const OurStream stream_id,
                                         bool assume_already_playing,
-                                        MD5::Hash &expected_stream_key)
+                                        GVariantWrapper *expected_stream_key)
 {
     set_start_title(meta_data, meta_data_length);
     set_start_url(expected_artist, expected_album, expected_title,
@@ -5272,7 +5299,7 @@ static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_da
 static void set_start_title_and_url(const std::string title, const std::string url,
                                     const OurStream stream_id,
                                     bool assume_already_playing,
-                                    MD5::Hash &expected_stream_key)
+                                    GVariantWrapper *expected_stream_key)
 {
     set_start_title(title);
     set_start_url("", "", title, title, url,
@@ -5282,7 +5309,7 @@ static void set_start_title_and_url(const std::string title, const std::string u
 static void set_next_url(const std::string title, const std::string url,
                          const OurStream stream_id,
                          bool assume_is_app_mode, bool assume_already_playing,
-                         MD5::Hash &expected_stream_key)
+                         GVariantWrapper *expected_stream_key)
 {
     const auto *const reg = register_lookup(239);
 
@@ -5291,7 +5318,11 @@ static void set_next_url(const std::string title, const std::string url,
         MD5::Context ctx;
         MD5::init(ctx);
         MD5::update(ctx, reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
-        MD5::finish(ctx, expected_stream_key);
+        MD5::Hash hash;
+        MD5::finish(ctx, hash);
+
+        if(expected_stream_key != nullptr)
+            *expected_stream_key = std::move(hash_to_variant(hash));
 
         mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
         mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
@@ -5300,13 +5331,15 @@ static void set_next_url(const std::string title, const std::string url,
         mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-            stream_id.get().get_raw_id(), url.c_str(), expected_stream_key,
+            stream_id.get().get_raw_id(), url.c_str(), hash,
             0, "ms", 0, "ms", 0, FALSE, assume_already_playing);
     }
     else
     {
         mock_messages->expect_msg_error(0, LOG_ERR, "Can't queue next stream, didn't receive a start stream");
-        expected_stream_key.fill(0);
+
+        if(expected_stream_key != nullptr)
+            expected_stream_key->release();
     }
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
@@ -5315,7 +5348,7 @@ static void set_next_url(const std::string title, const std::string url,
 static void set_next_title_and_url(const std::string title, const std::string url,
                                    const OurStream stream_id,
                                    bool assume_is_app_mode, bool assume_already_playing,
-                                   MD5::Hash &expected_stream_key)
+                                   GVariantWrapper *expected_stream_key)
 {
     set_next_title(title);
     set_next_url(title, url, stream_id, assume_is_app_mode, assume_already_playing, expected_stream_key);
@@ -5367,6 +5400,86 @@ static void expect_next_url_empty()
                             buffer, sizeof(buffer));
 }
 
+static GVariantWrapper empty_array_variant()
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("ay"));
+
+    return GVariantWrapper(g_variant_builder_end(&builder));
+}
+
+static void expect_cover_art_notification(GVariantWrapper stream_key,
+                                          GVariantWrapper known_hash,
+                                          const std::vector<uint8_t> &image_data,
+                                          GVariantWrapper *image_hash = nullptr,
+                                          bool is_not_in_cache_if_empty = false)
+{
+    GVariantWrapper image_hash_variant;
+    GVariantWrapper image_data_variant;
+    ArtCache::ReadError::Code read_error_code;
+
+    if(image_data.empty())
+    {
+        image_hash_variant = std::move(empty_array_variant());
+        image_data_variant = std::move(empty_array_variant());
+
+        if(is_not_in_cache_if_empty)
+        {
+            read_error_code = ArtCache::ReadError::KEY_UNKNOWN;
+            mock_messages->expect_msg_info("Cover art for current stream not in cache");
+        }
+        else
+        {
+            read_error_code = ArtCache::ReadError::OK;
+            mock_messages->expect_msg_info("Cover art for current stream has not changed");
+        }
+    }
+    else
+    {
+        MD5::Context ctx;
+        MD5::init(ctx);
+        MD5::update(ctx, image_data.data(), image_data.size());
+        MD5::Hash hash;
+        MD5::finish(ctx, hash);
+
+        image_hash_variant = std::move(hash_to_variant(hash));
+        image_data_variant =
+            GVariantWrapper(g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                                      image_data.data(), image_data.size(),
+                                                      sizeof(image_data[0])));
+
+        read_error_code = ArtCache::ReadError::UNCACHED;
+        mock_messages->expect_msg_info("Taking new cover art for current stream from cache");
+    }
+
+    if(stream_key == nullptr)
+        stream_key = std::move(hash_to_variant(skey_dummy));
+
+    if(known_hash == nullptr)
+        known_hash = std::move(empty_array_variant());
+
+    if(image_hash != nullptr)
+        *image_hash = image_hash_variant;
+
+    mock_dbus_iface->expect_dbus_get_artcache_read_iface(dbus_artcache_read_iface_dummy);
+    mock_artcache_dbus->expect_tdbus_artcache_read_call_get_scaled_image_data_sync(
+        true, dbus_artcache_read_iface_dummy,
+        std::move(stream_key), "png@120x120",
+        std::move(known_hash), read_error_code, 42,
+        std::move(image_hash_variant),
+        std::move(image_data_variant));
+}
+
+static void expect_empty_cover_art_notification(GVariantWrapper &stream_key)
+{
+    if(stream_key == nullptr)
+        stream_key = std::move(hash_to_variant(skey_dummy));
+
+    static const std::vector<uint8_t> empty;
+
+    expect_cover_art_notification(stream_key, GVariantWrapper(), empty);
+}
+
 static void send_title_and_url(const ID::Stream stream_id,
                                const char *expected_title,
                                const char *expected_url,
@@ -5408,9 +5521,8 @@ static void stop_stream()
  */
 void test_start_stream()
 {
-    MD5::Hash hash;
     set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
-                            OurStream::make(), false, hash);
+                            OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5420,11 +5532,10 @@ void test_start_stream()
  */
 void test_start_stream_with_meta_data()
 {
-    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5436,11 +5547,10 @@ void test_start_stream_with_unterminated_meta_data()
 {
     static const uint8_t evil[] = { 'T', 'i', 't', 'l', 'e', 0x1d, };
 
-    MD5::Hash hash;
     set_start_meta_data_and_url(evil, sizeof(evil),
                                 "http://app-provided.url.org/stream.aac",
                                 "", "", "Title",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5450,11 +5560,10 @@ void test_start_stream_with_unterminated_meta_data()
  */
 void test_start_stream_with_partial_meta_data()
 {
-    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist on that album",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist on that album", "", "The title",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5464,11 +5573,10 @@ void test_start_stream_with_partial_meta_data()
  */
 void test_start_stream_with_too_many_meta_data()
 {
-    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat I like",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5478,11 +5586,10 @@ void test_start_stream_with_too_many_meta_data()
  */
 void test_start_stream_with_way_too_many_meta_data()
 {
-    MD5::Hash hash;
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat\x1dI\x1dlike",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5492,11 +5599,10 @@ void test_start_stream_with_way_too_many_meta_data()
  */
 void test_start_stream_with_title_name()
 {
-    MD5::Hash hash;
     set_start_meta_data_and_url("The Title\x1d\x1d",
                                 "http://app-provided.url.org/stream.aac",
                                 "", "", "The Title",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5506,11 +5612,10 @@ void test_start_stream_with_title_name()
  */
 void test_start_stream_with_artist_name()
 {
-    MD5::Hash hash;
     set_start_meta_data_and_url("\x1dThe Artist\x1d",
                                 "http://app-provided.url.org/stream.aac",
                                 "The Artist", "", "",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5520,11 +5625,10 @@ void test_start_stream_with_artist_name()
  */
 void test_start_stream_with_album_name()
 {
-    MD5::Hash hash;
     set_start_meta_data_and_url("\x1d\x1dThe Album",
                                 "http://app-provided.url.org/stream.aac",
                                 "", "The Album", "",
-                                OurStream::make(), false, hash);
+                                OurStream::make(), false, nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -5534,34 +5638,40 @@ void test_start_stream_with_album_name()
  */
 void test_start_stream_then_start_another_stream()
 {
+    const std::vector<uint8_t> cached_image_first{0x30, 0x31, 0x32, 0x33, };
+    const std::vector<uint8_t> cached_image_second{0x40, 0x41, 0x42, 0x43, 0x44, 0x46, };
+
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash_first;
+    GVariantWrapper skey_first;
     set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, hash_first);
+                            stream_id_first, false, &skey_first);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    GVariantWrapper hash_first;
+    expect_cover_art_notification(skey_first, GVariantWrapper(), cached_image_first, &hash_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    MD5::Hash hash_second;
+    GVariantWrapper skey_second;
     set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
-                            stream_id_second, true, hash_second);
+                            stream_id_second, true, &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_cover_art_notification(skey_second, hash_first, cached_image_second);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
-                                          hash_second.data(), hash_second.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_second));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
 }
@@ -5574,32 +5684,34 @@ void test_start_stream_then_quickly_start_another_stream()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash_first;
+    GVariantWrapper skey_first;
     set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, hash_first);
+                            stream_id_first, false, &skey_first);
     register_changed_data->check();
 
     const auto stream_id_second(++next_stream_id);
-    MD5::Hash hash_second;
+    GVariantWrapper skey_second;
     set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
-                            stream_id_second, false, hash_second);
+                            stream_id_second, false, &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Got start notification for unknown app stream ID 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check(std::array<uint8_t, 3>{75, 76, 210});
     mock_messages->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_second);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
-                                          hash_second.data(), hash_second.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_second));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
 }
@@ -5609,21 +5721,25 @@ void test_start_stream_then_quickly_start_another_stream()
  */
 void test_app_can_start_stream_while_other_source_is_playing()
 {
+    GVariantWrapper dummy_stream_key;
+    expect_empty_cover_art_notification(dummy_stream_key);
     dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI).get_raw_id(),
-                                          hash_dummy.data(), hash_dummy.size());
+                                          GVariantWrapper::move(dummy_stream_key));
+    register_changed_data->check({210});
     expect_current_title_and_url("", "");
 
     const auto stream_id(OurStream::make());
-    MD5::Hash hash;
+    GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, true, hash);
+                            stream_id, true, &skey);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
-                                          hash.data(), hash.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 }
@@ -5639,16 +5755,17 @@ void test_app_can_start_stream_while_other_source_is_playing()
 void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 {
     const auto stream_id(OurStream::make());
-    MD5::Hash hash;
+    GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, false, hash);
+                            stream_id, false, &skey);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
-                                          hash.data(), hash.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
@@ -5659,9 +5776,11 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
+    GVariantWrapper dummy_stream_key;
+    expect_empty_cover_art_notification(dummy_stream_key);
     dcpregs_playstream_start_notification(ui_stream_id.get_raw_id(),
-                                          hash_dummy.data(), hash_dummy.size());
-    register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+                                          GVariantWrapper::move(dummy_stream_key));
+    register_changed_data->check(std::array<uint8_t, 4>{79, 75, 76, 210});
     expect_current_title_and_url("", "");
 
     send_title_and_url(ui_stream_id, "UI stream", "http://ui-provided.url.org/loud.flac", true);
@@ -5678,16 +5797,17 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
 {
     const auto stream_id(OurStream::make());
-    MD5::Hash hash;
+    GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, false, hash);
+                            stream_id, false, &skey);
     register_changed_data->check();
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
-                                          hash.data(), hash.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
@@ -5702,18 +5822,20 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
         "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    GVariantWrapper dummy_stream_key;
+    expect_empty_cover_art_notification(dummy_stream_key);
     dcpregs_playstream_start_notification(ui_stream_id.get_raw_id(),
-                                          hash_dummy.data(), hash_dummy.size());
-    register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
+                                          GVariantWrapper::move(dummy_stream_key));
+    register_changed_data->check(std::array<uint8_t, 4>{79, 75, 76, 210});
     expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
 }
 
 static void start_stop_single_stream(bool with_notifications)
 {
     const auto stream_id(OurStream::make());
-    MD5::Hash hash;
+    GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, false, hash);
+                            stream_id, false, &skey);
     register_changed_data->check();
     mock_messages->check();
 
@@ -5721,9 +5843,10 @@ static void start_stop_single_stream(bool with_notifications)
     {
         mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+        expect_empty_cover_art_notification(skey);
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
-                                              hash.data(), hash.size());
-        register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                              GVariantWrapper::move(skey));
+        register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
         mock_messages->check();
         expect_next_url_empty();
         expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
@@ -5768,9 +5891,11 @@ void test_quick_start_stop_single_stream()
     register_changed_data->check();
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    GVariantWrapper dummy_stream_key;
+    expect_empty_cover_art_notification(dummy_stream_key);
     dcpregs_playstream_start_notification(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
-                                          hash_dummy.data(), hash_dummy.size());
-    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+                                          GVariantWrapper::move(dummy_stream_key));
+    register_changed_data->check(std::array<uint8_t, 3>{75, 76, 210});
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
@@ -5791,10 +5916,12 @@ void test_url_is_not_sent_to_spi_slave_if_unchanged()
     static constexpr char url[] = "http://my.url.org/stream.m3u";
     const auto stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
 
+    GVariantWrapper dummy_stream_key;
+    expect_empty_cover_art_notification(dummy_stream_key);
     dcpregs_playstream_start_notification(stream_id.get_raw_id(),
-                                          hash_dummy.data(), hash_dummy.size());
+                                          GVariantWrapper::move(dummy_stream_key));
 
-    register_changed_data->check();
+    register_changed_data->check({210});
     mock_messages->check();
     expect_current_title_and_url("", "");
 
@@ -5831,10 +5958,12 @@ void test_nothing_is_sent_to_spi_slave_if_title_and_url_unchanged()
     static constexpr char title[] = "Stream Me";
     const auto stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
 
+    GVariantWrapper dummy_stream_key;
+    expect_empty_cover_art_notification(dummy_stream_key);
     dcpregs_playstream_start_notification(stream_id.get_raw_id(),
-                                          hash_dummy.data(), hash_dummy.size());
+                                          GVariantWrapper::move(dummy_stream_key));
 
-    register_changed_data->check();
+    register_changed_data->check({210});
     mock_messages->check();
     expect_current_title_and_url("", "");
 
@@ -5870,31 +5999,33 @@ void test_start_stream_and_queue_next()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash_first;
+    GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, hash_first);
+                            stream_id_first, false, &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    MD5::Hash hash_second;
+    GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, true, true, hash_second);
+                           stream_id_second, true, true, &skey_second);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_second);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
-                                          hash_second.data(), hash_second.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_second));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
@@ -5925,18 +6056,19 @@ void test_play_multiple_tracks_in_a_row()
 
     /* queue first track */
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash;
+    GVariantWrapper skey;
     set_start_title_and_url(title_and_url[0].first, title_and_url[0].second,
-                            stream_id_first, false, hash);
+                            stream_id_first, false, &skey);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     /* first track starts playing */
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash.data(), hash.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url(title_and_url[0].first, title_and_url[0].second);
 
@@ -5946,7 +6078,7 @@ void test_play_multiple_tracks_in_a_row()
 
         /* queue next track */
         const auto stream_id(++next_stream_id);
-        set_next_title_and_url(pair.first, pair.second, stream_id, true, true, hash);
+        set_next_title_and_url(pair.first, pair.second, stream_id, true, true, &skey);
         register_changed_data->check();
 
         /* next track starts playing */
@@ -5955,9 +6087,10 @@ void test_play_multiple_tracks_in_a_row()
                  "Next app stream %u", stream_id.get().get_raw_id());
         mock_messages->expect_msg_info_formatted(buffer);
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+        expect_empty_cover_art_notification(skey);
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
-                                              hash.data(), hash.size());
-        register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                              GVariantWrapper::move(skey));
+        register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
         mock_messages->check();
         expect_next_url_empty();
         expect_current_title_and_url(pair.first, pair.second);
@@ -5984,32 +6117,34 @@ void test_start_stream_and_quickly_queue_next()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash_first;
+    GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, hash_first);
+                            stream_id_first, false, &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     const auto stream_id_second(++next_stream_id);
-    MD5::Hash hash_second;
+    GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, true, true, hash_second);
+                           stream_id_second, true, true, &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_second);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
-                                          hash_second.data(), hash_second.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_second));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 }
@@ -6025,17 +6160,18 @@ void test_queue_next_after_stop_notification_is_ignored()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash_first;
+    GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, hash_first);
+                            stream_id_first, false, &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
@@ -6048,9 +6184,8 @@ void test_queue_next_after_stop_notification_is_ignored()
 
     /* ...but the slave sends another stream just in that moment */
     const auto stream_id_second(++next_stream_id);
-    MD5::Hash hash_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, false, false, hash_second);
+                           stream_id_second, false, false, nullptr);
     expect_current_title_and_url("", "");
 }
 
@@ -6059,9 +6194,8 @@ void test_queue_next_after_stop_notification_is_ignored()
  */
 void test_queue_next_with_prior_start_is_ignored()
 {
-    MD5::Hash hash;
     set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                           OurStream::make(), false, false, hash);
+                           OurStream::make(), false, false, nullptr);
     expect_current_title_and_url("", "");
 }
 
@@ -6071,9 +6205,8 @@ void test_queue_next_with_prior_start_is_ignored()
  */
 void test_queue_next_with_prior_start_by_us_is_ignored()
 {
-    MD5::Hash hash;
     set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                           OurStream::make(), false, true, hash);
+                           OurStream::make(), false, true, nullptr);
     expect_current_title_and_url("", "");
 }
 
@@ -6086,38 +6219,37 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash_first;
+    GVariantWrapper skey_first;
     set_start_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3",
-                            stream_id_first, false, hash_first);
+                            stream_id_first, false, &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_second(++next_stream_id);
-    MD5::Hash hash_second;
     set_next_title_and_url("Stream 2", "http://app-provided.url.org/2.mp3",
-                           stream_id_second, true, true, hash_second);
+                           stream_id_second, true, true, nullptr);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_third(++next_stream_id);
-    MD5::Hash hash_third;
     set_next_title_and_url("Stream 3", "http://app-provided.url.org/3.mp3",
-                           stream_id_third, true, true, hash_third);
+                           stream_id_third, true, true, nullptr);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_fourth(++next_stream_id);
-    MD5::Hash hash_fourth;
+    GVariantWrapper skey_fourth;
     set_next_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3",
-                           stream_id_fourth, true, true, hash_fourth);
+                           stream_id_fourth, true, true, &skey_fourth);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
@@ -6125,9 +6257,10 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
 
     mock_messages->expect_msg_info_formatted("Next app stream 260");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_fourth);
     dcpregs_playstream_start_notification(stream_id_fourth.get().get_raw_id(),
-                                          hash_fourth.data(), hash_fourth.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_fourth));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3");
 }
@@ -6137,48 +6270,52 @@ void test_pause_and_continue()
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
-    MD5::Hash hash_first;
+    GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, hash_first);
+                            stream_id_first, false, &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     const auto stream_id_second(++next_stream_id);
-    MD5::Hash hash_second;
+    GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, true, true, hash_second);
+                           stream_id_second, true, true, &skey_second);
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* the pause signal itself is caught, but ignored by dcpd; however,
      * starting the same stream is treated as continue from pause */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check();
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check({210});
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* also works a second time */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
+    expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
-                                          hash_first.data(), hash_first.size());
-    register_changed_data->check();
+                                          GVariantWrapper::move(skey_first));
+    register_changed_data->check({210});
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* now assume the next stream has started */
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    expect_empty_cover_art_notification(skey_second);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
-                                          hash_second.data(), hash_second.size());
-    register_changed_data->check(std::array<uint8_t, 3>{239, 75, 76});
+                                          GVariantWrapper::move(skey_second));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 }

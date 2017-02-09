@@ -518,6 +518,11 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_209_download_url,
     },
     {
+        REGISTER(210, REGISTER_MK_VERSION(1, 0, 2)),
+        .max_data_size = 16,
+        .read_handler = dcpregs_read_210_current_cover_art_hash,
+    },
+    {
         /* Continue playing, next stream has this title (fallback title) */
         REGISTER(238, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 128,

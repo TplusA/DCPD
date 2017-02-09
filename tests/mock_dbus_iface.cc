@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -36,6 +36,7 @@ enum class DBusFn
     get_streamplayer_urlfifo_iface,
     get_streamplayer_playback_iface,
     get_airable_sec_iface,
+    get_artcache_read_iface,
     get_credentials_read_iface,
     get_credentials_write_iface,
     get_logind_manager_iface,
@@ -93,6 +94,10 @@ static std::ostream &operator<<(std::ostream &os, const DBusFn id)
 
       case DBusFn::get_airable_sec_iface:
         os << "get_airable_sec_iface";
+        break;
+
+      case DBusFn::get_artcache_read_iface:
+        os << "get_artcache_read_iface";
         break;
 
       case DBusFn::get_credentials_read_iface:
@@ -207,6 +212,14 @@ class MockDBusIface::Expectation
         arg_with_connman_(false)
     {}
 
+    explicit Expectation(tdbusartcacheRead *ret_object):
+        function_id_(DBusFn::get_artcache_read_iface),
+        ret_dbus_object_(static_cast<void *>(ret_object)),
+        ret_code_(0),
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
+    {}
+
     explicit Expectation(tdbuscredentialsRead *ret_object):
         function_id_(DBusFn::get_credentials_read_iface),
         ret_dbus_object_(static_cast<void *>(ret_object)),
@@ -309,6 +322,11 @@ void MockDBusIface::expect_dbus_get_airable_sec_iface(tdbusAirable *ret)
     expectations_->add(Expectation(ret));
 }
 
+void MockDBusIface::expect_dbus_get_artcache_read_iface(tdbusartcacheRead *ret)
+{
+    expectations_->add(Expectation(ret));
+}
+
 void MockDBusIface::expect_dbus_get_credentials_read_iface(tdbuscredentialsRead *ret)
 {
     expectations_->add(Expectation(ret));
@@ -406,6 +424,14 @@ tdbusAirable *dbus_get_airable_sec_iface(void)
 
     cppcut_assert_equal(expect.function_id_, DBusFn::get_airable_sec_iface);
     return static_cast<tdbusAirable *>(expect.ret_dbus_object_);
+}
+
+tdbusartcacheRead *dbus_get_artcache_read_iface(void)
+{
+    const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.function_id_, DBusFn::get_artcache_read_iface);
+    return static_cast<tdbusartcacheRead *>(expect.ret_dbus_object_);
 }
 
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void)

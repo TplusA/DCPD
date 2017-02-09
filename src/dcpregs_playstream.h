@@ -48,6 +48,7 @@ ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length);
 int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length);
 int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_79_start_play_stream_url(uint8_t *response, size_t length);
+ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length);
 int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length);
 int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length);
@@ -55,9 +56,9 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length);
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
                                           const char *title, const char *url);
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
-                                           const uint8_t *stream_key,
-                                           size_t stream_key_length);
+                                           void *stream_key_variant);
 void dcpregs_playstream_stop_notification(void);
+void dcpregs_playstream_cover_art_notification(void *stream_key_variant);
 
 #ifdef __cplusplus
 }

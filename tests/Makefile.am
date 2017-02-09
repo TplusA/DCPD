@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -71,6 +71,7 @@ test_registers_la_SOURCES = \
     mock_streamplayer_dbus.hh mock_streamplayer_dbus.cc \
     mock_credentials_dbus.hh mock_credentials_dbus.cc \
     mock_airable_dbus.hh mock_airable_dbus.cc \
+    mock_artcache_dbus.hh mock_artcache_dbus.cc \
     mock_logind_manager_dbus.hh mock_logind_manager_dbus.cc \
     mock_connman.hh mock_connman.cc \
     mock_os.hh mock_os.cc \

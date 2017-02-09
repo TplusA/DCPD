@@ -649,6 +649,11 @@ tdbusAirable *dbus_get_airable_sec_iface(void)
     return airable_iface_data.airable_sec_iface;
 }
 
+tdbusartcacheRead *dbus_get_artcache_read_iface(void)
+{
+    return artcache_iface_data.artcache_read_iface;
+}
+
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void)
 {
     return credentials_iface_data.cred_read_iface;

@@ -173,13 +173,8 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
         uint16_t stream_id = g_variant_get_uint16(val);
         g_variant_unref(val);
 
-        val = g_variant_get_child_value(parameters, 1);
-        gsize len;
-        gconstpointer key = g_variant_get_fixed_array(val, &len, sizeof(uint8_t));
-
-        dcpregs_playstream_start_notification(stream_id, key, len);
-
-        g_variant_unref(val);
+        dcpregs_playstream_start_notification(stream_id,
+                                              g_variant_get_child_value(parameters, 1));
     }
     else if(strcmp(signal_name, "Stopped") == 0 ||
             strcmp(signal_name, "StoppedWithError") == 0)
@@ -268,7 +263,37 @@ void dbussignal_artcache_monitor(GDBusProxy *proxy, const gchar *sender_name,
                                  gpointer user_data)
 {
     static const char iface_name[] = "de.tahifi.ArtCache.Monitor";
-    unknown_signal(iface_name, signal_name, sender_name);
+
+    if(strcmp(signal_name, "Associated") == 0)
+        check_parameter_assertions(parameters, 2);
+    else if(strcmp(signal_name, "Removed") == 0)
+    {
+        check_parameter_assertions(parameters, 1);
+        dcpregs_playstream_cover_art_notification(g_variant_get_child_value(parameters, 0));
+    }
+    else if(strcmp(signal_name, "Added") == 0)
+    {
+        check_parameter_assertions(parameters, 3);
+
+        GVariant *stream_key_variant = NULL;
+        uint8_t stream_key_priority;
+        gboolean is_updated;
+
+        g_variant_get(parameters, "(@ayyb)",
+                      &stream_key_variant, &stream_key_priority, &is_updated);
+
+        if(is_updated)
+            dcpregs_playstream_cover_art_notification(stream_key_variant);
+        else
+            g_variant_unref(stream_key_variant);
+    }
+    else if(strcmp(signal_name, "Failed") == 0)
+    {
+        check_parameter_assertions(parameters, 3);
+        dcpregs_playstream_cover_art_notification(g_variant_get_child_value(parameters, 0));
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
 }
 
 gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,

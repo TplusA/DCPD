@@ -38,7 +38,7 @@ dcpd_SOURCES = \
     connman.c connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
     stream_id.h \
-    coverart.hh md5.hh \
+    coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.h \
@@ -105,6 +105,7 @@ libregisters_la_SOURCES = \
     dbusdl_dbus.h \
     stream_id.h \
     coverart.cc coverart.hh md5.cc md5.hh \
+    gvariantwrapper.cc gvariantwrapper.hh \
     actor_id.h \
     shutdown_guard.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \

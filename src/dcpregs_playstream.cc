@@ -20,15 +20,21 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
+#include <memory>
+#include <cstring>
+#include <glib.h>
 
 #include "dcpregs_playstream.h"
 #include "registers_priv.h"
 #include "coverart.hh"
 #include "streamplayer_dbus.h"
+#include "artcache_dbus.h"
+#include "de_tahifi_artcache_errors.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
+
+constexpr const char *ArtCache::ReadError::names_[];
 
 enum DevicePlaymode
 {
@@ -125,6 +131,7 @@ struct PlayAnyStreamData
      * The cover art meta data of the currently playing stream, if any.
      */
     CoverArt::Tracker tracked_stream_key;
+    CoverArt::Picture current_cover_art;
 
     /*!
      * Register values in #PlayAnyStreamData::pending_data are for this ID.
@@ -646,6 +653,11 @@ void dcpregs_playstream_init(void)
 
 void dcpregs_playstream_deinit(void)
 {
+    g_mutex_lock(&play_stream_data.lock);
+    play_stream_data.other.tracked_stream_key.clear();
+    play_stream_data.other.current_cover_art.clear();
+    g_mutex_unlock(&play_stream_data.lock);
+
     g_mutex_clear(&play_stream_data.lock);
 }
 
@@ -740,6 +752,20 @@ ssize_t dcpregs_read_79_start_play_stream_url(uint8_t *response, size_t length)
     return 0;
 }
 
+ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
+
+    g_mutex_lock(&play_stream_data.lock);
+
+    const size_t len =
+        play_stream_data.other.current_cover_art.copy_hash(response, length);
+
+    g_mutex_unlock(&play_stream_data.lock);
+
+    return len;
+}
+
 int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 238 handler %p %zu", data, length);
@@ -832,17 +858,107 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
     g_mutex_unlock(&play_stream_data.lock);
 }
 
-static void try_notify_cover_art_changed(const CoverArt::Tracker &tracked_key,
-                                         bool has_stream_key_changed)
+static bool try_retrieve_cover_art(GVariant *stream_key,
+                                   CoverArt::Picture &picture)
 {
-    /* TODO: Implementation */
+    if(stream_key == nullptr)
+        return picture.clear();
+
+    guchar error_code;
+    guchar image_priority;
+    GError *error = nullptr;
+
+    GVariantWrapper known_hash = picture.get_hash_variant();
+
+    if(known_hash == nullptr)
+    {
+        GVariantBuilder builder;
+        g_variant_builder_init(&builder, G_VARIANT_TYPE("ay"));
+        known_hash = std::move(GVariantWrapper(g_variant_builder_end(&builder)));
+    }
+
+    GVariant *image_hash_variant = nullptr;
+    GVariant *image_data_variant = nullptr;
+
+    tdbus_artcache_read_call_get_scaled_image_data_sync(
+        dbus_get_artcache_read_iface(), stream_key, "png@120x120",
+        GVariantWrapper::get(known_hash),
+        &error_code, &image_priority,
+        &image_hash_variant, &image_data_variant,
+        NULL, &error);
+
+    if(dbus_common_handle_dbus_error(&error, "Get cover art picture") < 0)
+        return picture.clear();
+
+    GVariantWrapper image_hash(image_hash_variant, GVariantWrapper::Transfer::JUST_MOVE);
+    GVariantWrapper image_data(image_data_variant, GVariantWrapper::Transfer::JUST_MOVE);
+
+    ArtCache::ReadError read_error(error_code);
+    bool retval = false;
+    bool should_clear_picture = true;
+
+    switch(read_error.get())
+    {
+      case ArtCache::ReadError::OK:
+        msg_info("Cover art for current stream has not changed");
+        should_clear_picture = false;
+        break;
+
+      case ArtCache::ReadError::UNCACHED:
+        {
+            gsize hash_len;
+            gconstpointer hash_bytes =
+                g_variant_get_fixed_array(GVariantWrapper::get(image_hash),
+                                          &hash_len, sizeof(uint8_t));
+
+            gsize image_len;
+            gconstpointer image_bytes =
+                g_variant_get_fixed_array(GVariantWrapper::get(image_data),
+                                          &image_len, sizeof(uint8_t));
+
+            msg_info("Taking new cover art for current stream from cache");
+
+            should_clear_picture = false;
+            retval = picture.set(std::move(GVariantWrapper(image_hash)),
+                                 static_cast<const uint8_t *>(hash_bytes), hash_len,
+                                 std::move(GVariantWrapper(image_data)),
+                                 static_cast<const uint8_t *>(image_bytes), image_len);
+        }
+
+        break;
+
+      case ArtCache::ReadError::KEY_UNKNOWN:
+        msg_info("Cover art for current stream not in cache");
+        break;
+
+      case ArtCache::ReadError::BUSY:
+        msg_info("Cover art for current stream not ready yet");
+        break;
+
+      case ArtCache::ReadError::FORMAT_NOT_SUPPORTED:
+      case ArtCache::ReadError::IO_FAILURE:
+      case ArtCache::ReadError::INTERNAL:
+        msg_error(0, LOG_ERR,
+                  "Error retrieving cover art: %s", read_error.to_string());
+        break;
+    }
+
+    return should_clear_picture ? picture.clear() : retval;
+}
+
+static inline void notify_cover_art_changed()
+{
+    registers_get_data()->register_changed_notification_fn(210);
 }
 
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
-                                           const uint8_t *stream_key,
-                                           size_t stream_key_length)
+                                           void *stream_key_variant)
 {
     g_mutex_lock(&play_stream_data.lock);
+
+    play_stream_data.other.tracked_stream_key.set(
+            std::move(GVariantWrapper(static_cast<GVariant *>(stream_key_variant),
+                                      GVariantWrapper::Transfer::JUST_MOVE)));
 
     const enum StreamIdType stream_id_type =
         determine_stream_id_type(raw_stream_id, &play_stream_data.app);
@@ -851,10 +967,6 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
         play_stream_data.other.currently_playing_stream != raw_stream_id;
 
     play_stream_data.other.currently_playing_stream = raw_stream_id;
-
-    const bool has_stream_key_changed =
-        play_stream_data.other.tracked_stream_key.set(stream_key,
-                                                      stream_key_length);
 
     bool switched_to_nonapp_mode = false;
 
@@ -928,8 +1040,13 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
 
     try_notify_pending_stream_info(&play_stream_data.other,
                                    switched_to_nonapp_mode);
-    try_notify_cover_art_changed(play_stream_data.other.tracked_stream_key,
-                                 has_stream_key_changed);
+
+    GVariant *val = play_stream_data.other.tracked_stream_key.is_tracking()
+        ? GVariantWrapper::get(play_stream_data.other.tracked_stream_key.get_variant())
+        : nullptr;
+
+    try_retrieve_cover_art(val, play_stream_data.other.current_cover_art);
+    notify_cover_art_changed();
 
     g_mutex_unlock(&play_stream_data.lock);
 }
@@ -938,8 +1055,8 @@ void dcpregs_playstream_stop_notification(void)
 {
     g_mutex_lock(&play_stream_data.lock);
 
-    const bool has_stream_key_changed =
-        play_stream_data.other.tracked_stream_key.clear();
+    play_stream_data.other.tracked_stream_key.clear();
+    play_stream_data.other.current_cover_art.clear();
 
     if(is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -956,8 +1073,25 @@ void dcpregs_playstream_stop_notification(void)
 
     do_notify_stream_info(&play_stream_data.other, NOTIFY_STREAM_INFO_DEV_NULL,
                           SEND_STREAM_UPDATE_URL_AND_TITLE);
-    try_notify_cover_art_changed(play_stream_data.other.tracked_stream_key,
-                                 has_stream_key_changed);
+
+    g_mutex_unlock(&play_stream_data.lock);
+}
+
+void dcpregs_playstream_cover_art_notification(void *stream_key_variant)
+{
+    g_mutex_lock(&play_stream_data.lock);
+
+    const GVariantWrapper wrapped_val(static_cast<GVariant *>(stream_key_variant),
+                                      GVariantWrapper::Transfer::JUST_MOVE);
+
+    const bool has_cover_art_changed =
+        play_stream_data.other.tracked_stream_key.is_tracking(wrapped_val)
+        ? try_retrieve_cover_art(GVariantWrapper::get(wrapped_val),
+                                 play_stream_data.other.current_cover_art)
+        : false;
+
+    if(has_cover_art_changed)
+        notify_cover_art_changed();
 
     g_mutex_unlock(&play_stream_data.lock);
 }
