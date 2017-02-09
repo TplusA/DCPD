@@ -111,16 +111,7 @@ struct FileTransferData
     xmodem_status;
 };
 
-static struct FileTransferData filetransfer_data =
-{
-    .xmodem_status =
-    {
-        .mapped_file =
-        {
-            .fd = -1,
-        },
-    },
-};
+static struct FileTransferData filetransfer_data;
 
 static int handle_dbus_error(GError **error)
 {

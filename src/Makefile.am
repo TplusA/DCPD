@@ -95,7 +95,7 @@ libregisters_la_SOURCES = \
     dcpregs_networkconfig.c dcpregs_networkconfig.h \
     dcpregs_upnpname.c dcpregs_upnpname.h \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
-    dcpregs_filetransfer.c dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
+    dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
     dcpregs_playstream.cc dcpregs_playstream.h \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \
