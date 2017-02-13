@@ -18,6 +18,7 @@
 
 #include <cinttypes>
 #include <cstdlib>
+#include <iterator>
 
 #include "gvariantwrapper.hh"
 
@@ -94,6 +95,40 @@ class Picture
     const GVariantWrapper &get_hash_variant() const { return hash_; }
 
     size_t copy_hash(uint8_t *buffer, size_t buffer_size) const;
+
+    class const_iterator: public std::iterator<std::random_access_iterator_tag, const uint8_t>
+    {
+      private:
+        const uint8_t *const data_;
+        const size_t length_;
+        size_t pos_;
+
+      public:
+        explicit const_iterator(const value_type *data, size_t length,
+                                size_t pos = 0):
+            data_(data),
+            length_(length),
+            pos_(pos)
+        {}
+
+        bool operator==(const const_iterator &other) const
+        {
+            return ((this == &other) ||
+                    (data_ == other.data_ && length_ == other.length_ &&
+                     pos_ == other.pos_));
+        }
+
+        bool operator!=(const const_iterator &other) const { return !(*this == other); }
+        reference operator*() const { return data_[pos_]; }
+        const_iterator &operator++() { ++pos_; return *this; }
+        const_iterator operator++(int) { const_iterator ret(*this); ++pos_; return ret; }
+        const_iterator &operator--() { --pos_; return *this; }
+        const_iterator operator--(int) { const_iterator ret(*this); --pos_; return ret; }
+        difference_type operator-(const const_iterator &other) { return pos_ - other.pos_; }
+    };
+
+    const_iterator begin() const { return const_iterator(picture_data_, picture_length_); }
+    const_iterator end() const   { return const_iterator(picture_data_, picture_length_, picture_length_); }
 };
 
 void generate_stream_key_for_app(StreamKey &stream_key, const char *url);
