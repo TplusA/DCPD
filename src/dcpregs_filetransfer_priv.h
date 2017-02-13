@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -27,6 +27,7 @@
 
 #define HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE     0x26
 #define HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD     0x20
+#define HCR_COMMAND_LOAD_TO_DEVICE_COVER_ART    0x21
 
 #define HCR_COMMAND_CATEGORY_RESET              0x24
 #define HCR_COMMAND_REBOOT_SYSTEM               0x20

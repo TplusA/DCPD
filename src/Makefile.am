@@ -32,7 +32,7 @@ dcpd_SOURCES = \
     messages.c messages.h messages_glib.c messages_glib.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_wlansurvey.h \
-    dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
+    dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_playstream.hh dcpregs_status.h \
     dcpregs_upnpname.h dcpregs_searchparameters.h \
     connman.c connman_iter.c connman_scan.c connman.h \
@@ -95,7 +95,7 @@ libregisters_la_SOURCES = \
     dcpregs_networkconfig.c dcpregs_networkconfig.h \
     dcpregs_upnpname.c dcpregs_upnpname.h \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
-    dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer_priv.h \
+    dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
     dcpregs_playstream.cc dcpregs_playstream.h dcpregs_playstream.hh \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \

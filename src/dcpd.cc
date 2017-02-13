@@ -40,7 +40,9 @@
 #include "registers.h"
 #include "dcpregs_status.h"
 #include "dcpregs_filetransfer.h"
+#include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
+#include "dcpregs_playstream.hh"
 #include "connman.h"
 #include "networkprefs.h"
 #include "configproxy.h"
@@ -1003,6 +1005,7 @@ static bool main_loop_init(const struct parameters *parameters,
                                                               parameters->ethernet_interface_mac_address);
 
     register_init(push_register_to_slave);
+    dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
 
     transaction_init_allocator();
 

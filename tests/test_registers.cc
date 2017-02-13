@@ -34,8 +34,10 @@
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
+#include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_playstream.h"
+#include "dcpregs_playstream.hh"
 #include "dcpregs_mediaservices.h"
 #include "dcpregs_searchparameters.h"
 #include "dcpregs_status.h"
@@ -4139,6 +4141,7 @@ void cut_setup()
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(register_changed_callback);
+    dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
 }
 
 void cut_teardown()
@@ -4518,6 +4521,30 @@ void test_new_transfer_is_blocked_after_shutdown()
     dcpregs_filetransfer_prepare_for_shutdown();
 
     start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 0);
+}
+
+/*!\test
+ * Request download of empty cover art via XMODEM.
+ */
+void test_download_empty_cover_art()
+{
+    /* no picture hash available */
+    auto *reg =
+        lookup_register_expect_handlers(210, dcpregs_read_210_current_cover_art_hash, nullptr);
+
+    uint8_t buffer[16];
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+
+    static constexpr uint8_t hcr_command[] =
+        { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_COVER_ART };
+
+    /* no picture available */
+    reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+
+    mock_messages->expect_msg_info("Download of cover art requested");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "No cover art available");
+
+    cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
 }
 
 /*!\test
