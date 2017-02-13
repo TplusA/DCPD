@@ -76,7 +76,7 @@ class Picture
 
   public:
     Picture(const Picture &) = delete;
-    Picture &operator=(const Picture &) = delete;
+    Picture &operator=(const Picture &) = default;
 
     explicit Picture():
         hash_data_(nullptr),
@@ -129,6 +129,20 @@ class Picture
 
     const_iterator begin() const { return const_iterator(picture_data_, picture_length_); }
     const_iterator end() const   { return const_iterator(picture_data_, picture_length_, picture_length_); }
+};
+
+class PictureProviderIface
+{
+  protected:
+    explicit PictureProviderIface() {}
+
+  public:
+    PictureProviderIface(const PictureProviderIface &) = delete;
+    PictureProviderIface &operator=(const PictureProviderIface &) = delete;
+
+    virtual ~PictureProviderIface() {}
+
+    virtual bool copy_picture(Picture &dest) const = 0;
 };
 
 void generate_stream_key_for_app(StreamKey &stream_key, const char *url);

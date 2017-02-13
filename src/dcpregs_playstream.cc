@@ -25,6 +25,7 @@
 #include <glib.h>
 
 #include "dcpregs_playstream.h"
+#include "dcpregs_playstream.hh"
 #include "registers_priv.h"
 #include "coverart.hh"
 #include "streamplayer_dbus.h"
@@ -1094,4 +1095,37 @@ void dcpregs_playstream_cover_art_notification(void *stream_key_variant)
         notify_cover_art_changed();
 
     g_mutex_unlock(&play_stream_data.lock);
+}
+
+class PictureProvider: public CoverArt::PictureProviderIface
+{
+  private:
+    GMutex &lock_;
+    const CoverArt::Picture &picture_;
+
+  public:
+    PictureProvider(const PictureProvider &) = delete;
+    PictureProvider &operator=(const PictureProvider &) = delete;
+
+    explicit PictureProvider(GMutex &lock, const CoverArt::Picture &picture):
+        lock_(lock),
+        picture_(picture)
+    {}
+
+    bool copy_picture(CoverArt::Picture &dest) const override
+    {
+        g_mutex_lock(&lock_);
+        dest = picture_;
+        g_mutex_unlock(&lock_);
+
+        return dest.is_available();
+    }
+};
+
+static PictureProvider picture_provider(play_stream_data.lock,
+                                        play_stream_data.other.current_cover_art);
+
+const CoverArt::PictureProviderIface &dcpregs_playstream_get_picture_provider()
+{
+    return picture_provider;
 }
