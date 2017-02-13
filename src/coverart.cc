@@ -135,17 +135,19 @@ bool CoverArt::Picture::set(GVariantWrapper &&hash,
 
 bool CoverArt::Picture::clear()
 {
-    if(!is_valid_)
-        return false;
-
     hash_.release();
     hash_data_ = nullptr;
     picture_container_.release();
     picture_length_ = 0;
     picture_data_ = nullptr;
-    is_valid_ = false;
 
-    return true;
+    if(!is_valid_)
+        return false;
+    else
+    {
+        is_valid_ = false;
+        return true;
+    }
 }
 
 size_t CoverArt::Picture::copy_hash(uint8_t *buffer, size_t buffer_size) const
