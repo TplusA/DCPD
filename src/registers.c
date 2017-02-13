@@ -585,6 +585,7 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
     dcpregs_networkconfig_init();
     dcpregs_wlansurvey_init();
     dcpregs_filetransfer_init();
+    dcpregs_playstream_init();
     dcpregs_upnpname_init();
 }
 
@@ -593,6 +594,7 @@ void register_deinit(void)
     dcpregs_networkconfig_deinit();
     dcpregs_wlansurvey_deinit();
     dcpregs_filetransfer_deinit();
+    dcpregs_playstream_deinit();
     dcpregs_upnpname_deinit();
 }
 

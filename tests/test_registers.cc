@@ -5152,13 +5152,10 @@ void cut_setup()
 
     network_prefs_init(NULL, NULL, NULL, NULL);
     register_init(register_changed_callback);
-
-    dcpregs_playstream_init();
 }
 
 void cut_teardown()
 {
-    dcpregs_playstream_deinit();
     register_deinit();
     network_prefs_deinit();
 
