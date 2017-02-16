@@ -1128,7 +1128,7 @@ static bool is_system_update_required(void)
     }
 
     const int result =
-        os_system("/bin/sh -c 'test -z \"$(sudo /usr/bin/opkg list-upgradable)\"'");
+        os_system(true, "/bin/sh -c 'test -z \"$(sudo /usr/bin/opkg list-upgradable)\"'");
 
     return result != EXIT_SUCCESS;
 }
@@ -1351,7 +1351,7 @@ static void *update_watchdog_main(void *user_data)
 
     for(int tries = 90; tries > 0; --tries)
     {
-        if(os_system("/usr/bin/pgrep opkg") != EXIT_SUCCESS)
+        if(os_system(false, "/usr/bin/pgrep opkg") != EXIT_SUCCESS)
         {
             is_opkg_running = false;
             break;

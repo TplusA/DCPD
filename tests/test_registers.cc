@@ -3980,7 +3980,7 @@ static void write_and_read_name(const char *name,
     mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
     cppcut_assert_equal(0, reg->write_handler((const uint8_t *)name, name_length));
 

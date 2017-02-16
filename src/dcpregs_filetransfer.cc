@@ -833,7 +833,7 @@ static int try_start_system_update(void)
         "/bin/sh -c 'exec /bin/sh %s </dev/null >/dev/null 2>/dev/null &'";
 
     if(success &&
-       os_system_formatted(poor_mans_daemonize,
+       os_system_formatted(true, poor_mans_daemonize,
                            update_shell_script_file) == EXIT_SUCCESS)
     {
         /* keep file around, used as a lock */
