@@ -1,3 +1,18 @@
+2017-02-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.0 released: Changes of D-Bus interfaces were necessary
+	  which break compatibility with older version, hence the change of
+	  the major version.
+
+	* Cover art: Integration with TACAMan. Pictures are retrieved for the
+	  current stream, changes of cover art are monitored.
+
+	* Cover art: SPI slave gets cover art change notifications via
+	  register 210 and can retrieve pictures via XMODEM.
+
+	* DCP protocol: Protocol level still at 1.0.2 because 2.13 was never
+	  published.
+
 2017-01-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 2.13 released.
