@@ -958,11 +958,11 @@ static void fill_download_status_from_xmodem(uint8_t *response)
             break;
 
           case XMODEM_SOURCE_DBUSDL:
-            response[1] = XModemStatusTraits<XMODEM_SOURCE_NONE>::get_progress(filetransfer_data.xmodem_status);
+            response[1] = XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::get_progress(filetransfer_data.xmodem_status);
             break;
 
           case XMODEM_SOURCE_COVER_ART:
-            response[1] = XModemStatusTraits<XMODEM_SOURCE_NONE>::get_progress(filetransfer_data.xmodem_status);
+            response[1] = XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::get_progress(filetransfer_data.xmodem_status);
             break;
         }
     }
