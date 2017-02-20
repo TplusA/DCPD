@@ -1,3 +1,11 @@
+2017-02-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.1 released.
+
+	* XMODEM: Fix progress reports for downloaded files.
+
+	* XMODEM: Fix progress reports for cover art.
+
 2017-02-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.0 released: Changes of D-Bus interfaces were necessary
