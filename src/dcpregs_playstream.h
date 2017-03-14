@@ -33,14 +33,8 @@
 extern "C" {
 #endif
 
-/*!
- * Function required by unit tests for initializing static data.
- */
 void dcpregs_playstream_init(void);
-
-/*!
- * Function required by unit tests.
- */
+void dcpregs_playstream_late_init(void);
 void dcpregs_playstream_deinit(void);
 
 ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length);

@@ -42,6 +42,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
+#include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
 #include "connman.h"
 #include "networkprefs.h"
@@ -1501,6 +1502,8 @@ int main(int argc, char *argv[])
         shutdown(&files);
         return EXIT_FAILURE;
     }
+
+    dcpregs_playstream_late_init();
 
     static struct sigaction action;
 

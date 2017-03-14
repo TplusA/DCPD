@@ -636,6 +636,15 @@ static void try_start_stream(struct PlayAppStreamData *const data,
     }
 }
 
+static void registered_audio_source(GObject *source_object, GAsyncResult *res,
+                                    gpointer user_data)
+{
+    GError *error = nullptr;
+    tdbus_aupath_manager_call_register_source_finish(TDBUS_AUPATH_MANAGER(source_object),
+                                                     res, &error);
+    dbus_common_handle_dbus_error(&error, "Register audio source");
+}
+
 static struct
 {
     GMutex lock;
@@ -650,6 +659,16 @@ void dcpregs_playstream_init(void)
     memset(&play_stream_data, 0, sizeof(play_stream_data));
     g_mutex_init(&play_stream_data.lock);
     play_stream_data.app.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
+}
+
+void dcpregs_playstream_late_init(void)
+{
+    tdbus_aupath_manager_call_register_source(dbus_audiopath_get_manager_iface(),
+                                              "App", "Streams pushed by smartphone app",
+                                              "strbo",
+                                              "/de/tahifi/Dcpd",
+                                              nullptr,
+                                              registered_audio_source, &play_stream_data);
 }
 
 void dcpregs_playstream_deinit(void)

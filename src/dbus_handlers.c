@@ -223,6 +223,26 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     return TRUE;
 }
 
+gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
+                                              GDBusMethodInvocation *invocation,
+                                              const char *source_id,
+                                              gpointer user_data)
+{
+    msg_info("Selected source \"%s\"", source_id);
+    tdbus_aupath_source_complete_selected(object, invocation);
+    return TRUE;
+}
+
+gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
+                                                GDBusMethodInvocation *invocation,
+                                                const char *source_id,
+                                                gpointer user_data)
+{
+    msg_info("Deselected source \"%s\"", source_id);
+    tdbus_aupath_source_complete_deselected(object, invocation);
+    return TRUE;
+}
+
 void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
                         const gchar *signal_name, GVariant *parameters,
                         gpointer user_data)

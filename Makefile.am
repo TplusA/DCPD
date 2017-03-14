@@ -39,6 +39,7 @@ EXTRA_DIST += \
     dbus_interfaces/de_tahifi_artcache_errors.hh \
     dbus_interfaces/de_tahifi_artcache_monitor_errors.h \
     dbus_interfaces/de_tahifi_artcache_read_errors.h \
+    dbus_interfaces/de_tahifi_audiopath.xml \
     dbus_interfaces/de_tahifi_credentials.xml \
     dbus_interfaces/net_connman.xml \
     dbus_interfaces/org_freedesktop_login1.xml

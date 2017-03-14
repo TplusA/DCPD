@@ -23,6 +23,7 @@
 #include <gio/gio.h>
 
 #include "dcpd_dbus.h"
+#include "audiopath_dbus.h"
 #include "configuration_dbus.h"
 #include "debug_dbus.h"
 
@@ -62,6 +63,15 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     GDBusMethodInvocation *invocation,
                                     guint16 raw_stream_id,
                                     const gchar *title, const gchar *url);
+
+gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
+                                              GDBusMethodInvocation *invocation,
+                                              const char *source_id,
+                                              gpointer user_data);
+gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
+                                                GDBusMethodInvocation *invocation,
+                                                const char *source_id,
+                                                gpointer user_data);
 
 gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,
                                          GDBusMethodInvocation *invocation,
