@@ -32,6 +32,7 @@ enum class DBusFn
     get_views_iface,
     get_list_navigation_iface,
     get_list_item_iface,
+    get_audiopath_manager_iface,
     get_file_transfer_iface,
     get_streamplayer_urlfifo_iface,
     get_streamplayer_playback_iface,
@@ -78,6 +79,10 @@ static std::ostream &operator<<(std::ostream &os, const DBusFn id)
 
       case DBusFn::get_list_item_iface:
         os << "get_list_item_iface";
+        break;
+
+      case DBusFn::get_audiopath_manager_iface:
+        os << "get_audiopath_manager_iface";
         break;
 
       case DBusFn::get_file_transfer_iface:
@@ -220,6 +225,14 @@ class MockDBusIface::Expectation
         arg_with_connman_(false)
     {}
 
+    explicit Expectation(tdbusaupathManager *ret_object):
+        function_id_(DBusFn::get_audiopath_manager_iface),
+        ret_dbus_object_(static_cast<void *>(ret_object)),
+        ret_code_(0),
+        arg_connect_to_session_bus_(false),
+        arg_with_connman_(false)
+    {}
+
     explicit Expectation(tdbuscredentialsRead *ret_object):
         function_id_(DBusFn::get_credentials_read_iface),
         ret_dbus_object_(static_cast<void *>(ret_object)),
@@ -327,6 +340,11 @@ void MockDBusIface::expect_dbus_get_artcache_read_iface(tdbusartcacheRead *ret)
     expectations_->add(Expectation(ret));
 }
 
+void MockDBusIface::expect_dbus_get_audiopath_manager_iface(tdbusaupathManager *ret)
+{
+    expectations_->add(Expectation(ret));
+}
+
 void MockDBusIface::expect_dbus_get_credentials_read_iface(tdbuscredentialsRead *ret)
 {
     expectations_->add(Expectation(ret));
@@ -392,6 +410,14 @@ tdbusdcpdListItem *dbus_get_list_item_iface(void)
 
     cppcut_assert_equal(expect.function_id_, DBusFn::get_list_item_iface);
     return static_cast<tdbusdcpdListItem *>(expect.ret_dbus_object_);
+}
+
+tdbusaupathManager *dbus_audiopath_get_manager_iface(void)
+{
+    const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.function_id_, DBusFn::get_audiopath_manager_iface);
+    return static_cast<tdbusaupathManager *>(expect.ret_dbus_object_);
 }
 
 tdbusFileTransfer *dbus_get_file_transfer_iface(void)

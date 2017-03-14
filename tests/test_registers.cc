@@ -54,6 +54,7 @@
 #include "mock_credentials_dbus.hh"
 #include "mock_airable_dbus.hh"
 #include "mock_artcache_dbus.hh"
+#include "mock_audiopath_dbus.hh"
 #include "mock_logind_manager_dbus.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
@@ -544,6 +545,7 @@ static MockMessages *mock_messages;
 static MockOs *mock_os;
 static MockDcpdDBus *mock_dcpd_dbus;
 static MockLogindManagerDBus *mock_logind_manager_dbus;
+static MockAudiopathDBus *mock_audiopath_dbus;
 static MockDBusIface *mock_dbus_iface;
 
 static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
@@ -560,6 +562,9 @@ static tdbusdcpdListItem *const dbus_dcpd_list_item_iface_dummy =
 
 static tdbuslogindManager *const dbus_logind_manager_iface_dummy =
     reinterpret_cast<tdbuslogindManager *>(0x35127956);
+
+static tdbusaupathManager *const dbus_audiopath_manager_iface_dummy =
+    reinterpret_cast<tdbusaupathManager *>(0xc0a68060);
 
 void cut_setup()
 {
@@ -583,6 +588,11 @@ void cut_setup()
     mock_logind_manager_dbus->init();
     mock_logind_manager_dbus_singleton = mock_logind_manager_dbus;
 
+    mock_audiopath_dbus = new MockAudiopathDBus();
+    cppcut_assert_not_null(mock_audiopath_dbus);
+    mock_audiopath_dbus->init();
+    mock_audiopath_dbus_singleton = mock_audiopath_dbus;
+
     mock_dbus_iface = new MockDBusIface;
     cppcut_assert_not_null(mock_dbus_iface);
     mock_dbus_iface->init();
@@ -597,24 +607,28 @@ void cut_teardown()
     mock_os->check();
     mock_dcpd_dbus->check();
     mock_logind_manager_dbus->check();
+    mock_audiopath_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
     mock_logind_manager_dbus_singleton = nullptr;
+    mock_audiopath_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
     delete mock_dcpd_dbus;
     delete mock_logind_manager_dbus;
+    delete mock_audiopath_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_os = nullptr;
     mock_dcpd_dbus = nullptr;
     mock_logind_manager_dbus = nullptr;
+    mock_audiopath_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
 
@@ -723,8 +737,9 @@ void test_slave_drc_views_goto_view_by_id_0()
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "UPnP");
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
+                                                                         "UPnP");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -736,8 +751,9 @@ void test_slave_drc_views_goto_view_by_id_1()
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x01, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "TuneIn");
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
+                                                                         "TuneIn");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -749,8 +765,9 @@ void test_slave_drc_views_goto_view_by_id_2()
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x02, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Filesystem");
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
+                                                                         "Filesystem");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -763,15 +780,15 @@ void test_slave_drc_views_goto_view_by_id_unknown_id()
     static const uint8_t buffer_highest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, UINT8_MAX, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0x03 (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown audio source ID 0x03 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_lowest_unknown, sizeof(buffer_lowest_unknown)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0xff (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown audio source ID 0xff (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_highest_unknown, sizeof(buffer_highest_unknown)));
 }
 
@@ -784,7 +801,7 @@ void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -798,7 +815,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 1, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -812,7 +829,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 3, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -824,8 +841,9 @@ void test_slave_drc_views_goto_internet_radio()
     static const uint8_t buffer[] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xaa");
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Internet Radio");
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
+                                                                         "TuneIn");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -5108,6 +5126,7 @@ static MockMessages *mock_messages;
 static MockStreamplayerDBus *mock_streamplayer_dbus;
 static MockArtCacheDBus *mock_artcache_dbus;
 static MockDcpdDBus *mock_dcpd_dbus;
+static MockAudiopathDBus *mock_audiopath_dbus;
 static MockDBusIface *mock_dbus_iface;
 
 static tdbussplayURLFIFO *const dbus_streamplayer_urlfifo_iface_dummy =
@@ -5124,6 +5143,9 @@ static tdbusdcpdViews *const dbus_dcpd_views_iface_dummy =
 
 static tdbusartcacheRead *const dbus_artcache_read_iface_dummy =
     reinterpret_cast<tdbusartcacheRead *>(0x3bcb891a);
+
+static tdbusaupathManager *const dbus_audiopath_manager_iface_dummy =
+    reinterpret_cast<tdbusaupathManager *>(0x9ccb816a);
 
 using OurStream = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
 
@@ -5161,6 +5183,11 @@ void cut_setup()
     mock_dcpd_dbus->init();
     mock_dcpd_dbus_singleton = mock_dcpd_dbus;
 
+    mock_audiopath_dbus = new MockAudiopathDBus();
+    cppcut_assert_not_null(mock_audiopath_dbus);
+    mock_audiopath_dbus->init();
+    mock_audiopath_dbus_singleton = mock_audiopath_dbus;
+
     mock_dbus_iface = new MockDBusIface;
     cppcut_assert_not_null(mock_dbus_iface);
     mock_dbus_iface->init();
@@ -5195,43 +5222,79 @@ void cut_teardown()
     mock_streamplayer_dbus->check();
     mock_artcache_dbus->check();
     mock_dcpd_dbus->check();
+    mock_audiopath_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_streamplayer_dbus_singleton = nullptr;
     mock_artcache_dbus_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
+    mock_audiopath_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_streamplayer_dbus;
     delete mock_artcache_dbus;
     delete mock_dcpd_dbus;
+    delete mock_audiopath_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_streamplayer_dbus = nullptr;
     mock_artcache_dbus = nullptr;
     mock_dcpd_dbus = nullptr;
+    mock_audiopath_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
 
-static void set_start_title(const uint8_t *title, size_t length)
+static void set_start_title(const uint8_t *title, size_t length,
+                            bool switching_to_app_mode,
+                            bool immediate_audio_source_selection)
 {
+    if(switching_to_app_mode)
+    {
+        mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+        mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, "App");
+    }
+
     const auto *const reg = register_lookup(78);
 
     cppcut_assert_equal(0, reg->write_handler(title, length));
+
+    if(switching_to_app_mode && immediate_audio_source_selection)
+    {
+        mock_messages->expect_msg_info("Enter app mode");
+        dcpregs_playstream_select_source();
+    }
 }
 
-static void set_start_title(const std::string title)
+static void set_start_title(const std::string title,
+                            bool switching_to_app_mode,
+                            bool immediate_audio_source_selection)
 {
+    if(switching_to_app_mode)
+    {
+        mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+        mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, "App");
+    }
+
     const auto *const reg = register_lookup(78);
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
+
+    if(switching_to_app_mode && immediate_audio_source_selection)
+    {
+        mock_messages->expect_msg_info("Enter app mode");
+        dcpregs_playstream_select_source();
+    }
 }
 
-static void set_next_title(const std::string title)
+static void set_next_title(const std::string title, bool is_in_app_mode)
 {
+    if(!is_in_app_mode)
+        mock_messages->expect_msg_error(0, LOG_CRIT,
+                                        "BUG: App sets next stream title while not in app mode");
+
     const auto *const reg = register_lookup(238);
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
@@ -5244,12 +5307,47 @@ static GVariantWrapper hash_to_variant(const MD5::Hash &hash)
                                                      sizeof(hash[0])));
 }
 
+static void set_start_playing_expectations(const std::string expected_artist,
+                                           const std::string expected_album,
+                                           const std::string expected_title,
+                                           const std::string expected_alttrack,
+                                           const std::string url,
+                                           const OurStream stream_id,
+                                           const MD5::Hash &hash,
+                                           bool assume_already_playing)
+{
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
+        dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
+        expected_artist.c_str(), expected_album.c_str(),
+        expected_title.c_str(), expected_alttrack.c_str(),
+        url.c_str());
+    mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(
+        dbus_streamplayer_urlfifo_iface_dummy);
+    mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
+        TRUE, dbus_streamplayer_urlfifo_iface_dummy,
+        stream_id.get().get_raw_id(), url.c_str(), hash,
+        0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
+
+    if(!assume_already_playing)
+    {
+        mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(
+            dbus_streamplayer_playback_iface_dummy);
+        mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(
+            TRUE, dbus_streamplayer_playback_iface_dummy);
+    }
+
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Play");
+}
+
 static void set_start_url(const std::string expected_artist,
                           const std::string expected_album,
                           const std::string expected_title,
                           const std::string expected_alttrack,
                           const std::string url,
-                          const OurStream stream_id, bool assume_already_playing,
+                          const OurStream stream_id,
+                          bool assume_already_playing, bool assume_is_app_mode,
                           GVariantWrapper *expected_stream_key)
 {
     MD5::Context ctx;
@@ -5263,26 +5361,11 @@ static void set_start_url(const std::string expected_artist,
 
     const auto *const reg = register_lookup(79);
 
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
-            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-            expected_artist.c_str(), expected_album.c_str(),
-            expected_title.c_str(), expected_alttrack.c_str(),
-            url.c_str());
-    mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
-    mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
-        TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-        stream_id.get().get_raw_id(), url.c_str(), hash,
-        0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
-
-    if(!assume_already_playing)
-    {
-        mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
-        mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
-    }
-
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Play");
+    if(assume_is_app_mode)
+        set_start_playing_expectations(expected_artist, expected_album,
+                                       expected_title, expected_alttrack,
+                                       url, stream_id, hash,
+                                       assume_already_playing);
 
     cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
 
@@ -5297,11 +5380,13 @@ static void set_start_meta_data_and_url(const std::string meta_data,
                                         const std::string expected_title,
                                         const OurStream stream_id,
                                         bool assume_already_playing,
-                                        GVariantWrapper *expected_stream_key)
+                                        GVariantWrapper *expected_stream_key,
+                                        bool immediate_audio_source_selection = true)
 {
-    set_start_title(meta_data);
+    set_start_title(meta_data, true, immediate_audio_source_selection);
     set_start_url(expected_artist, expected_album, expected_title, meta_data,
-                  url, stream_id, assume_already_playing, expected_stream_key);
+                  url, stream_id, assume_already_playing,
+                  immediate_audio_source_selection, expected_stream_key);
 }
 
 static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_data_length,
@@ -5311,31 +5396,93 @@ static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_da
                                         const std::string expected_title,
                                         const OurStream stream_id,
                                         bool assume_already_playing,
-                                        GVariantWrapper *expected_stream_key)
+                                        GVariantWrapper *expected_stream_key,
+                                        bool immediate_audio_source_selection = true)
 {
-    set_start_title(meta_data, meta_data_length);
+    set_start_title(meta_data, meta_data_length, true, immediate_audio_source_selection);
     set_start_url(expected_artist, expected_album, expected_title,
                   std::string(static_cast<const char *>(static_cast<const void *>(meta_data)),
                               meta_data_length),
-                  url, stream_id, assume_already_playing, expected_stream_key);
+                  url, stream_id, assume_already_playing,
+                  immediate_audio_source_selection, expected_stream_key);
+}
+
+enum class SetTitleAndURLDataAssumptions
+{
+    IDLE__IN_NON_APP_MODE__KEEP_MODE,
+    IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+    IDLE__IN_APP_MODE__KEEP_MODE,
+    PLAYING__IN_NON_APP_MODE__KEEP_MODE,
+    PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE,
+    PLAYING__IN_APP_MODE__KEEP_MODE,
+};
+
+void decode(const SetTitleAndURLDataAssumptions assumptions,
+            bool &assume_already_playing, bool &assume_is_app_mode,
+            bool &expecting_switch_to_app_mode)
+{
+    assume_already_playing = false;
+    assume_is_app_mode = false;
+    expecting_switch_to_app_mode = false;
+
+    switch(assumptions)
+    {
+      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
+        break;
+
+      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
+        expecting_switch_to_app_mode = true;
+        break;
+
+      case SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+        assume_is_app_mode = true;
+        break;
+
+      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
+        assume_already_playing = true;
+        break;
+
+      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
+        assume_already_playing = true;
+        expecting_switch_to_app_mode = true;
+        break;
+
+      case SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
+        assume_already_playing = true;
+        assume_is_app_mode = true;
+        break;
+    }
 }
 
 static void set_start_title_and_url(const std::string title, const std::string url,
                                     const OurStream stream_id,
-                                    bool assume_already_playing,
-                                    GVariantWrapper *expected_stream_key)
+                                    SetTitleAndURLDataAssumptions assumptions,
+                                    GVariantWrapper *expected_stream_key,
+                                    bool immediate_audio_source_selection = true)
 {
-    set_start_title(title);
+    bool assume_already_playing, assume_is_app_mode, expecting_switch_to_app_mode;
+
+    decode(assumptions, assume_already_playing, assume_is_app_mode,
+           expecting_switch_to_app_mode);
+
+    set_start_title(title, expecting_switch_to_app_mode, immediate_audio_source_selection);
     set_start_url("", "", title, title, url,
-                  stream_id, assume_already_playing, expected_stream_key);
+                  stream_id, assume_already_playing,
+                  assume_is_app_mode || (expecting_switch_to_app_mode && immediate_audio_source_selection),
+                  expected_stream_key);
 }
 
 static void set_next_url(const std::string title, const std::string url,
                          const OurStream stream_id,
-                         bool assume_is_app_mode, bool assume_already_playing,
+                         SetTitleAndURLDataAssumptions assumptions,
                          GVariantWrapper *expected_stream_key)
 {
     const auto *const reg = register_lookup(239);
+
+    bool assume_already_playing, assume_is_app_mode, expecting_switch_to_app_mode;
+
+    decode(assumptions, assume_already_playing, assume_is_app_mode,
+           expecting_switch_to_app_mode);
 
     if(assume_is_app_mode)
     {
@@ -5357,10 +5504,17 @@ static void set_next_url(const std::string title, const std::string url,
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
             stream_id.get().get_raw_id(), url.c_str(), hash,
             0, "ms", 0, "ms", 0, FALSE, assume_already_playing);
+
+        if(!assume_already_playing)
+        {
+            mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
+            mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+        }
     }
     else
     {
-        mock_messages->expect_msg_error(0, LOG_ERR, "Can't queue next stream, didn't receive a start stream");
+        mock_messages->expect_msg_error(0, LOG_CRIT,
+                                        "BUG: App sets next URL while not in app mode");
 
         if(expected_stream_key != nullptr)
             expected_stream_key->release();
@@ -5371,11 +5525,27 @@ static void set_next_url(const std::string title, const std::string url,
 
 static void set_next_title_and_url(const std::string title, const std::string url,
                                    const OurStream stream_id,
-                                   bool assume_is_app_mode, bool assume_already_playing,
+                                   SetTitleAndURLDataAssumptions assumptions,
                                    GVariantWrapper *expected_stream_key)
 {
-    set_next_title(title);
-    set_next_url(title, url, stream_id, assume_is_app_mode, assume_already_playing, expected_stream_key);
+    bool assume_is_app_mode = false;
+
+    switch(assumptions)
+    {
+      case SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+        assume_is_app_mode = true;
+        break;
+
+      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
+        break;
+    }
+
+    set_next_title(title, assume_is_app_mode);
+    set_next_url(title, url, stream_id, assumptions, expected_stream_key);
 }
 
 static void expect_current_title(const std::string &expected_title)
@@ -5546,9 +5716,76 @@ static void stop_stream()
 void test_start_stream()
 {
     set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
-                            OurStream::make(), false, nullptr);
+                            OurStream::make(),
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            nullptr);
 
     expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * App starts single stream with plain title information, audio source
+ * selection is a bit late.
+ */
+void test_start_stream_with_slow_audio_source_selection()
+{
+    static const char title[] = "Test stream";
+    static const char url[] = "http://app-provided.url.org/stream.flac";
+    const auto stream_id(OurStream::make());
+
+    set_start_title_and_url(title, url, stream_id,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            nullptr, false);
+
+    expect_current_title_and_url("", "");
+
+    MD5::Context ctx;
+    MD5::init(ctx);
+    MD5::update(ctx, reinterpret_cast<const uint8_t *>(url), sizeof(url) - 1);
+    MD5::Hash hash;
+    MD5::finish(ctx, hash);
+
+    mock_messages->expect_msg_info("Enter app mode");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Processing pending start request");
+    set_start_playing_expectations("", "", title, title, url, stream_id, hash, false);
+
+    dcpregs_playstream_select_source();
+}
+
+/*!\test
+ * App starts single stream with plain title information, then gets stopped
+ * because another audio source is selected.
+ */
+void test_start_stream_and_deselect_audio_source()
+{
+    set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
+                            OurStream::make(),
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            nullptr);
+
+    expect_current_title_and_url("", "");
+
+    mock_messages->expect_msg_info("Leave app mode");
+    mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
+    mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+
+    dcpregs_playstream_deselect_source();
+
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    dcpregs_playstream_stop_notification();
+    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+}
+
+/*!\test
+ * App mode is entered, nothing is played, then it leaves app mode because
+ * another audio source is selected.
+ */
+void test_enter_app_mode_and_immediately_deselect_audio_source()
+{
+    set_start_title("Test stream", true, true);
+
+    mock_messages->expect_msg_info("Leave app mode");
+    dcpregs_playstream_deselect_source();
 }
 
 /*!\test
@@ -5670,10 +5907,12 @@ void test_start_stream_then_start_another_stream()
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey_first;
     set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, &skey_first);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey_first);
     register_changed_data->check();
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper hash_first;
     expect_cover_art_notification(skey_first, GVariantWrapper(), cached_image_first, &hash_first);
@@ -5686,7 +5925,9 @@ void test_start_stream_then_start_another_stream()
     const auto stream_id_second(++next_stream_id);
     GVariantWrapper skey_second;
     set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
-                            stream_id_second, true, &skey_second);
+                            stream_id_second,
+                            SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                            &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
@@ -5710,13 +5951,17 @@ void test_start_stream_then_quickly_start_another_stream()
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey_first;
     set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, &skey_first);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey_first);
     register_changed_data->check();
 
     const auto stream_id_second(++next_stream_id);
     GVariantWrapper skey_second;
     set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
-                            stream_id_second, false, &skey_second);
+                            stream_id_second,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                            &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
@@ -5730,7 +5975,7 @@ void test_start_stream_then_quickly_start_another_stream()
     mock_messages->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 258");
+    mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
     dcpregs_playstream_start_notification(stream_id_second.get().get_raw_id(),
@@ -5742,6 +5987,9 @@ void test_start_stream_then_quickly_start_another_stream()
 
 /*!\test
  * App starts stream while another source is playing.
+ *
+ * An audio source selection step is done so that we are allowed to use the
+ * player.
  */
 void test_app_can_start_stream_while_other_source_is_playing()
 {
@@ -5755,10 +6003,12 @@ void test_app_can_start_stream_while_other_source_is_playing()
     const auto stream_id(OurStream::make());
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, true, &skey);
+                            stream_id,
+                            SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey);
     register_changed_data->check();
 
-    mock_messages->expect_msg_info_formatted("Switch to app mode: continue with stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
@@ -5770,7 +6020,7 @@ void test_app_can_start_stream_while_other_source_is_playing()
 
 /*!\test
  * App mode ends when a non-app source such as the remote control starts
- * playing.
+ * playing (unauthorized so).
  *
  * UI sends title and URL after start notification in this test case. This
  * leads to a short glitch which could only be avoided by keeping outdated
@@ -5781,10 +6031,12 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
     const auto stream_id(OurStream::make());
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, false, &skey);
+                            stream_id,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey);
     register_changed_data->check();
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
@@ -5796,8 +6048,8 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
     /* NOTE: In real life, there should have been a stop notification before
      *       this start notification, so this test stretches beyond spec; hence
      *       the harsh log message. */
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-        "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
+    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
+        "BUG: Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
     GVariantWrapper dummy_stream_key;
@@ -5814,7 +6066,7 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
 
 /*!\test
  * App mode ends when a non-app source such as the remote control starts
- * playing.
+ * playing (unauthorized so).
  *
  * UI sends title and URL before start notification in this test case.
  */
@@ -5823,10 +6075,12 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     const auto stream_id(OurStream::make());
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, false, &skey);
+                            stream_id,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey);
     register_changed_data->check();
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
@@ -5843,8 +6097,8 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     /* NOTE: In real life, there should have been a stop notification before
      *       this start notification, so this test stretches beyond spec; hence
      *       the harsh log message. */
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-        "Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
+    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
+        "BUG: Leave app mode: unexpected start of non-app stream 129 (expected next 0 or new 257)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
@@ -5859,13 +6113,15 @@ static void start_stop_single_stream(bool with_notifications)
     const auto stream_id(OurStream::make());
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                            stream_id, false, &skey);
+                            stream_id,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey);
     register_changed_data->check();
     mock_messages->check();
 
     if(with_notifications)
     {
-        mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+        mock_messages->expect_msg_info_formatted("Next app stream 257");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         expect_empty_cover_art_notification(skey);
         dcpregs_playstream_start_notification(stream_id.get().get_raw_id(),
@@ -5881,7 +6137,7 @@ static void start_stop_single_stream(bool with_notifications)
 
     if(with_notifications)
     {
-        mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+        mock_messages->expect_msg_info("App mode: streamplayer has stopped");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         dcpregs_playstream_stop_notification();
         register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
@@ -5910,8 +6166,7 @@ void test_quick_start_stop_single_stream()
     start_stop_single_stream(false);
 
     /* late D-Bus signals are ignored */
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-                                              "Unexpected start of app stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     register_changed_data->check();
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
@@ -5919,12 +6174,13 @@ void test_quick_start_stop_single_stream()
     expect_empty_cover_art_notification(dummy_stream_key);
     dcpregs_playstream_start_notification(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN,
                                           GVariantWrapper::move(dummy_stream_key));
-    register_changed_data->check(std::array<uint8_t, 3>{75, 76, 210});
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
+    mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
-    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 }
 
@@ -6025,11 +6281,13 @@ void test_start_stream_and_queue_next()
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, &skey_first);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
@@ -6042,7 +6300,9 @@ void test_start_stream_and_queue_next()
     const auto stream_id_second(++next_stream_id);
     GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, true, true, &skey_second);
+                           stream_id_second,
+                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           &skey_second);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
@@ -6055,7 +6315,7 @@ void test_start_stream_and_queue_next()
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 
     /* after a while, the stream may finish */
-    mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
@@ -6082,12 +6342,14 @@ void test_play_multiple_tracks_in_a_row()
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey;
     set_start_title_and_url(title_and_url[0].first, title_and_url[0].second,
-                            stream_id_first, false, &skey);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     /* first track starts playing */
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
@@ -6102,7 +6364,9 @@ void test_play_multiple_tracks_in_a_row()
 
         /* queue next track */
         const auto stream_id(++next_stream_id);
-        set_next_title_and_url(pair.first, pair.second, stream_id, true, true, &skey);
+        set_next_title_and_url(pair.first, pair.second, stream_id,
+                               SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                               &skey);
         register_changed_data->check();
 
         /* next track starts playing */
@@ -6121,7 +6385,7 @@ void test_play_multiple_tracks_in_a_row()
     }
 
     /* after a while, the last stream finishes playing */
-    mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
@@ -6143,18 +6407,22 @@ void test_start_stream_and_quickly_queue_next()
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, &skey_first);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     const auto stream_id_second(++next_stream_id);
     GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, true, true, &skey_second);
+                           stream_id_second,
+                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
@@ -6177,20 +6445,22 @@ void test_start_stream_and_quickly_queue_next()
  * App starts stream and tries to queue another stream just after the first
  * stream ended.
  *
- * The second stream is not played at all.
+ * The second stream is played because we are still in app mode.
  */
-void test_queue_next_after_stop_notification_is_ignored()
+void test_queue_next_after_stop_notification_is_not_ignored()
 {
     auto next_stream_id(OurStream::make());
 
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, &skey_first);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
@@ -6200,7 +6470,7 @@ void test_queue_next_after_stop_notification_is_ignored()
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* the stream finishes... */
-    mock_messages->expect_msg_info("Leave app mode: streamplayer has stopped");
+    mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     dcpregs_playstream_stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
@@ -6209,7 +6479,9 @@ void test_queue_next_after_stop_notification_is_ignored()
     /* ...but the slave sends another stream just in that moment */
     const auto stream_id_second(++next_stream_id);
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, false, false, nullptr);
+                           stream_id_second,
+                           SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                           nullptr);
     expect_current_title_and_url("", "");
 }
 
@@ -6219,7 +6491,9 @@ void test_queue_next_after_stop_notification_is_ignored()
 void test_queue_next_with_prior_start_is_ignored()
 {
     set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                           OurStream::make(), false, false, nullptr);
+                           OurStream::make(),
+                           SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE,
+                           nullptr);
     expect_current_title_and_url("", "");
 }
 
@@ -6230,7 +6504,9 @@ void test_queue_next_with_prior_start_is_ignored()
 void test_queue_next_with_prior_start_by_us_is_ignored()
 {
     set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
-                           OurStream::make(), false, true, nullptr);
+                           OurStream::make(),
+                           SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE,
+                           nullptr);
     expect_current_title_and_url("", "");
 }
 
@@ -6245,11 +6521,13 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey_first;
     set_start_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3",
-                            stream_id_first, false, &skey_first);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
@@ -6260,20 +6538,26 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
 
     const auto stream_id_second(++next_stream_id);
     set_next_title_and_url("Stream 2", "http://app-provided.url.org/2.mp3",
-                           stream_id_second, true, true, nullptr);
+                           stream_id_second,
+                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           nullptr);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_third(++next_stream_id);
     set_next_title_and_url("Stream 3", "http://app-provided.url.org/3.mp3",
-                           stream_id_third, true, true, nullptr);
+                           stream_id_third,
+                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           nullptr);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
     const auto stream_id_fourth(++next_stream_id);
     GVariantWrapper skey_fourth;
     set_next_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3",
-                           stream_id_fourth, true, true, &skey_fourth);
+                           stream_id_fourth,
+                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           &skey_fourth);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
 
@@ -6296,11 +6580,13 @@ void test_pause_and_continue()
     const auto stream_id_first(next_stream_id);
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
-                            stream_id_first, false, &skey_first);
+                            stream_id_first,
+                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
-    mock_messages->expect_msg_info_formatted("Enter app mode: started stream 257");
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
@@ -6313,7 +6599,9 @@ void test_pause_and_continue()
     const auto stream_id_second(++next_stream_id);
     GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
-                           stream_id_second, true, true, &skey_second);
+                           stream_id_second,
+                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           &skey_second);
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* the pause signal itself is caught, but ignored by dcpd; however,

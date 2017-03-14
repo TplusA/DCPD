@@ -39,11 +39,13 @@ constexpr const char *ArtCache::ReadError::names_[];
 
 enum DevicePlaymode
 {
-    DEVICE_PLAYMODE_IDLE,
+    DEVICE_PLAYMODE_DESELECTED,
+    DEVICE_PLAYMODE_DESELECTED_PLAYING,
+    DEVICE_PLAYMODE_SELECTED_IDLE,
     DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION,
-    DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION,
+    DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED,
+    DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION,
     DEVICE_PLAYMODE_APP_IS_PLAYING,
-    DEVICE_PLAYMODE_OTHER_IS_PLAYING,
 };
 
 enum StreamIdType
@@ -76,9 +78,22 @@ struct SimplifiedStreamInfo
     char url[512 + 1];
 };
 
+enum class PendingAppRequest
+{
+    NONE,
+    START,
+    STOP_KEEP_SELECTED,
+    STOP_FOR_DESELECTION,
+};
+
 struct PlayAppStreamData
 {
     enum DevicePlaymode device_playmode;
+
+    /*!
+     * Pending request to be considered when app audio source is selected.
+     */
+    enum PendingAppRequest pending_request;
 
     /*!
      * Keep track of IDs of streams started by app.
@@ -201,13 +216,15 @@ static inline bool is_app_mode(const enum DevicePlaymode mode)
 {
     switch(mode)
     {
+      case DEVICE_PLAYMODE_SELECTED_IDLE:
       case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
-      case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION:
+      case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
       case DEVICE_PLAYMODE_APP_IS_PLAYING:
         return true;
 
-      case DEVICE_PLAYMODE_IDLE:
-      case DEVICE_PLAYMODE_OTHER_IS_PLAYING:
+      case DEVICE_PLAYMODE_DESELECTED:
+      case DEVICE_PLAYMODE_DESELECTED_PLAYING:
+      case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
         break;
     }
 
@@ -216,7 +233,8 @@ static inline bool is_app_mode(const enum DevicePlaymode mode)
 
 static inline bool is_app_mode_and_playing(const enum DevicePlaymode mode)
 {
-    return is_app_mode(mode) && mode != DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION;
+    return is_app_mode(mode) &&
+           mode != DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED;
 }
 
 static enum StreamIdType determine_stream_id_type(const stream_id_t raw_stream_id,
@@ -265,12 +283,13 @@ clear_stream_info(struct SimplifiedStreamInfo *info)
 
 static inline void reset_to_idle_mode(struct PlayAppStreamData *data)
 {
-    data->device_playmode = DEVICE_PLAYMODE_IDLE;
+    data->device_playmode = DEVICE_PLAYMODE_SELECTED_IDLE;
+    data->pending_request = PendingAppRequest::NONE;
     data->current_stream_id = 0;
     data->next_stream_id = 0;
 }
 
-static inline void notify_leave_app_mode(void)
+static inline void notify_app_playback_stopped(void)
 {
     registers_get_data()->register_changed_notification_fn(79);
 }
@@ -342,18 +361,8 @@ static void app_stream_started_playing(struct PlayAppStreamData *data,
     log_assert(stype == STREAM_ID_TYPE_APP_CURRENT ||
                stype == STREAM_ID_TYPE_APP_NEXT);
 
-    switch(data->device_playmode)
-    {
-      case DEVICE_PLAYMODE_IDLE:
-      case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION:
+    if(!is_app_mode(data->device_playmode))
         BUG("App stream started in unexpected mode %d", data->device_playmode);
-        break;
-
-      case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
-      case DEVICE_PLAYMODE_APP_IS_PLAYING:
-      case DEVICE_PLAYMODE_OTHER_IS_PLAYING:
-        break;
-    }
 
     data->device_playmode = DEVICE_PLAYMODE_APP_IS_PLAYING;
 
@@ -371,11 +380,12 @@ static void app_stream_started_playing(struct PlayAppStreamData *data,
 static inline void other_stream_started_playing(struct PlayAppStreamData *data,
                                                 bool *switched_to_nonapp_mode)
 {
-    if(data->device_playmode != DEVICE_PLAYMODE_IDLE &&
-       data->device_playmode != DEVICE_PLAYMODE_OTHER_IS_PLAYING)
+    if(data->device_playmode != DEVICE_PLAYMODE_DESELECTED &&
+       data->device_playmode != DEVICE_PLAYMODE_DESELECTED_PLAYING)
         *switched_to_nonapp_mode = true;
 
-    data->device_playmode = DEVICE_PLAYMODE_OTHER_IS_PLAYING;
+    data->device_playmode = DEVICE_PLAYMODE_DESELECTED_PLAYING;
+    data->pending_request = PendingAppRequest::NONE;
     data->current_stream_id = 0;
     data->next_stream_id = 0;
 }
@@ -630,9 +640,28 @@ static void try_start_stream(struct PlayAppStreamData *const data,
         else
         {
             log_assert(data->device_playmode == DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION ||
+                       data->device_playmode == DEVICE_PLAYMODE_SELECTED_IDLE ||
                        data->device_playmode == DEVICE_PLAYMODE_APP_IS_PLAYING);
             data->next_stream_id = stream_id;
         }
+    }
+}
+
+static void try_stop_stream(struct PlayAppStreamData *const data,
+                            bool stay_in_app_mode)
+{
+    data->device_playmode = stay_in_app_mode
+        ? DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED
+        : DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
+
+    GError *error = NULL;
+
+    if(!tdbus_splay_playback_call_stop_sync(dbus_get_streamplayer_playback_iface(),
+                                            NULL, &error))
+    {
+        msg_error(0, LOG_NOTICE, "Failed stopping stream player");
+        dbus_common_handle_dbus_error(&error, "Stop stream");
+        reset_to_idle_mode(data);
     }
 }
 
@@ -654,6 +683,8 @@ static struct
 }
 play_stream_data;
 
+static const char app_audio_source_id[] = "App";
+
 void dcpregs_playstream_init(void)
 {
     memset(&play_stream_data, 0, sizeof(play_stream_data));
@@ -664,7 +695,8 @@ void dcpregs_playstream_init(void)
 void dcpregs_playstream_late_init(void)
 {
     tdbus_aupath_manager_call_register_source(dbus_audiopath_get_manager_iface(),
-                                              "App", "Streams pushed by smartphone app",
+                                              app_audio_source_id,
+                                              "Streams pushed by smartphone app",
                                               "strbo",
                                               "/de/tahifi/Dcpd",
                                               nullptr,
@@ -717,6 +749,11 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 
     g_mutex_lock(&play_stream_data.lock);
 
+    if(!is_app_mode(play_stream_data.app.device_playmode))
+        tdbus_aupath_manager_call_request_source(dbus_audiopath_get_manager_iface(),
+                                                 app_audio_source_id,
+                                                 NULL, NULL, NULL);
+
     (void)copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
                            sizeof(play_stream_data.app.inbuffer_new_stream.meta_data),
                            data, length);
@@ -732,34 +769,46 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
 
     g_mutex_lock(&play_stream_data.lock);
 
+    const bool is_in_app_mode = is_app_mode(play_stream_data.app.device_playmode);
+
+    if(is_in_app_mode)
+        play_stream_data.app.pending_request = PendingAppRequest::NONE;
+
     if(copy_string_data(play_stream_data.app.inbuffer_new_stream.url,
                         sizeof(play_stream_data.app.inbuffer_new_stream.url),
                         data, length))
     {
         /* maybe start playing */
         if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
-            try_start_stream(&play_stream_data.app, &play_stream_data.other,
-                             true);
+        {
+            if(is_in_app_mode)
+                try_start_stream(&play_stream_data.app, &play_stream_data.other,
+                                 true);
+            else
+                play_stream_data.app.pending_request = PendingAppRequest::START;
+        }
         else
             msg_error(0, LOG_ERR, "Not starting stream, register 78 still unset");
     }
-    else if(is_app_mode(play_stream_data.app.device_playmode))
+    else if(is_in_app_mode)
     {
         /* stop command */
-        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION;
-
-        GError *error = NULL;
-
-        if(!tdbus_splay_playback_call_stop_sync(dbus_get_streamplayer_playback_iface(),
-                                                NULL, &error))
-        {
-            msg_error(0, LOG_NOTICE, "Failed stopping stream player");
-            dbus_common_handle_dbus_error(&error, "Stop stream");
-            reset_to_idle_mode(&play_stream_data.app);
-        }
+        try_stop_stream(&play_stream_data.app, true);
     }
+    else
+        play_stream_data.app.pending_request = PendingAppRequest::STOP_KEEP_SELECTED;
 
-    clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
+    switch(play_stream_data.app.pending_request)
+    {
+      case PendingAppRequest::START:
+        break;
+
+      case PendingAppRequest::NONE:
+      case PendingAppRequest::STOP_KEEP_SELECTED:
+      case PendingAppRequest::STOP_FOR_DESELECTION:
+        clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
+        break;
+    }
 
     g_mutex_unlock(&play_stream_data.lock);
 
@@ -792,9 +841,12 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 
     g_mutex_lock(&play_stream_data.lock);
 
-    (void)copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
-                           sizeof(play_stream_data.app.inbuffer_next_stream.meta_data),
-                           data, length);
+    if(!is_app_mode(play_stream_data.app.device_playmode))
+        BUG("App sets next stream title while not in app mode");
+    else
+        (void)copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
+                               sizeof(play_stream_data.app.inbuffer_next_stream.meta_data),
+                               data, length);
 
     g_mutex_unlock(&play_stream_data.lock);
 
@@ -807,21 +859,14 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
 
     g_mutex_lock(&play_stream_data.lock);
 
-    if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
-                        sizeof(play_stream_data.app.inbuffer_next_stream.url),
-                        data, length))
+    if(!is_app_mode(play_stream_data.app.device_playmode))
+        BUG("App sets next URL while not in app mode");
+    else
     {
-        switch(play_stream_data.app.device_playmode)
+        if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
+                            sizeof(play_stream_data.app.inbuffer_next_stream.url),
+                            data, length))
         {
-          case DEVICE_PLAYMODE_IDLE:
-          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION:
-          case DEVICE_PLAYMODE_OTHER_IS_PLAYING:
-            msg_error(0, LOG_ERR,
-                      "Can't queue next stream, didn't receive a start stream");
-            break;
-
-          case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
-          case DEVICE_PLAYMODE_APP_IS_PLAYING:
             /* maybe send to streamplayer queue */
             if(play_stream_data.app.inbuffer_next_stream.meta_data[0] != '\0')
                 try_start_stream(&play_stream_data.app, &play_stream_data.other,
@@ -829,16 +874,15 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
             else
                 msg_error(0, LOG_ERR,
                           "Not starting stream, register 238 still unset");
-
-            break;
         }
-    }
-    else
-    {
-        /* ignore funny writes */
-    }
+        else
+        {
+            /* ignore funny writes */
+            BUG("App is doing weird stuff");
+        }
 
-    clear_stream_info(&play_stream_data.app.inbuffer_next_stream);
+        clear_stream_info(&play_stream_data.app.inbuffer_next_stream);
+    }
 
     g_mutex_unlock(&play_stream_data.lock);
 
@@ -849,6 +893,90 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 239 handler %p %zu", response, length);
     return 0;
+}
+
+void dcpregs_playstream_select_source(void)
+{
+    g_mutex_lock(&play_stream_data.lock);
+
+    if(is_app_mode(play_stream_data.app.device_playmode))
+        BUG("Already selected");
+    else
+    {
+        msg_info("Enter app mode");
+
+        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_SELECTED_IDLE;
+
+        switch(play_stream_data.app.pending_request)
+        {
+          case PendingAppRequest::NONE:
+            break;
+
+          case PendingAppRequest::START:
+            msg_vinfo(MESSAGE_LEVEL_DIAG, "Processing pending start request");
+
+            if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
+            {
+                try_start_stream(&play_stream_data.app, &play_stream_data.other,
+                                 true);
+                clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
+            }
+            else
+                BUG("No data available for pending start request");
+
+            break;
+
+          case PendingAppRequest::STOP_KEEP_SELECTED:
+            msg_info("Processing pending stop request");
+            try_stop_stream(&play_stream_data.app, true);
+            break;
+
+          case PendingAppRequest::STOP_FOR_DESELECTION:
+            msg_info("Processing pending stop request and leaving app mode");
+            try_stop_stream(&play_stream_data.app, false);
+            break;
+        }
+
+        play_stream_data.app.pending_request = PendingAppRequest::NONE;
+    }
+
+    g_mutex_unlock(&play_stream_data.lock);
+}
+
+void dcpregs_playstream_deselect_source(void)
+{
+    g_mutex_lock(&play_stream_data.lock);
+
+    if(!is_app_mode(play_stream_data.app.device_playmode))
+        BUG("Not selected");
+    else
+    {
+        msg_info("Leave app mode");
+
+        switch(play_stream_data.app.device_playmode)
+        {
+          case DEVICE_PLAYMODE_SELECTED_IDLE:
+            play_stream_data.app.device_playmode = DEVICE_PLAYMODE_DESELECTED;
+            break;
+
+          case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
+          case DEVICE_PLAYMODE_APP_IS_PLAYING:
+            try_stop_stream(&play_stream_data.app, false);
+            break;
+
+          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
+            play_stream_data.app.device_playmode =
+                DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
+            break;
+
+          case DEVICE_PLAYMODE_DESELECTED:
+          case DEVICE_PLAYMODE_DESELECTED_PLAYING:
+          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
+            break;
+        }
+    }
+
+    g_mutex_unlock(&play_stream_data.lock);
 }
 
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
@@ -1011,25 +1139,25 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
       case STREAM_ID_TYPE_APP_NEXT:
         switch(play_stream_data.app.device_playmode)
         {
+          case DEVICE_PLAYMODE_DESELECTED:
+          case DEVICE_PLAYMODE_DESELECTED_PLAYING:
+            BUG("App stream %u started, but audio source not selected",
+                raw_stream_id);
+
+            other_stream_started_playing(&play_stream_data.app,
+                                         &switched_to_nonapp_mode);
+            break;
+
+          case DEVICE_PLAYMODE_SELECTED_IDLE:
           case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
-            msg_info("Enter app mode: started stream %u", raw_stream_id);
-            app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
-            break;
-
-          case DEVICE_PLAYMODE_OTHER_IS_PLAYING:
-            msg_info("Switch to app mode: continue with stream %u",
-                     raw_stream_id);
-            app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
-            break;
-
+          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
           case DEVICE_PLAYMODE_APP_IS_PLAYING:
             msg_info("%s app stream %u",
                      is_new_stream ? "Next" : "Continue with", raw_stream_id);
             app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
             break;
 
-          case DEVICE_PLAYMODE_IDLE:
-          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION:
+          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
             msg_error(0, LOG_NOTICE,
                       "Unexpected start of app stream %u", raw_stream_id);
 
@@ -1042,18 +1170,17 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
 
       case STREAM_ID_TYPE_NON_APP:
         if(is_app_mode(play_stream_data.app.device_playmode))
-        {
-            msg_error(0, LOG_NOTICE,
-                      "Leave app mode: unexpected start of non-app stream %u "
-                      "(expected next %u or new %u)",
-                      raw_stream_id,
-                      play_stream_data.app.next_stream_id,
-                      play_stream_data.app.current_stream_id);
-            notify_leave_app_mode();
-        }
+            BUG("Leave app mode: unexpected start of non-app stream %u "
+                "(expected next %u or new %u)",
+                raw_stream_id,
+                play_stream_data.app.next_stream_id,
+                play_stream_data.app.current_stream_id);
 
         other_stream_started_playing(&play_stream_data.app,
                                      &switched_to_nonapp_mode);
+
+        if(switched_to_nonapp_mode)
+            notify_app_playback_stopped();
 
         break;
     }
@@ -1080,11 +1207,13 @@ void dcpregs_playstream_stop_notification(void)
 
     if(is_app_mode(play_stream_data.app.device_playmode))
     {
-        msg_info("Leave app mode: streamplayer has stopped");
-        notify_leave_app_mode();
+        msg_info("App mode: streamplayer has stopped");
+        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_SELECTED_IDLE;
+        notify_app_playback_stopped();
     }
+    else
+        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_DESELECTED;
 
-    play_stream_data.app.device_playmode = DEVICE_PLAYMODE_IDLE;
     play_stream_data.app.last_pushed_stream_id =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
 

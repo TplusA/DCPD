@@ -72,6 +72,7 @@ test_registers_la_SOURCES = \
     mock_credentials_dbus.hh mock_credentials_dbus.cc \
     mock_airable_dbus.hh mock_airable_dbus.cc \
     mock_artcache_dbus.hh mock_artcache_dbus.cc \
+    mock_audiopath_dbus.hh mock_audiopath_dbus.cc \
     mock_logind_manager_dbus.hh mock_logind_manager_dbus.cc \
     mock_connman.hh mock_connman.cc \
     mock_os.hh mock_os.cc \

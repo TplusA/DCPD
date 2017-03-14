@@ -229,6 +229,7 @@ gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
                                               gpointer user_data)
 {
     msg_info("Selected source \"%s\"", source_id);
+    dcpregs_playstream_select_source();
     tdbus_aupath_source_complete_selected(object, invocation);
     return TRUE;
 }
@@ -239,6 +240,7 @@ gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
                                                 gpointer user_data)
 {
     msg_info("Deselected source \"%s\"", source_id);
+    dcpregs_playstream_deselect_source();
     tdbus_aupath_source_complete_deselected(object, invocation);
     return TRUE;
 }

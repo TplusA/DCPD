@@ -52,6 +52,7 @@ class MockDBusIface
     void expect_dbus_get_streamplayer_playback_iface(tdbussplayPlayback *);
     void expect_dbus_get_airable_sec_iface(tdbusAirable *);
     void expect_dbus_get_artcache_read_iface(tdbusartcacheRead *);
+    void expect_dbus_get_audiopath_manager_iface(tdbusaupathManager *);
     void expect_dbus_get_credentials_read_iface(tdbuscredentialsRead *);
     void expect_dbus_get_credentials_write_iface(tdbuscredentialsWrite *);
     void expect_dbus_get_logind_manager_iface(tdbuslogindManager *);
