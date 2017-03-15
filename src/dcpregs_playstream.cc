@@ -37,39 +37,39 @@
 
 constexpr const char *ArtCache::ReadError::names_[];
 
-enum DevicePlaymode
+enum class DevicePlaymode
 {
-    DEVICE_PLAYMODE_DESELECTED,
-    DEVICE_PLAYMODE_DESELECTED_PLAYING,
-    DEVICE_PLAYMODE_SELECTED_IDLE,
-    DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION,
-    DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED,
-    DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION,
-    DEVICE_PLAYMODE_APP_IS_PLAYING,
+    DESELECTED,
+    DESELECTED_PLAYING,
+    SELECTED_IDLE,
+    WAIT_FOR_START_NOTIFICATION,
+    WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED,
+    WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION,
+    APP_IS_PLAYING,
 };
 
-enum StreamIdType
+enum class StreamIdType
 {
-    STREAM_ID_TYPE_INVALID,
-    STREAM_ID_TYPE_NON_APP,
-    STREAM_ID_TYPE_APP_CURRENT,
-    STREAM_ID_TYPE_APP_NEXT,
-    STREAM_ID_TYPE_APP_UNKNOWN,
+    INVALID,
+    NON_APP,
+    APP_CURRENT,
+    APP_NEXT,
+    APP_UNKNOWN,
 };
 
-enum NotifyStreamInfo
+enum class NotifyStreamInfo
 {
-    NOTIFY_STREAM_INFO_UNMODIFIED,
-    NOTIFY_STREAM_INFO_PENDING,
-    NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING,
-    NOTIFY_STREAM_INFO_DEV_NULL,
+    UNMODIFIED,
+    PENDING,
+    OVERWRITTEN_PENDING,
+    DEV_NULL,
 };
 
-enum SendStreamUpdate
+enum class SendStreamUpdate
 {
-    SEND_STREAM_UPDATE_NONE,
-    SEND_STREAM_UPDATE_TITLE,
-    SEND_STREAM_UPDATE_URL_AND_TITLE,
+    NONE,
+    TITLE,
+    URL_AND_TITLE,
 };
 
 struct SimplifiedStreamInfo
@@ -88,12 +88,12 @@ enum class PendingAppRequest
 
 struct PlayAppStreamData
 {
-    enum DevicePlaymode device_playmode;
+    DevicePlaymode device_playmode;
 
     /*!
      * Pending request to be considered when app audio source is selected.
      */
-    enum PendingAppRequest pending_request;
+    PendingAppRequest pending_request;
 
     /*!
      * Keep track of IDs of streams started by app.
@@ -128,7 +128,7 @@ struct PlayAppStreamData
     struct SimplifiedStreamInfo inbuffer_next_stream;
 };
 
-enum CoverArtDataState
+enum class CoverArtDataState
 {
     COVER_ART_HAVE_NOTHING,
     COVER_ART_HAVE_TRACKED_STREAM_KEY,
@@ -212,66 +212,66 @@ static inline bool is_valid_stream(stream_id_t raw_stream_id)
             raw_stream_id <= STREAM_ID_COOKIE_MAX);
 }
 
-static inline bool is_app_mode(const enum DevicePlaymode mode)
+static inline bool is_app_mode(const DevicePlaymode mode)
 {
     switch(mode)
     {
-      case DEVICE_PLAYMODE_SELECTED_IDLE:
-      case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
-      case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
-      case DEVICE_PLAYMODE_APP_IS_PLAYING:
+      case DevicePlaymode::SELECTED_IDLE:
+      case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
+      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
+      case DevicePlaymode::APP_IS_PLAYING:
         return true;
 
-      case DEVICE_PLAYMODE_DESELECTED:
-      case DEVICE_PLAYMODE_DESELECTED_PLAYING:
-      case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
+      case DevicePlaymode::DESELECTED:
+      case DevicePlaymode::DESELECTED_PLAYING:
+      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
         break;
     }
 
     return false;
 }
 
-static inline bool is_app_mode_and_playing(const enum DevicePlaymode mode)
+static inline bool is_app_mode_and_playing(const DevicePlaymode mode)
 {
     return is_app_mode(mode) &&
-           mode != DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED;
+           mode != DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED;
 }
 
-static enum StreamIdType determine_stream_id_type(const stream_id_t raw_stream_id,
-                                                  const struct PlayAppStreamData *data)
+static StreamIdType determine_stream_id_type(const stream_id_t raw_stream_id,
+                                             const struct PlayAppStreamData *data)
 {
     const stream_id_t source_id = (raw_stream_id & STREAM_ID_SOURCE_MASK);
 
     if(source_id == STREAM_ID_SOURCE_INVALID ||
        (raw_stream_id & STREAM_ID_COOKIE_MASK) == STREAM_ID_COOKIE_INVALID)
-        return STREAM_ID_TYPE_INVALID;
+        return StreamIdType::INVALID;
     else if(source_id != STREAM_ID_SOURCE_APP)
-        return STREAM_ID_TYPE_NON_APP;
+        return StreamIdType::NON_APP;
 
     if(raw_stream_id == data->current_stream_id)
-        return STREAM_ID_TYPE_APP_CURRENT;
+        return StreamIdType::APP_CURRENT;
     else if(raw_stream_id == data->next_stream_id)
-        return STREAM_ID_TYPE_APP_NEXT;
+        return StreamIdType::APP_NEXT;
     else
-        return STREAM_ID_TYPE_APP_UNKNOWN;
+        return StreamIdType::APP_UNKNOWN;
 }
 
-static inline enum SendStreamUpdate
+static inline SendStreamUpdate
 determine_send_stream_update(bool title_changed, bool url_changed)
 {
     if(!title_changed && !url_changed)
-        return SEND_STREAM_UPDATE_NONE;
+        return SendStreamUpdate::NONE;
 
     if(!url_changed)
-        return SEND_STREAM_UPDATE_TITLE;
+        return SendStreamUpdate::TITLE;
 
-    return SEND_STREAM_UPDATE_URL_AND_TITLE;
+    return SendStreamUpdate::URL_AND_TITLE;
 }
 
-static inline enum SendStreamUpdate
+static inline SendStreamUpdate
 clear_stream_info(struct SimplifiedStreamInfo *info)
 {
-    const enum SendStreamUpdate ret =
+    const SendStreamUpdate ret =
         determine_send_stream_update(info->meta_data[0] != '\0',
                                      info->url[0] != '\0');
 
@@ -283,7 +283,7 @@ clear_stream_info(struct SimplifiedStreamInfo *info)
 
 static inline void reset_to_idle_mode(struct PlayAppStreamData *data)
 {
-    data->device_playmode = DEVICE_PLAYMODE_SELECTED_IDLE;
+    data->device_playmode = DevicePlaymode::SELECTED_IDLE;
     data->pending_request = PendingAppRequest::NONE;
     data->current_stream_id = 0;
     data->next_stream_id = 0;
@@ -300,28 +300,28 @@ static inline void notify_ready_for_next_stream_from_slave(void)
 }
 
 static void do_notify_stream_info(struct PlayAnyStreamData *data,
-                                  const enum NotifyStreamInfo which,
-                                  const enum SendStreamUpdate update)
+                                  const NotifyStreamInfo which,
+                                  const SendStreamUpdate update)
 {
     switch(which)
     {
-      case NOTIFY_STREAM_INFO_UNMODIFIED:
+      case NotifyStreamInfo::UNMODIFIED:
         break;
 
-      case NOTIFY_STREAM_INFO_PENDING:
+      case NotifyStreamInfo::PENDING:
         data->current_stream_information = data->pending_data;
         break;
 
-      case NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING:
+      case NotifyStreamInfo::OVERWRITTEN_PENDING:
         data->current_stream_information = data->overwritten_pending_data;
         break;
 
-      case NOTIFY_STREAM_INFO_DEV_NULL:
+      case NotifyStreamInfo::DEV_NULL:
         clear_stream_info(&data->current_stream_information);
         break;
     }
 
-    if(which == NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING)
+    if(which == NotifyStreamInfo::OVERWRITTEN_PENDING)
     {
         clear_stream_info(&data->overwritten_pending_data);
         data->overwritten_pending_stream_id =
@@ -336,18 +336,18 @@ static void do_notify_stream_info(struct PlayAnyStreamData *data,
 
     switch(update)
     {
-      case SEND_STREAM_UPDATE_NONE:
+      case SendStreamUpdate::NONE:
         msg_vinfo(MESSAGE_LEVEL_DIAG,
                   "Suppress sending title and URL to SPI slave");
         break;
 
-      case SEND_STREAM_UPDATE_URL_AND_TITLE:
+      case SendStreamUpdate::URL_AND_TITLE:
         msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         registers_get_data()->register_changed_notification_fn(75);
         registers_get_data()->register_changed_notification_fn(76);
         break;
 
-      case SEND_STREAM_UPDATE_TITLE:
+      case SendStreamUpdate::TITLE:
         msg_vinfo(MESSAGE_LEVEL_DIAG, "Send only new title to SPI slave");
         registers_get_data()->register_changed_notification_fn(75);
         break;
@@ -355,18 +355,17 @@ static void do_notify_stream_info(struct PlayAnyStreamData *data,
 }
 
 static void app_stream_started_playing(struct PlayAppStreamData *data,
-                                       enum StreamIdType stype,
-                                       bool is_new_stream)
+                                       StreamIdType stype, bool is_new_stream)
 {
-    log_assert(stype == STREAM_ID_TYPE_APP_CURRENT ||
-               stype == STREAM_ID_TYPE_APP_NEXT);
+    log_assert(stype == StreamIdType::APP_CURRENT ||
+               stype == StreamIdType::APP_NEXT);
 
     if(!is_app_mode(data->device_playmode))
         BUG("App stream started in unexpected mode %d", data->device_playmode);
 
-    data->device_playmode = DEVICE_PLAYMODE_APP_IS_PLAYING;
+    data->device_playmode = DevicePlaymode::APP_IS_PLAYING;
 
-    if(stype == STREAM_ID_TYPE_APP_NEXT)
+    if(stype == StreamIdType::APP_NEXT)
     {
         data->current_stream_id = data->next_stream_id;
         data->next_stream_id = 0;
@@ -380,11 +379,11 @@ static void app_stream_started_playing(struct PlayAppStreamData *data,
 static inline void other_stream_started_playing(struct PlayAppStreamData *data,
                                                 bool *switched_to_nonapp_mode)
 {
-    if(data->device_playmode != DEVICE_PLAYMODE_DESELECTED &&
-       data->device_playmode != DEVICE_PLAYMODE_DESELECTED_PLAYING)
+    if(data->device_playmode != DevicePlaymode::DESELECTED &&
+       data->device_playmode != DevicePlaymode::DESELECTED_PLAYING)
         *switched_to_nonapp_mode = true;
 
-    data->device_playmode = DEVICE_PLAYMODE_DESELECTED_PLAYING;
+    data->device_playmode = DevicePlaymode::DESELECTED_PLAYING;
     data->pending_request = PendingAppRequest::NONE;
     data->current_stream_id = 0;
     data->next_stream_id = 0;
@@ -455,13 +454,13 @@ static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
          ? raw_stream_id
          : STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID);
 
-    enum NotifyStreamInfo which;
-    enum SendStreamUpdate update;
+    NotifyStreamInfo which;
+    SendStreamUpdate update;
 
     if((raw_stream_id & STREAM_ID_COOKIE_MASK) == STREAM_ID_COOKIE_INVALID)
     {
         update = clear_stream_info(dest_info);
-        which = NOTIFY_STREAM_INFO_DEV_NULL;
+        which = NotifyStreamInfo::DEV_NULL;
     }
     else
     {
@@ -471,7 +470,7 @@ static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
 
         strncpy_terminated(dest_info->meta_data, title, sizeof(dest_info->meta_data));
         strncpy_terminated(dest_info->url,       url,   sizeof(dest_info->url));
-        which = NOTIFY_STREAM_INFO_UNMODIFIED;
+        which = NotifyStreamInfo::UNMODIFIED;
     }
 
     /* direct update */
@@ -485,14 +484,14 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
     if(is_stream_with_valid_source(data->pending_stream_id) &&
        data->currently_playing_stream == data->pending_stream_id)
     {
-        do_notify_stream_info(data, NOTIFY_STREAM_INFO_PENDING,
-                              SEND_STREAM_UPDATE_URL_AND_TITLE);
+        do_notify_stream_info(data, NotifyStreamInfo::PENDING,
+                              SendStreamUpdate::URL_AND_TITLE);
     }
     else if(is_stream_with_valid_source(data->overwritten_pending_stream_id) &&
             data->currently_playing_stream == data->overwritten_pending_stream_id)
     {
-        do_notify_stream_info(data, NOTIFY_STREAM_INFO_OVERWRITTEN_PENDING,
-                              SEND_STREAM_UPDATE_URL_AND_TITLE);
+        do_notify_stream_info(data, NotifyStreamInfo::OVERWRITTEN_PENDING,
+                              SendStreamUpdate::URL_AND_TITLE);
     }
     else if(switched_to_nonapp_mode)
     {
@@ -500,8 +499,8 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
          * has failed to deliver title and URL up to this point, then we need
          * to wipe out the currently stored, outdated information. The external
          * source may send the missing information later in this case. */
-        do_notify_stream_info(data, NOTIFY_STREAM_INFO_DEV_NULL,
-                              SEND_STREAM_UPDATE_URL_AND_TITLE);
+        do_notify_stream_info(data, NotifyStreamInfo::DEV_NULL,
+                              SendStreamUpdate::URL_AND_TITLE);
     }
 }
 
@@ -630,7 +629,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
         if(is_restart)
         {
             if(!is_playing)
-                data->device_playmode = DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION;
+                data->device_playmode = DevicePlaymode::WAIT_FOR_START_NOTIFICATION;
 
             data->current_stream_id = stream_id;
             data->next_stream_id = 0;
@@ -639,9 +638,9 @@ static void try_start_stream(struct PlayAppStreamData *const data,
         }
         else
         {
-            log_assert(data->device_playmode == DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION ||
-                       data->device_playmode == DEVICE_PLAYMODE_SELECTED_IDLE ||
-                       data->device_playmode == DEVICE_PLAYMODE_APP_IS_PLAYING);
+            log_assert(data->device_playmode == DevicePlaymode::WAIT_FOR_START_NOTIFICATION ||
+                       data->device_playmode == DevicePlaymode::SELECTED_IDLE ||
+                       data->device_playmode == DevicePlaymode::APP_IS_PLAYING);
             data->next_stream_id = stream_id;
         }
     }
@@ -651,8 +650,8 @@ static void try_stop_stream(struct PlayAppStreamData *const data,
                             bool stay_in_app_mode)
 {
     data->device_playmode = stay_in_app_mode
-        ? DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED
-        : DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
+        ? DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED
+        : DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
 
     GError *error = NULL;
 
@@ -905,7 +904,7 @@ void dcpregs_playstream_select_source(void)
     {
         msg_info("Enter app mode");
 
-        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_SELECTED_IDLE;
+        play_stream_data.app.device_playmode = DevicePlaymode::SELECTED_IDLE;
 
         switch(play_stream_data.app.pending_request)
         {
@@ -955,23 +954,23 @@ void dcpregs_playstream_deselect_source(void)
 
         switch(play_stream_data.app.device_playmode)
         {
-          case DEVICE_PLAYMODE_SELECTED_IDLE:
-            play_stream_data.app.device_playmode = DEVICE_PLAYMODE_DESELECTED;
+          case DevicePlaymode::SELECTED_IDLE:
+            play_stream_data.app.device_playmode = DevicePlaymode::DESELECTED;
             break;
 
-          case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
-          case DEVICE_PLAYMODE_APP_IS_PLAYING:
+          case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
+          case DevicePlaymode::APP_IS_PLAYING:
             try_stop_stream(&play_stream_data.app, false);
             break;
 
-          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
+          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
             play_stream_data.app.device_playmode =
-                DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
+                DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
             break;
 
-          case DEVICE_PLAYMODE_DESELECTED:
-          case DEVICE_PLAYMODE_DESELECTED_PLAYING:
-          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
+          case DevicePlaymode::DESELECTED:
+          case DevicePlaymode::DESELECTED_PLAYING:
+          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
             break;
         }
     }
@@ -1108,7 +1107,7 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
             std::move(GVariantWrapper(static_cast<GVariant *>(stream_key_variant),
                                       GVariantWrapper::Transfer::JUST_MOVE)));
 
-    const enum StreamIdType stream_id_type =
+    const StreamIdType stream_id_type =
         determine_stream_id_type(raw_stream_id, &play_stream_data.app);
 
     const bool is_new_stream =
@@ -1120,11 +1119,11 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
 
     switch(stream_id_type)
     {
-      case STREAM_ID_TYPE_INVALID:
+      case StreamIdType::INVALID:
         BUG("Got start notification for invalid stream ID %u", raw_stream_id);
         break;
 
-      case STREAM_ID_TYPE_APP_UNKNOWN:
+      case StreamIdType::APP_UNKNOWN:
         if(is_app_mode_and_playing(play_stream_data.app.device_playmode))
             msg_error(0, LOG_NOTICE,
                       "Got start notification for unknown app stream ID %u",
@@ -1135,12 +1134,12 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
 
         break;
 
-      case STREAM_ID_TYPE_APP_CURRENT:
-      case STREAM_ID_TYPE_APP_NEXT:
+      case StreamIdType::APP_CURRENT:
+      case StreamIdType::APP_NEXT:
         switch(play_stream_data.app.device_playmode)
         {
-          case DEVICE_PLAYMODE_DESELECTED:
-          case DEVICE_PLAYMODE_DESELECTED_PLAYING:
+          case DevicePlaymode::DESELECTED:
+          case DevicePlaymode::DESELECTED_PLAYING:
             BUG("App stream %u started, but audio source not selected",
                 raw_stream_id);
 
@@ -1148,16 +1147,16 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
                                          &switched_to_nonapp_mode);
             break;
 
-          case DEVICE_PLAYMODE_SELECTED_IDLE:
-          case DEVICE_PLAYMODE_WAIT_FOR_START_NOTIFICATION:
-          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
-          case DEVICE_PLAYMODE_APP_IS_PLAYING:
+          case DevicePlaymode::SELECTED_IDLE:
+          case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
+          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
+          case DevicePlaymode::APP_IS_PLAYING:
             msg_info("%s app stream %u",
                      is_new_stream ? "Next" : "Continue with", raw_stream_id);
             app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
             break;
 
-          case DEVICE_PLAYMODE_WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
+          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
             msg_error(0, LOG_NOTICE,
                       "Unexpected start of app stream %u", raw_stream_id);
 
@@ -1168,7 +1167,7 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
 
         break;
 
-      case STREAM_ID_TYPE_NON_APP:
+      case StreamIdType::NON_APP:
         if(is_app_mode(play_stream_data.app.device_playmode))
             BUG("Leave app mode: unexpected start of non-app stream %u "
                 "(expected next %u or new %u)",
@@ -1208,11 +1207,11 @@ void dcpregs_playstream_stop_notification(void)
     if(is_app_mode(play_stream_data.app.device_playmode))
     {
         msg_info("App mode: streamplayer has stopped");
-        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_SELECTED_IDLE;
+        play_stream_data.app.device_playmode = DevicePlaymode::SELECTED_IDLE;
         notify_app_playback_stopped();
     }
     else
-        play_stream_data.app.device_playmode = DEVICE_PLAYMODE_DESELECTED;
+        play_stream_data.app.device_playmode = DevicePlaymode::DESELECTED;
 
     play_stream_data.app.last_pushed_stream_id =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
@@ -1220,8 +1219,8 @@ void dcpregs_playstream_stop_notification(void)
     play_stream_data.other.currently_playing_stream =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
 
-    do_notify_stream_info(&play_stream_data.other, NOTIFY_STREAM_INFO_DEV_NULL,
-                          SEND_STREAM_UPDATE_URL_AND_TITLE);
+    do_notify_stream_info(&play_stream_data.other, NotifyStreamInfo::DEV_NULL,
+                          SendStreamUpdate::URL_AND_TITLE);
 
     g_mutex_unlock(&play_stream_data.lock);
 }
