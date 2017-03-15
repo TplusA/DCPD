@@ -737,9 +737,8 @@ void test_slave_drc_views_goto_view_by_id_0()
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x00, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
-                                                                         "UPnP");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "UPnP");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -751,9 +750,8 @@ void test_slave_drc_views_goto_view_by_id_1()
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x01, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
-                                                                         "TuneIn");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "TuneIn");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -765,9 +763,8 @@ void test_slave_drc_views_goto_view_by_id_2()
     static const uint8_t buffer[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, 0x02, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
-                                                                         "Filesystem");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Filesystem");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -780,15 +777,15 @@ void test_slave_drc_views_goto_view_by_id_unknown_id()
     static const uint8_t buffer_highest_unknown[] = { DRCP_BROWSE_VIEW_OPEN_SOURCE, UINT8_MAX, DRCP_ACCEPT };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown audio source ID 0x03 (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0x03 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_lowest_unknown, sizeof(buffer_lowest_unknown)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown audio source ID 0xff (Invalid argument)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0xff (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_highest_unknown, sizeof(buffer_highest_unknown)));
 }
 
@@ -801,7 +798,7 @@ void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -815,7 +812,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 1, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -829,7 +826,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 3, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
@@ -841,9 +838,8 @@ void test_slave_drc_views_goto_internet_radio()
     static const uint8_t buffer[] = { DRCP_GOTO_INTERNET_RADIO, 0x00 };
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xaa");
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy,
-                                                                         "TuneIn");
+    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Internet Radio");
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 

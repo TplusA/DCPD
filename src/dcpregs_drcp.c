@@ -58,8 +58,8 @@ static int handle_fast_wind_set_factor(tdbusdcpdPlayback *iface,
     return 0;
 }
 
-static int handle_select_source_by_id(tdbusaupathManager *iface,
-                                      const uint8_t *data, size_t length)
+static int handle_goto_view_by_id(tdbusdcpdViews *iface,
+                                  const uint8_t *data, size_t length)
 {
     if(!is_length_correct(2, length))
         return -1;
@@ -67,30 +67,27 @@ static int handle_select_source_by_id(tdbusaupathManager *iface,
     if(data[1] != DRCP_ACCEPT)
         return -1;
 
-    static const char *source_names[] =
+    static const char *view_names[] =
     {
         "UPnP",
         "TuneIn",
         "Filesystem",
     };
 
-    if(data[0] >= sizeof(source_names) / sizeof(source_names[0]))
+    if(data[0] >= sizeof(view_names) / sizeof(view_names[0]))
     {
-        msg_error(EINVAL, LOG_NOTICE, "Unknown audio source ID 0x%02x", data[0]);
+        msg_error(EINVAL, LOG_NOTICE, "Unknown view ID 0x%02x", data[0]);
         return -1;
     }
 
-    tdbus_aupath_manager_call_request_source(iface, source_names[data[0]],
-                                             NULL, NULL, NULL);
+    tdbus_dcpd_views_emit_open(iface, view_names[data[0]]);
 
     return 0;
 }
 
-static void handle_select_source_internet_radio(tdbusaupathManager *iface)
+static void handle_goto_internet_radio(tdbusdcpdViews *iface)
 {
-    static const uint8_t src_id[] = { 0x01, DRCP_ACCEPT };
-
-    handle_select_source_by_id(iface, src_id, sizeof(src_id));
+    tdbus_dcpd_views_emit_open(iface, "Internet Radio");
 }
 
 static void handle_goto_favorites(tdbusdcpdViews *iface)
@@ -288,13 +285,13 @@ static const struct drc_command_t drc_commands[] =
     },
     {
         .code = DRCP_BROWSE_VIEW_OPEN_SOURCE,
-        .iface_id = DBUSIFACE_AUDIOPATH_MANAGER_WITH_DATA,
-        .dbus_signal.aupath_manager_d = handle_select_source_by_id,
+        .iface_id = DBUSIFACE_VIEWS_WITH_DATA,
+        .dbus_signal.views_d = handle_goto_view_by_id,
     },
     {
         .code = DRCP_GOTO_INTERNET_RADIO,
-        .iface_id = DBUSIFACE_AUDIOPATH_MANAGER,
-        .dbus_signal.aupath_manager = handle_select_source_internet_radio,
+        .iface_id = DBUSIFACE_VIEWS,
+        .dbus_signal.views = handle_goto_internet_radio,
     },
     {
         .code = DRCP_GOTO_FAVORITES,
