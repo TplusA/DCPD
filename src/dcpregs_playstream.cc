@@ -361,7 +361,8 @@ static void app_stream_started_playing(struct PlayAppStreamData *data,
                stype == StreamIdType::APP_NEXT);
 
     if(!is_app_mode(data->device_playmode))
-        BUG("App stream started in unexpected mode %d", data->device_playmode);
+        BUG("App stream started in unexpected mode %d",
+            static_cast<int>(data->device_playmode));
 
     data->device_playmode = DevicePlaymode::APP_IS_PLAYING;
 
