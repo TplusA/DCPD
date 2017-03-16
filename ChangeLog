@@ -1,3 +1,16 @@
+2017-03-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.0 released.
+
+	* Audio routing: Register with TAPSwitch as audio source.
+
+	* Audio routing: The daemon selects the App audio source before
+	  starting to play. It won't play anything before source selection has
+	  succeeded.
+
+	* Audio routing: The player is stopped when the App source is
+	  deselected.
+
 2017-02-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.1 released.
