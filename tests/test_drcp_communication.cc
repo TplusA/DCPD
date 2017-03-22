@@ -22,6 +22,7 @@
 
 #include <cppcutter.h>
 #include <algorithm>
+#include <memory>
 
 #include "named_pipe.h"
 #include "drcp.h"
@@ -41,11 +42,26 @@
 namespace drcpd_communication_tests
 {
 
-struct fill_buffer_data_t
+class FillBufferData
 {
+  public:
     std::string data_;
     int errno_value_;
     int return_value_;
+
+    FillBufferData(const FillBufferData &) = delete;
+    FillBufferData &operator=(const FillBufferData &) = delete;
+
+    explicit FillBufferData():
+        errno_value_(EBADMSG),
+        return_value_(-666)
+    {}
+
+    explicit FillBufferData(const char *data, int err, int ret):
+        data_(data),
+        errno_value_(err),
+        return_value_(ret)
+    {}
 
     void set(const char *data, int err, int ret)
     {
@@ -57,7 +73,8 @@ struct fill_buffer_data_t
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
-static fill_buffer_data_t *fill_buffer_data;
+static std::unique_ptr<FillBufferData> fill_buffer_data;
+static std::unique_ptr<FillBufferData> fill_buffer_data_second_try;
 static struct dynamic_buffer buffer;
 static const struct fifo_pair fds = { 10, 20 };
 
@@ -75,7 +92,8 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
-    fill_buffer_data = new fill_buffer_data_t;
+    fill_buffer_data.reset(new FillBufferData);
+    fill_buffer_data_second_try.reset(nullptr);
 
     dynamic_buffer_init(&buffer);
 }
@@ -92,7 +110,8 @@ void cut_teardown()
 
     delete mock_messages;
     delete mock_os;
-    delete fill_buffer_data;
+    fill_buffer_data.reset(nullptr);
+    fill_buffer_data_second_try.reset(nullptr);
 
     mock_messages = nullptr;
     mock_os = nullptr;
@@ -123,6 +142,18 @@ static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
     return fill_buffer_data->return_value_;
 }
 
+/*!
+ * Proxy function for exchanging data for second #os_try_read_to_buffer() call.
+ */
+static int fill_buffer_second_try(void *dest, size_t count,
+                                  size_t *add_bytes_read,
+                                  int fd, bool suppress_error_on_eagain)
+{
+    fill_buffer_data = std::move(fill_buffer_data_second_try);
+
+    return fill_buffer(dest, count, add_bytes_read, fd, suppress_error_on_eagain);
+}
+
 /*!\test
  * Reading of a valid size header works.
  */
@@ -142,48 +173,61 @@ void test_read_drcp_size_header()
 }
 
 /*!\test
- * Attempting to read size header from empty input fails.
+ * Attempting to read size header from empty input results in more reads.
+ *
+ * In practice, this only happens on a heavily loaded system, but it may happen
+ * regardless. While named pipes offer atomicity of reads and writes up to a
+ * certain size, the atomicity also depends on how the writing end is
+ * implemented. If the writer puts data in chunks using multiple system calls,
+ * then atomicity is restricted to those chunks.
  */
 void test_read_drcp_size_header_from_empty_input()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_sched_yield();
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
 
     fill_buffer_data->set("", 0, 0);
+    fill_buffer_data_second_try.reset(new FillBufferData("Size: 15\n", 0, 0));
 
-    mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Too short input, expected XML size");
+    size_t size = 0;
+    size_t offset = 0;
+    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
 
-    size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
-    cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    static const size_t expected_size_value(15);
+    static const size_t expected_payload_offset(9);
+    cppcut_assert_equal(expected_size_value, size);
+    cppcut_assert_equal(expected_payload_offset, offset);
 }
 
 /*!\test
- * Attempting to read size header from half-ready input fails.
+ * Attempting to read size header from half-ready input results in more reads.
  *
- * This should not happen in practice since we are operating on named pipes
- * which offer certain atomicity of reads and writes. Partial reads and writes
- * should therefore not be a problem, but we handle the theoretically
- * impossible case anyway and document the expected behavior in form of this
- * test.
+ * In practice, this only happens on a heavily loaded system, but it may happen
+ * regardless. While named pipes offer atomicity of reads and writes up to a
+ * certain size, the atomicity also depends on how the writing end is
+ * implemented. If the writer puts data in chunks using multiple system calls,
+ * then atomicity is restricted to those chunks.
  */
-void test_read_drcp_size_header_from_nearly_empty_input()
+void test_read_drcp_size_header_with_incomplete_size_token()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_sched_yield();
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
 
-    static const char input_string[] = "Size";
-    fill_buffer_data->set(input_string, 0, 0);
+    fill_buffer_data->set("Si", 0, 0);
+    fill_buffer_data_second_try.reset(new FillBufferData("ze: 4\n", 0, 0));
 
-    mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Too short input, expected XML size");
+    size_t size = 0;
+    size_t offset = 0;
+    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
 
-    size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
-    cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    static const size_t expected_size_value(4);
+    static const size_t expected_payload_offset(8);
+    cppcut_assert_equal(expected_size_value, size);
+    cppcut_assert_equal(expected_payload_offset, offset);
 }
 
 /*!\test
@@ -198,21 +242,25 @@ void test_read_drcp_size_header_from_nearly_empty_input()
  * impossible case anyway and document the expected behavior in form of this
  * test.
  */
-void test_read_drcp_size_header_from_incomplete_input()
+void test_read_drcp_size_header_with_incomplete_size_value()
 {
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_sched_yield();
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
 
     static const char input_string[] = "Size: 5";
     fill_buffer_data->set(input_string, 0, 0);
+    fill_buffer_data_second_try.reset(new FillBufferData("10\n", 0, 0));
 
-    mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Incomplete XML size");
+    size_t size = 0;
+    size_t offset = 0;
+    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
 
-    size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
-    cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    static const size_t expected_size_value(510);
+    static const size_t expected_payload_offset(10);
+    cppcut_assert_equal(expected_size_value, size);
+    cppcut_assert_equal(expected_payload_offset, offset);
 }
 
 /*!\test
