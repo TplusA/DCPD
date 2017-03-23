@@ -48,26 +48,31 @@ class FillBufferData
     std::string data_;
     int errno_value_;
     int return_value_;
+    bool suppress_eagain_error_;
 
     FillBufferData(const FillBufferData &) = delete;
     FillBufferData &operator=(const FillBufferData &) = delete;
 
     explicit FillBufferData():
         errno_value_(EBADMSG),
-        return_value_(-666)
+        return_value_(-666),
+        suppress_eagain_error_(false)
     {}
 
-    explicit FillBufferData(const char *data, int err, int ret):
+    explicit FillBufferData(const char *data, int err, int ret,
+                            bool suppress_eagain_error = false):
         data_(data),
         errno_value_(err),
-        return_value_(ret)
+        return_value_(ret),
+        suppress_eagain_error_(suppress_eagain_error)
     {}
 
-    void set(const char *data, int err, int ret)
+    void set(const char *data, int err, int ret, bool suppress_eagain_error = false)
     {
         data_ = data;
         errno_value_ = err;
         return_value_ = ret;
+        suppress_eagain_error_ = suppress_eagain_error;
     }
 };
 
@@ -131,7 +136,9 @@ static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
     cppcut_assert_equal(buffer.size, count);
     cppcut_assert_not_null(add_bytes_read);
     cppcut_assert_equal(fds.in_fd, fd);
-    cut_assert_false(suppress_error_on_eagain);
+    cppcut_assert_not_null(fill_buffer_data.get());
+    cppcut_assert_equal(fill_buffer_data->suppress_eagain_error_,
+                        suppress_error_on_eagain);
 
     const size_t n = std::min(count, fill_buffer_data->data_.length());
     std::copy_n(fill_buffer_data->data_.begin(), n, dest_ptr + *add_bytes_read);
@@ -163,7 +170,7 @@ void test_read_drcp_size_header()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 731\n";
-    fill_buffer_data->set(input_string, 0, 1);
+    fill_buffer_data->set(input_string, 0, 1, true);
 
     size_t size;
     size_t offset;
@@ -188,8 +195,8 @@ void test_read_drcp_size_header_from_empty_input()
     mock_os->expect_os_sched_yield();
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
 
-    fill_buffer_data->set("", 0, 0);
-    fill_buffer_data_second_try.reset(new FillBufferData("Size: 15\n", 0, 0));
+    fill_buffer_data->set("", 0, 0, true);
+    fill_buffer_data_second_try.reset(new FillBufferData("Size: 15\n", 0, 0, true));
 
     size_t size = 0;
     size_t offset = 0;
@@ -217,8 +224,8 @@ void test_read_drcp_size_header_with_incomplete_size_token()
     mock_os->expect_os_sched_yield();
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
 
-    fill_buffer_data->set("Si", 0, 0);
-    fill_buffer_data_second_try.reset(new FillBufferData("ze: 4\n", 0, 0));
+    fill_buffer_data->set("Si", 0, 0, true);
+    fill_buffer_data_second_try.reset(new FillBufferData("ze: 4\n", 0, 0, true));
 
     size_t size = 0;
     size_t offset = 0;
@@ -250,8 +257,8 @@ void test_read_drcp_size_header_with_incomplete_size_value()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
 
     static const char input_string[] = "Size: 5";
-    fill_buffer_data->set(input_string, 0, 0);
-    fill_buffer_data_second_try.reset(new FillBufferData("10\n", 0, 0));
+    fill_buffer_data->set(input_string, 0, 0, true);
+    fill_buffer_data_second_try.reset(new FillBufferData("10\n", 0, 0, true));
 
     size_t size = 0;
     size_t offset = 0;
@@ -272,7 +279,7 @@ void test_read_drcp_size_header_with_trailing_byte()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 123F\n";
-    fill_buffer_data->set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0, true);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_CRIT, "Malformed XML size \"123F\" (Invalid argument)");
 
@@ -292,7 +299,7 @@ void test_read_drcp_size_header_with_negative_size()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: -5\n";
-    fill_buffer_data->set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0, true);
 
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size -5 (Numerical result out of range)");
 
@@ -312,7 +319,7 @@ void test_read_drcp_size_header_with_huge_size()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 65536\n";
-    fill_buffer_data->set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0, true);
 
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size 65536 (Numerical result out of range)");
 
@@ -332,7 +339,7 @@ void test_read_drcp_size_header_with_overflow_size()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "Size: 18446744073709551616\n";
-    fill_buffer_data->set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 0, true);
 
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size 18446744073709551616 (Numerical result out of range)");
 
@@ -356,7 +363,7 @@ void test_read_faulty_drcp_size_header()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
     static const char input_string[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-    fill_buffer_data->set(input_string, 0, 1);
+    fill_buffer_data->set(input_string, 0, 1, true);
 
     mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
 
@@ -379,7 +386,7 @@ void test_read_drcp_size_header_from_broken_file_descriptor()
     dynamic_buffer_check_space(&buffer);
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
 
-    fill_buffer_data->set("", EBADF, -1);
+    fill_buffer_data->set("", EBADF, -1, true);
 
     mock_messages->expect_msg_error(EBADF, LOG_CRIT, "Reading XML size failed");
 

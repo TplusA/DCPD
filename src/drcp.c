@@ -42,7 +42,7 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
         const size_t prev_pos = buffer->pos;
         const int read_result =
             os_try_read_to_buffer(buffer->data, buffer->size,
-                                  &buffer->pos, in_fd, false);
+                                  &buffer->pos, in_fd, true);
 
         if(read_result < 0)
         {

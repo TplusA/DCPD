@@ -874,7 +874,7 @@ static void main_loop(struct files *files,
         {
             if(try_preallocate_buffer(&state.drcp_buffer, &files->drcp_fifo) &&
                dynamic_buffer_fill_from_fd(&state.drcp_buffer,
-                                           files->drcp_fifo.in_fd, false,
+                                           files->drcp_fifo.in_fd, true,
                                            "DRCP data"))
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
