@@ -124,7 +124,7 @@ class Picture
         const_iterator operator++(int) { const_iterator ret(*this); ++pos_; return ret; }
         const_iterator &operator--() { --pos_; return *this; }
         const_iterator operator--(int) { const_iterator ret(*this); --pos_; return ret; }
-        difference_type operator-(const const_iterator &other) { return pos_ - other.pos_; }
+        difference_type operator-(const const_iterator &other) const { return pos_ - other.pos_; }
     };
 
     const_iterator begin() const { return const_iterator(picture_data_, picture_length_); }
