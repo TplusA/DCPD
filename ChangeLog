@@ -1,3 +1,13 @@
+2017-02-30  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.2 released.
+
+	* Stability: Fixed communication with drcpd. Requires drcpd v3.3 for
+	  full effect as there was also a bug on the other side.
+
+	* Misc: Added extra log messages to help hunting down problems with
+	  transferring cover art to the SPI slave.
+
 2017-02-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.1 released.
