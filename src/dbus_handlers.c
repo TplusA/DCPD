@@ -166,7 +166,7 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
 
     if(strcmp(signal_name, "NowPlaying") == 0)
     {
-        /* some stream started or continued playing---is it ours? */
+        /* some stream started or continued playing */
         check_parameter_assertions(parameters, 5);
 
         GVariant *val = g_variant_get_child_value(parameters, 0);
