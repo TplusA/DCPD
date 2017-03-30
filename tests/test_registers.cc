@@ -4532,8 +4532,12 @@ void test_download_empty_cover_art()
     auto *reg =
         lookup_register_expect_handlers(210, dcpregs_read_210_current_cover_art_hash, nullptr);
 
+    mock_messages->expect_msg_info("Cover art: Send empty hash to SPI slave");
+
     uint8_t buffer[16];
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+
+    mock_messages->check();
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_COVER_ART };
@@ -4542,7 +4546,7 @@ void test_download_empty_cover_art()
     reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
 
     mock_messages->expect_msg_info("Download of cover art requested");
-    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "No cover art available");
+    mock_messages->expect_msg_info("No cover art available");
 
     cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
 }

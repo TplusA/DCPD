@@ -762,6 +762,19 @@ ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length
     const size_t len =
         play_stream_data.other.current_cover_art.copy_hash(response, length);
 
+    if(len == 0)
+        msg_info("Cover art: Send empty hash to SPI slave");
+    else if(len == 16)
+        msg_info("Cover art: Send hash to SPI slave: "
+                 "%02x%02x%02x%02x%02x%02x%02x%02x"
+                 "%02x%02x%02x%02x%02x%02x%02x%02x",
+                 response[0], response[1], response[2], response[3],
+                 response[4], response[5], response[6], response[7],
+                 response[8], response[9], response[10], response[11],
+                 response[12], response[13], response[14], response[15]);
+    else
+        BUG("Cover art: Send %zu hash bytes to SPI slave", len);
+
     g_mutex_unlock(&play_stream_data.lock);
 
     return len;

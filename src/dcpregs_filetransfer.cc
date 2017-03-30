@@ -185,6 +185,19 @@ struct XModemStatusTraits<XMODEM_SOURCE_DBUSDL>
     }
 };
 
+static void dump_picture_hash(const char *const what, const uint8_t *const h)
+{
+    if(h == nullptr)
+        msg_info("Cover art XMODEM: %s, hash EMPTY", what);
+    else
+        msg_info("Cover art XMODEM: %s, hash: "
+                 "%02x%02x%02x%02x%02x%02x%02x%02x "
+                 "%02x%02x%02x%02x%02x%02x%02x%02x",
+                 what,
+                 h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7],
+                 h[8], h[9], h[10], h[11], h[12], h[13], h[14], h[15]);
+}
+
 template <>
 struct XModemStatusTraits<XMODEM_SOURCE_COVER_ART>
 {
@@ -196,6 +209,10 @@ struct XModemStatusTraits<XMODEM_SOURCE_COVER_ART>
     static void free_resources(XModemStatus &status)
     {
         auto &data(status.src_data.coverart);
+
+        if(data.picture.is_available())
+            msg_info("Cover art XMODEM: Clear session data");
+
         data.picture.clear();
         data.dummy_file.ptr = nullptr;
         data.dummy_file.length = 0;
@@ -217,17 +234,19 @@ struct XModemStatusTraits<XMODEM_SOURCE_COVER_ART>
         {
             data.dummy_file.ptr = const_cast<uint8_t *>(&*data.picture.begin());
             data.dummy_file.length = std::distance(data.picture.begin(), data.picture.end());
+            msg_info("Cover art XMODEM: Setup download of %zu bytes",
+                     data.dummy_file.length);
+            dump_picture_hash("Setup session", data.picture.get_hash_bytes());
         }
         else
         {
             data.dummy_file.ptr = nullptr;
             data.dummy_file.length = 0;
+            msg_info("Cover art XMODEM: Setup download of empty picture");
         }
 
         xmodem_init(&status.xm_ctx, &data.dummy_file);
         data.in_progress = true;
-
-        msg_info("Cover art size %zu", data.dummy_file.length);
 
         return 0;
     }
@@ -428,7 +447,9 @@ static void reset_xmodem_state_for_cover_art(bool is_error)
     else
     {
         if(!filetransfer_data.picture_provider->copy_picture(data.picture))
-            msg_vinfo(MESSAGE_LEVEL_DIAG, "No cover art available");
+            msg_info("No cover art available");
+        else
+            dump_picture_hash("Copied from provider", data.picture.get_hash_bytes());
 
         filetransfer_data.xmodem_status.source = XMODEM_SOURCE_COVER_ART;
     }
