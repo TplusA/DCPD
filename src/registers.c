@@ -390,6 +390,12 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_drcp_command,
     },
     {
+        /* Seek in stream or set playback speed/direction */
+        REGISTER(73, REGISTER_MK_VERSION(1, 0, 3)),
+        .max_data_size = 5,
+        .write_handler = dcpregs_write_73_seek_or_set_speed,
+    },
+    {
         /* Search parameters */
         REGISTER(74, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 256,
@@ -565,7 +571,7 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
     registers_private_data.configured_protocol_level.code =
-        REGISTER_MK_VERSION(1, 0, 2);
+        REGISTER_MK_VERSION(1, 0, 3);
 
     struct register_configuration_t *config = registers_get_nonconst_data();
     struct register_network_interface_t *iface_data;
@@ -633,7 +639,7 @@ size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel
     {
 #define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
 
-        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 2)),
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 3)),
 
 #undef MK_RANGE
     };

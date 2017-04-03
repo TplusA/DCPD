@@ -659,63 +659,6 @@ void test_slave_drc_playback_start()
 }
 
 /*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor.
- */
-void test_slave_drc_playback_fast_find_set_speed()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4 };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(dbus_dcpd_playback_iface_dummy, 15.0);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor, but
- * with an invalid out-of-range parameter.
- */
-void test_slave_drc_playback_fast_find_set_speed_invalid_parameter()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_BROWSE_PLAY_VIEW_SET };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor, but
- * without any parameter.
- */
-void test_slave_drc_playback_fast_find_set_speed_without_parameter()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 0, expected 1 (Invalid argument)");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor, but
- * with two parameters instead of one.
- */
-void test_slave_drc_playback_fast_find_set_speed_with_two_parameters()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4, DRCP_KEY_DIGIT_4 };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 2, expected 1 (Invalid argument)");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
  * Slave sends DRC command for opening the view with binary ID 0.
  */
 void test_slave_drc_views_goto_view_by_id_0()
@@ -6977,6 +6920,11 @@ namespace spi_registers_misc
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
+static MockDcpdDBus *mock_dcpd_dbus;
+static MockDBusIface *mock_dbus_iface;
+
+static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
+    reinterpret_cast<tdbusdcpdPlayback *>(0x12345678);
 
 static constexpr char expected_config_filename[] = "/etc/os-release";
 
@@ -7002,6 +6950,16 @@ void cut_setup()
     cppcut_assert_not_null(mock_os);
     mock_os->init();
     mock_os_singleton = mock_os;
+
+    mock_dcpd_dbus = new MockDcpdDBus();
+    cppcut_assert_not_null(mock_dcpd_dbus);
+    mock_dcpd_dbus->init();
+    mock_dcpd_dbus_singleton = mock_dcpd_dbus;
+
+    mock_dbus_iface = new MockDBusIface;
+    cppcut_assert_not_null(mock_dbus_iface);
+    mock_dbus_iface->init();
+    mock_dbus_iface_singleton = mock_dbus_iface;
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
@@ -7030,15 +6988,23 @@ void cut_teardown()
 
     mock_messages->check();
     mock_os->check();
+    mock_dcpd_dbus->check();
+    mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
+    mock_dcpd_dbus_singleton = nullptr;
+    mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
+    delete mock_dcpd_dbus;
+    delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_os = nullptr;
+    mock_dcpd_dbus = nullptr;
+    mock_dbus_iface = nullptr;
 }
 
 /*!\test
@@ -7387,6 +7353,219 @@ void test_status_byte_updates_are_only_sent_if_changed()
 
     dcpregs_status_set_reboot_required();
     register_changed_data->check();
+}
+
+static void set_speed_factor_successful_cases(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+    const double sign_mul = (subcommand == 0xc1) ? 1.0 : -1.0;
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 4.0);
+
+    const uint8_t buffer_fraction_lower_boundary[] = { subcommand, 0x04, 0x00, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_fraction_lower_boundary,
+                                              sizeof(buffer_fraction_lower_boundary)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 4.18);
+
+    const uint8_t buffer_generic[] = { subcommand, 0x04, 0x12, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_generic, sizeof(buffer_generic)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 4.99);
+
+    const uint8_t buffer_fraction_upper_boundary[] = { subcommand, 0x04, 0x63, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_fraction_upper_boundary,
+                                              sizeof(buffer_fraction_upper_boundary)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 0.01);
+
+    const uint8_t buffer_absolute_minimum[] = { subcommand, 0x00, 0x01, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_absolute_minimum,
+                                              sizeof(buffer_absolute_minimum)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 255.99);
+
+    const uint8_t buffer_absolute_maximum[] = { subcommand, 0xff, 0x63, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_absolute_maximum,
+                                              sizeof(buffer_absolute_maximum)));
+}
+
+static void set_speed_factor_wrong_command_format(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    /* too long */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
+
+    const uint8_t buffer_too_long[] = { subcommand, 0x04, 0x00, 0x00 };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_too_long, sizeof(buffer_too_long)));
+
+    mock_messages->check();
+
+    /* too short */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
+
+    const uint8_t buffer_too_short[] = { subcommand, 0x04 };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_too_short, sizeof(buffer_too_short)));
+}
+
+static void set_speed_factor_invalid_factor(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
+
+    const uint8_t buffer_first_invalid[] = { subcommand, 0x04, 0x64, };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_first_invalid, sizeof(buffer_first_invalid)));
+
+    mock_messages->check();
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
+
+    const uint8_t buffer_last_invalid[] = { subcommand, 0x04, 0xff, };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_last_invalid, sizeof(buffer_last_invalid)));
+}
+
+static void set_speed_factor_zero(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor too small (Invalid argument)");
+
+    const uint8_t buffer[] = { subcommand, 0x00, 0x00, };
+    cppcut_assert_equal(-1, reg->write_handler(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends command for fast forward.
+ */
+void test_playback_set_speed_forward()
+{
+    set_speed_factor_successful_cases(0xc1);
+}
+
+/*!\test
+ * Slave sends fast forward command with wrong command length.
+ */
+void test_playback_set_speed_forward_command_has_2_bytes_of_data()
+{
+    set_speed_factor_wrong_command_format(0xc1);
+}
+
+/*!\test
+ * Slave sends fast forward command with invalid factor.
+ */
+void test_playback_set_speed_forward_fraction_part_is_two_digits_decimal()
+{
+    set_speed_factor_invalid_factor(0xc1);
+}
+
+/*!\test
+ * Slave sends fast forward command with factor 0.
+ */
+void test_playback_set_speed_forward_zero_factor_is_invalid()
+{
+    set_speed_factor_zero(0xc1);
+}
+
+/*!\test
+ * Slave sends command for fast reverse.
+ */
+void test_playback_set_speed_reverse()
+{
+    set_speed_factor_successful_cases(0xc2);
+}
+
+/*!\test
+ * Slave sends fast reverse command with wrong command length.
+ */
+void test_playback_set_speed_reverse_command_has_2_bytes_of_data()
+{
+    set_speed_factor_wrong_command_format(0xc2);
+}
+
+/*!\test
+ * Slave sends fast reverse command with invalid factor.
+ */
+void test_playback_set_speed_reverse_fraction_part_is_two_digits_decimal()
+{
+    set_speed_factor_invalid_factor(0xc2);
+}
+
+/*!\test
+ * Slave sends fast reverse command with factor 0.
+ */
+void test_playback_set_speed_reverse_zero_factor_is_invalid()
+{
+    set_speed_factor_zero(0xc2);
+}
+
+/*!\test
+ * Reverting to regular speed is done via own subcommand.
+ */
+void test_playback_regular_speed()
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy, 0.0);
+
+    static const uint8_t buffer[] = { 0xc3 };
+    cppcut_assert_equal(0, reg->write_handler(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Stream seek position is given in milliseconds as 32 bit little-endian value.
+ */
+void test_playback_stream_seek()
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
+                                                         264781241, "ms");
+
+    static const uint8_t buffer[] = { 0xc4, 0xb9, 0x3d, 0xc8, 0x0f };
+    cppcut_assert_equal(0, reg->write_handler(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Stream seek position can be any 32 bit unsigned integer value.
+ */
+void test_playback_stream_seek_boundaries()
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
+                                                         0, "ms");
+
+    static const uint8_t buffer_min[] = { 0xc4, 0x00, 0x00, 0x00, 0x00 };
+    cppcut_assert_equal(0, reg->write_handler(buffer_min, sizeof(buffer_min)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
+                                                         UINT32_MAX, "ms");
+
+    static const uint8_t buffer_max[] = { 0xc4, 0xff, 0xff, 0xff, 0xff };
+    cppcut_assert_equal(0, reg->write_handler(buffer_max, sizeof(buffer_max)));
 }
 
 };

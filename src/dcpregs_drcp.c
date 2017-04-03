@@ -42,22 +42,6 @@ static bool is_length_correct(size_t expected, size_t length)
     return false;
 }
 
-static int handle_fast_wind_set_factor(tdbusdcpdPlayback *iface,
-                                       const uint8_t *data, size_t length)
-{
-    if(!is_length_correct(1, length))
-        return -1;
-
-    const uint8_t factor_code = data[0];
-    if(factor_code < DRCP_KEY_DIGIT_0 || factor_code > DRCP_KEY_DIGIT_9)
-        return -1;
-
-    const uint8_t speed_factor = (factor_code - DRCP_KEY_DIGIT_0 + 1) * 3;
-    tdbus_dcpd_playback_emit_fast_wind_set_factor(iface, speed_factor);
-
-    return 0;
-}
-
 static int handle_goto_view_by_id(tdbusdcpdViews *iface,
                                   const uint8_t *data, size_t length)
 {
@@ -327,26 +311,6 @@ static const struct drc_command_t drc_commands[] =
         .code = DRCP_REPEAT_MODE_TOGGLE,
         .iface_id = DBUSIFACE_PLAYBACK,
         .dbus_signal.playback = tdbus_dcpd_playback_emit_repeat_mode_toggle,
-    },
-    {
-        .code = DRCP_FAST_WIND_FORWARD,
-        .iface_id = DBUSIFACE_PLAYBACK,
-        .dbus_signal.playback = tdbus_dcpd_playback_emit_fast_forward,
-    },
-    {
-        .code = DRCP_FAST_WIND_REVERSE,
-        .iface_id = DBUSIFACE_PLAYBACK,
-        .dbus_signal.playback = tdbus_dcpd_playback_emit_fast_rewind,
-    },
-    {
-        .code = DRCP_FAST_WIND_STOP,
-        .iface_id = DBUSIFACE_PLAYBACK,
-        .dbus_signal.playback = tdbus_dcpd_playback_emit_fast_wind_stop,
-    },
-    {
-        .code = DRCP_FAST_WIND_SET_SPEED,
-        .iface_id = DBUSIFACE_PLAYBACK_WITH_DATA,
-        .dbus_signal.playback_d = handle_fast_wind_set_factor,
     },
     {
         .code = DRCP_SHUFFLE_MODE_TOGGLE,

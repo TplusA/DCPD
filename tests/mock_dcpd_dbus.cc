@@ -21,6 +21,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <cppcutter.h>
+#include <string>
 
 #include "mock_dcpd_dbus.hh"
 
@@ -31,10 +32,8 @@ enum class DBusFn
     playback_emit_pause,
     playback_emit_next,
     playback_emit_previous,
-    playback_emit_fast_forward,
-    playback_emit_fast_rewind,
-    playback_emit_fast_wind_stop,
-    playback_emit_fast_wind_set_factor,
+    playback_emit_set_speed,
+    playback_emit_seek,
     playback_emit_repeat_mode_toggle,
     playback_emit_shuffle_mode_toggle,
     playback_emit_stream_info,
@@ -84,20 +83,12 @@ static std::ostream &operator<<(std::ostream &os, const DBusFn id)
         os << "playback_emit_previous";
         break;
 
-      case DBusFn::playback_emit_fast_forward:
-        os << "playback_emit_fast_forward";
+      case DBusFn::playback_emit_set_speed:
+        os << "playback_emit_set_speed";
         break;
 
-      case DBusFn::playback_emit_fast_rewind:
-        os << "playback_emit_fast_rewind";
-        break;
-
-      case DBusFn::playback_emit_fast_wind_stop:
-        os << "playback_emit_fast_wind_stop";
-        break;
-
-      case DBusFn::playback_emit_fast_wind_set_factor:
-        os << "playback_emit_fast_wind_set_factor";
+      case DBusFn::playback_emit_seek:
+        os << "playback_emit_seek";
         break;
 
       case DBusFn::playback_emit_repeat_mode_toggle:
@@ -169,6 +160,7 @@ class MockDcpdDBus::Expectation
         gdouble arg_factor_;
         gint arg_count_;
         guint16 arg_index_;
+        gint64 arg_position_;
         std::string arg_name_a_;
         std::string arg_name_b_;
         std::string arg_name_c_;
@@ -183,6 +175,7 @@ class MockDcpdDBus::Expectation
             arg_factor_(23.42),
             arg_count_(987),
             arg_index_(9000),
+            arg_position_(-987654321),
             key_value_table_(nullptr),
             ret_bool_(false)
         {}
@@ -204,6 +197,15 @@ class MockDcpdDBus::Expectation
     {
         data_.dbus_object_ = static_cast<void *>(dbus_object);
         data_.arg_factor_ = fast_wind_factor;
+    }
+
+    explicit Expectation(DBusFn id, tdbusdcpdPlayback *dbus_object,
+                         gint64 position, const gchar *position_units):
+        d(DBusFn::playback_emit_seek)
+    {
+        data_.dbus_object_ = static_cast<void *>(dbus_object);
+        data_.arg_position_ = position;
+        data_.arg_name_a_ = position_units;
     }
 
     explicit Expectation(tdbusdcpdPlayback *dbus_object,
@@ -320,24 +322,14 @@ void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_previous(tdbusdcpdPlayback *o
     expectations_->add(Expectation(DBusFn::playback_emit_previous, object));
 }
 
-void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_fast_forward(tdbusdcpdPlayback *object)
+void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_set_speed(tdbusdcpdPlayback *object, gdouble arg_speed)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_fast_forward, object));
+    expectations_->add(Expectation(DBusFn::playback_emit_set_speed, object, arg_speed));
 }
 
-void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_fast_rewind(tdbusdcpdPlayback *object)
+void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_seek(tdbusdcpdPlayback *object, gint64 arg_position, const gchar *arg_position_units)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_fast_rewind, object));
-}
-
-void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_fast_wind_stop(tdbusdcpdPlayback *object)
-{
-    expectations_->add(Expectation(DBusFn::playback_emit_fast_wind_stop, object));
-}
-
-void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(tdbusdcpdPlayback *object, gdouble arg_speed)
-{
-    expectations_->add(Expectation(DBusFn::playback_emit_fast_wind_set_factor, object, arg_speed));
+    expectations_->add(Expectation(DBusFn::playback_emit_seek, object, arg_position, arg_position_units));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_repeat_mode_toggle(tdbusdcpdPlayback *object)
@@ -451,36 +443,25 @@ void tdbus_dcpd_playback_emit_previous(tdbusdcpdPlayback *object)
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
-void tdbus_dcpd_playback_emit_fast_forward(tdbusdcpdPlayback *object)
+void tdbus_dcpd_playback_emit_set_speed(tdbusdcpdPlayback *object, gdouble arg_speed_factor)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_fast_forward);
+    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_set_speed);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
+    cut_assert(expect.d.arg_factor_ <= arg_speed_factor &&
+               expect.d.arg_factor_ >= arg_speed_factor);
 }
 
-void tdbus_dcpd_playback_emit_fast_rewind(tdbusdcpdPlayback *object)
+void tdbus_dcpd_playback_emit_seek(tdbusdcpdPlayback *object, gint64 arg_position,
+                                   const gchar *arg_position_units)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_fast_rewind);
+    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_seek);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
-}
-
-void tdbus_dcpd_playback_emit_fast_wind_stop(tdbusdcpdPlayback *object)
-{
-    const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_fast_wind_stop);
-    cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
-}
-
-void tdbus_dcpd_playback_emit_fast_wind_set_factor(tdbusdcpdPlayback *object, gdouble arg_speed)
-{
-    const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_fast_wind_set_factor);
-    cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
+    cppcut_assert_equal(expect.d.arg_position_, arg_position);
+    cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_position_units));
 }
 
 void tdbus_dcpd_playback_emit_repeat_mode_toggle(tdbusdcpdPlayback *object)
