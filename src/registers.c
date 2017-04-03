@@ -518,6 +518,7 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_209_download_url,
     },
     {
+        /* Cover art hash value (cover art itself is retrieved via XMODEM) */
         REGISTER(210, REGISTER_MK_VERSION(1, 0, 2)),
         .max_data_size = 16,
         .read_handler = dcpregs_read_210_current_cover_art_hash,
