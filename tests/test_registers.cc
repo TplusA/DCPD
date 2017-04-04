@@ -387,11 +387,17 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_2 =
     95, 210,
 };
 
-static const std::array<RegisterSetPerVersion, 3> all_registers
+static const std::array<uint8_t, 1> existing_registers_v1_0_3 =
+{
+   73,
+};
+
+static const std::array<RegisterSetPerVersion, 4> all_registers
 {
     RegisterSetPerVersion(1, 0, 0, existing_registers_v1_0_0),
     RegisterSetPerVersion(1, 0, 1, existing_registers_v1_0_1),
     RegisterSetPerVersion(1, 0, 2, existing_registers_v1_0_2),
+    RegisterSetPerVersion(1, 0, 3, existing_registers_v1_0_3),
 };
 
 void cut_setup()
@@ -522,6 +528,26 @@ void test_lookup_all_nonexistent_registers()
             }
         }
     }
+}
+
+/*!\test
+ * Make sure we are actually testing all registers from all protocol versions.
+ * */
+void test_assert_all_registers_are_checked_by_unit_tests()
+{
+    const struct RegisterProtocolLevel *level_ranges = nullptr;
+    const size_t level_ranges_count = register_get_supported_protocol_levels(&level_ranges);
+
+    cppcut_assert_equal(size_t(1), level_ranges_count);
+
+    const uint32_t lowest_checked_version(REGISTER_MK_VERSION(all_registers[0].version_major_,
+                                                              all_registers[0].version_minor_,
+                                                              all_registers[0].version_patch_));
+    const uint32_t highest_checked_version(REGISTER_MK_VERSION(all_registers[all_registers.size() - 1].version_major_,
+                                                               all_registers[all_registers.size() - 1].version_minor_,
+                                                               all_registers[all_registers.size() - 1].version_patch_));
+    cppcut_assert_equal(level_ranges[0].code, lowest_checked_version);
+    cppcut_assert_equal(level_ranges[1].code, highest_checked_version);
 }
 
 };
