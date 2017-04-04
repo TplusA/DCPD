@@ -1,3 +1,16 @@
+2017-04-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.3 released.
+
+	* DCP protocol: Support fast forward and fast rewind commands. This
+	  enables fast winding via remote control.
+
+	* DCP protocol: Support stream seek commands. This enables jumping
+	  to arbitrary stream positions via TA Control progress bar.
+
+	* DCP protocol: Avoid sending cover art hash updates on continue from
+	  pause mode and stream seeks.
+
 2017-02-30  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.2 released.
