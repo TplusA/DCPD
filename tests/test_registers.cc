@@ -334,6 +334,32 @@ namespace spi_registers_tests
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
 
+class RegisterSetPerVersion
+{
+  public:
+    const uint8_t version_major_;
+    const uint8_t version_minor_;
+    const uint8_t version_patch_;
+    const uint8_t *const registers_;
+    const size_t number_of_registers_;
+
+    RegisterSetPerVersion(const RegisterSetPerVersion &) = delete;
+    RegisterSetPerVersion(RegisterSetPerVersion &&) = default;
+    RegisterSetPerVersion &operator=(const RegisterSetPerVersion &) = delete;
+
+    template <size_t N>
+    constexpr explicit RegisterSetPerVersion(uint8_t version_major,
+                                             uint8_t version_minor,
+                                             uint8_t version_patch,
+                                             const std::array<uint8_t, N> &registers):
+        version_major_(version_major),
+        version_minor_(version_minor),
+        version_patch_(version_patch),
+        registers_(registers.data()),
+        number_of_registers_(N)
+    {}
+};
+
 static const std::array<uint8_t, 38> existing_registers_v1_0_0 =
 {
     1,
@@ -359,6 +385,13 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_1 =
 static const std::array<uint8_t, 2> existing_registers_v1_0_2 =
 {
     95, 210,
+};
+
+static const std::array<RegisterSetPerVersion, 3> all_registers
+{
+    RegisterSetPerVersion(1, 0, 0, existing_registers_v1_0_0),
+    RegisterSetPerVersion(1, 0, 1, existing_registers_v1_0_1),
+    RegisterSetPerVersion(1, 0, 2, existing_registers_v1_0_2),
 };
 
 void cut_setup()
@@ -430,46 +463,24 @@ void test_lookup_nonexistent_register_fails_gracefully()
  */
 void test_lookup_all_existing_registers()
 {
-    cut_assert_true(register_set_protocol_level(1, 0, 0));
-
-    for(auto r : existing_registers_v1_0_0)
+    for(const auto &regset : all_registers)
     {
-        const struct dcp_register_t *reg = register_lookup(r);
+        cut_assert_true(register_set_protocol_level(regset.version_major_,
+                                                    regset.version_minor_,
+                                                    regset.version_patch_));
 
-        cppcut_assert_not_null(reg);
-        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
-        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
-        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 0)),
-                               <=, reg->minimum_protocol_version.code);
-    }
+        for(size_t i = 0; i < regset.number_of_registers_; ++i)
+        {
+            const uint8_t &r = regset.registers_[i];
+            const struct dcp_register_t *reg = register_lookup(r);
 
-    cut_assert_true(register_set_protocol_level(1, 0, 1));
-
-    for(auto r : existing_registers_v1_0_1)
-    {
-        const struct dcp_register_t *reg = register_lookup(r);
-
-        cppcut_assert_not_null(reg);
-        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
-        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
-        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
-                               <=, reg->minimum_protocol_version.code);
-    }
-
-    cut_assert_true(register_set_protocol_level(1, 0, 2));
-
-    for(auto r : existing_registers_v1_0_2)
-    {
-        const struct dcp_register_t *reg = register_lookup(r);
-
-        cppcut_assert_not_null(reg);
-        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
-        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
-        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 2)),
-                               <=, reg->minimum_protocol_version.code);
+            cppcut_assert_not_null(reg);
+            cppcut_assert_equal(unsigned(r), unsigned(reg->address));
+            cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
+            cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
+            cppcut_assert_equal(uint32_t(REGISTER_MK_VERSION(regset.version_major_, regset.version_minor_, regset.version_patch_)),
+                                reg->minimum_protocol_version.code);
+        }
     }
 }
 
@@ -478,59 +489,37 @@ void test_lookup_all_existing_registers()
  */
 void test_lookup_all_nonexistent_registers()
 {
-    for(unsigned int r = 0; r <= UINT8_MAX; ++r)
+    std::vector<uint8_t> all_registers_up_to_selected_version;
+
+    for(const auto &regset : all_registers)
     {
-        auto found_v1_0_0 =
-            std::find(existing_registers_v1_0_0.begin(), existing_registers_v1_0_0.end(), r);
-        auto found_v1_0_1 =
-            std::find(existing_registers_v1_0_1.begin(), existing_registers_v1_0_1.end(), r);
-        auto found_v1_0_2 =
-            std::find(existing_registers_v1_0_2.begin(), existing_registers_v1_0_2.end(), r);
+        std::copy(regset.registers_,
+                  &regset.registers_[regset.number_of_registers_],
+                  std::back_inserter(all_registers_up_to_selected_version));
 
-        cut_assert_true(register_set_protocol_level(1, 0, 0));
+        cut_assert_true(register_set_protocol_level(regset.version_major_,
+                                                    regset.version_minor_,
+                                                    regset.version_patch_));
 
-        if(found_v1_0_0 == existing_registers_v1_0_0.end())
-            cppcut_assert_null(register_lookup(r));
-        else
+        const uint32_t selected_version_code(REGISTER_MK_VERSION(regset.version_major_,
+                                                                 regset.version_minor_,
+                                                                 regset.version_patch_));
+
+        for(unsigned int r = 0; r <= UINT8_MAX; ++r)
         {
-            const struct dcp_register_t *reg = register_lookup(r);
+            const auto found(std::find(all_registers_up_to_selected_version.begin(),
+                                       all_registers_up_to_selected_version.end(),
+                                       r));
 
-            cppcut_assert_not_null(reg);
-            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 0)),
-                                   <=, reg->minimum_protocol_version.code);
-        }
-
-        cut_assert_true(register_set_protocol_level(1, 0, 1));
-
-        if(found_v1_0_1 == existing_registers_v1_0_1.end())
-        {
-            if(found_v1_0_0 == existing_registers_v1_0_0.end())
+            if(found == all_registers_up_to_selected_version.end())
                 cppcut_assert_null(register_lookup(r));
-        }
-        else
-        {
-            const struct dcp_register_t *reg = register_lookup(r);
+            else
+            {
+                const struct dcp_register_t *reg = register_lookup(r);
 
-            cppcut_assert_not_null(reg);
-            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
-                                   <=, reg->minimum_protocol_version.code);
-        }
-
-        cut_assert_true(register_set_protocol_level(1, 0, 2));
-
-        if(found_v1_0_2 == existing_registers_v1_0_2.end())
-        {
-            if(found_v1_0_0 == existing_registers_v1_0_0.end() &&
-               found_v1_0_1 == existing_registers_v1_0_1.end())
-                cppcut_assert_null(register_lookup(r));
-        }
-        else
-        {
-            const struct dcp_register_t *reg = register_lookup(r);
-
-            cppcut_assert_not_null(reg);
-            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 2)),
-                                   <=, reg->minimum_protocol_version.code);
+                cppcut_assert_not_null(reg);
+                cppcut_assert_operator(selected_version_code, >=, reg->minimum_protocol_version.code);
+            }
         }
     }
 }
