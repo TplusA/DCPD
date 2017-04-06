@@ -191,7 +191,7 @@ static void dump_picture_hash(const char *const what, const uint8_t *const h)
         msg_info("Cover art XMODEM: %s, hash EMPTY", what);
     else
         msg_info("Cover art XMODEM: %s, hash: "
-                 "%02x%02x%02x%02x%02x%02x%02x%02x "
+                 "%02x%02x%02x%02x%02x%02x%02x%02x"
                  "%02x%02x%02x%02x%02x%02x%02x%02x",
                  what,
                  h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7],
