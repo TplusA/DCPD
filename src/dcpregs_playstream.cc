@@ -970,6 +970,20 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
     g_mutex_unlock(&play_stream_data.lock);
 }
 
+/*!
+ * Retrieve cover art for given stream key if necessary and possible.
+ *
+ * \param stream_key
+ *     For which stream key the picture should be retrieved from the cover art
+ *     cache.
+ *
+ * \param picture
+ *     Where to put the image data.
+ *
+ * \returns
+ *     True in case the \p picture has changed, false in case it remained
+ *     unchanged.
+ */
 static bool try_retrieve_cover_art(GVariant *stream_key,
                                    CoverArt::Picture &picture)
 {
@@ -1157,8 +1171,9 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
         ? GVariantWrapper::get(play_stream_data.other.tracked_stream_key.get_variant())
         : nullptr;
 
-    try_retrieve_cover_art(val, play_stream_data.other.current_cover_art);
-    notify_cover_art_changed();
+    if(try_retrieve_cover_art(val, play_stream_data.other.current_cover_art) ||
+       is_new_stream)
+        notify_cover_art_changed();
 
     g_mutex_unlock(&play_stream_data.lock);
 }

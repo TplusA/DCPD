@@ -6284,7 +6284,6 @@ void test_pause_and_continue()
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
                                           GVariantWrapper::move(skey_first));
-    register_changed_data->check({210});
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* also works a second time */
@@ -6292,7 +6291,6 @@ void test_pause_and_continue()
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
                                           GVariantWrapper::move(skey_first));
-    register_changed_data->check({210});
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* now assume the next stream has started */
