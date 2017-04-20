@@ -1152,3 +1152,15 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
                                        &global_dbussignal_connman_manager_data,
                                        wlan_service_name);
 }
+
+void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
+                                                       const char *network_ssid,
+                                                       const char *service_to_be_disabled)
+{
+    if(network_name == NULL && network_ssid == NULL)
+        BUG("Automatic connection to WPS service not implemented yet");
+    else if(network_name != NULL)
+        BUG("Connecting to WPS service by name (%s) not implemented yet ", network_name);
+    else
+        BUG("Connecting to WPS service by SSID (%s) not implemented yet ", network_ssid);
+}

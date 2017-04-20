@@ -51,6 +51,10 @@ void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manag
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled);
 
+void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
+                                                       const char *network_ssid,
+                                                       const char *service_to_be_disabled);
+
 #ifdef __cplusplus
 }
 #endif

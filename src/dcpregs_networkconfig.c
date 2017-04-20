@@ -22,6 +22,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
 #include <arpa/inet.h>
@@ -74,6 +75,14 @@ static const uint32_t req_wireless_only_parameters =
 
 #define ALL_REQUESTED(R) \
     ((nwconfig_write_data.requested_changes & (R)) == (R))
+
+enum WPSMode
+{
+    WPS_MODE_INVALID,
+    WPS_MODE_NONE,
+    WPS_MODE_DIRECT,
+    WPS_MODE_SCAN,
+};
 
 /*!
  * Network configuration change requests.
@@ -512,16 +521,18 @@ static bool is_known_security_mode_name(const char *name)
     return false;
 }
 
-static int handle_set_wireless_config(struct network_prefs *prefs)
+static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
+                                               char **out_wps_network_name,
+                                               char **out_wps_network_ssid)
 {
     if(!IS_REQUESTED(req_wireless_only_parameters))
-        return 0;
+        return WPS_MODE_NONE;
 
     if(network_prefs_get_technology_by_prefs(prefs) != NWPREFSTECH_WLAN)
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "Ignoring wireless parameters for active wired interface");
-        return 0;
+        return WPS_MODE_NONE;
     }
 
     const char *network_name;
@@ -564,7 +575,7 @@ static int handle_set_wireless_config(struct network_prefs *prefs)
     {
         msg_error(EINVAL, LOG_ERR,
                   "Cannot set WLAN parameters, security mode missing");
-        return -1;
+        return WPS_MODE_INVALID;
     }
 
     static const char empty_string[] = "";
@@ -595,6 +606,15 @@ static int handle_set_wireless_config(struct network_prefs *prefs)
         network_ssid = NULL;
     }
 
+    const enum WPSMode retval =
+        (strcmp(nwconfig_write_data.wlan_security_mode, "wps") == 0
+         ? (network_name == NULL
+            ? WPS_MODE_SCAN
+            : (network_name != empty_string || network_ssid != empty_string
+               ? WPS_MODE_DIRECT
+               : WPS_MODE_INVALID))
+         : WPS_MODE_NONE);
+
     if(IS_REQUESTED(REQ_WLAN_WPA_PASSPHRASE_102))
     {
         const size_t passphrase_length =
@@ -616,24 +636,43 @@ static int handle_set_wireless_config(struct network_prefs *prefs)
                                   nwconfig_write_data.wlan_security_mode,
                                   passphrase);
 
-    return 0;
+    switch(retval)
+    {
+      case WPS_MODE_INVALID:
+      case WPS_MODE_NONE:
+      case WPS_MODE_SCAN:
+        break;
+
+      case WPS_MODE_DIRECT:
+        if(network_name != NULL && network_name[0] != '\0')
+            *out_wps_network_name = strdup(network_name);
+
+        if(network_ssid != NULL && network_ssid[0] != '\0')
+            *out_wps_network_ssid = strdup(network_ssid);
+
+        break;
+    }
+
+    return retval;
 }
 
-static int apply_changes_to_prefs(struct network_prefs *prefs)
+static enum WPSMode apply_changes_to_prefs(struct network_prefs *prefs,
+                                           char **out_wps_network_name,
+                                           char **out_wps_network_ssid)
 {
     log_assert(prefs != NULL);
 
     if(handle_set_dhcp_mode(prefs) < 0)
-        return -1;
+        return WPS_MODE_INVALID;
 
     if(handle_set_static_ipv4_config(prefs) < 0)
-        return -1;
+        return WPS_MODE_INVALID;
 
     if(handle_set_dns_servers(prefs) < 0)
-        return -1;
+        return WPS_MODE_INVALID;
 
-    if(handle_set_wireless_config(prefs) < 0)
-        return -1;
+    const enum WPSMode mode =
+        handle_set_wireless_config(prefs, out_wps_network_name, out_wps_network_ssid);
 
     static const uint32_t not_implemented =
         REQ_PROXY_MODE_59 |
@@ -650,10 +689,10 @@ static int apply_changes_to_prefs(struct network_prefs *prefs)
     {
         BUG("Unsupported change requests: 0x%08x",
             nwconfig_write_data.requested_changes & not_implemented);
-        return -1;
+        return WPS_MODE_INVALID;
     }
 
-    return 0;
+    return mode;
 }
 
 /*!
@@ -662,14 +701,16 @@ static int apply_changes_to_prefs(struct network_prefs *prefs)
  * \attention
  *     Must be called with the #ShutdownGuard from #nwstatus_data locked.
  */
-static int modify_network_configuration(const struct register_network_interface_t *selected,
-                                        char *previous_wlan_name_buffer,
-                                        size_t previous_wlan_name_buffer_size)
+static enum WPSMode modify_network_configuration(const struct register_network_interface_t *selected,
+                                                 char *previous_wlan_name_buffer,
+                                                 size_t previous_wlan_name_buffer_size,
+                                                 char **out_wps_network_name,
+                                                 char **out_wps_network_ssid)
 {
     if(shutdown_guard_is_shutting_down_unlocked(nwstatus_data.shutdown_guard))
     {
         msg_info("Not writing network configuration during shutdown.");
-        return -1;
+        return WPS_MODE_INVALID;
     }
 
     struct network_prefs *ethernet_prefs;
@@ -678,7 +719,7 @@ static int modify_network_configuration(const struct register_network_interface_
         network_prefs_open_rw(&ethernet_prefs, &wlan_prefs);
 
     if(cfg == NULL)
-        return -1;
+        return WPS_MODE_INVALID;
 
     struct network_prefs *selected_prefs =
         selected->is_wired ? ethernet_prefs : wlan_prefs;
@@ -690,14 +731,27 @@ static int modify_network_configuration(const struct register_network_interface_
     if(selected_prefs == NULL)
         selected_prefs = network_prefs_add_prefs(cfg, selected->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN);
 
-    int ret = apply_changes_to_prefs(selected_prefs);
+    enum WPSMode wps_mode =
+        apply_changes_to_prefs(selected_prefs,
+                               out_wps_network_name, out_wps_network_ssid);
 
-    if(ret == 0)
-        ret = network_prefs_write_to_file(cfg);
+    switch(wps_mode)
+    {
+      case WPS_MODE_NONE:
+        if(network_prefs_write_to_file(cfg) < 0)
+            wps_mode = WPS_MODE_INVALID;
+
+        break;
+
+      case WPS_MODE_INVALID:
+      case WPS_MODE_DIRECT:
+      case WPS_MODE_SCAN:
+        break;
+    }
 
     network_prefs_close(cfg);
 
-    return ret;
+    return wps_mode;
 }
 
 static bool may_change_config(void)
@@ -784,15 +838,46 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
     char current_wlan_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
-    int ret = modify_network_configuration(selected, current_wlan_service_name,
-                                           sizeof(current_wlan_service_name));
+    char *wps_network_name = NULL;
+    char *wps_network_ssid = NULL;
+    const enum WPSMode wps_mode =
+        modify_network_configuration(selected, current_wlan_service_name,
+                                     sizeof(current_wlan_service_name),
+                                     &wps_network_name, &wps_network_ssid);
     shutdown_guard_unlock(nwstatus_data.shutdown_guard);
 
-    if(ret == 0)
+    log_assert((wps_mode == WPS_MODE_DIRECT &&
+                (wps_network_name != NULL || wps_network_ssid != NULL)) ||
+               (wps_mode != WPS_MODE_DIRECT &&
+                (wps_network_name == NULL && wps_network_ssid == NULL)));
+
+    switch(wps_mode)
+    {
+      case WPS_MODE_INVALID:
+        break;
+
+      case WPS_MODE_NONE:
         dbussignal_connman_manager_connect_to_service(tech,
                                                       current_wlan_service_name);
+        return 0;
 
-    return ret;
+      case WPS_MODE_DIRECT:
+        log_assert(tech == NWPREFSTECH_WLAN);
+        dbussignal_connman_manager_connect_to_wps_service(wps_network_name,
+                                                          wps_network_ssid,
+                                                          current_wlan_service_name);
+        free(wps_network_name);
+        free(wps_network_ssid);
+        return 0;
+
+      case WPS_MODE_SCAN:
+        log_assert(tech == NWPREFSTECH_WLAN);
+        dbussignal_connman_manager_connect_to_wps_service(NULL, NULL,
+                                                          current_wlan_service_name);
+        return 0;
+    }
+
+    return -1;
 }
 
 int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)

@@ -266,12 +266,26 @@ static void survey_complete(ConnmanSurveyDoneFn callback,
 
 class ConnectToConnManServiceData
 {
+  public:
+    enum class Mode
+    {
+        NONE,
+        FROM_CONFIG,
+        WPS_DIRECT_BY_SSID,
+        WPS_DIRECT_BY_NAME,
+        WPS_SCAN,
+    };
+
   private:
-    bool is_expected_;
+    Mode expected_mode_;
     enum NetworkPrefsTechnology expected_tech_;
     std::string expected_service_;
+    const char *expected_service_cstr_;
+    std::string expected_network_name_;
+    const char *expected_network_name_cstr_;
+    std::vector<uint8_t> expected_network_ssid_;
 
-    bool was_called_;
+    Mode called_mode_;
 
   public:
     ConnectToConnManServiceData(const ConnectToConnManServiceData &) = delete;
@@ -281,10 +295,14 @@ class ConnectToConnManServiceData
 
     void init()
     {
-        is_expected_ = false;
+        expected_mode_ = Mode::NONE;
         expected_tech_ = NWPREFSTECH_UNKNOWN;
         expected_service_.clear();
-        was_called_ = false;
+        expected_service_cstr_ = nullptr;
+        expected_network_name_.clear();
+        expected_network_name_cstr_ = nullptr;
+        expected_network_ssid_.clear();
+        called_mode_ = Mode::NONE;
     }
 
     void expect(enum NetworkPrefsTechnology expected_tech,
@@ -292,31 +310,144 @@ class ConnectToConnManServiceData
     {
         cppcut_assert_not_equal(NWPREFSTECH_UNKNOWN, expected_tech);
 
-        is_expected_ = true;
+        expected_mode_ = Mode::FROM_CONFIG;
         expected_tech_ = expected_tech;
-        expected_service_ = expected_service_to_be_disabled;
 
-        was_called_ = false;
+        if(expected_service_to_be_disabled != nullptr)
+        {
+            expected_service_ = expected_service_to_be_disabled;
+            expected_service_cstr_ = expected_service_.c_str();
+        }
+
+        called_mode_ = Mode::NONE;
+    }
+
+    void expect(const char *expected_service_to_be_disabled,
+                const char *expected_network_name,
+                const std::vector<uint8_t> *expected_network_ssid)
+    {
+        if(expected_service_to_be_disabled != nullptr)
+        {
+            expected_service_ = expected_service_to_be_disabled;
+            expected_service_cstr_ = expected_service_.c_str();
+        }
+
+        if(expected_network_name != nullptr)
+        {
+            expected_network_name_ = expected_network_name;
+            expected_network_name_cstr_ = expected_network_name_.c_str();
+            expected_mode_ = Mode::WPS_DIRECT_BY_NAME;
+        }
+        else if(expected_network_ssid != nullptr)
+        {
+            expected_network_ssid_ = *expected_network_ssid;
+            expected_mode_ = Mode::WPS_DIRECT_BY_SSID;
+        }
+        else
+            expected_mode_ = Mode::WPS_SCAN;
+
+        called_mode_ = Mode::NONE;
     }
 
     void called(enum NetworkPrefsTechnology tech,
                 const char *service_to_be_disabled)
     {
-        cut_assert_true(is_expected_);
-        cut_assert_false(was_called_);
+        cppcut_assert_equal(Mode::FROM_CONFIG, expected_mode_);
+        cppcut_assert_equal(Mode::NONE, called_mode_);
 
-        was_called_ = true;
+        called_mode_ = Mode::FROM_CONFIG;
 
         cppcut_assert_equal(expected_tech_, tech);
-        cppcut_assert_equal(expected_service_.c_str(), service_to_be_disabled);
+        cppcut_assert_equal(expected_service_cstr_, service_to_be_disabled);
+    }
+
+    void called(const char *network_name, const char *network_ssid,
+                const char *service_to_be_disabled)
+    {
+        cppcut_assert_equal(Mode::NONE, called_mode_);
+
+        switch(expected_mode_)
+        {
+          case Mode::NONE:
+            cut_fail("Unexpected mode NONE");
+            break;
+
+          case Mode::FROM_CONFIG:
+            cut_fail("Unexpected mode FROM_CONFIG");
+            break;
+
+          case Mode::WPS_DIRECT_BY_SSID:
+            called_mode_ = expected_mode_;
+
+            {
+                std::string temp;
+                for(const uint8_t &byte : expected_network_ssid_)
+                {
+                    temp.push_back(nibble_to_char(byte >> 4));
+                    temp.push_back(nibble_to_char(byte & 0x0f));
+                }
+
+                cppcut_assert_equal(temp.c_str(), network_ssid);
+            }
+
+            break;
+
+          case Mode::WPS_DIRECT_BY_NAME:
+            called_mode_ = expected_mode_;
+            cppcut_assert_equal(expected_network_name_cstr_, network_name);
+            cppcut_assert_null(network_ssid);
+            break;
+
+          case Mode::WPS_SCAN:
+            called_mode_ = expected_mode_;
+            cppcut_assert_null(network_name);
+            cppcut_assert_null(network_ssid);
+            break;
+        }
+
+        cppcut_assert_equal(expected_service_cstr_, service_to_be_disabled);
     }
 
     void check()
     {
-        cppcut_assert_equal(is_expected_, was_called_);
+        cppcut_assert_equal(expected_mode_, called_mode_);
         init();
     }
+
+  private:
+    static char nibble_to_char(uint8_t nibble)
+    {
+        return (nibble < 10) ? '0' + nibble : 'a' + nibble - 10;
+    }
 };
+
+static std::ostream &operator<<(std::ostream &os, ConnectToConnManServiceData::Mode mode)
+{
+    switch(mode)
+    {
+      case ConnectToConnManServiceData::Mode::NONE:
+        os << "NONE";
+        break;
+
+      case ConnectToConnManServiceData::Mode::FROM_CONFIG:
+        os << "FROM_CONFIG";
+        break;
+
+      case ConnectToConnManServiceData::Mode::WPS_DIRECT_BY_SSID:
+        os << "WPS_DIRECT_BY_SSID";
+        break;
+
+      case ConnectToConnManServiceData::Mode::WPS_DIRECT_BY_NAME:
+        os << "WPS_DIRECT_BY_NAME";
+        break;
+
+      case ConnectToConnManServiceData::Mode::WPS_SCAN:
+        os << "WPS_SCAN";
+        break;
+    }
+
+    return os;
+}
 
 static ConnectToConnManServiceData connect_to_connman_service_data;
 
@@ -326,6 +457,15 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
                                                    const char *service_to_be_disabled)
 {
     connect_to_connman_service_data.called(tech, service_to_be_disabled);
+}
+
+/* Another quick replacement for the Connman D-Bus API */
+void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
+                                                       const char *network_ssid,
+                                                       const char *service_to_be_disabled)
+{
+    connect_to_connman_service_data.called(network_name, network_ssid,
+                                           service_to_be_disabled);
 }
 
 namespace spi_registers_tests
@@ -1373,7 +1513,10 @@ static void start_ipv4_config()
 /* TODO: Remove add_message_expectation parameter */
 static void commit_ipv4_config(bool add_message_expectation,
                                enum NetworkPrefsTechnology tech,
-                               int expected_return_value = 0)
+                               int expected_return_value = 0,
+                               bool is_taking_config_from_file = true,
+                               const char *wps_name = nullptr,
+                               const std::vector<uint8_t> *wps_ssid = nullptr)
 {
     auto *reg = lookup_register_expect_handlers(53,
                                                 dcpregs_write_53_active_ip_profile);
@@ -1383,7 +1526,10 @@ static void commit_ipv4_config(bool add_message_expectation,
         /* XXX: The empty string passed as second parameter is most certainly
          *      incorrect. Likely, there is something wrong with the test setup
          *      and/or mocks. */
-        connect_to_connman_service_data.expect(tech, "");
+        if(is_taking_config_from_file)
+            connect_to_connman_service_data.expect(tech, "");
+        else
+            connect_to_connman_service_data.expect("", wps_name, wps_ssid);
     }
 
     static const uint8_t zero = 0;
@@ -2512,7 +2658,35 @@ static void assume_wlan_interface_is_active()
     config->active_interface = &config->builtin_wlan_interface;
 }
 
-static void set_wlan_security_mode(const char *requested_security_mode)
+static void set_wlan_name(const char *wps_name)
+{
+    cppcut_assert_not_null(wps_name);
+
+    auto *reg = lookup_register_expect_handlers(94,
+                                                dcpregs_read_94_ssid,
+                                                dcpregs_write_94_ssid);
+
+    cppcut_assert_equal(0,
+                        reg->write_handler(static_cast<const uint8_t *>(
+                                               static_cast<const void *>(wps_name)),
+                                           strlen(wps_name)));
+}
+
+static void set_wlan_name(const std::vector<uint8_t> &wps_ssid)
+{
+    cut_assert_false(wps_ssid.empty());
+
+    auto *reg = lookup_register_expect_handlers(94,
+                                                dcpregs_read_94_ssid,
+                                                dcpregs_write_94_ssid);
+
+    cppcut_assert_equal(0, reg->write_handler(wps_ssid.data(), wps_ssid.size()));
+}
+
+static void set_wlan_security_mode(const char *requested_security_mode,
+                                   bool expecting_configuration_file_be_written = true,
+                                   const char *wps_name = nullptr,
+                                   const std::vector<uint8_t> *wps_ssid = nullptr)
 {
     assume_wlan_interface_is_active();
 
@@ -2532,32 +2706,45 @@ static void set_wlan_security_mode(const char *requested_security_mode)
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+    if(expecting_configuration_file_be_written)
+    {
+        mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+        for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+            mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+        mock_os->expect_os_file_close(expected_os_write_fd);
+        mock_os->expect_os_sync_dir(network_config_path);
+    }
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    if(wps_ssid != nullptr)
+        set_wlan_name(*wps_ssid);
+    else if(wps_name != nullptr)
+        set_wlan_name(wps_name);
 
-    static const char expected_config_file_format[] =
-        "[ethernet]\n"
-        "MAC = %s\n"
-        "DHCP = yes\n"
-        "[wifi]\n"
-        "MAC = %s\n"
-        "DHCP = yes\n"
-        "Security = %s\n";
+    commit_ipv4_config(false, NWPREFSTECH_WLAN, 0,
+                       expecting_configuration_file_be_written,
+                       wps_name, wps_ssid);
 
-    char new_config_file_buffer[512];
-    snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, ethernet_mac_address,
-             wlan_mac_address, requested_security_mode);
+    if(expecting_configuration_file_be_written)
+    {
+        static const char expected_config_file_format[] =
+            "[ethernet]\n"
+            "MAC = %s\n"
+            "DHCP = yes\n"
+            "[wifi]\n"
+            "MAC = %s\n"
+            "DHCP = yes\n"
+            "Security = %s\n";
 
-    size_t written_config_file_length = strlen(new_config_file_buffer);
+        char new_config_file_buffer[512];
+        snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
+                 expected_config_file_format, ethernet_mac_address,
+                 wlan_mac_address, requested_security_mode);
 
-    cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
-                            os_write_buffer.data(), os_write_buffer.size());
+        size_t written_config_file_length = strlen(new_config_file_buffer);
+
+        cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
+                                os_write_buffer.data(), os_write_buffer.size());
+    }
 }
 
 /*!\test
@@ -2585,11 +2772,28 @@ void test_set_wlan_security_mode_wpa_eap()
 }
 
 /*!\test
- * Set WLAN security mode to WPS.
+ * Set WLAN security mode to WPS, name is given.
+ */
+void test_set_wlan_security_mode_wps_with_name()
+{
+    set_wlan_security_mode("wps", false, "MyNetwork", nullptr);
+}
+
+/*!\test
+ * Set WLAN security mode to WPS, SSID is given.
+ */
+void test_set_wlan_security_mode_wps_with_ssid()
+{
+    const std::vector<uint8_t> ssid { 0x05, 0xfb, 0x81, 0xc2, 0x7a, };
+    set_wlan_security_mode("wps", false, nullptr, &ssid);
+}
+
+/*!\test
+ * Set WLAN security mode to WPS, scan mode.
  */
 void test_set_wlan_security_mode_wps()
 {
-    set_wlan_security_mode("wps");
+    set_wlan_security_mode("wps", false, nullptr, nullptr);
 }
 
 /*!\test
