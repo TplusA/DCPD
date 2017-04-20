@@ -576,18 +576,18 @@ static int handle_set_wireless_config(struct network_prefs *prefs)
         network_name = empty_string;
         network_ssid = empty_string;
 
-       if(nwconfig_write_data.wlan_ssid_length > 0)
-       {
-           if(is_wlan_ssid_simple_ascii(nwconfig_write_data.wlan_ssid,
-                                        nwconfig_write_data.wlan_ssid_length))
-               network_name = (const char *)nwconfig_write_data.wlan_ssid;
-           else
-           {
-               binary_to_hexdump(ssid_buffer, nwconfig_write_data.wlan_ssid,
-                                 nwconfig_write_data.wlan_ssid_length);
-               network_ssid = ssid_buffer;
-           }
-       }
+        if(nwconfig_write_data.wlan_ssid_length > 0)
+        {
+            if(is_wlan_ssid_simple_ascii(nwconfig_write_data.wlan_ssid,
+                                         nwconfig_write_data.wlan_ssid_length))
+                network_name = (const char *)nwconfig_write_data.wlan_ssid;
+            else
+            {
+                binary_to_hexdump(ssid_buffer, nwconfig_write_data.wlan_ssid,
+                                  nwconfig_write_data.wlan_ssid_length);
+                network_ssid = ssid_buffer;
+            }
+        }
     }
     else
     {
