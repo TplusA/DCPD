@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -34,6 +34,10 @@ typedef void (*ConnmanCommonConnectServiceCallback)(const char *service_name,
                                                     enum ConnmanCommonConnectServiceCallbackResult result,
                                                     void *user_data);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 GVariant *connman_common_query_services(tdbusconnmanManager *iface);
 bool connman_common_set_service_property(const char *object_path,
                                          const char *property_name,
@@ -47,5 +51,9 @@ void connman_common_init_dict_from_temp_gvariant(GVariant *temp,
                                                  GVariantDict *dict);
 void connman_common_init_subdict(GVariant *tuple, GVariantDict *subdict,
                                  const char *subdict_name);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !CONNMAN_COMMON_H */

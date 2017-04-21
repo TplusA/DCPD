@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,9 +20,9 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
+#include <string>
+#include <map>
+#include <cstring>
 
 #include "dbus_handlers_connman_manager.h"
 #include "dbus_handlers_connman_manager_glue.h"
@@ -31,174 +31,133 @@
 #include "connman_common.h"
 #include "messages.h"
 
-struct Maybe
+class Maybe
 {
-    bool is_state_known;
-    bool state;
+  private:
+    bool is_state_known_;
+    bool state_;
+
+  public:
+    Maybe(const Maybe &) = delete;
+    Maybe(Maybe &&) = default;
+    Maybe &operator=(const Maybe &) = delete;
+
+    explicit Maybe():
+        is_state_known_(false),
+        state_(false)
+    {}
+
+    void set_unknown() { is_state_known_ = false; }
+
+    bool operator=(bool state)
+    {
+        state_ = state;
+        is_state_known_ = true;
+        return state_;
+    }
+
+    bool operator==(bool b) const { return is_state_known_ ? state_ == b : false; }
+    bool operator!=(bool b) const { return is_state_known_ ? state_ != b : false; }
+
+    template <typename T>
+    const T &pick(const T &if_yes, const T &if_no, const T &if_unknown) const
+    {
+        return is_state_known_
+            ? (state_ ? if_yes : if_no)
+            : if_unknown;
+    }
 };
 
-static inline void init_maybe(struct Maybe *maybe)
+class ServiceEntry
 {
-    maybe->state = false;
-    maybe->is_state_known = false;
-}
+  public:
+    Maybe is_favorite;
+    Maybe is_auto_connect;
+    Maybe is_connected;
 
-static inline void set_maybe_value(struct Maybe *maybe, bool state)
-{
-    maybe->state = state;
-    maybe->is_state_known = true;
-}
+    ServiceEntry(const ServiceEntry &) = delete;
+    ServiceEntry(ServiceEntry &&) = default;
+    ServiceEntry &operator=(const ServiceEntry &) = delete;
 
-static inline bool maybe_true(const struct Maybe *maybe)
-{
-    return maybe->is_state_known ? maybe->state : false;
-}
-
-static inline bool maybe_false(const struct Maybe *maybe)
-{
-    return maybe->is_state_known ? !maybe->state : false;
-}
-
-struct ServiceList
-{
-    struct ServiceList *next;
-
-    char *service_name;
-
-    struct Maybe is_favorite;
-    struct Maybe is_auto_connect;
-    struct Maybe is_connected;
+    explicit ServiceEntry() {}
 };
 
-struct WLANConnectionState
+using ServiceList = std::map<std::string, ServiceEntry>;
+
+class WLANConnectionState
 {
+  public:
     bool is_connecting;
-    struct Maybe has_failed;
+    Maybe has_failed;
+
+    WLANConnectionState(const WLANConnectionState &) = delete;
+    WLANConnectionState &operator=(const WLANConnectionState &) = delete;
+
+    explicit WLANConnectionState():
+        is_connecting(false)
+    {}
+
+    void init()
+    {
+        is_connecting = false;
+        has_failed.set_unknown();
+    }
 };
 
-struct dbussignal_connman_manager_data
+class dbussignal_connman_manager_data
 {
+  public:
     GMutex lock;
 
     char wlan_service_name[512];
     void (*schedule_connect_to_wlan)(void);
-    struct WLANConnectionState wlan_connection_state;
+    WLANConnectionState wlan_connection_state;
 
-    struct ServiceList *services;
+    ServiceList services;
+
+    dbussignal_connman_manager_data(const dbussignal_connman_manager_data &) = delete;
+    dbussignal_connman_manager_data &operator=(const dbussignal_connman_manager_data &) = delete;
+
+    explicit dbussignal_connman_manager_data():
+        schedule_connect_to_wlan(nullptr)
+    {
+        g_mutex_init(&lock);
+        wlan_service_name[0] = '\0';
+    }
+
+    void init(void (*schedule_connect_to_wlan_fn)())
+    {
+        g_mutex_init(&lock);
+        wlan_service_name[0] = '\0';
+        schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
+        wlan_connection_state.init();
+        services.clear();
+    }
 };
 
-static struct ServiceList *lookup_service_rw(struct ServiceList *head,
-                                             const char *service_name,
-                                             struct ServiceList **prev)
+static ServiceList::iterator insert_service(ServiceList &services,
+                                            const char *service_name)
 {
-    struct ServiceList *p = NULL;
+    auto list_entry = services.find(service_name);
 
-    for(struct ServiceList *s = head; s != NULL; s = s->next)
-    {
-        if(strcmp(s->service_name, service_name) == 0)
-        {
-            if(prev != NULL)
-                *prev = p;
+    if(list_entry != services.end())
+        return list_entry;
 
-            return s;
-        }
+    auto elem = services.emplace(service_name, std::move(ServiceEntry()));
 
-        p = s;
-    }
-
-    if(prev != NULL)
-        *prev = p;
-
-    return NULL;
+    return elem.first;
 }
 
-static bool insert_service(struct ServiceList **head, const char *service_name,
-                           struct ServiceList **list_entry)
+static bool remove_service(ServiceList &services, const char *service_name)
 {
-    struct ServiceList *last = NULL;
-    struct ServiceList *service = (*head != NULL)
-        ? lookup_service_rw(*head, service_name, &last)
-        : NULL;
-
-    if(list_entry != NULL)
-        *list_entry = service;
-
-    if(service != NULL)
-        return false;
-
-    service = malloc(sizeof(*service));
-
-    if(service == NULL)
-    {
-        msg_out_of_memory("service list entry");
-        return false;
-    }
-
-    service->next = NULL;
-    service->service_name = strdup(service_name);
-    init_maybe(&service->is_favorite);
-    init_maybe(&service->is_auto_connect);
-    init_maybe(&service->is_connected);
-
-    if(service->service_name == NULL)
-    {
-        msg_out_of_memory("service name copy");
-        free(service);
-        return false;
-    }
-
-    /* cppcheck-suppress knownConditionTrueFalse */
-    if(last != NULL)
-    {
-        log_assert(last->next == NULL);
-        last->next = service;
-    }
-    else
-    {
-        log_assert(*head == NULL);
-        *head = service;
-    }
-
-    if(list_entry != NULL)
-        *list_entry = service;
-
-    return true;
-}
-
-static bool remove_service(struct ServiceList **head, const char *service_name)
-{
-    struct ServiceList *prev;
-    struct ServiceList *service = (*head != NULL)
-        ? lookup_service_rw(*head, service_name, &prev)
-        : NULL;
-
-    if(service == NULL)
-        return false;
-
-    if(prev != NULL)
-    {
-        log_assert(prev->next == service);
-        prev->next = service->next;
-    }
-    else
-    {
-        log_assert(service == *head);
-        *head = service->next;
-    }
-
-    free(service->service_name);
-    service->service_name = NULL;
-    service->next = NULL;
-    free(service);
-
-    return true;
+    return services.erase(service_name) == 1;
 }
 
 static void service_connected(const char *service_name,
                               enum ConnmanCommonConnectServiceCallbackResult result,
                               void *user_data)
 {
-    struct dbussignal_connman_manager_data *data = user_data;
+    auto *data = static_cast<dbussignal_connman_manager_data *>(user_data);
 
     g_mutex_lock(&data->lock);
 
@@ -208,12 +167,12 @@ static void service_connected(const char *service_name,
     {
       case CONNMAN_SERVICE_CONNECT_CONNECTED:
         msg_info("Connected to %s", service_name);
-        set_maybe_value(&data->wlan_connection_state.has_failed, false);
+        data->wlan_connection_state.has_failed = false;
         break;
 
       case CONNMAN_SERVICE_CONNECT_FAILURE:
         msg_info("Failed connecting to %s", service_name);
-        set_maybe_value(&data->wlan_connection_state.has_failed, true);
+        data->wlan_connection_state.has_failed = true;
         break;
 
       case CONNMAN_SERVICE_CONNECT_DISCARDED:
@@ -223,12 +182,12 @@ static void service_connected(const char *service_name,
     g_mutex_unlock(&data->lock);
 }
 
-void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data)
+void dbussignal_connman_manager_connect_our_wlan(dbussignal_connman_manager_data *data)
 {
     g_mutex_lock(&data->lock);
 
     data->wlan_connection_state.is_connecting = true;
-    init_maybe(&data->wlan_connection_state.has_failed);
+    data->wlan_connection_state.has_failed.set_unknown();
 
     connman_common_connect_service_by_object_path(data->wlan_service_name,
                                                   service_connected, data);
@@ -254,18 +213,17 @@ static void check_parameter_assertions(GVariant *parameters,
 }
 
 static struct ConnmanInterfaceData *
-get_iface_data_by_service_name(const char *service_name,
-                               struct Maybe *is_favorite,
-                               struct Maybe *is_auto_connect,
-                               struct Maybe *is_connected)
+get_iface_data_by_service_name(const std::string &service_name,
+                               Maybe &is_favorite, Maybe &is_auto_connect,
+                               Maybe &is_connected)
 {
     struct ConnmanInterfaceData *data =
-        connman_find_interface_by_object_path(service_name);
+        connman_find_interface_by_object_path(service_name.c_str());
 
     if(data != NULL)
     {
-        set_maybe_value(is_favorite, connman_get_favorite(data));
-        set_maybe_value(is_auto_connect, connman_get_auto_connect_mode(data));
+        is_favorite = connman_get_favorite(data);
+        is_auto_connect = connman_get_auto_connect_mode(data);
 
         switch(connman_get_state(data))
         {
@@ -273,14 +231,14 @@ get_iface_data_by_service_name(const char *service_name,
           case CONNMAN_STATE_CONFIGURATION:
           case CONNMAN_STATE_READY:
           case CONNMAN_STATE_ONLINE:
-            set_maybe_value(is_connected, true);
+            is_connected = true;
             break;
 
           case CONNMAN_STATE_NOT_SPECIFIED:
           case CONNMAN_STATE_IDLE:
           case CONNMAN_STATE_FAILURE:
           case CONNMAN_STATE_DISCONNECT:
-            set_maybe_value(is_connected, false);
+            is_connected = false;
             break;
         }
     }
@@ -385,38 +343,40 @@ static void avoid_wlan_service(const char *service_name)
     connman_common_remove_service_by_object_path(service_name);
 }
 
-static void avoid_service(const struct ServiceList *service_list_entry,
+static void avoid_service(const ServiceEntry &service_list_entry,
+                          const std::string &service_name,
                           bool is_ethernet)
 {
-    if(!maybe_true(&service_list_entry->is_connected))
+    if(service_list_entry.is_connected != true)
         return;
 
     if(is_ethernet)
-        connman_common_disconnect_service_by_object_path(service_list_entry->service_name);
+        connman_common_disconnect_service_by_object_path(service_name.c_str());
     else
-        avoid_wlan_service(service_list_entry->service_name);
+        avoid_wlan_service(service_name.c_str());
 }
 
-static bool avoid_service_if_no_preferences(const struct ServiceList *service_list_entry,
+static bool avoid_service_if_no_preferences(const ServiceEntry &service_list_entry,
+                                            const std::string &service_name,
                                             const struct network_prefs *prefs,
                                             bool is_ethernet)
 {
     if(prefs != NULL)
         return false;
 
-    avoid_service(service_list_entry, is_ethernet);
+    avoid_service(service_list_entry, service_name, is_ethernet);
 
     BUG("Cannot configure ConnMan service \"%s\": no preferences",
-        service_list_entry->service_name);
+        service_name.c_str());
 
     return true;
 }
 
 static void configure_our_ipv6_network_common(struct ConnmanInterfaceData *iface_data,
-                                              const char *service_name)
+                                              const std::string &service_name)
 {
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
-              "Configure IPv6 parameters for service %s", service_name);
+              "Configure IPv6 parameters for service %s", service_name.c_str());
 
     const enum ConnmanDHCPMode system_dhcp_mode =
         connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_6,
@@ -427,7 +387,7 @@ static void configure_our_ipv6_network_common(struct ConnmanInterfaceData *iface
       case CONNMAN_DHCP_OFF:
         msg_vinfo(MESSAGE_LEVEL_DEBUG,
                   "Not configuring IPv6 parameters for %s: up to date",
-                  service_name);
+                  service_name.c_str());
         return;
 
       case CONNMAN_DHCP_NOT_AVAILABLE:
@@ -441,7 +401,7 @@ static void configure_our_ipv6_network_common(struct ConnmanInterfaceData *iface
 
     /* All we are doing about IPv6 is to disable it---sad. :( */
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
-              "Disable IPv6 for service %s", service_name);
+              "Disable IPv6 for service %s", service_name.c_str());
 
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
@@ -452,18 +412,19 @@ static void configure_our_ipv6_network_common(struct ConnmanInterfaceData *iface
         g_variant_new_variant(g_variant_builder_end(&builder));
 
     if(ipv6_config != NULL)
-        connman_common_set_service_property(service_name,
+        connman_common_set_service_property(service_name.c_str(),
                                             "IPv6.Configuration", ipv6_config);
 }
 
 static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface_data,
-                                              const struct ServiceList *service_list_entry,
+                                              const ServiceEntry &service_list_entry,
+                                              const std::string &service_name,
                                               const struct network_prefs *prefs,
                                               bool is_ethernet)
 {
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
               "Configure IPv4 parameters for service %s",
-              service_list_entry->service_name);
+              service_name.c_str());
 
     bool want_dhcp;
     const char *want_address;
@@ -476,7 +437,7 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
                                         &want_netmask, &want_gateway,
                                         &want_dns1, &want_dns2))
     {
-        avoid_service(service_list_entry, is_ethernet);
+        avoid_service(service_list_entry, service_name, is_ethernet);
         return false;
     }
 
@@ -491,7 +452,7 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
     {
         msg_vinfo(MESSAGE_LEVEL_DEBUG,
                   "Not configuring IPv4 parameters for %s: up to date",
-                  service_list_entry->service_name);
+                  service_name.c_str());
         return true;
     }
 
@@ -531,11 +492,11 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
     }
 
     if(ipv4_config != NULL)
-        connman_common_set_service_property(service_list_entry->service_name,
+        connman_common_set_service_property(service_name.c_str(),
                                             "IPv4.Configuration", ipv4_config);
 
     if(dns_config != NULL)
-        connman_common_set_service_property(service_list_entry->service_name,
+        connman_common_set_service_property(service_name.c_str(),
                                             "Nameservers.Configuration",
                                             dns_config);
 
@@ -553,37 +514,37 @@ static bool configure_our_ipv4_network_common(struct ConnmanInterfaceData *iface
  *     True in case the LAN has been configured, false in case it hasn't.
  */
 static bool configure_our_lan(const struct network_prefs *prefs,
-                              struct ServiceList *service_list_entry)
+                              ServiceEntry &service_list_entry,
+                              const std::string &service_name)
 {
-    if(avoid_service_if_no_preferences(service_list_entry, prefs, true))
+    if(avoid_service_if_no_preferences(service_list_entry, service_name, prefs, true))
         return false;
 
-    struct Maybe dummy;
-
+    Maybe dummy;
     struct ConnmanInterfaceData *iface_data =
-        get_iface_data_by_service_name(service_list_entry->service_name,
-                                       &service_list_entry->is_favorite,
-                                       &dummy,
-                                       &service_list_entry->is_connected);
+        get_iface_data_by_service_name(service_name,
+                                       service_list_entry.is_favorite,
+                                       dummy,
+                                       service_list_entry.is_connected);
 
     if(iface_data == NULL)
         return false;
 
-    configure_our_ipv6_network_common(iface_data, service_list_entry->service_name);
+    configure_our_ipv6_network_common(iface_data, service_name);
 
     const bool ret =
         configure_our_ipv4_network_common(iface_data, service_list_entry,
-                                          prefs, true);
+                                          service_name, prefs, true);
 
     connman_free_interface_data(iface_data);
 
     return ret;
 }
 
-static bool is_wlan_connecting_or_has_failed(const struct WLANConnectionState *wlan_conn_state)
+static bool is_wlan_connecting_or_has_failed(const WLANConnectionState &wlan_conn_state)
 {
-    return wlan_conn_state->is_connecting ||
-           maybe_true(&wlan_conn_state->has_failed);
+    return wlan_conn_state.is_connecting ||
+           wlan_conn_state.has_failed == true;
 }
 
 /*!
@@ -598,32 +559,33 @@ static bool is_wlan_connecting_or_has_failed(const struct WLANConnectionState *w
  *     in case nothing needs to be done.
  */
 static bool configure_our_wlan(const struct network_prefs *prefs,
-                               struct ServiceList *service_list_entry,
-                               struct WLANConnectionState *wlan_conn_state,
+                               ServiceEntry &service_list_entry,
+                               const std::string &service_name,
+                               WLANConnectionState &wlan_conn_state,
                                const char *ethernet_service_name,
                                bool have_just_lost_ethernet_device,
                                bool make_it_favorite)
 {
-    if(avoid_service_if_no_preferences(service_list_entry, prefs, false))
+    if(avoid_service_if_no_preferences(service_list_entry, service_name, prefs, false))
         return false;
 
     if(is_wlan_connecting_or_has_failed(wlan_conn_state))
         return false;
 
     struct ConnmanInterfaceData *iface_data =
-        get_iface_data_by_service_name(service_list_entry->service_name,
-                                       &service_list_entry->is_favorite,
-                                       &service_list_entry->is_auto_connect,
-                                       &service_list_entry->is_connected);
+        get_iface_data_by_service_name(service_name,
+                                       service_list_entry.is_favorite,
+                                       service_list_entry.is_auto_connect,
+                                       service_list_entry.is_connected);
 
     if(iface_data == NULL)
         return false;
 
-    configure_our_ipv6_network_common(iface_data, service_list_entry->service_name);
+    configure_our_ipv6_network_common(iface_data, service_name);
 
     const bool ret =
         configure_our_ipv4_network_common(iface_data, service_list_entry,
-                                          prefs, false);
+                                          service_name, prefs, false);
 
     connman_free_interface_data(iface_data);
     iface_data = NULL;
@@ -634,29 +596,25 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
               "Our WLAN is %sa favorite, auto-connect %s, "
               "make it auto-connect %d",
-              service_list_entry->is_favorite.is_state_known
-              ? (service_list_entry->is_favorite.state ? "" : "not ")
-              : "maybe ",
-              service_list_entry->is_auto_connect.is_state_known
-              ? (service_list_entry->is_auto_connect.state ? "yes" : "no")
-              : "maybe",
+              service_list_entry.is_favorite.pick<const char *>("", "not", "maybe"),
+              service_list_entry.is_auto_connect.pick<const char *>("yes", "no", "maybe"),
               make_it_favorite);
 
-    if(maybe_true(&service_list_entry->is_favorite))
+    if(service_list_entry.is_favorite == true)
     {
-        if(maybe_false(&service_list_entry->is_auto_connect))
+        if(service_list_entry.is_auto_connect == false)
         {
-            if(connman_common_set_service_property(service_list_entry->service_name,
+            if(connman_common_set_service_property(service_name.c_str(),
                                                    "AutoConnect",
                                                    g_variant_new_variant(g_variant_new_boolean(true))))
-                wlan_conn_state->is_connecting = true;
+                wlan_conn_state.is_connecting = true;
         }
 
         /* rely on auto-connect */
         return false;
     }
 
-    if(maybe_false(&service_list_entry->is_favorite) && make_it_favorite)
+    if(service_list_entry.is_favorite == false && make_it_favorite)
     {
         /* if this function returns true, then the caller will schedule a WLAN
          * connection attempt by calling #schedule_wlan_connect_if_necessary();
@@ -693,10 +651,10 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
     return false;
 }
 
-static bool react_to_service_changes(struct ServiceList **known_services_list,
+static bool react_to_service_changes(ServiceList &known_services_list,
                                      GVariant *changes, GVariant *removed,
                                      char *wlan_service_name,
-                                     struct WLANConnectionState *wlan_conn_state,
+                                     WLANConnectionState &wlan_conn_state,
                                      const struct network_prefs *ethernet_prefs,
                                      const struct network_prefs *wlan_prefs)
 {
@@ -763,8 +721,8 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
             have_just_lost_ethernet_device = true;
         else if(strcmp(name, wlan_service_name) == 0)
         {
-            wlan_conn_state->is_connecting = false;
-            init_maybe(&wlan_conn_state->has_failed);
+            wlan_conn_state.is_connecting = false;
+            wlan_conn_state.has_failed.set_unknown();
         }
     }
 
@@ -772,8 +730,8 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
 
     GVariantIter *props_iter;
     bool want_to_switch_to_wlan = false;
-    const struct ServiceList *our_ethernet_service = NULL;
-    const struct ServiceList *our_wlan_service = NULL;
+    std::string our_ethernet_service_name;
+    std::string our_wlan_service_name;
 
     while(g_variant_iter_loop(&iter, "(&oa{sv})", &name, &props_iter))
     {
@@ -785,8 +743,9 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
                   ? "Service changed: \"%s\""
                   : "Service still available: \"%s\"", name);
 
-        struct ServiceList *service_list_entry;
-        insert_service(known_services_list, name, &service_list_entry);
+        const auto service_list_entry_iter(insert_service(known_services_list, name));
+        const std::string &service_name(service_list_entry_iter->first);
+        ServiceEntry &service_list_entry(service_list_entry_iter->second);
 
         if(msg_is_verbose(MESSAGE_LEVEL_TRACE))
         {
@@ -853,60 +812,58 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
         while(g_variant_iter_loop(props_iter, "{&sv}", &prop, &value))
         {
             if(strcmp(prop, "State") == 0)
-                set_maybe_value(&service_list_entry->is_connected,
-                                strcmp(g_variant_get_string(value, NULL), "ready") == 0);
+                service_list_entry.is_connected =
+                    (strcmp(g_variant_get_string(value, NULL), "ready") == 0);
             else if(strcmp(prop, "Favorite") == 0)
-                set_maybe_value(&service_list_entry->is_favorite,
-                                !!g_variant_get_boolean(value));
+                service_list_entry.is_favorite = !!g_variant_get_boolean(value);
         }
 
-        if(strcmp(service_list_entry->service_name, wlan_service_name) == 0)
+        if(service_name == wlan_service_name)
         {
             /* our WLAN service has changed, perhaps, so we may have to
              * configure it and we have to connect to it in case there is no
              * Ethernet connection */
-            if(configure_our_wlan(wlan_prefs, service_list_entry,
+            if(configure_our_wlan(wlan_prefs, service_list_entry, service_name,
                                   wlan_conn_state, ethernet_service_name,
                                   have_just_lost_ethernet_device, false))
                 want_to_switch_to_wlan = true;
 
-            our_wlan_service = service_list_entry;
+            our_wlan_service_name = service_name;
 
             continue;
         }
 
-        if(strcmp(service_list_entry->service_name, ethernet_service_name) == 0)
+        if(service_name == ethernet_service_name)
         {
             /* our LAN service may need some care */
-            configure_our_lan(ethernet_prefs, service_list_entry);
-
-            our_ethernet_service = service_list_entry;
+            configure_our_lan(ethernet_prefs, service_list_entry, service_name);
+            our_ethernet_service_name = service_name;
 
             continue;
         }
 
         /* some service not managed by us */
-        if(maybe_false(&service_list_entry->is_favorite))
+        if(service_list_entry.is_favorite == false)
         {
             /* we know each other already, and it's not a favorite */
             continue;
         }
 
         /* new or favorite or both, or state unknown: smash it */
-        switch(network_prefs_get_technology_by_service_name(service_list_entry->service_name))
+        switch(network_prefs_get_technology_by_service_name(service_name.c_str()))
         {
           case NWPREFSTECH_UNKNOWN:
             msg_error(0, LOG_INFO,
                       "ConnMan service %s changed, but cannot handle technology",
-                      service_list_entry->service_name);
+                      service_name.c_str());
             break;
 
           case NWPREFSTECH_ETHERNET:
-            avoid_service(service_list_entry, true);
+            avoid_service(service_list_entry, service_name, true);
             break;
 
           case NWPREFSTECH_WLAN:
-            avoid_service(service_list_entry, false);
+            avoid_service(service_list_entry, service_name, false);
             break;
         }
     }
@@ -914,7 +871,7 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
     if(have_just_lost_ethernet_device && wlan_service_name[0] != '\0')
         want_to_switch_to_wlan = true;
 
-    if(our_ethernet_service == NULL && our_wlan_service != NULL)
+    if(our_ethernet_service_name.empty() && our_wlan_service_name.empty())
     {
         /* there is no Ethernet interface (cable not plugged in), but there is
          * a WLAN matching the configuration set by the user */
@@ -936,13 +893,15 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
      * it by hand.
      */
 
-    if(our_wlan_service == NULL)
+    if(our_wlan_service_name.empty())
         return false;
 
-    if(maybe_true(&our_wlan_service->is_connected))
+    const auto our_wlan_service(known_services_list.find(our_wlan_service_name));
+
+    if(our_wlan_service->second.is_connected == true)
         return false;
 
-    if(maybe_true(&our_wlan_service->is_auto_connect))
+    if(our_wlan_service->second.is_auto_connect == true)
         return false;
 
     if(is_wlan_connecting_or_has_failed(wlan_conn_state))
@@ -953,7 +912,7 @@ static bool react_to_service_changes(struct ServiceList **known_services_list,
 }
 
 static void schedule_wlan_connect_if_necessary(bool is_necessary,
-                                               struct dbussignal_connman_manager_data *data,
+                                               dbussignal_connman_manager_data *data,
                                                const char *service_name)
 {
     g_mutex_lock(&data->lock);
@@ -983,7 +942,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                                 gpointer user_data)
 {
     static const char iface_name[] = "net.connman.Manager";
-    struct dbussignal_connman_manager_data *const data = user_data;
+    auto *data = static_cast<dbussignal_connman_manager_data *>(user_data);
 
     if(strcmp(signal_name, "ServicesChanged") == 0)
     {
@@ -1006,9 +965,9 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
             GVariant *removed = g_variant_get_child_value(parameters, 1);
 
             need_to_schedule_wlan_connection =
-                react_to_service_changes(&data->services, changes, removed,
+                react_to_service_changes(data->services, changes, removed,
                                          wlan_service_name_buffer,
-                                         &data->wlan_connection_state,
+                                         data->wlan_connection_state,
                                          ethernet_prefs, wlan_prefs);
 
             g_variant_unref(changes);
@@ -1059,17 +1018,12 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         unknown_signal(iface_name, signal_name, sender_name);
 }
 
-static struct dbussignal_connman_manager_data global_dbussignal_connman_manager_data;
+static dbussignal_connman_manager_data global_dbussignal_connman_manager_data;
 
-struct dbussignal_connman_manager_data *
-dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void))
+dbussignal_connman_manager_data *
+dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)())
 {
-    memset(&global_dbussignal_connman_manager_data, 0,
-           sizeof(global_dbussignal_connman_manager_data));
-    g_mutex_init(&global_dbussignal_connman_manager_data.lock);
-    global_dbussignal_connman_manager_data.schedule_connect_to_wlan =
-        schedule_connect_to_wlan_fn;
-
+    global_dbussignal_connman_manager_data.init(schedule_connect_to_wlan_fn);
     return &global_dbussignal_connman_manager_data;
 }
 
@@ -1108,12 +1062,9 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 
         if(ethernet_service_name[0] != '\0')
         {
-            struct ServiceList *service_list_entry;
-
-            insert_service(&global_dbussignal_connman_manager_data.services,
-                           ethernet_service_name,
-                           &service_list_entry);
-            configure_our_lan(ethernet_prefs, service_list_entry);
+            const auto iter(insert_service(global_dbussignal_connman_manager_data.services,
+                                           ethernet_service_name));
+            configure_our_lan(ethernet_prefs, iter->second, iter->first);
         }
 
         break;
@@ -1123,17 +1074,14 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
                                                wlan_service_name,
                                                sizeof(wlan_service_name)))
         {
-            struct ServiceList *service_list_entry;
-
-            insert_service(&global_dbussignal_connman_manager_data.services,
-                           wlan_service_name,
-                           &service_list_entry);
+            const auto iter(insert_service(global_dbussignal_connman_manager_data.services,
+                                           wlan_service_name));
 
             global_dbussignal_connman_manager_data.wlan_connection_state.is_connecting = false;
-            init_maybe(&global_dbussignal_connman_manager_data.wlan_connection_state.has_failed);
+            global_dbussignal_connman_manager_data.wlan_connection_state.has_failed.set_unknown();
 
-            if(configure_our_wlan(wlan_prefs, service_list_entry,
-                                  &global_dbussignal_connman_manager_data.wlan_connection_state,
+            if(configure_our_wlan(wlan_prefs, iter->second, iter->first,
+                                  global_dbussignal_connman_manager_data.wlan_connection_state,
                                   ethernet_service_name, false, true))
                 need_to_schedule_wlan_connection = true;
         }
