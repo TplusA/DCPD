@@ -651,6 +651,87 @@ static bool configure_our_wlan(const struct network_prefs *prefs,
     return false;
 }
 
+static void dump_removed_services(enum MessageVerboseLevel level,
+                                  GVariant *removed)
+{
+    if(!msg_is_verbose(level))
+        return;
+
+    GVariantIter iter;
+    g_variant_iter_init(&iter, removed);
+    const gchar *name;
+
+    while(g_variant_iter_loop(&iter, "&o", &name))
+        msg_info("Service removed: \"%s\"", name);
+}
+
+static void dump_service_changes(enum MessageVerboseLevel level,
+                                 const char *name, GVariantIter *props_iter)
+{
+    if(!msg_is_verbose(level))
+        return;
+
+    msg_info((g_variant_iter_n_children(props_iter) > 0)
+             ? "Service changed: \"%s\""
+             : "Service still available: \"%s\"", name);
+
+    const char *prop = NULL;
+    GVariant *value = NULL;
+    GVariantIter *iter_copy = g_variant_iter_copy(props_iter);
+
+    while(g_variant_iter_loop(iter_copy, "{&sv}", &prop, &value))
+    {
+        if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING))
+            msg_info("- %s = %s", prop, g_variant_get_string(value, NULL));
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
+            msg_info("- %s = %s", prop, g_variant_get_boolean(value) ? "TRUE" : "FALSE");
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BYTE))
+            msg_info("- %s = %u", prop, g_variant_get_byte(value));
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT16))
+            msg_info("- %s = %d", prop, g_variant_get_int16(value));
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT16))
+            msg_info("- %s = %u", prop, g_variant_get_uint16(value));
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT32))
+            msg_info("- %s = %d", prop, g_variant_get_int32(value));
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32))
+            msg_info("- %s = %u", prop, g_variant_get_uint32(value));
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING_ARRAY))
+        {
+            msg_info("- %s", prop);
+
+            GVariantIter array_iter;
+            g_variant_iter_init(&array_iter, value);
+
+            const gchar *array_value = NULL;
+
+            while(g_variant_iter_loop(&array_iter, "&s", &array_value))
+                msg_info("`-- %s", array_value);
+        }
+        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_VARDICT))
+        {
+            msg_info("- %s", prop);
+
+            GVariantIter dict_iter;
+            g_variant_iter_init(&dict_iter, value);
+
+            const gchar *dict_key = NULL;
+            GVariant *dict_value;
+
+            while(g_variant_iter_loop(&dict_iter, "{&sv}", &dict_key, &dict_value))
+            {
+                if(g_variant_is_of_type(dict_value, G_VARIANT_TYPE_STRING))
+                    msg_info("`-- %s = %s", dict_key, g_variant_get_string(dict_value, NULL));
+                else
+                    msg_info("`-- %s (type %s)", dict_key, g_variant_get_type_string(dict_value));
+            }
+        }
+        else
+            msg_info("- %s (type %s)", prop, g_variant_get_type_string(value));
+    }
+
+    g_variant_iter_free(iter_copy);
+}
+
 static bool react_to_service_changes(ServiceList &known_services_list,
                                      GVariant *changes, GVariant *removed,
                                      char *wlan_service_name,
@@ -706,14 +787,14 @@ static bool react_to_service_changes(ServiceList &known_services_list,
 
     bool have_just_lost_ethernet_device = false;
 
+    dump_removed_services(MESSAGE_LEVEL_TRACE, removed);
+
     GVariantIter iter;
     g_variant_iter_init(&iter, removed);
     const gchar *name;
 
     while(g_variant_iter_loop(&iter, "&o", &name))
     {
-        msg_vinfo(MESSAGE_LEVEL_TRACE, "Service removed: \"%s\"", name);
-
         remove_service(known_services_list, name);
 
         if(have_ethernet_service_name &&
@@ -738,74 +819,11 @@ static bool react_to_service_changes(ServiceList &known_services_list,
         if(name[0] == '\0')
             continue;
 
-        msg_vinfo(MESSAGE_LEVEL_TRACE,
-                  (g_variant_iter_n_children(props_iter) > 0)
-                  ? "Service changed: \"%s\""
-                  : "Service still available: \"%s\"", name);
+        dump_service_changes(MESSAGE_LEVEL_TRACE, name, props_iter);
 
         const auto service_list_entry_iter(insert_service(known_services_list, name));
         const std::string &service_name(service_list_entry_iter->first);
         ServiceEntry &service_list_entry(service_list_entry_iter->second);
-
-        if(msg_is_verbose(MESSAGE_LEVEL_TRACE))
-        {
-            const char *prop = NULL;
-            GVariant *value = NULL;
-            GVariantIter *iter_copy = g_variant_iter_copy(props_iter);
-
-            while(g_variant_iter_loop(iter_copy, "{&sv}", &prop, &value))
-            {
-                if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING))
-                    msg_info("- %s = %s", prop, g_variant_get_string(value, NULL));
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
-                    msg_info("- %s = %s", prop, g_variant_get_boolean(value) ? "TRUE" : "FALSE");
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BYTE))
-                    msg_info("- %s = %u", prop, g_variant_get_byte(value));
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT16))
-                    msg_info("- %s = %d", prop, g_variant_get_int16(value));
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT16))
-                    msg_info("- %s = %u", prop, g_variant_get_uint16(value));
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT32))
-                    msg_info("- %s = %d", prop, g_variant_get_int32(value));
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32))
-                    msg_info("- %s = %u", prop, g_variant_get_uint32(value));
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING_ARRAY))
-                {
-                    msg_info("- %s", prop);
-
-                    GVariantIter array_iter;
-                    g_variant_iter_init(&array_iter, value);
-
-                    const gchar *array_value = NULL;
-
-                    while(g_variant_iter_loop(&array_iter, "&s", &array_value))
-                        msg_info("`-- %s", array_value);
-                }
-                else if(g_variant_is_of_type(value, G_VARIANT_TYPE_VARDICT))
-                {
-                    msg_info("- %s", prop);
-
-                    GVariantIter dict_iter;
-                    g_variant_iter_init(&dict_iter, value);
-
-                    const gchar *dict_key = NULL;
-                    GVariant *dict_value;
-
-                    while(g_variant_iter_loop(&dict_iter, "{&sv}", &dict_key, &dict_value))
-                    {
-                        if(g_variant_is_of_type(dict_value, G_VARIANT_TYPE_STRING))
-                            msg_info("`-- %s = %s", dict_key, g_variant_get_string(dict_value, NULL));
-                        else
-                            msg_info("`-- %s (type %s)", dict_key, g_variant_get_type_string(dict_value));
-                    }
-                }
-                else
-                    msg_info("- %s (type %s)", prop, g_variant_get_type_string(value));
-            }
-
-            g_variant_iter_free(iter_copy);
-        }
-
         const char *prop = NULL;
         GVariant *value = NULL;
 
@@ -985,20 +1003,23 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
     {
         check_parameter_assertions(parameters, 2);
 
-        GVariant *name = g_variant_get_child_value(parameters, 0);
-        log_assert(name != NULL);
+        const char *param_name;
+        GVariant *value;
+        g_variant_get(parameters, "(&sv)", &param_name, &value);
 
-        if(strcmp(g_variant_get_string(name, NULL), "State") == 0)
+        log_assert(param_name != NULL);
+
+        if(strcmp(param_name, "State") == 0)
         {
-            msg_vinfo(MESSAGE_LEVEL_DIAG, "ConnMan state changed");
+            msg_vinfo(MESSAGE_LEVEL_DIAG, "ConnMan state changed -> %s",
+                      g_variant_get_string(value, NULL));
             dcpregs_networkconfig_interfaces_changed();
         }
         else
             msg_vinfo(MESSAGE_LEVEL_DIAG,
-                      "ConnMan property \"%s\" changed",
-                      g_variant_get_string(name, NULL));
+                      "ConnMan property \"%s\" changed", param_name);
 
-        g_variant_unref(name);
+        g_variant_unref(value);
     }
     else if(strcmp(signal_name, "TechnologyAdded"))
     {
