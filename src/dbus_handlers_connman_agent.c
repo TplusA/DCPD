@@ -24,6 +24,7 @@
 #include <ctype.h>
 #include <inttypes.h>
 
+#include "connman_agent.h"
 #include "dbus_handlers_connman_agent.h"
 #include "networkprefs.h"
 #include "messages.h"
@@ -59,6 +60,13 @@ static GQuark net_connman_agent_error_quark(void)
     return (GQuark)quark_volatile;
 }
 
+struct AgentData
+{
+    bool is_wps_mode;
+};
+
+static struct AgentData global_agent_data;
+
 enum RequestID
 {
     /*! Any request not understood by the parser is mapped to this ID */
@@ -80,7 +88,7 @@ enum RequestID
     REQUEST_PREVIOUS_PASSPHRASE,
 
     /*! Request use of WPS */
-    REQUEST_WPS,
+    REQUEST_WPS_PIN,
 
     /*! Username for WISPr authentication */
     REQUEST_USERNAME,
@@ -193,6 +201,17 @@ static void enter_agent_handler(GDBusMethodInvocation *invocation)
     msg_vinfo(MESSAGE_LEVEL_TRACE, "%s method invocation from '%s': %s",
               iface_name, g_dbus_method_invocation_get_sender(invocation),
               g_dbus_method_invocation_get_method_name(invocation));
+}
+
+bool connman_agent_set_wps_mode(bool is_wps_mode)
+{
+    if(global_agent_data.is_wps_mode == is_wps_mode)
+        return false;
+
+    msg_info("Set %s mode", is_wps_mode ? "WPS" : "normal");
+    global_agent_data.is_wps_mode = is_wps_mode;
+
+    return true;
 }
 
 gboolean dbusmethod_connman_agent_release(tdbusconnmanAgent *object,
@@ -369,6 +388,18 @@ error_request:
     return return_string;
 }
 
+static const char *wps_get_passphrase(void)
+{
+    /* maybe in a distant future we'll support preset passphrases for WPS */
+    return NULL;
+}
+
+static const char *wps_get_pin(void)
+{
+    /* empty string means push-button method */
+    return "";
+}
+
 static bool insert_answer(GVariantBuilder *result_builder,
                           struct Request *request, enum RequestID request_id,
                           const struct network_prefs *preferences)
@@ -389,17 +420,36 @@ static bool insert_answer(GVariantBuilder *result_builder,
 
     G_STATIC_ASSERT(G_N_ELEMENTS(prefgetters) == REQUEST_LAST_REQUEST_ID + 1);
 
+    /* must match #RequestID enumeration */
+    static const char *(*const wpsgetters[])(void) =
+    {
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        wps_get_passphrase,
+        NULL,
+        wps_get_pin,
+        NULL,
+        NULL,
+    };
+
+    G_STATIC_ASSERT(G_N_ELEMENTS(wpsgetters) == REQUEST_LAST_REQUEST_ID + 1);
+
     log_assert(request != NULL);
     log_assert(!request->is_answered);
 
-    if(prefgetters[request_id] == NULL)
+    if((preferences != NULL && prefgetters[request_id] == NULL) ||
+       (preferences == NULL && wpsgetters[request_id] == NULL))
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "ConnMan request %u not supported", request_id);
         return false;
     }
 
-    const char *const value = prefgetters[request_id](preferences);
+    const char *const value = preferences != NULL
+        ? prefgetters[request_id](preferences)
+        : wpsgetters[request_id]();
 
     if(value == NULL)
     {
@@ -552,11 +602,12 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "Got request for service \"%s\"", arg_service);
 
-    struct network_prefs_handle *prefsfile;
-    const struct network_prefs *preferences;
+    struct network_prefs_handle *prefsfile = NULL;
+    const struct network_prefs *preferences = NULL;
 
-    const char *error_message =
-        find_preferences_for_service(&prefsfile, &preferences, arg_service);
+    const char *error_message = global_agent_data.is_wps_mode
+        ? NULL
+        : find_preferences_for_service(&prefsfile, &preferences, arg_service);
 
     if(send_error_if_possible(invocation, error_message))
         return TRUE;
@@ -568,7 +619,10 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     if(send_error_if_possible(invocation, error_message))
     {
         unref_collected_requests(requests);
-        network_prefs_close(prefsfile);
+
+        if(/* cppcheck-suppress knownConditionTrueFalse */ prefsfile != NULL)
+            network_prefs_close(prefsfile);
+
         return TRUE;
     }
 
@@ -613,7 +667,9 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     GVariant *result = g_variant_builder_end(&result_builder);
 
     unref_collected_requests(requests);
-    network_prefs_close(prefsfile);
+
+    if(prefsfile != NULL)
+        network_prefs_close(prefsfile);
 
     if(send_error_if_possible(invocation, error_message))
         g_variant_unref(result);
