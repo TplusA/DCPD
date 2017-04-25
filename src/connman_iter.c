@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -152,6 +152,19 @@ static const char *get_string_value(struct ConnmanServiceIterator *iter,
 
     iter->current_variant =
         g_variant_dict_lookup_value(&iter->dict, key, G_VARIANT_TYPE_STRING);
+
+    if(iter->current_variant != NULL)
+        return g_variant_get_string(iter->current_variant, NULL);
+    else
+        return NULL;
+}
+
+const char *connman_service_iterator_get_service_name(struct ConnmanServiceIterator *iter)
+{
+    free_current_variant(iter);
+
+    iter->current_variant =
+        g_variant_get_child_value(iter->current_service_tuple, 0);
 
     if(iter->current_variant != NULL)
         return g_variant_get_string(iter->current_variant, NULL);

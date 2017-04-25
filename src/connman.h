@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -157,6 +157,7 @@ struct ConnmanServiceIterator *connman_service_iterator_get(void);
 void connman_service_iterator_rewind(struct ConnmanServiceIterator *iter);
 bool connman_service_iterator_next(struct ConnmanServiceIterator *iter);
 void connman_service_iterator_free(struct ConnmanServiceIterator *iter);
+const char *connman_service_iterator_get_service_name(struct ConnmanServiceIterator *iter);
 const char *connman_service_iterator_get_technology_type(struct ConnmanServiceIterator *iter);
 const char *connman_service_iterator_get_ssid(struct ConnmanServiceIterator *iter);
 int connman_service_iterator_get_strength(struct ConnmanServiceIterator *iter);
