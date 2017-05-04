@@ -23,6 +23,7 @@
 #include <string>
 #include <map>
 #include <cstring>
+#include <cinttypes>
 
 #include "dbus_handlers_connman_manager.h"
 #include "dbus_handlers_connman_manager_glue.h"
@@ -665,6 +666,35 @@ static void dump_removed_services(enum MessageVerboseLevel level,
         msg_info("Service removed: \"%s\"", name);
 }
 
+static bool dump_simple_value(const char *prefix,
+                              const char *prop, GVariant *value)
+{
+    if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING))
+        msg_info("%s %s = %s", prefix, prop, g_variant_get_string(value, NULL));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
+        msg_info("%s %s = %s", prefix, prop, g_variant_get_boolean(value) ? "TRUE" : "FALSE");
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BYTE))
+        msg_info("%s %s = %" PRIu8, prefix, prop, g_variant_get_byte(value));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT16))
+        msg_info("%s %s = %" PRId16, prefix, prop, g_variant_get_int16(value));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT16))
+        msg_info("%s %s = %" PRIu16, prefix, prop, g_variant_get_uint16(value));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT32))
+        msg_info("%s %s = %" PRId32, prefix, prop, g_variant_get_int32(value));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32))
+        msg_info("%s %s = %" PRIu32, prefix, prop, g_variant_get_uint32(value));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT64))
+        msg_info("%s %s = %" PRId64, prefix, prop, g_variant_get_int64(value));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32))
+        msg_info("%s %s = %" PRIu64, prefix, prop, g_variant_get_uint64(value));
+    else if(g_variant_is_of_type(value, G_VARIANT_TYPE_DOUBLE))
+        msg_info("%s %s = %f", prefix, prop, g_variant_get_double(value));
+    else
+        return false;
+
+    return true;
+}
+
 static void dump_service_changes(enum MessageVerboseLevel level,
                                  const char *name, GVariantIter *props_iter)
 {
@@ -681,20 +711,8 @@ static void dump_service_changes(enum MessageVerboseLevel level,
 
     while(g_variant_iter_loop(iter_copy, "{&sv}", &prop, &value))
     {
-        if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING))
-            msg_info("- %s = %s", prop, g_variant_get_string(value, NULL));
-        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN))
-            msg_info("- %s = %s", prop, g_variant_get_boolean(value) ? "TRUE" : "FALSE");
-        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_BYTE))
-            msg_info("- %s = %u", prop, g_variant_get_byte(value));
-        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT16))
-            msg_info("- %s = %d", prop, g_variant_get_int16(value));
-        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT16))
-            msg_info("- %s = %u", prop, g_variant_get_uint16(value));
-        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_INT32))
-            msg_info("- %s = %d", prop, g_variant_get_int32(value));
-        else if(g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32))
-            msg_info("- %s = %u", prop, g_variant_get_uint32(value));
+        if(dump_simple_value("-", prop, value))
+            continue;
         else if(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING_ARRAY))
         {
             msg_info("- %s", prop);
@@ -719,8 +737,8 @@ static void dump_service_changes(enum MessageVerboseLevel level,
 
             while(g_variant_iter_loop(&dict_iter, "{&sv}", &dict_key, &dict_value))
             {
-                if(g_variant_is_of_type(dict_value, G_VARIANT_TYPE_STRING))
-                    msg_info("`-- %s = %s", dict_key, g_variant_get_string(dict_value, NULL));
+                if(dump_simple_value("--", dict_key, dict_value))
+                    continue;
                 else
                     msg_info("`-- %s (type %s)", dict_key, g_variant_get_type_string(dict_value));
             }
