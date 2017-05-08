@@ -65,6 +65,8 @@ network_prefs_open_rw(struct network_prefs **ethernet,
 void network_prefs_close(struct network_prefs_handle *handle);
 struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handle,
                                               enum NetworkPrefsTechnology tech);
+bool network_prefs_remove_prefs(struct network_prefs_handle *handle,
+                                enum NetworkPrefsTechnology tech);
 int network_prefs_write_to_file(struct network_prefs_handle *handle);
 
 const struct network_prefs_mac_address *

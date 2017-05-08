@@ -226,6 +226,54 @@ gboolean dbusmethod_connman_agent_release(tdbusconnmanAgent *object,
     return TRUE;
 }
 
+static const char *get_service_basename(const char *full_service_name,
+                                        size_t *tech_length)
+{
+    const char *const before_service = strrchr(full_service_name, '/');
+    const char *const service = before_service + 1;
+    const char *const after_tech = (before_service != NULL) ? strchr(service, '_') : NULL;
+
+    *tech_length = after_tech - service;
+
+    return before_service != NULL && after_tech != NULL && *tech_length > 0
+        ? service
+        : NULL;
+}
+
+static const char *delete_service_configuration(const char *full_service_name)
+{
+    size_t tech_length;
+    const char *const service = get_service_basename(full_service_name,
+                                                     &tech_length);
+
+    if(service == NULL)
+        return "Malformed service name, cannot delete";
+
+    const enum NetworkPrefsTechnology tech =
+        (tech_length == 8 && memcmp(service, "ethernet", tech_length) == 0
+         ? NWPREFSTECH_ETHERNET
+         : (tech_length == 4 && memcmp(service, "wifi", tech_length) == 0
+            ? NWPREFSTECH_WLAN
+            : NWPREFSTECH_UNKNOWN));
+
+    if(tech == NWPREFSTECH_UNKNOWN)
+        return "Technology unknown, cannot delete";
+
+    struct network_prefs *np;
+    struct network_prefs_handle *prefsfile = network_prefs_open_rw(&np, &np);
+
+    if(prefsfile == NULL)
+        return "Failed reading network preferences, cannot delete service";
+
+    const bool succeeded =
+        network_prefs_remove_prefs(prefsfile, tech) &&
+        network_prefs_write_to_file(prefsfile) == 0;
+
+    network_prefs_close(prefsfile);
+
+    return succeeded ? NULL : "Failed removing service from preferences";
+}
+
 gboolean dbusmethod_connman_agent_report_error(tdbusconnmanAgent *object,
                                                GDBusMethodInvocation *invocation,
                                                const gchar *arg_service,
@@ -235,6 +283,16 @@ gboolean dbusmethod_connman_agent_report_error(tdbusconnmanAgent *object,
     enter_agent_handler(invocation);
 
     msg_error(0, LOG_ERR, "Agent error for service %s: %s", arg_service, arg_error);
+
+    if(strcmp(arg_error, "invalid-key") == 0)
+    {
+        const char *error_message = delete_service_configuration(arg_service);
+
+        if(error_message != NULL)
+            msg_error(0, LOG_NOTICE, "Error deleting configuration for %s: %s",
+                      arg_service, error_message);
+    }
+
     tdbus_connman_agent_complete_report_error(object, invocation);
 
     return TRUE;
@@ -541,12 +599,11 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
 {
     *preferences = NULL;
 
-    const char *const before_service = strrchr(full_service_name, '/');
-    const char *const service = before_service + 1;
-    const char *const after_tech = (before_service != NULL) ? strchr(service, '_') : NULL;
-    const size_t tech_length = after_tech - service;
+    size_t tech_length;
+    const char *const service = get_service_basename(full_service_name,
+                                                     &tech_length);
 
-    if(before_service == NULL || after_tech == NULL || tech_length == 0)
+    if(service == NULL)
     {
         *prefsfile = NULL;
         return "Malformed service name";

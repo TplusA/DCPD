@@ -577,6 +577,35 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
     return NULL;
 }
 
+bool network_prefs_remove_prefs(struct network_prefs_handle *handle,
+                                enum NetworkPrefsTechnology tech)
+{
+    assert_writable_file(handle);
+
+    bool retval = false;
+
+    switch(tech)
+    {
+      case NWPREFSTECH_UNKNOWN:
+        BUG("Attempted to remove preferences for unknown technology %d", tech);
+        break;
+
+      case NWPREFSTECH_ETHERNET:
+        retval = inifile_remove_section(handle->file,
+                                        networkprefs_data.network_ethernet_prefs.section);
+        networkprefs_data.network_ethernet_prefs.section = NULL;
+        break;
+
+      case NWPREFSTECH_WLAN:
+        retval = inifile_remove_section(handle->file,
+                                        networkprefs_data.network_wlan_prefs.section);
+        networkprefs_data.network_wlan_prefs.section = NULL;
+        break;
+    }
+
+    return retval;
+}
+
 int network_prefs_write_to_file(struct network_prefs_handle *handle)
 {
     assert_writable_file(handle);
