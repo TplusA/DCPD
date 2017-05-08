@@ -267,16 +267,52 @@ static void write_default_preferences(const char *filename,
 }
 
 static const char *check_mac_address(const char *mac_address,
-                                     size_t required_length, bool is_wired)
+                                     size_t required_length, bool is_wired,
+                                     bool *is_real)
 {
-    if(mac_address == NULL ||
-       strlen(mac_address) != required_length)
+    bool failed = (mac_address == NULL ||
+                   strlen(mac_address) != required_length);
+
+    if(!failed)
+    {
+        /* colons must be in correct place */
+        for(size_t i = 2; i < required_length; i += 3)
+        {
+            if(mac_address[i] != ':')
+            {
+                failed = true;
+                break;
+            }
+        }
+    }
+
+    if(!failed)
+    {
+        /* must have hexadecimal digits in between */
+        for(size_t i = 0; i < required_length; i += 3)
+        {
+            if(!isxdigit(mac_address[i]) || !isxdigit(mac_address[i + 1]))
+            {
+                failed = true;
+                break;
+            }
+        }
+    }
+
+    if(failed)
     {
         /* locally administered address, invalid in the wild */
+        *is_real = false;
         return is_wired ? "02:00:00:00:00:00" : "03:00:00:00:00:00";
     }
-    else
-        return mac_address;
+
+    const uint8_t nibble = isdigit(mac_address[1])
+        ? mac_address[1] - '0'
+        : 10 + (toupper(mac_address[1]) - 'A');
+
+    *is_real = (nibble & 0x02) == 0;
+
+    return mac_address;
 }
 
 static void copy_mac_address(char *dest, size_t dest_size, const char *src)
@@ -331,12 +367,12 @@ void network_prefs_init(const char *ethernet_mac_address,
     const char *temp;
     temp = check_mac_address(ethernet_mac_address,
                              sizeof(networkprefs_data.ethernet_mac.address) - 1,
-                             true);
+                             true, &networkprefs_data.ethernet_mac.is_real);
     copy_mac_address(networkprefs_data.ethernet_mac.address,
                      sizeof(networkprefs_data.ethernet_mac.address), temp);
     temp = check_mac_address(wlan_mac_address,
                              sizeof(networkprefs_data.wlan_mac.address) - 1,
-                             false);
+                             false, &networkprefs_data.wlan_mac.is_real);
     copy_mac_address(networkprefs_data.wlan_mac.address,
                      sizeof(networkprefs_data.wlan_mac.address), temp);
 

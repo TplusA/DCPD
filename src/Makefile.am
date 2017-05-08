@@ -37,6 +37,7 @@ dcpd_SOURCES = \
     dcpregs_upnpname.h dcpregs_searchparameters.h \
     connman.c connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
+    connman_service.cc connman_service.hh maybe.hh \
     stream_id.h \
     coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \

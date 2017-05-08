@@ -663,7 +663,7 @@ static void handle_register_change(unsigned int wait_result, int fd,
 }
 
 static void handle_connman_manager_events(unsigned int wait_result,
-                                          struct dbussignal_connman_manager_data *data)
+                                          struct DBusSignalManagerData *data)
 {
     if((wait_result & WAITEVENT_CONNECT_TO_WLAN_REQUESTED) != 0)
         dbussignal_connman_manager_connect_our_wlan(data);
@@ -840,7 +840,7 @@ static void handle_transaction_exception(struct state *const state,
 static void main_loop(struct files *files,
                       struct dcp_over_tcp_data *dot,
                       struct smartphone_app_connection_data *appconn,
-                      struct dbussignal_connman_manager_data *connman,
+                      struct DBusSignalManagerData *connman,
                       int primitive_queue_fd, int register_changed_fd)
 {
     static struct state state;
@@ -982,7 +982,7 @@ struct parameters
 
 static bool main_loop_init(const struct parameters *parameters,
                            struct smartphone_app_connection_data *appconn,
-                           struct dbussignal_connman_manager_data **connman,
+                           struct DBusSignalManagerData **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
     configproxy_init();
@@ -1486,7 +1486,7 @@ int main(int argc, char *argv[])
     /*!
      * Data for net.connman.Manager D-Bus signal handlers.
      */
-    static struct dbussignal_connman_manager_data *connman;
+    static struct DBusSignalManagerData *connman;
 
     /*!
      * Data for handling DCP over TCP/IP.

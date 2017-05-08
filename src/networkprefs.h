@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -37,6 +37,7 @@ enum NetworkPrefsTechnology
 struct network_prefs_mac_address
 {
     char address[6 * 3];
+    bool is_real;
 };
 
 #ifdef __cplusplus

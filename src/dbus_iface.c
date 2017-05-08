@@ -365,7 +365,7 @@ static struct dbus_process_data process_data;
 
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
                struct smartphone_app_connection_data *appconn_data,
-               struct dbussignal_connman_manager_data *connman_data)
+               struct DBusSignalManagerData *connman_data)
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();

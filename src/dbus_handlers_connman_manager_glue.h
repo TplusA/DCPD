@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,9 +30,9 @@
 extern "C" {
 #endif
 
-struct dbussignal_connman_manager_data;
+struct DBusSignalManagerData;
 
-struct dbussignal_connman_manager_data *
+struct DBusSignalManagerData *
 dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
 
 /*!
@@ -44,9 +44,9 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
  * Usually called from main context.
  *
  * \see
- *     #dbussignal_connman_manager_data::schedule_connect_to_wlan()
+ *     #DBusSignalManagerData::schedule_connect_to_wlan()
  */
-void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data);
+void dbussignal_connman_manager_connect_our_wlan(struct DBusSignalManagerData *data);
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled);
