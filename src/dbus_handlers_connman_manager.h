@@ -30,6 +30,8 @@
 extern "C" {
 #endif
 
+void dbussignal_connman_manager_about_to_connect_signals(void);
+
 void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                                 const gchar *signal_name, GVariant *parameters,
                                 gpointer user_data);

@@ -476,6 +476,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     {
         log_assert(connman_iface_data.connman_manager_iface != NULL);
 
+        dbussignal_connman_manager_about_to_connect_signals();
         g_signal_connect(connman_iface_data.connman_manager_iface, "g-signal",
                          G_CALLBACK(dbussignal_connman_manager), connman_data);
     }

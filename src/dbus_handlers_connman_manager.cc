@@ -1667,6 +1667,19 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)())
     return &global_dbussignal_connman_manager_data;
 }
 
+void dbussignal_connman_manager_about_to_connect_signals(void)
+{
+    GVariant *all_services =
+        connman_common_query_services(dbus_get_connman_manager_iface());
+
+    if(update_all_services(all_services, nullptr,
+                           global_dbussignal_connman_manager_data, "startup"))
+        g_variant_unref(all_services);
+
+    process_pending_changes(global_dbussignal_connman_manager_data,
+                            false, false);
+}
+
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled)
 {
