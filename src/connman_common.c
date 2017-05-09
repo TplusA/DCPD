@@ -120,7 +120,7 @@ static bool prepare_service_connect_request(struct ConnectToServiceData *data,
         fn(object_path, CONNMAN_SERVICE_CONNECT_FAILURE, user_data);
     else
     {
-        static const int wlan_connect_timeout_seconds = 60;
+        static const int wlan_connect_timeout_seconds = 150;
 
         data->proxy =
             dbus_get_connman_service_proxy_for_object_path(object_path,
