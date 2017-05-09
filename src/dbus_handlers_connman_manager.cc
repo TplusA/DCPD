@@ -22,6 +22,7 @@
 
 #include <string>
 #include <map>
+#include <vector>
 #include <memory>
 #include <algorithm>
 #include <cstring>
@@ -32,6 +33,7 @@
 #include "dbus_iface_deep.h"
 #include "dcpregs_networkconfig.h"
 #include "connman.h"
+#include "connman_agent.h"
 #include "connman_common.h"
 #include "connman_service.hh"
 #include "messages.h"
@@ -156,13 +158,16 @@ class WLANConnectionState
     {
         IDLE,
         ABOUT_TO_CONNECT,
+        ABOUT_TO_CONNECT_WPS,
         CONNECTING,
+        CONNECTING_WPS,
         DONE,
         FAILED,
     };
 
   private:
-    std::string service_name_;
+    std::vector<std::string> service_names_;
+    size_t next_wps_candidate_;
     State state_;
 
   public:
@@ -170,12 +175,14 @@ class WLANConnectionState
     WLANConnectionState &operator=(const WLANConnectionState &) = delete;
 
     explicit WLANConnectionState():
+        next_wps_candidate_(0),
         state_(State::IDLE)
     {}
 
     void reset()
     {
-        service_name_.clear();
+        service_names_.clear();
+        next_wps_candidate_ = 0;
         state_ = State::IDLE;
     }
 
@@ -183,31 +190,81 @@ class WLANConnectionState
     {
         log_assert(state_ == State::IDLE);
         log_assert(!service_name.empty());
-        service_name_ = service_name;
+        service_names_.push_back(service_name);
         state_ = State::ABOUT_TO_CONNECT;
     }
 
-    void start_connecting()
+    void about_to_connect_to(std::vector<std::string> &&service_names)
+    {
+        log_assert(state_ == State::IDLE);
+        log_assert(!service_names.empty());
+        service_names_ = std::move(service_names);
+        state_ = State::ABOUT_TO_CONNECT_WPS;
+    }
+
+    bool about_to_connect_next()
+    {
+        log_assert(state_ == State::CONNECTING_WPS);
+
+        if(next_wps_candidate_ < service_names_.size() &&
+           ++next_wps_candidate_ < service_names_.size())
+        {
+            state_ = State::ABOUT_TO_CONNECT_WPS;
+        }
+
+        return state_ == State::ABOUT_TO_CONNECT_WPS;
+    }
+
+    void start_connecting_direct()
     {
         log_assert(state_ == State::ABOUT_TO_CONNECT);
         state_ = State::CONNECTING;
     }
 
+    void start_connecting_wps()
+    {
+        log_assert(state_ == State::ABOUT_TO_CONNECT_WPS);
+        log_assert(next_wps_candidate_ < service_names_.size());
+        state_ = State::CONNECTING_WPS;
+    }
+
     void finished_successfully()
     {
-        log_assert(state_ == State::CONNECTING);
+        log_assert(state_ == State::CONNECTING ||
+                   state_ == State::CONNECTING_WPS);
         state_ = State::DONE;
     }
 
     void finished_with_failure()
     {
-        log_assert(state_ == State::CONNECTING);
+        log_assert(state_ == State::CONNECTING ||
+                   state_ == State::CONNECTING_WPS);
         state_ = State::FAILED;
+    }
+
+    void remove_pending_wps_service(const char *service_name)
+    {
+        log_assert(state_ == State::ABOUT_TO_CONNECT_WPS || state_ == State::CONNECTING_WPS);
+        log_assert(service_name != nullptr);
+        log_assert(service_name[0] != '\0');
+
+        if(next_wps_candidate_ >= service_names_.size())
+            return;
+
+        const auto it(std::find(service_names_.begin() + next_wps_candidate_,
+                                service_names_.end(), service_name));
+
+        if(it != service_names_.end())
+            service_names_.erase(it);
     }
 
     State get_state() const { return state_; }
 
-    const std::string &get_service_name() const { return service_name_; }
+    const std::string &get_service_name() const
+    {
+        log_assert(next_wps_candidate_ < service_names_.size());
+        return service_names_[next_wps_candidate_];
+    }
 };
 
 class DBusSignalManagerData
@@ -267,6 +324,103 @@ static void service_connected(const char *service_name,
     g_mutex_unlock(&data->lock);
 }
 
+static void schedule_wlan_connect__unlocked(DBusSignalManagerData &data)
+{
+    log_assert(!data.wlan_connection_state.get_service_name().empty());
+
+    connman_wlan_power_on();
+    data.schedule_connect_to_wlan();
+
+    msg_vinfo(MESSAGE_LEVEL_DEBUG,
+              "***** Scheduled connect to WLAN *****");
+}
+
+static inline bool wps_bug_if(bool cond, const char *unknown)
+{
+    if(cond)
+    {
+        BUG("Connected via WPS, but %s unknown", unknown);
+        return true;
+    }
+    else
+        return false;
+}
+
+static void store_wlan_config_and_notify_slave(const Connman::ServiceBase *service)
+{
+    if(wps_bug_if(service == nullptr, "service"))
+        return;
+
+    const auto &s(static_cast<const Connman::Service<Connman::Technology::WLAN> &>(*service));
+    const auto &t(s.get_tech_data());
+
+    if(wps_bug_if(!t.security_.is_known(), "service security"))
+        return;
+
+    if(wps_bug_if(!t.network_name_.is_known() && !t.network_ssid_.is_known(), "service SSID"))
+        return;
+
+    struct network_prefs *dummy;
+    struct network_prefs_handle *handle = network_prefs_open_rw(&dummy, &dummy);
+
+    if(handle == nullptr)
+        return;
+
+    network_prefs_remove_prefs(handle, NWPREFSTECH_WLAN);
+
+    struct network_prefs *wlan = network_prefs_add_prefs(handle, NWPREFSTECH_WLAN);
+
+    if(wlan != nullptr)
+    {
+        network_prefs_put_wlan_config(wlan,
+                                      t.network_name_.get().c_str(),
+                                      t.network_ssid_.get().c_str(),
+                                      t.security_.get().c_str(),
+                                      nullptr);
+        network_prefs_write_to_file(handle);
+    }
+
+    network_prefs_close(handle);
+
+    if(wlan != nullptr)
+        dcpregs_networkconfig_interfaces_changed();
+}
+
+static void wps_connected(const char *service_name,
+                          enum ConnmanCommonConnectServiceCallbackResult result,
+                          void *user_data)
+{
+    auto &data(*static_cast<DBusSignalManagerData *>(user_data));
+    bool leave_wps_mode = true;
+
+    g_mutex_lock(&data.lock);
+
+    switch(result)
+    {
+      case CONNMAN_SERVICE_CONNECT_CONNECTED:
+        store_wlan_config_and_notify_slave(data.services[data.wlan_connection_state.get_service_name()]);
+        data.wlan_connection_state.finished_successfully();
+        break;
+
+      case CONNMAN_SERVICE_CONNECT_FAILURE:
+      case CONNMAN_SERVICE_CONNECT_DISCARDED:
+        if(data.wlan_connection_state.about_to_connect_next())
+        {
+            leave_wps_mode = false;
+            schedule_wlan_connect__unlocked(data);
+        }
+        else
+            data.wlan_connection_state.finished_with_failure();
+
+        break;
+    }
+
+    if(leave_wps_mode)
+        connman_agent_set_wps_mode(false);
+
+    g_mutex_unlock(&data.lock);
+}
+
 void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
 {
     g_mutex_lock(&data->lock);
@@ -274,7 +428,7 @@ void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
     switch(data->wlan_connection_state.get_state())
     {
       case WLANConnectionState::State::ABOUT_TO_CONNECT:
-        data->wlan_connection_state.start_connecting();
+        data->wlan_connection_state.start_connecting_direct();
 
         if(!connman_common_connect_service_by_object_path(data->wlan_connection_state.get_service_name().c_str(),
                                                           service_connected,
@@ -284,8 +438,19 @@ void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
 
         break;
 
+      case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+        data->wlan_connection_state.start_connecting_wps();
+
+        if(!connman_common_connect_service_by_object_path(data->wlan_connection_state.get_service_name().c_str(),
+                                                          wps_connected, data))
+            wps_connected(data->wlan_connection_state.get_service_name().c_str(),
+                              CONNMAN_SERVICE_CONNECT_FAILURE, data);
+
+        break;
+
       case WLANConnectionState::State::IDLE:
       case WLANConnectionState::State::CONNECTING:
+      case WLANConnectionState::State::CONNECTING_WPS:
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
         BUG("Tried to connect to WLAN in state %d",
@@ -553,7 +718,9 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
         break;
 
       case WLANConnectionState::State::ABOUT_TO_CONNECT:
+      case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
       case WLANConnectionState::State::CONNECTING:
+      case WLANConnectionState::State::CONNECTING_WPS:
         return false;
     }
 
@@ -578,7 +745,7 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
                                                    g_variant_new_variant(g_variant_new_boolean(true))))
             {
                 wlan_connection_state.about_to_connect_to(service_name);
-                wlan_connection_state.start_connecting();
+                wlan_connection_state.start_connecting_direct();
             }
         }
 
@@ -1002,6 +1169,21 @@ static void update_service_list(ServiceList &known_services,
                 if(wlan_connection_state.get_service_name() == name)
                     wlan_connection_state.reset();
 
+                break;
+
+              case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+                if(wlan_connection_state.get_service_name() == name &&
+                   !wlan_connection_state.about_to_connect_next())
+                {
+                    wlan_connection_state.reset();
+                }
+                else
+                    wlan_connection_state.remove_pending_wps_service(name);
+
+                break;
+
+              case WLANConnectionState::State::CONNECTING_WPS:
+                wlan_connection_state.remove_pending_wps_service(name);
                 break;
             }
 
@@ -1443,7 +1625,9 @@ static bool do_process_pending_changes(ServiceList &known_services,
         return true;
 
       case WLANConnectionState::State::ABOUT_TO_CONNECT:
+      case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
       case WLANConnectionState::State::CONNECTING:
+      case WLANConnectionState::State::CONNECTING_WPS:
         break;
     }
 
@@ -1456,15 +1640,7 @@ static void schedule_wlan_connect_if_necessary(bool is_necessary,
     g_mutex_lock(&data.lock);
 
     if(is_necessary)
-    {
-        log_assert(data.wlan_connection_state.get_state() == WLANConnectionState::State::ABOUT_TO_CONNECT);
-
-        connman_wlan_power_on();
-        data.schedule_connect_to_wlan();
-
-        msg_vinfo(MESSAGE_LEVEL_DEBUG,
-                  "***** Scheduled connect to WLAN *****");
-    }
+        schedule_wlan_connect__unlocked(data);
 
     g_mutex_unlock(&data.lock);
 }
@@ -1658,6 +1834,111 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         unknown_signal(iface_name, signal_name, sender_name);
 }
 
+static bool is_ssid_rejected(const std::string &ssid, const char *wanted_network_name,
+                             const char *wanted_network_ssid)
+{
+    log_assert(!ssid.empty());
+
+    if(wanted_network_name == nullptr && wanted_network_ssid == nullptr)
+        return false;
+
+    if(wanted_network_name != nullptr && ssid == wanted_network_name)
+        return false;
+
+    if(wanted_network_ssid != nullptr && ssid == wanted_network_ssid)
+        return false;
+
+    return true;
+}
+
+static bool start_wps(DBusSignalManagerData &data,
+                      const char *network_name, const char *network_ssid,
+                      const char *service_to_be_disabled)
+{
+    switch(data.wlan_connection_state.get_state())
+    {
+      case WLANConnectionState::State::IDLE:
+        break;
+
+      case WLANConnectionState::State::DONE:
+      case WLANConnectionState::State::FAILED:
+        data.wlan_connection_state.reset();
+        break;
+
+      case WLANConnectionState::State::ABOUT_TO_CONNECT:
+      case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+      case WLANConnectionState::State::CONNECTING:
+      case WLANConnectionState::State::CONNECTING_WPS:
+        msg_info("Cannot connect via WPS, already connecting");
+        return false;
+    }
+
+    if(data.services.number_of_wlan_services() == 0)
+    {
+        msg_info("No WLAN services available, cannot connect via WPS");
+        return false;
+    }
+
+    std::vector<std::string> wps_candidates;
+
+    for(const auto &it : data.services)
+    {
+        /* want WLAN */
+        switch(it.second->get_technology())
+        {
+          case Connman::Technology::UNKNOWN_TECHNOLOGY:
+          case Connman::Technology::ETHERNET:
+            continue;
+
+          case Connman::Technology::WLAN:
+            break;
+        }
+
+        const auto &tech_data(static_cast<const Connman::Service<Connman::Technology::WLAN> &>(*it.second).get_tech_data());
+
+        /* want non-hidden networks */
+        if(!tech_data.network_name_.is_known() ||
+           tech_data.network_name_.get().empty())
+            continue;
+
+        /* maybe want services which match a specific name */
+        if(is_ssid_rejected(tech_data.network_name_.get(),
+                            network_name, network_ssid))
+        {
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "Ignoring service with SSID \"%s\" for WPS",
+                      tech_data.network_name_.get().c_str());
+            continue;
+        }
+
+        /* want WPS */
+        if(tech_data.is_wps_available_ == true)
+            wps_candidates.push_back(it.first);
+    }
+
+    if(wps_candidates.empty())
+    {
+        msg_info("No WPS-enabled services found");
+        connman_agent_set_wps_mode(false);
+        return false;
+    }
+
+    data.wlan_connection_state.about_to_connect_to(std::move(wps_candidates));
+
+    if(service_to_be_disabled != NULL && service_to_be_disabled[0] != '\0')
+    {
+        auto service(data.services.find(service_to_be_disabled));
+
+        if(service != data.services.end() && service->second->is_active())
+            avoid_service(*service->second, service->first);
+    }
+
+    connman_agent_set_wps_mode(true);
+    schedule_wlan_connect__unlocked(data);
+
+    return true;
+}
+
 static DBusSignalManagerData global_dbussignal_connman_manager_data;
 
 DBusSignalManagerData *
@@ -1739,8 +2020,6 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
         break;
     }
 
-    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
-
     network_prefs_close(handle);
 
     if(service_to_be_disabled != NULL && service_to_be_disabled[0] != '\0')
@@ -1752,6 +2031,8 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
             avoid_service(*service->second, service->first);
     }
 
+    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
+
     schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
                                        global_dbussignal_connman_manager_data);
 }
@@ -1760,10 +2041,9 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *network_ssid,
                                                        const char *service_to_be_disabled)
 {
-    if(network_name == NULL && network_ssid == NULL)
-        BUG("Automatic connection to WPS service not implemented yet");
-    else if(network_name != NULL)
-        BUG("Connecting to WPS service by name (%s) not implemented yet ", network_name);
-    else
-        BUG("Connecting to WPS service by SSID (%s) not implemented yet ", network_ssid);
+    g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
+    start_wps(global_dbussignal_connman_manager_data,
+              network_name, network_ssid, service_to_be_disabled);
+    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
+
 }
