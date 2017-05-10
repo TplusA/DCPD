@@ -27,7 +27,7 @@ dcpd_SOURCES = \
     smartphone_app_send.c smartphone_app_send.h \
     actor_id.h \
     applink.h applink_variables.h \
-    network.h \
+    network.h network_status_bits.h \
     transactions.h dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \

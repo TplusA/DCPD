@@ -2047,3 +2047,78 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
     g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
 
 }
+
+static bool get_connecting_status(const ServiceList::Map::value_type &s,
+                                  bool is_wps)
+{
+    if(!s.second->get_service_data().state_.is_known())
+        return false;
+
+    switch(s.second->get_service_data().state_.get())
+    {
+      case Connman::ServiceState::NOT_AVAILABLE:
+      case Connman::ServiceState::UNKNOWN_STATE:
+      case Connman::ServiceState::READY:
+      case Connman::ServiceState::DISCONNECT:
+      case Connman::ServiceState::ONLINE:
+        break;
+
+      case Connman::ServiceState::IDLE:
+      case Connman::ServiceState::FAILURE:
+        if(is_wps)
+            return true;
+
+        break;
+
+      case Connman::ServiceState::ASSOCIATION:
+      case Connman::ServiceState::CONFIGURATION:
+        return true;
+    }
+
+    return false;
+}
+
+bool dbussignal_connman_manager_is_connecting(bool *is_wps)
+{
+    auto &d(global_dbussignal_connman_manager_data);
+
+    g_mutex_lock(&d.lock);
+
+    bool retval = false;
+    *is_wps = false;
+
+    switch(d.wlan_connection_state.get_state())
+    {
+      case WLANConnectionState::State::IDLE:
+      case WLANConnectionState::State::DONE:
+      case WLANConnectionState::State::FAILED:
+        break;
+
+      case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+      case WLANConnectionState::State::CONNECTING_WPS:
+        *is_wps = true;
+
+        /* fall-through */
+
+      case WLANConnectionState::State::ABOUT_TO_CONNECT:
+      case WLANConnectionState::State::CONNECTING:
+        retval = true;
+        break;
+    }
+
+    if(!retval)
+    {
+        for(const auto &s : d.services)
+        {
+            if(get_connecting_status(s, false))
+            {
+                retval = true;
+                break;
+            }
+        }
+    }
+
+    g_mutex_unlock(&d.lock);
+
+    return retval;
+}

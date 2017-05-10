@@ -29,6 +29,7 @@
 
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_common.h"
+#include "network_status_bits.h"
 #include "registers_priv.h"
 #include "connman.h"
 #include "dbus_handlers_connman_manager_glue.h"
@@ -142,7 +143,7 @@ static struct
      * Status changes are only sent to the slave if the information represented
      * by the status register actually changed.
      */
-    uint8_t previous_response[2];
+    uint8_t previous_response[3];
 }
 nwstatus_data;
 
@@ -153,6 +154,7 @@ void dcpregs_networkconfig_init(void)
     nwstatus_data.shutdown_guard = shutdown_guard_alloc("networkconfig");
     nwstatus_data.previous_response[0] = UINT8_MAX;
     nwstatus_data.previous_response[1] = UINT8_MAX;
+    nwstatus_data.previous_response[2] = UINT8_MAX;
 }
 
 void dcpregs_networkconfig_deinit(void)
@@ -899,18 +901,21 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
     return 0;
 }
 
-static void fill_network_status_register_response(uint8_t response[static 2])
+static void fill_network_status_register_response(uint8_t response[static 3])
 {
     struct register_configuration_t *config = registers_get_nonconst_data();
 
     config->active_interface = NULL;
 
-    response[0] = 0x00;
-    response[1] = 0x00;
+    response[0] = NETWORK_STATUS_IPV4_NOT_CONFIGURED;
+    response[1] = NETWORK_STATUS_DEVICE_NONE;
+    response[2] = NETWORK_STATUS_CONNECTION_NONE;
 
     struct ConnmanInterfaceData *fallback_iface_data;
     struct ConnmanInterfaceData *iface_data =
         find_active_primary_interface(config, &fallback_iface_data);
+
+    bool need_check_connection_status = false;
 
     if(iface_data != NULL)
     {
@@ -923,30 +928,50 @@ static void fill_network_status_register_response(uint8_t response[static 2])
                                    result, sizeof(result));
 
         if(result[0] != '\0')
+        {
             response[0] = (connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_4,
                                                  CONNMAN_READ_CONFIG_SOURCE_CURRENT) ==
-                           CONNMAN_DHCP_ON) ? 0x02 : 0x01;
+                           CONNMAN_DHCP_ON)
+                ? NETWORK_STATUS_IPV4_DHCP
+                : NETWORK_STATUS_IPV4_STATIC_ADDRESS;
+            response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
+        }
+        else
+            need_check_connection_status = true;
     }
     else if(fallback_iface_data != NULL)
     {
         iface_data = fallback_iface_data;
         fallback_iface_data = NULL;
+        need_check_connection_status = true;
     }
 
     if(iface_data != NULL)
     {
+        if(need_check_connection_status)
+        {
+            bool is_wps;
+            bool is_connecting = dbussignal_connman_manager_is_connecting(&is_wps);
+
+            if(is_connecting)
+                response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;
+
+            if(is_wps)
+                response[2] |= NETWORK_STATUS_CONNECTION_IS_WPS_MODE;
+        }
+
         const enum ConnmanConnectionType ctype = connman_get_connection_type(iface_data);
 
         switch(ctype)
         {
           case CONNMAN_CONNECTION_TYPE_UNKNOWN:
           case CONNMAN_CONNECTION_TYPE_ETHERNET:
-            response[1] = 0x01;
+            response[1] = NETWORK_STATUS_DEVICE_ETHERNET;
             config->active_interface = &config->builtin_ethernet_interface;
             break;
 
           case CONNMAN_CONNECTION_TYPE_WLAN:
-            response[1] = 0x02;
+            response[1] = NETWORK_STATUS_DEVICE_WLAN;
             config->active_interface = &config->builtin_wlan_interface;
             break;
         }
@@ -959,7 +984,7 @@ ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 50 handler %p %zu", response, length);
 
-    if(data_length_is_unexpected(length, 2))
+    if(data_length_is_unexpected(length, 3))
         return -1;
 
     fill_network_status_register_response(response);

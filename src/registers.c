@@ -313,7 +313,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* Network status */
         REGISTER(50, REGISTER_MK_VERSION(1, 0, 0)),
-        .max_data_size = 2,
+        .max_data_size = 3,
         .read_handler = dcpregs_read_50_network_status,
     },
     {

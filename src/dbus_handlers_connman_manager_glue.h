@@ -19,6 +19,8 @@
 #ifndef DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
 #define DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
 
+#include <stdbool.h>
+
 #include "networkprefs.h"
 
 /*!
@@ -54,6 +56,8 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *network_ssid,
                                                        const char *service_to_be_disabled);
+
+bool dbussignal_connman_manager_is_connecting(bool *is_wps);
 
 #ifdef __cplusplus
 }
