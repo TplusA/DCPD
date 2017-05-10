@@ -737,7 +737,15 @@ static bool do_read_register(struct transaction *t)
             t->reg->read_handler(t->payload.data, t->payload.size);
 
         if(read_result < 0)
+        {
+            msg_error(0, LOG_ERR, "RegIO R: FAILED READING %d (%zd)",
+                      t->reg->address, read_result);
             return false;
+        }
+
+        if(t->reg->address != 120 || msg_is_verbose(MESSAGE_LEVEL_DEBUG))
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "RegIO R: %d, %zu bytes", t->reg->address, read_result);
 
         t->payload.pos = read_result;
 
@@ -753,7 +761,17 @@ static bool do_read_register(struct transaction *t)
             return false;
         }
 
-        return t->reg->read_handler_dynamic(&t->payload);
+        if(!t->reg->read_handler_dynamic(&t->payload))
+        {
+            msg_error(0, LOG_ERR, "RegIO R: FAILED READING %d",
+                      t->reg->address);
+            return false;
+        }
+
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "RegIO R: %d, %zu bytes", t->reg->address, t->payload.pos);
+
+        return true;
     }
 }
 
@@ -970,7 +988,18 @@ enum transaction_process_status transaction_process(struct transaction *t,
              : t->reg->write_handler(t->payload.data, t->payload.pos));
 
         if(write_result < 0)
+        {
+            msg_error(0, LOG_ERR,
+                      "RegIO W: FAILED WRITING %zu bytes to %d (%d)",
+                      t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos,
+                      t->reg->address, write_result);
             break;
+        }
+
+        if(t->reg->address != 121 || msg_is_verbose(MESSAGE_LEVEL_DEBUG))
+            msg_vinfo(MESSAGE_LEVEL_DIAG, "RegIO W: %d, %zu bytes",
+                      t->reg->address,
+                      t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos);
 
         return TRANSACTION_FINISHED;
 

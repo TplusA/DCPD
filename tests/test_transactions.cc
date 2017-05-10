@@ -625,6 +625,7 @@ void test_register_read_request_size_1_transaction()
     static auto *dummy_connman_iface_data =
         reinterpret_cast<struct ConnmanInterfaceData *>(123456);
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 55, 1 bytes");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
         "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
     mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface_data,
@@ -705,6 +706,7 @@ void test_register_read_request_size_16_transaction()
     static auto *dummy_connman_iface_data =
         reinterpret_cast<struct ConnmanInterfaceData *>(123456);
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 56, 16 bytes");
     mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
         "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
     mock_connman->expect_get_address_string("111.222.255.100",
@@ -783,6 +785,8 @@ void test_register_multi_step_read_request_transaction()
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 51, 18 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -902,6 +906,10 @@ void test_big_data_is_sent_to_slave_in_fragments()
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(head, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    /* this is our \c #big_register defined above */
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 0, 683 bytes");
+
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(head, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -1180,6 +1188,8 @@ void test_register_write_request_transaction()
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54, 1 bytes");
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -1605,6 +1615,8 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
+
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -1644,6 +1656,8 @@ void test_register_push_transaction()
 
     cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
     cppcut_assert_not_null(t);
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -1689,6 +1703,7 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
 
         mock_messages->expect_msg_vinfo_if_not_ignored(MESSAGE_LEVEL_TRACE,
                                                        "read 17 handler %p %zu");
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
 
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                             transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -2014,6 +2029,8 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
     /* the push transaction is moved to some other place for deferred
      * processing, a new transaction has been allocated for the newly detected
      * slave transaction; now continue processing that one */
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 87, 5 bytes");
+
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd, &e));
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
