@@ -84,7 +84,7 @@ static int handle_peer_data(int fd, void *user_data)
     struct tcp_client *peer = user_data;
 
     if(queue_read_from_peer_event(peer))
-        msg_vinfo(MESSAGE_LEVEL_DIAG,
+        msg_vinfo(MESSAGE_LEVEL_TRACE,
                   "Queued push-to-slave for data from peer %u on port %u",
                   get_peer_id(peer), peer->tunnel->port);
 
