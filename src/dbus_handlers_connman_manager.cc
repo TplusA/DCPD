@@ -162,8 +162,6 @@ class DBusSignalManagerData
     void (*schedule_connect_to_wlan)(void);
     WLANConnectionState wlan_connection_state;
 
-    Connman::ServiceList services;
-
     DBusSignalManagerData(const DBusSignalManagerData &) = delete;
     DBusSignalManagerData &operator=(const DBusSignalManagerData &) = delete;
 
@@ -178,7 +176,7 @@ class DBusSignalManagerData
         g_mutex_init(&lock);
         schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
         wlan_connection_state.reset();
-        services.clear();
+        Connman::get_service_list_singleton_for_update().first.clear();
     }
 };
 
@@ -280,12 +278,15 @@ static void wps_connected(const char *service_name,
     auto &data(*static_cast<DBusSignalManagerData *>(user_data));
     bool leave_wps_mode = true;
 
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+
     g_mutex_lock(&data.lock);
 
     switch(result)
     {
       case CONNMAN_SERVICE_CONNECT_CONNECTED:
-        store_wlan_config_and_notify_slave(data.services[data.wlan_connection_state.get_service_name()]);
+        store_wlan_config_and_notify_slave(services[data.wlan_connection_state.get_service_name()]);
         data.wlan_connection_state.finished_successfully();
         break;
 
@@ -1534,7 +1535,7 @@ static void schedule_wlan_connect_if_necessary(bool is_necessary,
 }
 
 static bool update_all_services(GVariant *all_services, GVariant *changes,
-                                DBusSignalManagerData &data,
+                                Connman::ServiceList &services,
                                 const char *context)
 {
     if(all_services == nullptr)
@@ -1555,17 +1556,18 @@ static bool update_all_services(GVariant *all_services, GVariant *changes,
     {
         std::map<std::string, bool> has_changed;
         get_changed_services_names(changes, has_changed);
-        update_service_list(all_services, data.services, &has_changed,
+        update_service_list(all_services, services, &has_changed,
                             *preferred_ethernet_mac, *preferred_wlan_mac);
     }
     else
-        update_service_list(all_services, data.services, nullptr,
+        update_service_list(all_services, services, nullptr,
                             *preferred_ethernet_mac, *preferred_wlan_mac);
 
     return true;
 }
 
 static void process_pending_changes(DBusSignalManagerData &data,
+                                    Connman::ServiceList &services,
                                     bool have_lost_active_ethernet_device,
                                     bool have_lost_active_wlan_device)
 {
@@ -1575,7 +1577,7 @@ static void process_pending_changes(DBusSignalManagerData &data,
         network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
 
     const bool need_to_schedule_wlan_connection =
-        do_process_pending_changes(data.services,
+        do_process_pending_changes(services,
                                    have_lost_active_ethernet_device,
                                    have_lost_active_wlan_device,
                                    data.wlan_connection_state,
@@ -1631,9 +1633,12 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         GVariant *changes = g_variant_get_child_value(parameters, 0);
         GVariant *removed = g_variant_get_child_value(parameters, 1);
 
+        const auto locked_services(Connman::get_service_list_singleton_for_update());
+        auto &services(locked_services.first);
+
         bool have_lost_active_ethernet_device;
         bool have_lost_active_wlan_device;
-        update_service_list(data->services, data->wlan_connection_state,
+        update_service_list(services, data->wlan_connection_state,
                             removed,
                             have_lost_active_ethernet_device,
                             have_lost_active_wlan_device);
@@ -1646,20 +1651,23 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         GVariant *all_services =
             connman_common_query_services(dbus_get_connman_manager_iface());
 
-        if(update_all_services(all_services, changes, *data,
+        if(update_all_services(all_services, changes, services,
                                "ServicesChanged"))
             g_variant_unref(all_services);
 
         g_variant_unref(changes);
         g_variant_unref(removed);
 
-        process_pending_changes(*data,
+        process_pending_changes(*data, services,
                                 have_lost_active_ethernet_device,
                                 have_lost_active_wlan_device);
     }
     else if(strcmp(signal_name, "PropertyChanged") == 0)
     {
         check_parameter_assertions(parameters, 2);
+
+        const auto locked_services(Connman::get_service_list_singleton_for_update());
+        auto &services(locked_services.first);
 
         GVariant *all_services =
             connman_common_query_services(dbus_get_connman_manager_iface());
@@ -1670,19 +1678,18 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
         if(all_services != nullptr)
         {
             const std::vector<std::string> removed(
-                    std::move(find_removed(data->services, all_services)));
+                    std::move(find_removed(services, all_services)));
 
-            update_service_list(data->services, data->wlan_connection_state,
+            update_service_list(services, data->wlan_connection_state,
                                 removed,
                                 have_lost_active_ethernet_device,
                                 have_lost_active_wlan_device);
         }
 
-        if(update_all_services(all_services, nullptr, *data,
-                               "PropertyChanged"))
+        if(update_all_services(all_services, nullptr, services, signal_name))
             g_variant_unref(all_services);
 
-        process_pending_changes(*data,
+        process_pending_changes(*data, services,
                                 have_lost_active_ethernet_device,
                                 have_lost_active_wlan_device);
 
@@ -1740,6 +1747,7 @@ static bool is_ssid_rejected(const std::string &ssid, const char *wanted_network
 }
 
 static bool start_wps(DBusSignalManagerData &data,
+                      const Connman::ServiceList &services,
                       const char *network_name, const char *network_ssid,
                       const char *service_to_be_disabled)
 {
@@ -1761,7 +1769,7 @@ static bool start_wps(DBusSignalManagerData &data,
         return false;
     }
 
-    if(data.services.number_of_wlan_services() == 0)
+    if(services.number_of_wlan_services() == 0)
     {
         msg_info("No WLAN services available, cannot connect via WPS");
         return false;
@@ -1769,7 +1777,7 @@ static bool start_wps(DBusSignalManagerData &data,
 
     std::vector<std::string> wps_candidates;
 
-    for(const auto &it : data.services)
+    for(const auto &it : services)
     {
         /* want WLAN */
         switch(it.second->get_technology())
@@ -1815,9 +1823,9 @@ static bool start_wps(DBusSignalManagerData &data,
 
     if(service_to_be_disabled != NULL && service_to_be_disabled[0] != '\0')
     {
-        auto service(data.services.find(service_to_be_disabled));
+        auto service(services.find(service_to_be_disabled));
 
-        if(service != data.services.end() && service->second->is_active())
+        if(service != services.end() && service->second->is_active())
             avoid_service(*service->second, service->first);
     }
 
@@ -1838,15 +1846,17 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)())
 
 void dbussignal_connman_manager_about_to_connect_signals(void)
 {
+    const auto locked_services(Connman::get_service_list_singleton_for_update());
+    auto &services(locked_services.first);
+
     GVariant *all_services =
         connman_common_query_services(dbus_get_connman_manager_iface());
 
-    if(update_all_services(all_services, nullptr,
-                           global_dbussignal_connman_manager_data, "startup"))
+    if(update_all_services(all_services, nullptr, services, "startup"))
         g_variant_unref(all_services);
 
     process_pending_changes(global_dbussignal_connman_manager_data,
-                            false, false);
+                            services, false, false);
 }
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
@@ -1866,6 +1876,9 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     char service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
     bool need_to_schedule_wlan_connection = false;
 
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+
     g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
 
     switch(tech)
@@ -1877,9 +1890,9 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
         if(network_prefs_generate_service_name(ethernet_prefs, service_name,
                                                sizeof(service_name)) > 0)
         {
-            auto our_service(global_dbussignal_connman_manager_data.services.find(service_name));
+            auto our_service(services.find(service_name));
 
-            if(our_service != global_dbussignal_connman_manager_data.services.end())
+            if(our_service != services.end())
                 configure_ipv4_settings(*our_service->second, our_service->first,
                                         ethernet_prefs);
         }
@@ -1890,9 +1903,9 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
         if(network_prefs_generate_service_name(wlan_prefs, service_name,
                                                sizeof(service_name)) > 0)
         {
-            auto our_service(global_dbussignal_connman_manager_data.services.find(service_name));
+            auto our_service(services.find(service_name));
 
-            if(our_service != global_dbussignal_connman_manager_data.services.end())
+            if(our_service != services.end())
             {
                 if(configure_our_wlan(static_cast<const Connman::Service<Connman::Technology::WLAN> &>(*our_service->second),
                                       our_service->first, wlan_prefs,
@@ -1912,9 +1925,9 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 
     if(service_to_be_disabled != NULL && service_to_be_disabled[0] != '\0')
     {
-        auto service(global_dbussignal_connman_manager_data.services.find(service_to_be_disabled));
+        auto service(services.find(service_to_be_disabled));
 
-        if(service != global_dbussignal_connman_manager_data.services.end() &&
+        if(service != services.end() &&
            service->second->is_active())
             avoid_service(*service->second, service->first);
     }
@@ -1929,8 +1942,11 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *network_ssid,
                                                        const char *service_to_be_disabled)
 {
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+
     g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
-    start_wps(global_dbussignal_connman_manager_data,
+    start_wps(global_dbussignal_connman_manager_data, services,
               network_name, network_ssid, service_to_be_disabled);
     g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
 
@@ -1968,6 +1984,9 @@ static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s
 
 bool dbussignal_connman_manager_is_connecting(bool *is_wps)
 {
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+
     auto &d(global_dbussignal_connman_manager_data);
 
     g_mutex_lock(&d.lock);
@@ -1996,7 +2015,7 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
 
     if(!retval)
     {
-        for(const auto &s : d.services)
+        for(const auto &s : services)
         {
             if(get_connecting_status(s, false))
             {

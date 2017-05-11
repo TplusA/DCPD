@@ -21,6 +21,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 
 #include "connman_service.hh"
 
@@ -137,6 +138,12 @@ class ServiceList
     Map::iterator begin() { return services_.begin(); }
     Map::iterator end() { return services_.end(); }
 };
+
+std::pair<const ServiceList &, std::unique_lock<std::recursive_mutex>>
+get_service_list_singleton_const();
+
+std::pair<ServiceList &, std::unique_lock<std::recursive_mutex>>
+get_service_list_singleton_for_update();
 
 }
 
