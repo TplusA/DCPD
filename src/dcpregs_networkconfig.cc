@@ -20,11 +20,8 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <errno.h>
+#include <array>
+#include <cstring>
 #include <arpa/inet.h>
 
 #include "dcpregs_networkconfig.h"
@@ -77,12 +74,12 @@ static const uint32_t req_wireless_only_parameters =
 #define ALL_REQUESTED(R) \
     ((nwconfig_write_data.requested_changes & (R)) == (R))
 
-enum WPSMode
+enum class WPSMode
 {
-    WPS_MODE_INVALID,
-    WPS_MODE_NONE,
-    WPS_MODE_DIRECT,
-    WPS_MODE_SCAN,
+    INVALID,
+    NONE,
+    DIRECT,
+    SCAN,
 };
 
 /*!
@@ -114,19 +111,19 @@ static struct
     uint32_t requested_changes;
 
     bool dhcpv4_mode;
-    char ipv4_address[SIZE_OF_IPV4_ADDRESS_STRING];
-    char ipv4_netmask[SIZE_OF_IPV4_ADDRESS_STRING];
-    char ipv4_gateway[SIZE_OF_IPV4_ADDRESS_STRING];
-    char ipv4_dns_server1[SIZE_OF_IPV4_ADDRESS_STRING];
-    char ipv4_dns_server2[SIZE_OF_IPV4_ADDRESS_STRING];
+    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> ipv4_address;
+    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> ipv4_netmask;
+    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> ipv4_gateway;
+    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> ipv4_dns_server1;
+    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> ipv4_dns_server2;
 
-    char wlan_security_mode[SIZE_OF_WLAN_SECURITY_MODE];
+    std::array<char, SIZE_OF_WLAN_SECURITY_MODE> wlan_security_mode;
 
     size_t wlan_ssid_length;
-    uint8_t wlan_ssid[32 + 1];
+    std::array<uint8_t, 32 + 1> wlan_ssid;
 
     bool wlan_wpa_passphrase_is_ascii;
-    uint8_t wlan_wpa_passphrase[64 + 1];
+    std::array<uint8_t, 64 + 1> wlan_wpa_passphrase;
 }
 nwconfig_write_data;
 
@@ -143,13 +140,13 @@ static struct
      * Status changes are only sent to the slave if the information represented
      * by the status register actually changed.
      */
-    uint8_t previous_response[3];
+    std::array<uint8_t, 3> previous_response;
 }
 nwstatus_data;
 
 void dcpregs_networkconfig_init(void)
 {
-    nwconfig_write_data.selected_interface = NULL;
+    nwconfig_write_data.selected_interface = nullptr;
 
     nwstatus_data.shutdown_guard = shutdown_guard_alloc("networkconfig");
     nwstatus_data.previous_response[0] = UINT8_MAX;
@@ -164,13 +161,13 @@ void dcpregs_networkconfig_deinit(void)
 
 static bool in_edit_mode(void)
 {
-    return nwconfig_write_data.selected_interface != NULL;
+    return nwconfig_write_data.selected_interface != nullptr;
 }
 
 static const struct register_network_interface_t *
 get_network_iface_data(const struct register_configuration_t *config)
 {
-    return (config->active_interface != NULL)
+    return (config->active_interface != nullptr)
         ? config->active_interface
         : &config->builtin_ethernet_interface;
 }
@@ -205,19 +202,20 @@ static struct ConnmanInterfaceData *get_connman_iface_data(void)
         return connman_find_interface(network_prefs_get_mac_address_by_tech(tech)->address);
     }
     else
-        return find_active_primary_interface(config, NULL);
+        return find_active_primary_interface(config, nullptr);
 }
 
 /*!
  * Validate IPv4 address string.
  */
-static bool is_valid_ip_address_string(const char *string, bool is_empty_ok)
+static bool is_valid_ip_address_string(const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &string,
+                                       bool is_empty_ok)
 {
     if(string[0] == '\0')
         return is_empty_ok;
 
     uint8_t dummy[sizeof(struct in_addr)];
-    int result = inet_pton(AF_INET, string, dummy);
+    int result = inet_pton(AF_INET, string.data(), dummy);
 
     if(result > 0)
         return true;
@@ -225,7 +223,7 @@ static bool is_valid_ip_address_string(const char *string, bool is_empty_ok)
     if(result == 0)
         errno = 0;
 
-    msg_error(errno, LOG_WARNING, "Failed parsing IPv4 address %s", string);
+    msg_error(errno, LOG_WARNING, "Failed parsing IPv4 address %s", string.data());
 
     return false;
 }
@@ -250,23 +248,19 @@ static int fill_in_missing_ipv4_config_requests(void)
 /*!
  * Short helper for improving code readability.
  */
-static void copy_as_primary_dns(const char *src)
+static void copy_as_primary_dns(const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &src)
 {
-    memcpy(nwconfig_write_data.ipv4_dns_server1, src,
-           sizeof(nwconfig_write_data.ipv4_dns_server1));
-
-    nwconfig_write_data.ipv4_dns_server1[sizeof(nwconfig_write_data.ipv4_dns_server1) - 1] = '\0';
+    nwconfig_write_data.ipv4_dns_server1 = src;
+    nwconfig_write_data.ipv4_dns_server1[nwconfig_write_data.ipv4_dns_server1.size() - 1] = '\0';
 }
 
 /*!
  * Short helper for improving code readability.
  */
-static void copy_as_secondary_dns(const char *src)
+static void copy_as_secondary_dns(const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &src)
 {
-    memcpy(nwconfig_write_data.ipv4_dns_server2, src,
-           sizeof(nwconfig_write_data.ipv4_dns_server2));
-
-    nwconfig_write_data.ipv4_dns_server2[sizeof(nwconfig_write_data.ipv4_dns_server2) - 1] = '\0';
+    nwconfig_write_data.ipv4_dns_server2 = src;
+    nwconfig_write_data.ipv4_dns_server2[nwconfig_write_data.ipv4_dns_server2.size() - 1] = '\0';
 }
 
 /*!
@@ -274,7 +268,7 @@ static void copy_as_secondary_dns(const char *src)
  */
 static void shift_dns_servers(void)
 {
-    copy_as_primary_dns(nwconfig_write_data.ipv4_dns_server2);
+    nwconfig_write_data.ipv4_dns_server1 = nwconfig_write_data.ipv4_dns_server2;
     nwconfig_write_data.ipv4_dns_server2[0] = '\0';
 }
 
@@ -316,19 +310,19 @@ static void fill_in_missing_dns_server_config_requests(void)
     /* at this point we know that only one DNS server was sent to us, either a
      * "primary" one or a "secondary" */
 
-    char previous_primary[SIZE_OF_IPV4_ADDRESS_STRING];
-    char previous_secondary[SIZE_OF_IPV4_ADDRESS_STRING];
+    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> previous_primary;
+    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> previous_secondary;
 
     struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
-    if(iface_data == NULL)
+    if(iface_data == nullptr)
         previous_primary[0] = previous_secondary[0] = '\0';
     else
     {
-        connman_get_primary_dns_string(iface_data, previous_primary,
-                                       sizeof(previous_primary));
-        connman_get_secondary_dns_string(iface_data, previous_secondary,
-                                         sizeof(previous_secondary));
+        connman_get_primary_dns_string(iface_data, previous_primary.data(),
+                                       previous_primary.size());
+        connman_get_secondary_dns_string(iface_data, previous_secondary.data(),
+                                         previous_secondary.size());
         connman_free_interface_data(iface_data);
     }
 
@@ -350,8 +344,8 @@ static void fill_in_missing_dns_server_config_requests(void)
         /*
          * So we have two lists. For sure there must be a primary DNS server in
          * the \c previous_primary buffer (otherwise \c kv would have been
-         * \c NULL). There might be a secondary DNS in \c previous_secondary as
-         * well. */
+         * \c nullptr). There might be a secondary DNS in \c previous_secondary
+         * as well. */
         log_assert(previous_primary[0] != '\0');
 
         if(IS_REQUESTED(REQ_DNS_SERVER1_62))
@@ -373,7 +367,7 @@ static void fill_in_missing_dns_server_config_requests(void)
 static bool query_dhcp_mode(void)
 {
     struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
-    bool ret = (iface_data != NULL)
+    bool ret = (iface_data != nullptr)
         ? (connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_4,
                                  CONNMAN_READ_CONFIG_SOURCE_CURRENT) == CONNMAN_DHCP_ON)
         : false;
@@ -422,9 +416,9 @@ static int handle_set_static_ipv4_config(struct network_prefs *prefs)
     }
 
     if(nwconfig_write_data.ipv4_address[0] != '\0')
-        network_prefs_put_ipv4_config(prefs, nwconfig_write_data.ipv4_address,
-                                      nwconfig_write_data.ipv4_netmask,
-                                      nwconfig_write_data.ipv4_gateway);
+        network_prefs_put_ipv4_config(prefs, nwconfig_write_data.ipv4_address.data(),
+                                      nwconfig_write_data.ipv4_netmask.data(),
+                                      nwconfig_write_data.ipv4_gateway.data());
     else
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
@@ -446,8 +440,8 @@ static int handle_set_dns_servers(struct network_prefs *prefs)
 
     if(nwconfig_write_data.ipv4_dns_server1[0] != '\0')
         network_prefs_put_nameservers(prefs,
-                                      nwconfig_write_data.ipv4_dns_server1,
-                                      nwconfig_write_data.ipv4_dns_server2);
+                                      nwconfig_write_data.ipv4_dns_server1.data(),
+                                      nwconfig_write_data.ipv4_dns_server2.data());
 
     else
     {
@@ -503,9 +497,9 @@ static bool is_wlan_ssid_simple_ascii(const uint8_t *ssid, size_t len)
     return true;
 }
 
-static bool is_known_security_mode_name(const char *name)
+static bool is_known_security_mode_name(const std::array<char, SIZE_OF_WLAN_SECURITY_MODE> &name)
 {
-    static const char *const names[] =
+    static const std::array<const char *const, 5> names =
     {
         "none",
         "psk",
@@ -514,9 +508,9 @@ static bool is_known_security_mode_name(const char *name)
         "wep",
     };
 
-    for(size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
+    for(size_t i = 0; i < names.size(); ++i)
     {
-        if(strcmp(name, names[i]) == 0)
+        if(strcmp(name.data(), names[i]) == 0)
             return true;
     }
 
@@ -528,13 +522,13 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
                                                char **out_wps_network_ssid)
 {
     if(!IS_REQUESTED(req_wireless_only_parameters))
-        return WPS_MODE_NONE;
+        return WPSMode::NONE;
 
     if(network_prefs_get_technology_by_prefs(prefs) != NWPREFSTECH_WLAN)
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "Ignoring wireless parameters for active wired interface");
-        return WPS_MODE_NONE;
+        return WPSMode::NONE;
     }
 
     const char *network_name;
@@ -546,11 +540,11 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
         if(!is_known_security_mode_name(nwconfig_write_data.wlan_security_mode))
         {
             msg_error(EINVAL, LOG_ERR, "Invalid WLAN security mode \"%s\"",
-                      nwconfig_write_data.wlan_security_mode);
+                      nwconfig_write_data.wlan_security_mode.data());
             nwconfig_write_data.wlan_security_mode[0] = '\0';
         }
 
-        if(strcmp(nwconfig_write_data.wlan_security_mode, "wep") == 0)
+        if(strcmp(nwconfig_write_data.wlan_security_mode.data(), "wep") == 0)
         {
             BUG("Support for insecure WLAN mode \"WEP\" not implemented yet");
             nwconfig_write_data.wlan_security_mode[0] = '\0';
@@ -562,13 +556,13 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
          * to retrieve it from ConnMan */
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
-        if(iface_data == NULL)
+        if(iface_data == nullptr)
             nwconfig_write_data.wlan_security_mode[0] = '\0';
         else
         {
             connman_get_wlan_security_type_string(iface_data,
-                                                  nwconfig_write_data.wlan_security_mode,
-                                                  sizeof(nwconfig_write_data.wlan_security_mode));
+                                                  nwconfig_write_data.wlan_security_mode.data(),
+                                                  nwconfig_write_data.wlan_security_mode.size());
             connman_free_interface_data(iface_data);
         }
     }
@@ -577,12 +571,12 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
     {
         msg_error(EINVAL, LOG_ERR,
                   "Cannot set WLAN parameters, security mode missing");
-        return WPS_MODE_INVALID;
+        return WPSMode::INVALID;
     }
 
     static const char empty_string[] = "";
 
-    char ssid_buffer[2 * (sizeof(nwconfig_write_data.wlan_ssid) - 1) + 1];
+    char ssid_buffer[2 * (nwconfig_write_data.wlan_ssid.size() - 1) + 1];
 
     if(IS_REQUESTED(REQ_WLAN_SSID_94))
     {
@@ -591,12 +585,12 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
 
         if(nwconfig_write_data.wlan_ssid_length > 0)
         {
-            if(is_wlan_ssid_simple_ascii(nwconfig_write_data.wlan_ssid,
+            if(is_wlan_ssid_simple_ascii(nwconfig_write_data.wlan_ssid.data(),
                                          nwconfig_write_data.wlan_ssid_length))
-                network_name = (const char *)nwconfig_write_data.wlan_ssid;
+                network_name = reinterpret_cast<const char *>(nwconfig_write_data.wlan_ssid.data());
             else
             {
-                binary_to_hexdump(ssid_buffer, nwconfig_write_data.wlan_ssid,
+                binary_to_hexdump(ssid_buffer, nwconfig_write_data.wlan_ssid.data(),
                                   nwconfig_write_data.wlan_ssid_length);
                 network_ssid = ssid_buffer;
             }
@@ -604,52 +598,52 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
     }
     else
     {
-        network_name = NULL;
-        network_ssid = NULL;
+        network_name = nullptr;
+        network_ssid = nullptr;
     }
 
     const enum WPSMode retval =
-        (strcmp(nwconfig_write_data.wlan_security_mode, "wps") == 0
-         ? (network_name == NULL
-            ? WPS_MODE_SCAN
+        (strcmp(nwconfig_write_data.wlan_security_mode.data(), "wps") == 0
+         ? (network_name == nullptr
+            ? WPSMode::SCAN
             : (network_name != empty_string || network_ssid != empty_string
-               ? WPS_MODE_DIRECT
-               : WPS_MODE_INVALID))
-         : WPS_MODE_NONE);
+               ? WPSMode::DIRECT
+               : WPSMode::INVALID))
+         : WPSMode::NONE);
 
     if(IS_REQUESTED(REQ_WLAN_WPA_PASSPHRASE_102))
     {
         const size_t passphrase_length =
-            (strcmp(nwconfig_write_data.wlan_security_mode, "none") == 0)
+            (strcmp(nwconfig_write_data.wlan_security_mode.data(), "none") == 0)
             ? 0
             : (nwconfig_write_data.wlan_wpa_passphrase_is_ascii
-               ? strlen((const char *)nwconfig_write_data.wlan_wpa_passphrase)
-               : (sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1));
+               ? strlen(reinterpret_cast<const char *>(nwconfig_write_data.wlan_wpa_passphrase.data()))
+               : (nwconfig_write_data.wlan_wpa_passphrase.size() - 1));
 
         if(passphrase_length > 0)
-            passphrase = (const char *)nwconfig_write_data.wlan_wpa_passphrase;
+            passphrase = reinterpret_cast<const char *>(nwconfig_write_data.wlan_wpa_passphrase.data());
         else
             passphrase = "";
     }
     else
-        passphrase = NULL;
+        passphrase = nullptr;
 
     network_prefs_put_wlan_config(prefs, network_name, network_ssid,
-                                  nwconfig_write_data.wlan_security_mode,
+                                  nwconfig_write_data.wlan_security_mode.data(),
                                   passphrase);
 
     switch(retval)
     {
-      case WPS_MODE_INVALID:
-      case WPS_MODE_NONE:
-      case WPS_MODE_SCAN:
+      case WPSMode::INVALID:
+      case WPSMode::NONE:
+      case WPSMode::SCAN:
         break;
 
-      case WPS_MODE_DIRECT:
-        if(network_name != NULL && network_name[0] != '\0')
+      case WPSMode::DIRECT:
+        if(network_name != nullptr && network_name[0] != '\0')
             *out_wps_network_name = strdup(network_name);
 
-        if(network_ssid != NULL && network_ssid[0] != '\0')
+        if(network_ssid != nullptr && network_ssid[0] != '\0')
             *out_wps_network_ssid = strdup(network_ssid);
 
         break;
@@ -662,16 +656,16 @@ static enum WPSMode apply_changes_to_prefs(struct network_prefs *prefs,
                                            char **out_wps_network_name,
                                            char **out_wps_network_ssid)
 {
-    log_assert(prefs != NULL);
+    log_assert(prefs != nullptr);
 
     if(handle_set_dhcp_mode(prefs) < 0)
-        return WPS_MODE_INVALID;
+        return WPSMode::INVALID;
 
     if(handle_set_static_ipv4_config(prefs) < 0)
-        return WPS_MODE_INVALID;
+        return WPSMode::INVALID;
 
     if(handle_set_dns_servers(prefs) < 0)
-        return WPS_MODE_INVALID;
+        return WPSMode::INVALID;
 
     const enum WPSMode mode =
         handle_set_wireless_config(prefs, out_wps_network_name, out_wps_network_ssid);
@@ -691,7 +685,7 @@ static enum WPSMode apply_changes_to_prefs(struct network_prefs *prefs,
     {
         BUG("Unsupported change requests: 0x%08x",
             nwconfig_write_data.requested_changes & not_implemented);
-        return WPS_MODE_INVALID;
+        return WPSMode::INVALID;
     }
 
     return mode;
@@ -703,16 +697,16 @@ static enum WPSMode apply_changes_to_prefs(struct network_prefs *prefs,
  * \attention
  *     Must be called with the #ShutdownGuard from #nwstatus_data locked.
  */
-static enum WPSMode modify_network_configuration(const struct register_network_interface_t *selected,
-                                                 char *previous_wlan_name_buffer,
-                                                 size_t previous_wlan_name_buffer_size,
-                                                 char **out_wps_network_name,
-                                                 char **out_wps_network_ssid)
+static enum WPSMode
+modify_network_configuration(
+        const struct register_network_interface_t *selected,
+        std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> &previous_wlan_name_buffer,
+        char **out_wps_network_name, char **out_wps_network_ssid)
 {
     if(shutdown_guard_is_shutting_down_unlocked(nwstatus_data.shutdown_guard))
     {
         msg_info("Not writing network configuration during shutdown.");
-        return WPS_MODE_INVALID;
+        return WPSMode::INVALID;
     }
 
     struct network_prefs *ethernet_prefs;
@@ -720,17 +714,17 @@ static enum WPSMode modify_network_configuration(const struct register_network_i
     struct network_prefs_handle *cfg =
         network_prefs_open_rw(&ethernet_prefs, &wlan_prefs);
 
-    if(cfg == NULL)
-        return WPS_MODE_INVALID;
+    if(cfg == nullptr)
+        return WPSMode::INVALID;
 
     struct network_prefs *selected_prefs =
         selected->is_wired ? ethernet_prefs : wlan_prefs;
 
-    network_prefs_generate_service_name(selected->is_wired ? NULL : selected_prefs,
-                                        previous_wlan_name_buffer,
-                                        previous_wlan_name_buffer_size);
+    network_prefs_generate_service_name(selected->is_wired ? nullptr : selected_prefs,
+                                        previous_wlan_name_buffer.data(),
+                                        previous_wlan_name_buffer.size());
 
-    if(selected_prefs == NULL)
+    if(selected_prefs == nullptr)
         selected_prefs = network_prefs_add_prefs(cfg, selected->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN);
 
     enum WPSMode wps_mode =
@@ -739,15 +733,15 @@ static enum WPSMode modify_network_configuration(const struct register_network_i
 
     switch(wps_mode)
     {
-      case WPS_MODE_NONE:
+      case WPSMode::NONE:
         if(network_prefs_write_to_file(cfg) < 0)
-            wps_mode = WPS_MODE_INVALID;
+            wps_mode = WPSMode::INVALID;
 
         break;
 
-      case WPS_MODE_INVALID:
-      case WPS_MODE_DIRECT:
-      case WPS_MODE_SCAN:
+      case WPSMode::INVALID:
+      case WPSMode::DIRECT:
+      case WPSMode::SCAN:
         break;
     }
 
@@ -822,7 +816,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     const struct register_network_interface_t *selected =
         nwconfig_write_data.selected_interface;
 
-    nwconfig_write_data.selected_interface = NULL;
+    nwconfig_write_data.selected_interface = nullptr;
 
     if(nwconfig_write_data.requested_changes == 0)
     {
@@ -839,43 +833,42 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
               network_prefs_get_mac_address_by_tech(tech)->address);
 
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
-    char current_wlan_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
-    char *wps_network_name = NULL;
-    char *wps_network_ssid = NULL;
+    std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> current_wlan_service_name;
+    char *wps_network_name = nullptr;
+    char *wps_network_ssid = nullptr;
     const enum WPSMode wps_mode =
         modify_network_configuration(selected, current_wlan_service_name,
-                                     sizeof(current_wlan_service_name),
                                      &wps_network_name, &wps_network_ssid);
     shutdown_guard_unlock(nwstatus_data.shutdown_guard);
 
-    log_assert((wps_mode == WPS_MODE_DIRECT &&
-                (wps_network_name != NULL || wps_network_ssid != NULL)) ||
-               (wps_mode != WPS_MODE_DIRECT &&
-                (wps_network_name == NULL && wps_network_ssid == NULL)));
+    log_assert((wps_mode == WPSMode::DIRECT &&
+                (wps_network_name != nullptr || wps_network_ssid != nullptr)) ||
+               (wps_mode != WPSMode::DIRECT &&
+                (wps_network_name == nullptr && wps_network_ssid == nullptr)));
 
     switch(wps_mode)
     {
-      case WPS_MODE_INVALID:
+      case WPSMode::INVALID:
         break;
 
-      case WPS_MODE_NONE:
+      case WPSMode::NONE:
         dbussignal_connman_manager_connect_to_service(tech,
-                                                      current_wlan_service_name);
+                                                      current_wlan_service_name.data());
         return 0;
 
-      case WPS_MODE_DIRECT:
+      case WPSMode::DIRECT:
         log_assert(tech == NWPREFSTECH_WLAN);
         dbussignal_connman_manager_connect_to_wps_service(wps_network_name,
                                                           wps_network_ssid,
-                                                          current_wlan_service_name);
+                                                          current_wlan_service_name.data());
         free(wps_network_name);
         free(wps_network_ssid);
         return 0;
 
-      case WPS_MODE_SCAN:
+      case WPSMode::SCAN:
         log_assert(tech == NWPREFSTECH_WLAN);
-        dbussignal_connman_manager_connect_to_wps_service(NULL, NULL,
-                                                          current_wlan_service_name);
+        dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
+                                                          current_wlan_service_name.data());
         return 0;
     }
 
@@ -896,16 +889,16 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
 
     nwconfig_write_data.selected_interface =
         get_network_iface_data(registers_get_data());
-    log_assert(nwconfig_write_data.selected_interface != NULL);
+    log_assert(nwconfig_write_data.selected_interface != nullptr);
 
     return 0;
 }
 
-static void fill_network_status_register_response(uint8_t response[static 3])
+static void fill_network_status_register_response(std::array<uint8_t, 3> &response)
 {
     struct register_configuration_t *config = registers_get_nonconst_data();
 
-    config->active_interface = NULL;
+    config->active_interface = nullptr;
 
     response[0] = NETWORK_STATUS_IPV4_NOT_CONFIGURED;
     response[1] = NETWORK_STATUS_DEVICE_NONE;
@@ -917,15 +910,15 @@ static void fill_network_status_register_response(uint8_t response[static 3])
 
     bool need_check_connection_status = false;
 
-    if(iface_data != NULL)
+    if(iface_data != nullptr)
     {
-        log_assert(fallback_iface_data == NULL);
+        log_assert(fallback_iface_data == nullptr);
 
-        char result[2];
+        std::array<char, 2> result;
 
         connman_get_address_string(iface_data, CONNMAN_IP_VERSION_4,
                                    CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                   result, sizeof(result));
+                                   result.data(), result.size());
 
         if(result[0] != '\0')
         {
@@ -939,14 +932,14 @@ static void fill_network_status_register_response(uint8_t response[static 3])
         else
             need_check_connection_status = true;
     }
-    else if(fallback_iface_data != NULL)
+    else if(fallback_iface_data != nullptr)
     {
         iface_data = fallback_iface_data;
-        fallback_iface_data = NULL;
+        fallback_iface_data = nullptr;
         need_check_connection_status = true;
     }
 
-    if(iface_data != NULL)
+    if(iface_data != nullptr)
     {
         if(need_check_connection_status)
         {
@@ -984,11 +977,13 @@ ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 50 handler %p %zu", response, length);
 
-    if(data_length_is_unexpected(length, 3))
+    if(data_length_is_unexpected(length, nwstatus_data.previous_response.size()))
         return -1;
 
-    fill_network_status_register_response(response);
-    memcpy(nwstatus_data.previous_response, response, sizeof(nwstatus_data.previous_response));
+    fill_network_status_register_response(nwstatus_data.previous_response);
+    std::copy(nwstatus_data.previous_response.begin(),
+              nwstatus_data.previous_response.end(),
+              response);
 
     return length;
 }
@@ -1074,7 +1069,7 @@ int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
 
 static ssize_t
 read_ip_parameter(uint32_t requested_mask,
-                  const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
+                  const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &edited_ipv4_parameter,
                   bool (*connman_query_fn)(struct ConnmanInterfaceData *,
                                            char *, size_t),
                   uint8_t *response, size_t length)
@@ -1083,12 +1078,13 @@ read_ip_parameter(uint32_t requested_mask,
         return -1;
 
     if(in_edit_mode() && IS_REQUESTED(requested_mask))
-        memcpy(response, edited_ipv4_parameter, SIZE_OF_IPV4_ADDRESS_STRING);
+        std::copy(edited_ipv4_parameter.begin(), edited_ipv4_parameter.end(),
+                  response);
     else
     {
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
-        if(iface_data != NULL)
+        if(iface_data != nullptr)
             connman_query_fn(iface_data, (char *)response, length);
         else
             response[0] = '\0';
@@ -1101,7 +1097,7 @@ read_ip_parameter(uint32_t requested_mask,
 
 static ssize_t
 read_ipv4_parameter(uint32_t requested_mask,
-                    const char edited_ipv4_parameter[static SIZE_OF_IPV4_ADDRESS_STRING],
+                    const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &edited_ipv4_parameter,
                     bool (*connman_query_fn)(struct ConnmanInterfaceData *,
                                              enum ConnmanIPVersion,
                                              enum ConnmanReadConfigSource,
@@ -1112,12 +1108,13 @@ read_ipv4_parameter(uint32_t requested_mask,
         return -1;
 
     if(in_edit_mode() && IS_REQUESTED(requested_mask))
-        memcpy(response, edited_ipv4_parameter, SIZE_OF_IPV4_ADDRESS_STRING);
+        std::copy(edited_ipv4_parameter.begin(), edited_ipv4_parameter.end(),
+                  response);
     else
     {
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
-        if(iface_data != NULL)
+        if(iface_data != nullptr)
             connman_query_fn(iface_data, CONNMAN_IP_VERSION_4,
                              CONNMAN_READ_CONFIG_SOURCE_CURRENT,
                              (char *)response, length);
@@ -1180,7 +1177,8 @@ ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length)
                              response, length);
 }
 
-static int copy_ipv4_address(char *const dest, const uint32_t requested_change,
+static int copy_ipv4_address(std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &dest,
+                             const uint32_t requested_change,
                              const uint8_t *const data, size_t length,
                              bool is_empty_ok)
 {
@@ -1300,15 +1298,16 @@ ssize_t dcpregs_read_92_wlan_security(uint8_t *response, size_t length)
     bool failed = false;
 
     if(in_edit_mode() && IS_REQUESTED(REQ_WLAN_SECURITY_MODE_92))
-        memcpy(response, nwconfig_write_data.wlan_security_mode,
-               SIZE_OF_WLAN_SECURITY_MODE);
+        std::copy(nwconfig_write_data.wlan_security_mode.begin(),
+                  nwconfig_write_data.wlan_security_mode.end(),
+                  response);
     else
     {
         response[0] = '\0';
 
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
-        if(iface_data != NULL)
+        if(iface_data != nullptr)
         {
             failed = !connman_get_wlan_security_type_string(iface_data,
                                                             (char *)response,
@@ -1338,7 +1337,8 @@ int dcpregs_write_92_wlan_security(const uint8_t *data, size_t length)
     if(!may_change_config())
         return -1;
 
-    memcpy(nwconfig_write_data.wlan_security_mode, data, length);
+    std::copy(data, data + length,
+              nwconfig_write_data.wlan_security_mode.begin());
     nwconfig_write_data.wlan_security_mode[length] = '\0';
     nwconfig_write_data.requested_changes |= REQ_WLAN_SECURITY_MODE_92;
 
@@ -1357,19 +1357,20 @@ ssize_t dcpregs_read_93_ibss(uint8_t *response, size_t length)
 
 int dcpregs_write_93_ibss(const uint8_t *data, size_t length)
 {
-    if(data_length_is_in_unexpected_range(length, 4, 8))
+    std::array<char, 9> buffer;
+
+    if(data_length_is_in_unexpected_range(length, 4, buffer.size() - 1))
         return -1;
 
-    char buffer[9];
-    memcpy(buffer, data, length);
+    std::copy(data, data + length, buffer.begin());
     buffer[length] = '\0';
 
-    if(strcmp(buffer, "false") == 0)
+    if(strcmp(buffer.data(), "false") == 0)
     {
         msg_info("Ignoring IBSS infrastructure mode request (always using that mode)");
         return 0;
     }
-    else if(strcmp(buffer, "true") == 0)
+    else if(strcmp(buffer.data(), "true") == 0)
         msg_error(EINVAL, LOG_NOTICE,
                   "Cannot change IBSS mode to ad-hoc, always using infrastructure mode");
     else
@@ -1388,7 +1389,9 @@ ssize_t dcpregs_read_94_ssid(uint8_t *response, size_t length)
     if(in_edit_mode() && IS_REQUESTED(REQ_WLAN_SSID_94))
     {
         if(nwconfig_write_data.wlan_ssid_length > 0)
-            memcpy(response, nwconfig_write_data.wlan_ssid, nwconfig_write_data.wlan_ssid_length);
+            std::copy(nwconfig_write_data.wlan_ssid.begin(),
+                      nwconfig_write_data.wlan_ssid.begin() + nwconfig_write_data.wlan_ssid_length,
+                      response);
 
         retval = nwconfig_write_data.wlan_ssid_length;
     }
@@ -1396,7 +1399,7 @@ ssize_t dcpregs_read_94_ssid(uint8_t *response, size_t length)
     {
         struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
 
-        if(iface_data != NULL)
+        if(iface_data != nullptr)
         {
             retval = connman_get_wlan_ssid(iface_data, response, length);
             connman_free_interface_data(iface_data);
@@ -1416,7 +1419,7 @@ int dcpregs_write_94_ssid(const uint8_t *data, size_t length)
     if(!may_change_config())
         return -1;
 
-    memcpy(nwconfig_write_data.wlan_ssid, data, length);
+    std::copy(data, data + length, nwconfig_write_data.wlan_ssid.begin());
     nwconfig_write_data.wlan_ssid[length] = '\0';
     nwconfig_write_data.wlan_ssid_length = length;
     nwconfig_write_data.requested_changes |= REQ_WLAN_SSID_94;
@@ -1436,14 +1439,15 @@ ssize_t dcpregs_read_101_wpa_cipher(uint8_t *response, size_t length)
 
 int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length)
 {
-    if(data_length_is_in_unexpected_range(length, 3, 8))
+    std::array<char, 9> buffer;
+
+    if(data_length_is_in_unexpected_range(length, 3, buffer.size() - 1))
         return -1;
 
-    char buffer[9];
-    memcpy(buffer, data, length);
+    std::copy(data, data + length, buffer.begin());
     buffer[length] = '\0';
 
-    if(strcmp(buffer, "AES") == 0 || strcmp(buffer, "TKIP") == 0)
+    if(strcmp(buffer.data(), "AES") == 0 || strcmp(buffer.data(), "TKIP") == 0)
     {
         msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
         return 0;
@@ -1456,7 +1460,7 @@ int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length)
 
 ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
 {
-    if(data_length_is_unexpectedly_small(length, sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1))
+    if(data_length_is_unexpectedly_small(length, nwconfig_write_data.wlan_wpa_passphrase.size() - 1))
         return -1;
 
     if(!in_edit_mode())
@@ -1473,12 +1477,13 @@ ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
         copied_bytes = (nwconfig_write_data.wlan_wpa_passphrase_is_ascii
                         ? ((nwconfig_write_data.wlan_wpa_passphrase[0] == '\0')
                            ? 0
-                           : strlen((const char *)nwconfig_write_data.wlan_wpa_passphrase) - 1)
-                        : (sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1));
+                           : strlen(reinterpret_cast<const char *>(nwconfig_write_data.wlan_wpa_passphrase.data())) - 1)
+                        : (nwconfig_write_data.wlan_wpa_passphrase.size() - 1));
 
         if(copied_bytes > 0)
-            memcpy(response, nwconfig_write_data.wlan_wpa_passphrase,
-                   copied_bytes);
+            std::copy(nwconfig_write_data.wlan_wpa_passphrase.begin(),
+                      nwconfig_write_data.wlan_wpa_passphrase.begin() + copied_bytes,
+                      response);
         else
         {
             msg_info("Passphrase set, but empty");
@@ -1498,7 +1503,7 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
                                           0,
-                                          sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1))
+                                          nwconfig_write_data.wlan_wpa_passphrase.size() - 1))
         return -1;
 
     if(!may_change_config())
@@ -1528,7 +1533,7 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
 
         static const char invalid_passphrase_fmt[] = "Invalid passphrase: %s";
 
-        if(length == sizeof(nwconfig_write_data.wlan_wpa_passphrase) - 1)
+        if(length == nwconfig_write_data.wlan_wpa_passphrase.size() - 1)
         {
             if(!passphrase_is_hex)
             {
@@ -1562,12 +1567,12 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
 
 void dcpregs_networkconfig_interfaces_changed(void)
 {
-    uint8_t response[sizeof(nwstatus_data.previous_response)];
+    std::array<uint8_t, nwstatus_data.previous_response.size()> response;
 
     connman_wlan_power_on();
     fill_network_status_register_response(response);
 
-    if(memcmp(nwstatus_data.previous_response, response, sizeof(response)) != 0)
+    if(nwstatus_data.previous_response != response)
         registers_get_data()->register_changed_notification_fn(50);
 }
 
