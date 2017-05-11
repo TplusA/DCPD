@@ -35,121 +35,8 @@
 #include "connman.h"
 #include "connman_agent.h"
 #include "connman_common.h"
-#include "connman_service.hh"
+#include "connman_service_list.hh"
 #include "messages.h"
-
-class ServiceList
-{
-  public:
-    using Map = std::map<std::string, std::unique_ptr<Connman::ServiceBase>>;
-
-  private:
-    Map services_;
-    size_t number_of_ethernet_services_;
-    size_t number_of_wlan_services_;
-
-  public:
-    ServiceList(const ServiceList &) = delete;
-    ServiceList &operator=(const ServiceList &) = delete;
-
-    explicit ServiceList():
-        number_of_ethernet_services_(0),
-        number_of_wlan_services_(0)
-    {}
-
-    void clear()
-    {
-        services_.clear();
-        number_of_ethernet_services_ = 0;
-        number_of_wlan_services_ = 0;
-    }
-
-    void erase(const std::string &name)
-    {
-        auto it(services_.find(name));
-
-        if(it == services_.end())
-            return;
-
-        switch(it->second->get_technology())
-        {
-          case Connman::Technology::UNKNOWN_TECHNOLOGY:
-            break;
-
-          case Connman::Technology::ETHERNET:
-            log_assert(number_of_ethernet_services_ > 0);
-            --number_of_ethernet_services_;
-            break;
-
-          case Connman::Technology::WLAN:
-            log_assert(number_of_wlan_services_ > 0);
-            --number_of_wlan_services_;
-            break;
-        }
-
-        services_.erase(name);
-    }
-
-    bool insert(const char *name, Connman::ServiceData &&service_data,
-                Connman::Service<Connman::Technology::ETHERNET>::TechDataType &&ethernet_data,
-                bool is_ours)
-    {
-        if(services_.find(name) != services_.end())
-            return false;
-
-        services_[name].reset(new Connman::Service<Connman::Technology::ETHERNET>(
-                                        std::move(service_data),
-                                        std::move(ethernet_data),
-                                        is_ours));
-
-        ++number_of_ethernet_services_;
-
-        return true;
-    }
-
-    bool insert(const char *name, Connman::ServiceData &&service_data,
-                Connman::Service<Connman::Technology::WLAN>::TechDataType &&wlan_data,
-                bool is_ours)
-    {
-        if(services_.find(name) != services_.end())
-            return false;
-
-        services_[name].reset(new Connman::Service<Connman::Technology::WLAN>(
-                                        std::move(service_data),
-                                        std::move(wlan_data),
-                                        is_ours));
-
-        ++number_of_wlan_services_;
-
-        return true;
-    }
-
-    size_t number_of_services() const
-    {
-        log_assert(services_.size() == number_of_ethernet_services_ + number_of_wlan_services_);
-        return services_.size();
-    }
-
-    size_t number_of_ethernet_services() const { return number_of_ethernet_services_; }
-    size_t number_of_wlan_services() const { return number_of_wlan_services_; }
-
-    Connman::ServiceBase *operator[](const std::string &name)
-    {
-        auto it(services_.find(name));
-        return it != services_.end() ? it->second.get() : nullptr;
-    }
-
-    const Connman::ServiceBase *operator[](const std::string &name) const
-    {
-        return const_cast<ServiceList *>(this)->operator[](name);
-    }
-
-    Map::const_iterator find(const std::string &name) const { return services_.find(name); }
-    Map::const_iterator begin() const { return services_.begin(); }
-    Map::const_iterator end() const { return services_.end(); }
-    Map::iterator begin() { return services_.begin(); }
-    Map::iterator end() { return services_.end(); }
-};
 
 class WLANConnectionState
 {
@@ -275,7 +162,7 @@ class DBusSignalManagerData
     void (*schedule_connect_to_wlan)(void);
     WLANConnectionState wlan_connection_state;
 
-    ServiceList services;
+    Connman::ServiceList services;
 
     DBusSignalManagerData(const DBusSignalManagerData &) = delete;
     DBusSignalManagerData &operator=(const DBusSignalManagerData &) = delete;
@@ -1115,7 +1002,7 @@ struct UpdateServiceListTraits<std::vector<std::string>>
  * Remove listed services from our list.
  */
 template <typename RemovedType, typename Traits = UpdateServiceListTraits<RemovedType>>
-static void update_service_list(ServiceList &known_services,
+static void update_service_list(Connman::ServiceList &known_services,
                                 WLANConnectionState &wlan_connection_state,
                                 const RemovedType &removed,
                                 bool &have_lost_active_ethernet_device,
@@ -1192,7 +1079,7 @@ static void update_service_list(ServiceList &known_services,
 }
 
 static void update_service_list(GVariant *all_services,
-                                ServiceList &known_services,
+                                Connman::ServiceList &known_services,
                                 const std::map<std::string, bool> *has_changed,
                                 const struct network_prefs_mac_address &our_ethernet_mac,
                                 const struct network_prefs_mac_address &our_wlan_mac)
@@ -1316,7 +1203,7 @@ static bool disable_ipv6(Connman::ServiceBase &service,
     return retval;
 }
 
-static void ignore_services_if(ServiceList &services,
+static void ignore_services_if(Connman::ServiceList &services,
                                std::function<bool(const Connman::ServiceBase &service,
                                                   const std::string &name)> pred)
 {
@@ -1334,7 +1221,7 @@ static void ignore_services_if(ServiceList &services,
     }
 }
 
-static void ignore_inactive_services_on_wrong_interfaces(ServiceList &known_services)
+static void ignore_inactive_services_on_wrong_interfaces(Connman::ServiceList &known_services)
 {
     ignore_services_if(known_services,
             [] (const Connman::ServiceBase &s, const std::string &name)
@@ -1343,7 +1230,7 @@ static void ignore_inactive_services_on_wrong_interfaces(ServiceList &known_serv
             });
 }
 
-static void ignore_wlan_services_on_our_interfaces(ServiceList &known_services)
+static void ignore_wlan_services_on_our_interfaces(Connman::ServiceList &known_services)
 {
     if(known_services.number_of_wlan_services() > 0)
         ignore_services_if(known_services,
@@ -1353,7 +1240,7 @@ static void ignore_wlan_services_on_our_interfaces(ServiceList &known_services)
                 });
 }
 
-static void disconnect_active_services_if(ServiceList &services,
+static void disconnect_active_services_if(Connman::ServiceList &services,
                                           std::function<bool(const Connman::ServiceBase &service,
                                                              const std::string &name)> pred)
 {
@@ -1371,7 +1258,7 @@ static void disconnect_active_services_if(ServiceList &services,
     }
 }
 
-static void disconnect_active_services_on_wrong_interfaces(ServiceList &known_services)
+static void disconnect_active_services_on_wrong_interfaces(Connman::ServiceList &known_services)
 {
     disconnect_active_services_if(known_services,
             [] (const Connman::ServiceBase &s, const std::string &name)
@@ -1380,9 +1267,10 @@ static void disconnect_active_services_on_wrong_interfaces(ServiceList &known_se
             });
 }
 
-static void disconnect_nonmatching_active_services_on_our_interface(ServiceList &known_services,
-                                                                    const std::string &our_ethernet_name,
-                                                                    const std::string &our_wlan_name)
+static void
+disconnect_nonmatching_active_services_on_our_interface(Connman::ServiceList &known_services,
+                                                        const std::string &our_ethernet_name,
+                                                        const std::string &our_wlan_name)
 {
     disconnect_active_services_if(known_services,
             [&our_ethernet_name, &our_wlan_name]
@@ -1448,9 +1336,9 @@ static bool process_our_wlan_service(Connman::ServiceBase &service,
 }
 
 #ifdef NDEBUG
-static inline void bug_if_not_processed(const ServiceList &known_services) {}
+static inline void bug_if_not_processed(const Connman::ServiceList &known_services) {}
 #else /* !NDEBUG */
-static void bug_if_not_processed(const ServiceList &known_services)
+static void bug_if_not_processed(const Connman::ServiceList &known_services)
 {
     bool found_bug = false;
 
@@ -1501,7 +1389,7 @@ static void bug_if_not_processed(const ServiceList &known_services)
  * generalized approach that allows multiple configurations would actually
  * simplify things a lot, both for the software and for the end user.
  */
-static bool do_process_pending_changes(ServiceList &known_services,
+static bool do_process_pending_changes(Connman::ServiceList &known_services,
                                        bool have_lost_active_ethernet_device,
                                        bool have_lost_active_wlan_device,
                                        WLANConnectionState &wlan_connection_state,
@@ -1702,7 +1590,7 @@ static void process_pending_changes(DBusSignalManagerData &data,
 }
 
 static const std::vector<std::string>
-find_removed(const ServiceList &known_services, GVariant *all_services)
+find_removed(const Connman::ServiceList &known_services, GVariant *all_services)
 {
     std::vector<std::string> result;
     std::map<const std::string, bool> seen;
@@ -2048,7 +1936,7 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
 
 }
 
-static bool get_connecting_status(const ServiceList::Map::value_type &s,
+static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s,
                                   bool is_wps)
 {
     if(!s.second->get_service_data().state_.is_known())

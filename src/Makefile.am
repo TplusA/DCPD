@@ -37,7 +37,7 @@ dcpd_SOURCES = \
     dcpregs_upnpname.h dcpregs_searchparameters.h \
     connman.c connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
-    connman_service.cc connman_service.hh maybe.hh \
+    connman_service.cc connman_service.hh connman_service_list.hh maybe.hh \
     stream_id.h \
     coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
@@ -103,6 +103,7 @@ libregisters_la_SOURCES = \
     dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
     dbus_handlers_connman_manager_glue.h networkprefs.h \
+    connman_service.hh connman_service_list.hh maybe.hh \
     dbusdl_dbus.h \
     stream_id.h \
     coverart.cc coverart.hh md5.cc md5.hh \
