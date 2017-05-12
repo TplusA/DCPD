@@ -1,3 +1,35 @@
+2017-06-02  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.4 released.
+
+	* WLAN: Enable WPS push-button method.
+
+	* DCP protocol: Extended network status (register 50) for reporting
+	  state of connection.
+
+	* DCP protocol: Appliance ID set in register 87 has an effect now.
+	  Currently, the ID determines the way the network devices are treated
+	  and which MAC address is used for Airable. This version contains
+	  hard-coded rules, which is a design flaw enforced by project
+	  schedule. This issue is to be addressed in the future. Recognized
+	  appliance IDs are R1000E, MP1000E, MP2000R, MP2500HV, MP3100HV,
+	  CalaPlus, and CalaBerbel.
+
+	* Networking: The network MAC addresses are read out based on
+	  appliance ID. Filtering of ConnMan services by MAC address takes
+	  immediate effect on appliance ID change.
+
+	* TA Control: Fix very rarely occuring communication problem with
+	  smartphone app.
+
+	* Misc: Implement monitoring D-Bus interface for configuration value
+	  changes. This interface was long defined, and has finally been
+	  implemented.
+
+	* Misc: Unknown command line arguments are ignored in daemon mode.
+	  This is supposed to simplify ad-hoc upgrades and make regular
+	  updates more fail-safe.
+
 2017-04-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.3 released.
