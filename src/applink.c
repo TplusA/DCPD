@@ -165,7 +165,6 @@ static size_t count_parameters(struct ParserContext *ctx,
             overflow = true;
 
         ++count;
-
     }
 
     if(overflow)
