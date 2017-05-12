@@ -35,10 +35,9 @@ dcpd_SOURCES = \
     dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_playstream.hh dcpregs_status.h \
     dcpregs_upnpname.h dcpregs_searchparameters.h \
-    connman.c connman_iter.c connman_scan.c connman.h \
+    connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
-    connman_service.cc connman_service.hh maybe.hh \
-    connman_service_list.cc connman_service_list.hh \
+    connman_service.cc connman_service.hh connman_service_list.hh maybe.hh \
     stream_id.h \
     coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
@@ -61,6 +60,7 @@ noinst_LTLIBRARIES = \
     libtransactions.la \
     libdynamic_buffer.la \
     libregisters.la \
+    libservicelist.la \
     libnetworkprefs.la \
     libinifile.la \
     libapplink.la \
@@ -116,6 +116,13 @@ libregisters_la_SOURCES = \
 nodist_libregisters_la_SOURCES = do_update_sh.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 libregisters_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libservicelist_la_SOURCES = \
+    connman_service_list.cc connman_service_list.hh \
+    connman_service.hh maybe.hh \
+    messages.h
+libservicelist_la_CFLAGS = $(AM_CFLAGS)
+libservicelist_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)

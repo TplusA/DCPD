@@ -22,12 +22,14 @@
 
 #include <array>
 #include <cstring>
+#include <algorithm>
 #include <arpa/inet.h>
 
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_common.h"
 #include "network_status_bits.h"
 #include "registers_priv.h"
+#include "connman_service_list.hh"
 #include "connman.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "shutdown_guard.h"
@@ -172,37 +174,241 @@ get_network_iface_data(const struct register_configuration_t *config)
         : &config->builtin_ethernet_interface;
 }
 
-static struct ConnmanInterfaceData *
-find_active_primary_interface(const struct register_configuration_t *config,
-                              struct ConnmanInterfaceData **fallback)
+static void update_service_selection(const Connman::ServiceBase *service,
+                                     bool is_service_online,
+                                     const Connman::Technology default_tech,
+                                     const Connman::ServiceBase *&active_match,
+                                     const Connman::ServiceBase *&active_mismatch,
+                                     const Connman::ServiceBase *&inactive_match,
+                                     const Connman::ServiceBase *&inactive_mismatch)
 {
-    const enum NetworkPrefsTechnology default_tech =
-        get_network_iface_data(config)->is_wired
-        ? NWPREFSTECH_ETHERNET
-        : NWPREFSTECH_WLAN;
+    log_assert(active_match == nullptr);
 
-    return connman_find_active_primary_interface(
-                network_prefs_get_mac_address_by_tech(default_tech)->address,
-                network_prefs_get_mac_address_by_tech(NWPREFSTECH_ETHERNET)->address,
-                network_prefs_get_mac_address_by_tech(NWPREFSTECH_WLAN)->address,
-                fallback);
+    if(is_service_online)
+    {
+        if(service->get_technology() == default_tech)
+            active_match = service;
+        else
+            active_mismatch = service;
+    }
+    else
+    {
+        if(service->get_technology() == default_tech)
+            inactive_match = service;
+        else
+            inactive_mismatch = service;
+    }
 }
 
-static struct ConnmanInterfaceData *get_connman_iface_data(void)
+static void update_fallback_service_selection(const Connman::ServiceBase *service,
+                                              const Connman::Technology default_tech,
+                                              const Connman::ServiceBase *&fallback_match,
+                                              const Connman::ServiceBase *&fallback_mismatch)
+{
+    if(service->get_technology() == default_tech)
+        fallback_match = service;
+    else
+        fallback_mismatch = service;
+}
+
+static const Connman::ServiceBase *
+fixup_service_selection(const Connman::ServiceBase *active_match,
+                        const Connman::ServiceBase *active_mismatch,
+                        const Connman::ServiceBase *inactive_match,
+                        const Connman::ServiceBase *inactive_mismatch,
+                        const Connman::ServiceBase *fallback_match,
+                        const Connman::ServiceBase *fallback_mismatch,
+                        const Connman::ServiceBase **fallback)
+{
+    if(fallback != nullptr)
+        *fallback = nullptr;
+
+    if(active_match != nullptr)
+        return active_match;
+
+    if(active_mismatch != nullptr)
+        return active_mismatch;
+
+    if(fallback != nullptr)
+    {
+        if(inactive_match != nullptr)
+            *fallback = inactive_match;
+        else if(inactive_mismatch != nullptr)
+            *fallback = inactive_mismatch;
+        else if(fallback_match != nullptr)
+            *fallback = fallback_match;
+        else if(fallback_mismatch != nullptr)
+            *fallback = fallback_mismatch;
+    }
+
+    return nullptr;
+}
+
+/*!
+ * Find active service on NIC with MAC address matching one of the given ones.
+ *
+ * In case there is a single, active service on any matching NIC, that service
+ * will be returned.
+ *
+ * In case both, the wired and the wireless, NICs are found and there are
+ * active services on both of them, then the active service matching the
+ * \p default_tech parameter is returned (making it a tiebreaker).
+ *
+ * In case any of the NICs is found, but none of them has an active service,
+ * then (and only then) any non-idle service is returned in the \p fallback
+ * parameter, where those matching the \p default_tech parameter are preferred.
+ */
+static const Connman::ServiceBase *
+find_service_on_primary_interface(const Connman::ServiceList &services,
+                                  const Connman::Technology default_tech,
+                                  const Connman::ServiceBase **fallback)
+{
+    log_assert(default_tech != Connman::Technology::UNKNOWN_TECHNOLOGY);
+
+    const Connman::ServiceBase *active_service_match = nullptr;
+    const Connman::ServiceBase *active_service_mismatch = nullptr;
+    const Connman::ServiceBase *inactive_service_match = nullptr;
+    const Connman::ServiceBase *inactive_service_mismatch = nullptr;
+    const Connman::ServiceBase *fallback_service_match = nullptr;
+    const Connman::ServiceBase *fallback_service_mismatch = nullptr;
+
+    for(const auto &s : services)
+    {
+        if(!s.second->get_service_data().state_.is_known())
+           continue;
+
+        const auto &service(s.second);
+
+        if(!service->is_ours())
+            continue;
+
+        if(!service->is_active())
+            continue;
+
+        bool is_online = false;
+
+        switch(service->get_service_data().state_.get())
+        {
+          case Connman::ServiceState::NOT_AVAILABLE:
+          case Connman::ServiceState::UNKNOWN_STATE:
+            continue;
+
+          case Connman::ServiceState::IDLE:
+          case Connman::ServiceState::FAILURE:
+          case Connman::ServiceState::DISCONNECT:
+            update_fallback_service_selection(service.get(), default_tech,
+                                              fallback_service_match,
+                                              fallback_service_mismatch);
+            continue;
+
+          case Connman::ServiceState::ASSOCIATION:
+          case Connman::ServiceState::CONFIGURATION:
+            break;
+
+          case Connman::ServiceState::READY:
+          case Connman::ServiceState::ONLINE:
+            is_online = true;
+            break;
+        }
+
+        update_service_selection(service.get(), is_online, default_tech,
+                                 active_service_match, active_service_mismatch,
+                                 inactive_service_match, inactive_service_mismatch);
+
+        if(active_service_match != nullptr)
+            break;
+    }
+
+    return fixup_service_selection(active_service_match, active_service_mismatch,
+                                   inactive_service_match, inactive_service_mismatch,
+                                   fallback_service_match, fallback_service_mismatch,
+                                   fallback);
+}
+
+static const Connman::ServiceBase *
+find_best_service_by_technology(const Connman::ServiceList &services,
+                                const Connman::Technology tech)
+{
+    log_assert(tech != Connman::Technology::UNKNOWN_TECHNOLOGY);
+
+    const Connman::ServiceBase *found = nullptr;
+    int rank = -1;
+
+    for(const auto &s : services)
+    {
+        if(!s.second->get_service_data().state_.is_known())
+           continue;
+
+        const auto &service(s.second);
+
+        if(!service->is_ours())
+            continue;
+
+        if(service->get_technology() != tech)
+            continue;
+
+        switch(service->get_service_data().state_.get())
+        {
+          case Connman::ServiceState::NOT_AVAILABLE:
+          case Connman::ServiceState::UNKNOWN_STATE:
+            break;
+
+          case Connman::ServiceState::IDLE:
+          case Connman::ServiceState::FAILURE:
+          case Connman::ServiceState::DISCONNECT:
+            if(rank >= 0)
+                continue;
+
+            rank = 0;
+            break;
+
+          case Connman::ServiceState::ASSOCIATION:
+          case Connman::ServiceState::CONFIGURATION:
+            if(rank >= 1)
+                continue;
+
+            rank = 1;
+            break;
+
+          case Connman::ServiceState::READY:
+            if(rank >= 2)
+                continue;
+
+            rank = 2;
+            break;
+
+          case Connman::ServiceState::ONLINE:
+            if(rank >= 3)
+                continue;
+
+            rank = 3;
+            break;
+        }
+
+        found = service.get();
+
+        if(rank >= 3)
+            break;
+    }
+
+    return found;
+}
+
+static const Connman::ServiceBase *get_connman_service_data(const Connman::ServiceList &services)
 {
     const struct register_configuration_t *config = registers_get_data();
 
     if(in_edit_mode())
-    {
-        const enum NetworkPrefsTechnology tech =
-            nwconfig_write_data.selected_interface->is_wired
-            ? NWPREFSTECH_ETHERNET
-            : NWPREFSTECH_WLAN;
-
-        return connman_find_interface(network_prefs_get_mac_address_by_tech(tech)->address);
-    }
+        return find_best_service_by_technology(services,
+                                               nwconfig_write_data.selected_interface->is_wired
+                                               ? Connman::Technology::ETHERNET
+                                               : Connman::Technology::WLAN);
     else
-        return find_active_primary_interface(config, nullptr);
+        return find_service_on_primary_interface(services,
+                                                 get_network_iface_data(config)->is_wired
+                                                 ? Connman::Technology::ETHERNET
+                                                 : Connman::Technology::WLAN,
+                                                 nullptr);
 }
 
 /*!
@@ -246,21 +452,30 @@ static int fill_in_missing_ipv4_config_requests(void)
 }
 
 /*!
- * Short helper for improving code readability.
+ * Short helper template for improving code readability.
  */
-static void copy_as_primary_dns(const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &src)
+template <size_t N>
+static size_t copy_to_array(const std::string &src, std::array<char, N> &dest)
 {
-    nwconfig_write_data.ipv4_dns_server1 = src;
-    nwconfig_write_data.ipv4_dns_server1[nwconfig_write_data.ipv4_dns_server1.size() - 1] = '\0';
+    const size_t n(std::min(src.length(), N - 1));
+
+    std::copy_n(src.begin(), n, dest.begin());
+    dest[n] = '\0';
+
+    return n + 1;
 }
 
 /*!
- * Short helper for improving code readability.
+ * Short helper template for improving code readability.
  */
-static void copy_as_secondary_dns(const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &src)
+static size_t copy_to_array(const std::string &src, char *dest, size_t dest_size)
 {
-    nwconfig_write_data.ipv4_dns_server2 = src;
-    nwconfig_write_data.ipv4_dns_server2[nwconfig_write_data.ipv4_dns_server2.size() - 1] = '\0';
+    const size_t n(std::min(src.length(), dest_size - 1));
+
+    std::copy_n(src.begin(), n, dest);
+    dest[n] = '\0';
+
+    return n + 1;
 }
 
 /*!
@@ -297,7 +512,7 @@ static void shift_dns_servers_if_necessary(void)
  *     one defined already;
  *   - it becomes the primary one if no DNS servers were defined before.
  */
-static void fill_in_missing_dns_server_config_requests(void)
+static void fill_in_missing_dns_server_config_requests(const Connman::ServiceBase &service)
 {
     log_assert(IS_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63));
 
@@ -310,24 +525,9 @@ static void fill_in_missing_dns_server_config_requests(void)
     /* at this point we know that only one DNS server was sent to us, either a
      * "primary" one or a "secondary" */
 
-    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> previous_primary;
-    std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> previous_secondary;
-
-    struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
-
-    if(iface_data == nullptr)
-        previous_primary[0] = previous_secondary[0] = '\0';
-    else
-    {
-        connman_get_primary_dns_string(iface_data, previous_primary.data(),
-                                       previous_primary.size());
-        connman_get_secondary_dns_string(iface_data, previous_secondary.data(),
-                                         previous_secondary.size());
-        connman_free_interface_data(iface_data);
-    }
-
     const bool have_dns_servers =
-        previous_primary[0] != '\0' || previous_secondary[0] != '\0';
+        (service.get_service_data().dns_servers_.is_known() &&
+         !service.get_service_data().dns_servers_.get().empty());
 
     if(!have_dns_servers)
     {
@@ -341,39 +541,71 @@ static void fill_in_missing_dns_server_config_requests(void)
     }
     else
     {
+        const auto &dns_servers(service.get_service_data().dns_servers_.get());
+
         /*
-         * So we have two lists. For sure there must be a primary DNS server in
-         * the \c previous_primary buffer (otherwise \c kv would have been
-         * \c nullptr). There might be a secondary DNS in \c previous_secondary
-         * as well. */
-        log_assert(previous_primary[0] != '\0');
+        if(dns_servers.size() > 0)
+        {
+            copy_as_dns(dns_servers[0], previous_primary);
+
+            if(dns_servers.size() > 1)
+                copy_as_dns(dns_servers[1], previous_secondary);
+        }
+        */
 
         if(IS_REQUESTED(REQ_DNS_SERVER1_62))
         {
             /* have new primary server, now copy over the previously defined,
              * secondary one (if any) */
-            copy_as_secondary_dns(previous_secondary);
+            if(dns_servers.size() > 1)
+                copy_to_array(dns_servers[1], nwconfig_write_data.ipv4_dns_server2);
+            else
+                nwconfig_write_data.ipv4_dns_server2[0] = '\0';
+
             shift_dns_servers_if_necessary();
         }
         else
         {
             /* have new secondary server, now copy over the previously defined,
              * primary one */
-            copy_as_primary_dns(previous_primary);
+            copy_to_array(dns_servers[0], nwconfig_write_data.ipv4_dns_server1);
         }
     }
 }
 
+static uint8_t map_dhcp_method(const Connman::DHCPV4Method method)
+{
+    switch(method)
+    {
+      case Connman::DHCPV4Method::NOT_AVAILABLE:
+      case Connman::DHCPV4Method::UNKNOWN_METHOD:
+        break;
+
+      case Connman::DHCPV4Method::OFF:
+      case Connman::DHCPV4Method::MANUAL:
+      case Connman::DHCPV4Method::FIXED:
+        return NETWORK_STATUS_IPV4_STATIC_ADDRESS;
+
+      case Connman::DHCPV4Method::ON:
+        return NETWORK_STATUS_IPV4_DHCP;
+    }
+
+    return NETWORK_STATUS_IPV4_NOT_CONFIGURED;
+}
+
 static bool query_dhcp_mode(void)
 {
-    struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
-    bool ret = (iface_data != nullptr)
-        ? (connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_4,
-                                 CONNMAN_READ_CONFIG_SOURCE_CURRENT) == CONNMAN_DHCP_ON)
-        : false;
-    connman_free_interface_data(iface_data);
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+    const Connman::ServiceBase *service(get_connman_service_data(services));
 
-    return ret;
+    if(service == nullptr)
+        return false;
+
+    if(!service->get_service_data().ip_settings_v4_.is_known())
+        return false;
+
+    return map_dhcp_method(service->get_service_data().ip_settings_v4_.get().get_dhcp_method()) == NETWORK_STATUS_IPV4_DHCP;
 }
 
 static int handle_set_dhcp_mode(struct network_prefs *prefs)
@@ -431,12 +663,13 @@ static int handle_set_static_ipv4_config(struct network_prefs *prefs)
     return 0;
 }
 
-static int handle_set_dns_servers(struct network_prefs *prefs)
+static int handle_set_dns_servers(const Connman::ServiceBase &service,
+                                  struct network_prefs *prefs)
 {
     if(!IS_REQUESTED(REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63))
         return 0;
 
-    fill_in_missing_dns_server_config_requests();
+    fill_in_missing_dns_server_config_requests(service);
 
     if(nwconfig_write_data.ipv4_dns_server1[0] != '\0')
         network_prefs_put_nameservers(prefs,
@@ -463,19 +696,67 @@ static char nibble_to_char(uint8_t nibble)
         return 'a' + nibble - 10;
 }
 
-static void binary_to_hexdump(char *dest, const uint8_t *src, size_t len)
+static uint8_t char_to_nibble(char ch)
+{
+    if(ch >= '0' && ch <= '9')
+        return ch - '0';
+
+    if(ch >= 'a' && ch <= 'f')
+        return ch - 'a' + 10;
+
+    if(ch >= 'A' && ch <= 'F')
+        return ch - 'A' + 10;
+
+    return UINT8_MAX;
+}
+
+static size_t binary_to_hexdump(char *dest, size_t dest_size,
+                                const uint8_t *src, size_t src_size)
 {
     size_t j = 0;
 
-    for(size_t i = 0; i < len; ++i)
+    for(size_t i = 0; i < src_size && j < dest_size; ++i)
     {
-        const uint8_t byte = nwconfig_write_data.wlan_ssid[i];
+        const uint8_t byte = src[i];
+
+        if(j >= dest_size)
+            break;
 
         dest[j++] = nibble_to_char(byte >> 4);
+
+        if(j >= dest_size)
+            break;
+
         dest[j++] = nibble_to_char(byte & 0x0f);
     }
 
-    dest[j] = '\0';
+    if(j < dest_size)
+        dest[j++] = '\0';
+    else
+        dest[dest_size - 1] = '\0';
+
+    return j;
+}
+
+static size_t hexdump_to_binary(char *dest, size_t dest_size,
+                                const std::string &src)
+{
+    size_t j = 0;
+
+    for(size_t i = 0; i < src.size() && j < dest_size; i += 2)
+    {
+        if(j >= dest_size)
+            break;
+
+        dest[j] = char_to_nibble(src[i]) << 4;
+
+        if(i + 1 >= src.size())
+            break;
+
+        dest[j++] |= char_to_nibble(src[i + 1]);
+    }
+
+    return j;
 }
 
 static bool is_wlan_ssid_simple_ascii(const uint8_t *ssid, size_t len)
@@ -517,18 +798,27 @@ static bool is_known_security_mode_name(const std::array<char, SIZE_OF_WLAN_SECU
     return false;
 }
 
-static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
-                                               char **out_wps_network_name,
-                                               char **out_wps_network_ssid)
+static WPSMode handle_set_wireless_config(const Connman::ServiceBase &service,
+                                          struct network_prefs *prefs,
+                                          char **out_wps_network_name,
+                                          char **out_wps_network_ssid)
 {
     if(!IS_REQUESTED(req_wireless_only_parameters))
         return WPSMode::NONE;
 
-    if(network_prefs_get_technology_by_prefs(prefs) != NWPREFSTECH_WLAN)
+    switch(service.get_technology())
     {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        BUG("Tried setting WLAN parameters for unknown technology");
+        return WPSMode::NONE;
+
+      case Connman::Technology::ETHERNET:
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "Ignoring wireless parameters for active wired interface");
         return WPSMode::NONE;
+
+      case Connman::Technology::WLAN:
+        break;
     }
 
     const char *network_name;
@@ -552,19 +842,12 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
     }
     else
     {
-        /* we need to know the security mode for some checks below, so we need
-         * to retrieve it from ConnMan */
-        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+        const auto &tech_data(static_cast<const Connman::Service<Connman::Technology::WLAN> &>(service).get_tech_data());
 
-        if(iface_data == nullptr)
-            nwconfig_write_data.wlan_security_mode[0] = '\0';
+        if(tech_data.security_.is_known())
+            copy_to_array(tech_data.security_.get(), nwconfig_write_data.wlan_security_mode);
         else
-        {
-            connman_get_wlan_security_type_string(iface_data,
-                                                  nwconfig_write_data.wlan_security_mode.data(),
-                                                  nwconfig_write_data.wlan_security_mode.size());
-            connman_free_interface_data(iface_data);
-        }
+            nwconfig_write_data.wlan_security_mode[0] = '\0';
     }
 
     if(nwconfig_write_data.wlan_security_mode[0] == '\0')
@@ -590,7 +873,8 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
                 network_name = reinterpret_cast<const char *>(nwconfig_write_data.wlan_ssid.data());
             else
             {
-                binary_to_hexdump(ssid_buffer, nwconfig_write_data.wlan_ssid.data(),
+                binary_to_hexdump(ssid_buffer, sizeof(ssid_buffer),
+                                  nwconfig_write_data.wlan_ssid.data(),
                                   nwconfig_write_data.wlan_ssid_length);
                 network_ssid = ssid_buffer;
             }
@@ -602,7 +886,7 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
         network_ssid = nullptr;
     }
 
-    const enum WPSMode retval =
+    const WPSMode retval =
         (strcmp(nwconfig_write_data.wlan_security_mode.data(), "wps") == 0
          ? (network_name == nullptr
             ? WPSMode::SCAN
@@ -652,9 +936,10 @@ static enum WPSMode handle_set_wireless_config(struct network_prefs *prefs,
     return retval;
 }
 
-static enum WPSMode apply_changes_to_prefs(struct network_prefs *prefs,
-                                           char **out_wps_network_name,
-                                           char **out_wps_network_ssid)
+static WPSMode apply_changes_to_prefs(const Connman::ServiceBase &service,
+                                      struct network_prefs *prefs,
+                                      char **out_wps_network_name,
+                                      char **out_wps_network_ssid)
 {
     log_assert(prefs != nullptr);
 
@@ -664,11 +949,12 @@ static enum WPSMode apply_changes_to_prefs(struct network_prefs *prefs,
     if(handle_set_static_ipv4_config(prefs) < 0)
         return WPSMode::INVALID;
 
-    if(handle_set_dns_servers(prefs) < 0)
+    if(handle_set_dns_servers(service, prefs) < 0)
         return WPSMode::INVALID;
 
-    const enum WPSMode mode =
-        handle_set_wireless_config(prefs, out_wps_network_name, out_wps_network_ssid);
+    const WPSMode mode = handle_set_wireless_config(service, prefs,
+                                                    out_wps_network_name,
+                                                    out_wps_network_ssid);
 
     static const uint32_t not_implemented =
         REQ_PROXY_MODE_59 |
@@ -697,7 +983,7 @@ static enum WPSMode apply_changes_to_prefs(struct network_prefs *prefs,
  * \attention
  *     Must be called with the #ShutdownGuard from #nwstatus_data locked.
  */
-static enum WPSMode
+static WPSMode
 modify_network_configuration(
         const struct register_network_interface_t *selected,
         std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> &previous_wlan_name_buffer,
@@ -706,6 +992,17 @@ modify_network_configuration(
     if(shutdown_guard_is_shutting_down_unlocked(nwstatus_data.shutdown_guard))
     {
         msg_info("Not writing network configuration during shutdown.");
+        return WPSMode::INVALID;
+    }
+
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+    const Connman::ServiceBase *service(get_connman_service_data(services));
+
+    if(service == nullptr)
+    {
+        msg_error(0, LOG_ERR,
+                  "Network service does not exist, cannot configure");
         return WPSMode::INVALID;
     }
 
@@ -727,8 +1024,8 @@ modify_network_configuration(
     if(selected_prefs == nullptr)
         selected_prefs = network_prefs_add_prefs(cfg, selected->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN);
 
-    enum WPSMode wps_mode =
-        apply_changes_to_prefs(selected_prefs,
+    WPSMode wps_mode =
+        apply_changes_to_prefs(*service, selected_prefs,
                                out_wps_network_name, out_wps_network_ssid);
 
     switch(wps_mode)
@@ -816,11 +1113,10 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     const struct register_network_interface_t *selected =
         nwconfig_write_data.selected_interface;
 
-    nwconfig_write_data.selected_interface = nullptr;
-
     if(nwconfig_write_data.requested_changes == 0)
     {
         /* nothing to do */
+        nwconfig_write_data.selected_interface = nullptr;
         return 0;
     }
 
@@ -836,7 +1132,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> current_wlan_service_name;
     char *wps_network_name = nullptr;
     char *wps_network_ssid = nullptr;
-    const enum WPSMode wps_mode =
+    const WPSMode wps_mode =
         modify_network_configuration(selected, current_wlan_service_name,
                                      &wps_network_name, &wps_network_ssid);
     shutdown_guard_unlock(nwstatus_data.shutdown_guard);
@@ -845,6 +1141,8 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
                 (wps_network_name != nullptr || wps_network_ssid != nullptr)) ||
                (wps_mode != WPSMode::DIRECT &&
                 (wps_network_name == nullptr && wps_network_ssid == nullptr)));
+
+    nwconfig_write_data.selected_interface = nullptr;
 
     switch(wps_mode)
     {
@@ -904,42 +1202,45 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
     response[1] = NETWORK_STATUS_DEVICE_NONE;
     response[2] = NETWORK_STATUS_CONNECTION_NONE;
 
-    struct ConnmanInterfaceData *fallback_iface_data;
-    struct ConnmanInterfaceData *iface_data =
-        find_active_primary_interface(config, &fallback_iface_data);
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+    const Connman::ServiceBase *fallback_service_data;
+    const Connman::ServiceBase *service =
+        find_service_on_primary_interface(services,
+                                          get_network_iface_data(config)->is_wired
+                                          ? Connman::Technology::ETHERNET
+                                          : Connman::Technology::WLAN,
+                                          &fallback_service_data);
 
     bool need_check_connection_status = false;
 
-    if(iface_data != nullptr)
+    if(service != nullptr)
     {
-        log_assert(fallback_iface_data == nullptr);
+        log_assert(fallback_service_data == nullptr);
 
-        std::array<char, 2> result;
-
-        connman_get_address_string(iface_data, CONNMAN_IP_VERSION_4,
-                                   CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                   result.data(), result.size());
-
-        if(result[0] != '\0')
+        if(service->get_service_data().ip_settings_v4_.is_known())
         {
-            response[0] = (connman_get_dhcp_mode(iface_data, CONNMAN_IP_VERSION_4,
-                                                 CONNMAN_READ_CONFIG_SOURCE_CURRENT) ==
-                           CONNMAN_DHCP_ON)
-                ? NETWORK_STATUS_IPV4_DHCP
-                : NETWORK_STATUS_IPV4_STATIC_ADDRESS;
-            response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
+            const auto &settings(service->get_service_data().ip_settings_v4_.get());
+
+            if(settings.get_address().get_string().empty())
+                need_check_connection_status = true;
+            else
+            {
+                response[0] = map_dhcp_method(settings.get_dhcp_method());
+                response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
+            }
         }
         else
             need_check_connection_status = true;
     }
-    else if(fallback_iface_data != nullptr)
+    else if(fallback_service_data != nullptr)
     {
-        iface_data = fallback_iface_data;
-        fallback_iface_data = nullptr;
+        service = fallback_service_data;
+        fallback_service_data = nullptr;
         need_check_connection_status = true;
     }
 
-    if(iface_data != nullptr)
+    if(service != nullptr)
     {
         if(need_check_connection_status)
         {
@@ -953,24 +1254,22 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
                 response[2] |= NETWORK_STATUS_CONNECTION_IS_WPS_MODE;
         }
 
-        const enum ConnmanConnectionType ctype = connman_get_connection_type(iface_data);
-
-        switch(ctype)
+        switch(service->get_technology())
         {
-          case CONNMAN_CONNECTION_TYPE_UNKNOWN:
-          case CONNMAN_CONNECTION_TYPE_ETHERNET:
+          case Connman::Technology::UNKNOWN_TECHNOLOGY:
+            break;
+
+          case Connman::Technology::ETHERNET:
             response[1] = NETWORK_STATUS_DEVICE_ETHERNET;
             config->active_interface = &config->builtin_ethernet_interface;
             break;
 
-          case CONNMAN_CONNECTION_TYPE_WLAN:
+          case Connman::Technology::WLAN:
             response[1] = NETWORK_STATUS_DEVICE_WLAN;
             config->active_interface = &config->builtin_wlan_interface;
             break;
         }
     }
-
-    connman_free_interface_data(iface_data);
 }
 
 ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
@@ -1068,113 +1367,162 @@ int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
 }
 
 static ssize_t
-read_ip_parameter(uint32_t requested_mask,
-                  const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &edited_ipv4_parameter,
-                  bool (*connman_query_fn)(struct ConnmanInterfaceData *,
-                                           char *, size_t),
-                  uint8_t *response, size_t length)
+read_out_parameter(const std::function<ssize_t(const Connman::ServiceBase &, char *, size_t)> &copy,
+                   Connman::Technology required_technology,
+                   uint8_t *response, size_t length)
 {
-    if(data_length_is_unexpectedly_small(length, SIZE_OF_IPV4_ADDRESS_STRING))
-        return -1;
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+    const Connman::ServiceBase *service(get_connman_service_data(services));
 
-    if(in_edit_mode() && IS_REQUESTED(requested_mask))
-        std::copy(edited_ipv4_parameter.begin(), edited_ipv4_parameter.end(),
-                  response);
-    else
+    if(service != nullptr &&
+       (service->get_technology() == required_technology ||
+        required_technology == Connman::Technology::UNKNOWN_TECHNOLOGY))
     {
-        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
-
-        if(iface_data != nullptr)
-            connman_query_fn(iface_data, (char *)response, length);
-        else
-            response[0] = '\0';
-
-        connman_free_interface_data(iface_data);
+        return copy(*service, reinterpret_cast<char *>(response), length);
     }
 
-    return strlen((char *)response) + 1;
+    return -1;
 }
 
+template <typename T, size_t N>
 static ssize_t
-read_ipv4_parameter(uint32_t requested_mask,
-                    const std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &edited_ipv4_parameter,
-                    bool (*connman_query_fn)(struct ConnmanInterfaceData *,
-                                             enum ConnmanIPVersion,
-                                             enum ConnmanReadConfigSource,
-                                             char *, size_t),
-                    uint8_t *response, size_t length)
+read_out_parameter(uint32_t requested_mask,
+                   const std::array<T, N> &edited_ipv4_parameter,
+                   bool expected_length_includes_zero_terminator,
+                   const std::function<ssize_t(const Connman::ServiceBase &, char *, size_t)> &copy,
+                   Connman::Technology required_technology,
+                   uint8_t *response, size_t length,
+                   size_t n_copy_max = N)
 {
-    if(data_length_is_unexpectedly_small(length, SIZE_OF_IPV4_ADDRESS_STRING))
+    const size_t length_decrease = expected_length_includes_zero_terminator ? 0 : 1;
+
+    if(data_length_is_unexpectedly_small(length, N - length_decrease))
         return -1;
 
+    log_assert(n_copy_max <= N);
+
+    response[0] = '\0';
+
+    ssize_t written;
+
     if(in_edit_mode() && IS_REQUESTED(requested_mask))
-        std::copy(edited_ipv4_parameter.begin(), edited_ipv4_parameter.end(),
-                  response);
-    else
     {
-        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+        written = std::copy(edited_ipv4_parameter.begin(),
+                            edited_ipv4_parameter.begin() + n_copy_max - length_decrease,
+                            response) - response;
 
-        if(iface_data != nullptr)
-            connman_query_fn(iface_data, CONNMAN_IP_VERSION_4,
-                             CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                             (char *)response, length);
-        else
-            response[0] = '\0';
-
-        connman_free_interface_data(iface_data);
+        if(expected_length_includes_zero_terminator && size_t(written) < length)
+            written = strlen(reinterpret_cast<const char *>(response)) + 1;
     }
+    else
+        written = read_out_parameter(copy, required_technology, response, length);
 
-    return strlen((char *)response) + 1;
+    if(written < 0)
+        return written;
+
+    return (expected_length_includes_zero_terminator || size_t(written) <= length
+            ? written
+            : length);
 }
 
 ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 56 handler %p %zu", response, length);
 
-    return read_ipv4_parameter(REQ_IP_ADDRESS_56,
-                               nwconfig_write_data.ipv4_address,
-                               connman_get_address_string,
-                               response, length);
+    return read_out_parameter(REQ_IP_ADDRESS_56,
+                nwconfig_write_data.ipv4_address, true,
+                [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                {
+                    if(s.get_service_data().ip_settings_v4_.is_known())
+                        return copy_to_array(s.get_service_data().ip_settings_v4_.get().get_address().get_string(),
+                                             out, len);
+                    else
+                        return -1;
+                },
+                Connman::Technology::UNKNOWN_TECHNOLOGY,
+                response, length);
 }
 
 ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 57 handler %p %zu", response, length);
 
-    return read_ipv4_parameter(REQ_NETMASK_57,
-                               nwconfig_write_data.ipv4_netmask,
-                               connman_get_netmask_string,
-                               response, length);
+    return read_out_parameter(REQ_NETMASK_57,
+                nwconfig_write_data.ipv4_netmask, true,
+                [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                {
+                    if(s.get_service_data().ip_settings_v4_.is_known())
+                        return copy_to_array(s.get_service_data().ip_settings_v4_.get().get_netmask().get_string(),
+                                             out, len);
+                    else
+                        return -1;
+                },
+                Connman::Technology::UNKNOWN_TECHNOLOGY,
+                response, length);
 }
 
 ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 58 handler %p %zu", response, length);
 
-    return read_ipv4_parameter(REQ_DEFAULT_GATEWAY_58,
-                               nwconfig_write_data.ipv4_gateway,
-                               connman_get_gateway_string,
-                               response, length);
+    return read_out_parameter(REQ_DEFAULT_GATEWAY_58,
+                nwconfig_write_data.ipv4_gateway, true,
+                [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                {
+                    if(s.get_service_data().ip_settings_v4_.is_known())
+                        return copy_to_array(s.get_service_data().ip_settings_v4_.get().get_gateway().get_string(),
+                                             out, len);
+                    else
+                        return -1;
+                },
+                Connman::Technology::UNKNOWN_TECHNOLOGY,
+                response, length);
 }
 
 ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 62 handler %p %zu", response, length);
 
-    return read_ip_parameter(REQ_DNS_SERVER1_62,
-                             nwconfig_write_data.ipv4_dns_server1,
-                             connman_get_primary_dns_string,
-                             response, length);
+    return read_out_parameter(REQ_DNS_SERVER1_62,
+                nwconfig_write_data.ipv4_dns_server1, true,
+                [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                {
+                    if(!s.get_service_data().dns_servers_.is_known())
+                        return -1;
+
+                    const auto &servers(s.get_service_data().dns_servers_.get());
+
+                    if(!servers.empty())
+                        return copy_to_array(servers[0], out, len);
+                    else
+                        return -1;
+                },
+                Connman::Technology::UNKNOWN_TECHNOLOGY,
+                response, length);
 }
 
 ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 63 handler %p %zu", response, length);
 
-    return read_ip_parameter(REQ_DNS_SERVER2_63,
-                             nwconfig_write_data.ipv4_dns_server2,
-                             connman_get_secondary_dns_string,
-                             response, length);
+    return read_out_parameter(REQ_DNS_SERVER2_63,
+                nwconfig_write_data.ipv4_dns_server2, true,
+                [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                {
+                    if(!s.get_service_data().dns_servers_.is_known())
+                        return -1;
+
+                    const auto &servers(s.get_service_data().dns_servers_.get());
+
+                    if(servers.size() >= 2)
+                        return copy_to_array(servers[1], out, len);
+                    else
+                        return -1;
+
+                },
+                Connman::Technology::UNKNOWN_TECHNOLOGY,
+                response, length);
 }
 
 static int copy_ipv4_address(std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &dest,
@@ -1290,42 +1638,37 @@ int dcpregs_write_63_secondary_dns(const uint8_t *data, size_t length)
                              REQ_DNS_SERVER2_63, data, length, true);
 }
 
+static const Connman::TechData<Connman::Technology::WLAN> *
+get_wlan_tech_data(const Connman::ServiceBase &s)
+{
+    switch(s.get_technology())
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+      case Connman::Technology::ETHERNET:
+        break;
+
+      case Connman::Technology::WLAN:
+        return &static_cast<const Connman::Service<Connman::Technology::WLAN> &>(s).get_tech_data();
+    }
+
+    return nullptr;
+}
+
 ssize_t dcpregs_read_92_wlan_security(uint8_t *response, size_t length)
 {
-    if(data_length_is_unexpectedly_small(length, SIZE_OF_WLAN_SECURITY_MODE))
-        return -1;
+    return read_out_parameter(REQ_WLAN_SECURITY_MODE_92,
+                nwconfig_write_data.wlan_security_mode, false,
+                [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                {
+                    const auto *const d(get_wlan_tech_data(s));
 
-    bool failed = false;
-
-    if(in_edit_mode() && IS_REQUESTED(REQ_WLAN_SECURITY_MODE_92))
-        std::copy(nwconfig_write_data.wlan_security_mode.begin(),
-                  nwconfig_write_data.wlan_security_mode.end(),
-                  response);
-    else
-    {
-        response[0] = '\0';
-
-        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
-
-        if(iface_data != nullptr)
-        {
-            failed = !connman_get_wlan_security_type_string(iface_data,
-                                                            (char *)response,
-                                                            length);
-            connman_free_interface_data(iface_data);
-        }
-        else
-            failed = true;
-    }
-
-    if(failed)
-    {
-        msg_error(EINVAL, LOG_ERR,
-                  "No Connman security type set for active interface");
-        return -1;
-    }
-
-    return strlen((char *)response) + 1;
+                    if(d != nullptr && d->security_.is_known())
+                        return copy_to_array(d->security_.get(), out, len);
+                    else
+                        return -1;
+                },
+                Connman::Technology::WLAN,
+                response, length);
 }
 
 int dcpregs_write_92_wlan_security(const uint8_t *data, size_t length)
@@ -1381,34 +1724,43 @@ int dcpregs_write_93_ibss(const uint8_t *data, size_t length)
 
 ssize_t dcpregs_read_94_ssid(uint8_t *response, size_t length)
 {
-    if(data_length_is_unexpectedly_small(length, 32))
-        return -1;
+    ssize_t result =
+        read_out_parameter(REQ_WLAN_SSID_94,
+                           nwconfig_write_data.wlan_ssid, false,
+                           [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                           {
+                               const auto *const d(get_wlan_tech_data(s));
 
-    ssize_t retval;
+                               if(d != nullptr && d->network_name_.is_known())
+                                   return copy_to_array(d->network_name_.get(), out, len);
+                                else
+                                   return -2;
+                           },
+                           Connman::Technology::WLAN,
+                           response, length,
+                           nwconfig_write_data.wlan_ssid_length + 1);
 
-    if(in_edit_mode() && IS_REQUESTED(REQ_WLAN_SSID_94))
-    {
-        if(nwconfig_write_data.wlan_ssid_length > 0)
-            std::copy(nwconfig_write_data.wlan_ssid.begin(),
-                      nwconfig_write_data.wlan_ssid.begin() + nwconfig_write_data.wlan_ssid_length,
-                      response);
+    if(result == -1 || result > 1)
+        return result;
 
-        retval = nwconfig_write_data.wlan_ssid_length;
-    }
-    else
-    {
-        struct ConnmanInterfaceData *iface_data = get_connman_iface_data();
+    if(result >= 0 && in_edit_mode() && IS_REQUESTED(REQ_WLAN_SSID_94))
+        return result;
 
-        if(iface_data != nullptr)
-        {
-            retval = connman_get_wlan_ssid(iface_data, response, length);
-            connman_free_interface_data(iface_data);
-        }
-        else
-            retval = 0;
-    }
+    /* binary SSID */
+    result = read_out_parameter(
+                [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
+                {
+                    const auto *const d(get_wlan_tech_data(s));
 
-    return retval;
+                    if(d != nullptr && d->network_ssid_.is_known())
+                        return hexdump_to_binary(out, len, d->network_ssid_.get());
+                    else
+                        return -2;
+                },
+                Connman::Technology::WLAN,
+                response, length);
+
+    return result >= 0 ? result : -1;
 }
 
 int dcpregs_write_94_ssid(const uint8_t *data, size_t length)

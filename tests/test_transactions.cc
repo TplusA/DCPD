@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -27,10 +27,9 @@
 #include "transactions.h"
 #include "registers.h"
 #include "networkprefs.h"
+#include "connman_service_list.hh"
 #include "dcpdefs.h"
 
-#include "mock_dcpd_dbus.hh"
-#include "mock_connman.hh"
 #include "mock_messages.hh"
 #include "mock_os.hh"
 
@@ -110,12 +109,16 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
+    { Connman::get_service_list_singleton_for_update().first.clear(); }
+
     register_zero_for_unit_tests = NULL;
     transaction_init_allocator();
 }
 
 void cut_teardown()
 {
+    { Connman::get_service_list_singleton_for_update().first.clear(); }
+
     mock_messages->check();
     mock_messages_singleton = nullptr;
     delete mock_messages;
@@ -486,7 +489,6 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
-static MockConnman *mock_connman;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
 
@@ -512,11 +514,6 @@ void cut_setup()
     mock_os->init();
     mock_os_singleton = mock_os;
 
-    mock_connman = new MockConnman();
-    cppcut_assert_not_null(mock_connman);
-    mock_connman->init();
-    mock_connman_singleton = mock_connman;
-
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
     register_zero_for_unit_tests = NULL;
@@ -533,19 +530,15 @@ void cut_teardown()
 {
     mock_messages->check();
     mock_os->check();
-    mock_connman->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
-    mock_connman_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
-    delete mock_connman;
 
     mock_messages = nullptr;
     mock_os = nullptr;
-    mock_connman = nullptr;
 
     delete read_data;
     read_data = nullptr;
@@ -622,16 +615,7 @@ void test_register_read_request_size_1_transaction()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
-    static auto *dummy_connman_iface_data =
-        reinterpret_cast<struct ConnmanInterfaceData *>(123456);
-
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 55, 1 bytes");
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
-        "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface_data,
-                                       CONNMAN_IP_VERSION_4,
-                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
-    mock_connman->expect_free_interface_data(dummy_connman_iface_data);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -683,6 +667,22 @@ void test_register_read_request_size_16_transaction()
                        "/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
 
+    Connman::ServiceData data;
+    Connman::IPSettings<Connman::AddressType::IPV4> ipv4_data;
+    ipv4_data.set_address("111.222.255.100");
+    ipv4_data.set_netmask("255.255.255.0");
+    ipv4_data.set_gateway("111.222.255.1");
+    data.is_favorite_ = true;
+    data.is_auto_connect_ = true;
+    data.is_immutable_ = false;
+    data.state_ = Connman::ServiceState::ONLINE;
+    data.mac_address_.set("12:23:34:45:56:67");
+    data.ip_settings_v4_ = std::move(ipv4_data);
+    Connman::get_service_list_singleton_for_update().first.insert(
+            "/some/service", std::move(data),
+            std::move(Connman::TechData<Connman::Technology::ETHERNET>()),
+            true);
+
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -703,18 +703,7 @@ void test_register_read_request_size_16_transaction()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
-    static auto *dummy_connman_iface_data =
-        reinterpret_cast<struct ConnmanInterfaceData *>(123456);
-
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 56, 16 bytes");
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
-        "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
-    mock_connman->expect_get_address_string("111.222.255.100",
-                                            dummy_connman_iface_data,
-                                            CONNMAN_IP_VERSION_4,
-                                            CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                            false, 16);
-    mock_connman->expect_free_interface_data(dummy_connman_iface_data);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -1023,7 +1012,6 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
-static MockDcpdDBus *mock_dcpd_dbus;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
 
@@ -1048,11 +1036,6 @@ void cut_setup()
     cppcut_assert_not_null(mock_os);
     mock_os->init();
     mock_os_singleton = mock_os;
-
-    mock_dcpd_dbus = new MockDcpdDBus();
-    cppcut_assert_not_null(mock_dcpd_dbus);
-    mock_dcpd_dbus->init();
-    mock_dcpd_dbus_singleton = mock_dcpd_dbus;
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
@@ -1083,19 +1066,15 @@ void cut_teardown()
 
     mock_messages->check();
     mock_os->check();
-    mock_dcpd_dbus->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
-    mock_dcpd_dbus_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
-    delete mock_dcpd_dbus;
 
     mock_messages = nullptr;
     mock_os = nullptr;
-    mock_dcpd_dbus = nullptr;
 
     delete read_data;
     read_data = nullptr;

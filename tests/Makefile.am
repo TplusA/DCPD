@@ -82,6 +82,7 @@ test_registers_la_LIBADD = \
     $(top_builddir)/src/libshutdown_guard.la \
     $(top_builddir)/src/libdynamic_buffer.la \
     $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libinifile.la \
     $(top_builddir)/src/libxmodem.la
 test_registers_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
@@ -99,7 +100,6 @@ test_drcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 test_transactions_la_SOURCES = \
     test_transactions.cc \
     mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
-    mock_connman.hh mock_connman.cc \
     mock_logind_manager_dbus.hh mock_logind_manager_dbus.cc \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
@@ -107,6 +107,7 @@ test_transactions_la_SOURCES = \
 test_transactions_la_LIBADD = \
     $(top_builddir)/src/libtransactions.la \
     $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libshutdown_guard.la \
     $(top_builddir)/src/libdynamic_buffer.la
