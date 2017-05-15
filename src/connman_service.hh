@@ -19,7 +19,6 @@
 #ifndef CONNMAN_SERVICE_HH
 #define CONNMAN_SERVICE_HH
 
-#include <array>
 #include <vector>
 #include <string>
 #include <cstring>
@@ -116,18 +115,16 @@ template <AddressType AType, class Traits = AddressTraits<AType>>
 class Address
 {
   private:
-    std::array<char, Traits::ADDRESS_STRING_LENGTH + 1> address_;
-    size_t length_;
+    std::string address_;
 
   public:
     Address(const Address &) = delete;
     Address(Address &&) = default;
     Address &operator=(const Address &) = default;
 
-    explicit Address():
-        length_(0)
+    explicit Address()
     {
-        address_[0] = '\0';
+        address_.reserve(Traits::ADDRESS_STRING_LENGTH);
     }
 
     bool set(const char *address)
@@ -144,33 +141,28 @@ class Address
         }
 
         if(addrlen > 0)
-        {
-            std::copy(address, address + addrlen, address_.begin());
-            length_ = addrlen;
-        }
+            address_ = address;
         else
             unset();
 
         return true;
     }
 
-    void unset()
-    {
-        address_[0] = '\0';
-        length_ = 0;
-    }
+    void unset() { address_.clear(); }
 
-    const char *get_address_string() const { return length_ > 0 ? address_.data(): nullptr; }
+    bool empty() const { return address_.empty(); }
+
+    const std::string &get_string() const { return address_; }
 
     bool operator==(const Address &other) const
     {
-        if(length_ != other.length_)
+        if(address_.length() != other.address_.length())
             return false;
 
-        if(length_ == 0)
+        if(address_.empty() == 0)
             return true;
 
-        return std::equal(address_.begin(), address_.begin() + length_,
+        return std::equal(address_.begin(), address_.end(),
                           other.address_.begin(),
                           [] (const char &a, const char &b) { return toupper(a) == toupper(b); });
     }
@@ -183,12 +175,18 @@ class Address
     bool operator==(const char *other) const
     {
         if(other == nullptr)
-            return length_ == 0;
+            return address_.empty();
 
-        if(other[0] == '\0' && length_ == 0)
-            return true;
+        for(size_t i = 0; i < address_.length(); ++i)
+        {
+            if(other[i] == '\0')
+                return false;
 
-        return strcmp(address_.data(), other) == 0;
+            if(toupper(other[i] != toupper(address_[i])))
+                return false;
+        }
+
+        return other[address_.length()] == '\0';
     }
 
     bool operator!=(const char *other) const
@@ -226,23 +224,21 @@ class IPSettings
 
     DHCPMethod get_dhcp_method() const { return dhcp_method_; }
 
-    bool is_address_different(const char *addr) const { return is_different(address_, addr); }
-    bool is_netmask_different(const char *addr) const { return is_different(netmask_, addr); }
-    bool is_gateway_different(const char *addr) const { return is_different(gateway_, addr); }
+    const IPAddressType &get_address() const { return address_; }
+    const IPAddressType &get_netmask() const { return netmask_; }
+    const IPAddressType &get_gateway() const { return gateway_; }
+
+    bool operator==(const IPSettings &other) const
+    {
+        return (dhcp_method_ == other.dhcp_method_ &&
+                address_ == other.address_ &&
+                netmask_ == other.netmask_ &&
+                gateway_ == other.gateway_);
+    }
 
     bool operator!=(const IPSettings &other) const
     {
-        return (dhcp_method_ != other.dhcp_method_ || address_ != other.address_ ||
-                netmask_ != other.netmask_ || gateway_ != other.gateway_ );
-    }
-
-  private:
-    static bool is_different(const IPAddressType &addr, const char *other)
-    {
-        log_assert(other != nullptr);
-
-        const char *str(addr.get_address_string());
-        return (str != nullptr ? strcmp(str, other) == 0 : false);
+        return !(*this == other);
     }
 };
 
@@ -319,11 +315,11 @@ struct TechData<Technology::WLAN>
 
     bool operator==(const TechData &other) const
     {
-        return (network_name_ == other.network_name_ ||
-                network_ssid_ == other.network_ssid_ ||
-                passphrase_ == other.passphrase_ ||
-                security_ == other.security_ ||
-                is_wps_available_ == other.is_wps_available_ ||
+        return (network_name_ == other.network_name_ &&
+                network_ssid_ == other.network_ssid_ &&
+                passphrase_ == other.passphrase_ &&
+                security_ == other.security_ &&
+                is_wps_available_ == other.is_wps_available_ &&
                 strength_ == other.strength_);
     }
 

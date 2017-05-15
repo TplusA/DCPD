@@ -56,6 +56,13 @@ class Maybe
         return value_;
     }
 
+    T &operator=(const T &value)
+    {
+        value_ = value;
+        is_value_known_ = true;
+        return value_;
+    }
+
     void set_known() { is_value_known_ = true; }
     bool is_known() const { return is_value_known_; }
 
@@ -68,7 +75,7 @@ class Maybe
     bool operator==(const Maybe &other) const
     {
         if(other.is_value_known_)
-            return *this != other.value_;
+            return *this == other.value_;
         else
             return !is_value_known_;
     }
@@ -76,7 +83,7 @@ class Maybe
     bool operator!=(const Maybe &other) const
     {
         if(other.is_value_known_)
-            return *this == other.value_;
+            return *this != other.value_;
         else
             return is_value_known_;
     }

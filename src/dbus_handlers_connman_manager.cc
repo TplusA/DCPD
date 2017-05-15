@@ -401,9 +401,9 @@ static bool ipv4_settings_are_different(const Maybe<Connman::IPSettings<Connman:
         if(with_dhcp)
             return true;
 
-        if(settings.is_address_different(address) ||
-           settings.is_netmask_different(nm) ||
-           settings.is_gateway_different(gw))
+        if(settings.get_address() != address ||
+           settings.get_netmask() != nm ||
+           settings.get_gateway() != gw)
             return true;
 
         break;

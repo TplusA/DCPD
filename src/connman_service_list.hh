@@ -135,6 +135,7 @@ class ServiceList
     Map::const_iterator find(const std::string &name) const { return services_.find(name); }
     Map::const_iterator begin() const { return services_.begin(); }
     Map::const_iterator end() const { return services_.end(); }
+    Map::iterator find(const std::string &name) { return services_.find(name); }
     Map::iterator begin() { return services_.begin(); }
     Map::iterator end() { return services_.end(); }
 };
