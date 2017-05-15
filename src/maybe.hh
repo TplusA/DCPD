@@ -24,7 +24,7 @@ class Maybe
     T value_;
 
   public:
-    Maybe(const Maybe &) = delete;
+    Maybe(const Maybe &) = default;
     Maybe(Maybe &&) = default;
     Maybe &operator=(const Maybe &) = default;
 

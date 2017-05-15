@@ -118,7 +118,7 @@ class Address
     std::string address_;
 
   public:
-    Address(const Address &) = delete;
+    Address(const Address &) = default;
     Address(Address &&) = default;
     Address &operator=(const Address &) = default;
 
@@ -209,7 +209,7 @@ class IPSettings
     IPAddressType gateway_;
 
   public:
-    IPSettings(const IPSettings &) = delete;
+    IPSettings(const IPSettings &) = default;
     IPSettings(IPSettings &&) = default;
     IPSettings &operator=(const IPSettings &) = default;
 
@@ -257,7 +257,7 @@ struct ServiceData
     Maybe<IPSettings<AddressType::IPV6>> ip_configuration_v6_;
     Maybe<std::vector<std::string>> dns_servers_;
 
-    ServiceData(const ServiceData &) = delete;
+    ServiceData(const ServiceData &) = default;
     ServiceData(ServiceData &&) = default;
     ServiceData &operator=(const ServiceData &) = default;
 
@@ -287,7 +287,7 @@ struct TechData;
 template <>
 struct TechData<Technology::ETHERNET>
 {
-    TechData(const TechData &) = delete;
+    TechData(const TechData &) = default;
     TechData(TechData &&) = default;
     TechData &operator=(const TechData &) = default;
 
@@ -307,7 +307,7 @@ struct TechData<Technology::WLAN>
     Maybe<bool> is_wps_available_;
     Maybe<uint8_t> strength_;
 
-    TechData(const TechData &) = delete;
+    TechData(const TechData &) = default;
     TechData(TechData &&) = default;
     TechData &operator=(const TechData &) = default;
 
