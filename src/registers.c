@@ -574,17 +574,7 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
         REGISTER_MK_VERSION(1, 0, 3);
 
     struct register_configuration_t *config = registers_get_nonconst_data();
-    struct register_network_interface_t *iface_data;
 
-    iface_data = &config->builtin_ethernet_interface;
-    iface_data->is_builtin = true;
-    iface_data->is_wired = true;
-
-    iface_data = &config->builtin_wlan_interface;
-    iface_data->is_builtin = true;
-    iface_data->is_wired = false;
-
-    config->active_interface = NULL;
     config->register_changed_notification_fn = register_changed_callback;
 
     register_zero_for_unit_tests = NULL;

@@ -26,8 +26,8 @@
 #include <glib.h>
 
 #include "registers.h"
-#include "registers_priv.h"
 #include "networkprefs.h"
+#include "network_status_bits.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
@@ -467,6 +467,14 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
 {
     connect_to_connman_service_data.called(network_name, network_ssid,
                                            service_to_be_disabled);
+}
+
+/* Always tell caller that we are currently not in the progress of connecting
+ * the service */
+bool dbussignal_connman_manager_is_connecting(bool *is_wps)
+{
+    *is_wps = false;
+    return false;
 }
 
 namespace spi_registers_tests
@@ -1426,6 +1434,42 @@ static void setup_default_connman_service_list()
                     true);
 }
 
+static bool do_inject_service_changes(Connman::ServiceList::Map::iterator::value_type &it,
+                                      std::function<void(Connman::ServiceData &)> &&modify)
+{
+    auto &service(it.second);
+    Connman::ServiceData service_data(service->get_service_data());
+
+    modify(service_data);
+
+    switch(service->get_technology())
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        cut_fail("Unexpected case");
+        break;
+
+      case Connman::Technology::ETHERNET:
+        {
+            auto &s(static_cast<Connman::Service<Connman::Technology::ETHERNET> &>(*service));
+            auto temp(s.get_tech_data());
+            s.put_changes(std::move(service_data), std::move(temp));
+        }
+
+        return true;
+
+      case Connman::Technology::WLAN:
+        {
+            auto &s(static_cast<Connman::Service<Connman::Technology::WLAN> &>(*service));
+            auto temp(s.get_tech_data());
+            s.put_changes(std::move(service_data), std::move(temp));
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
 static void inject_service_changes(const char *iface_name,
                                    std::function<void(Connman::ServiceData &)> modify)
 {
@@ -1435,35 +1479,7 @@ static void inject_service_changes(const char *iface_name,
     auto it(services.find(iface_name));
     cut_assert(it != services.end());
 
-    auto &service(*it->second);
-    Connman::ServiceData service_data(service.get_service_data());
-
-    modify(service_data);
-
-    switch(it->second->get_technology())
-    {
-      case Connman::Technology::UNKNOWN_TECHNOLOGY:
-        cut_fail("Unexpected case");
-        break;
-
-      case Connman::Technology::ETHERNET:
-        {
-            auto &s(static_cast<Connman::Service<Connman::Technology::ETHERNET> &>(service));
-            auto temp(s.get_tech_data());
-            s.put_changes(std::move(service_data), std::move(temp));
-        }
-
-        break;
-
-      case Connman::Technology::WLAN:
-        {
-            auto &s(static_cast<Connman::Service<Connman::Technology::WLAN> &>(service));
-            auto temp(s.get_tech_data());
-            s.put_changes(std::move(service_data), std::move(temp));
-        }
-
-        break;
-    }
+    do_inject_service_changes(*it, std::move(modify));
 }
 
 template <Connman::Technology TECH>
@@ -1493,26 +1509,30 @@ struct AssumeInterfaceIsActiveTraits;
 template <>
 struct AssumeInterfaceIsActiveTraits<Connman::Technology::ETHERNET>
 {
-    static void activate_interface()
-    {
-        struct register_configuration_t *config = registers_get_nonconst_data();
-        config->active_interface = &config->builtin_ethernet_interface;
-    }
-
     static const char *get_service_name() { return ethernet_name; }
 };
 
 template <>
 struct AssumeInterfaceIsActiveTraits<Connman::Technology::WLAN>
 {
-    static void activate_interface()
-    {
-        struct register_configuration_t *config = registers_get_nonconst_data();
-        config->active_interface = &config->builtin_wlan_interface;
-    }
-
     static const char *get_service_name() { return wlan_name; }
 };
+
+static void activate_interface(const char *const service_name)
+{
+    auto locked(Connman::get_service_list_singleton_for_update());
+    auto &services(locked.first);
+
+    for(auto &s : services)
+    {
+        if(s.first == service_name)
+            do_inject_service_changes(s,
+                [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::READY; });
+        else
+            do_inject_service_changes(s,
+                [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::IDLE; });
+    }
+}
 
 template <Connman::Technology TECH, typename Traits = AssumeInterfaceIsActiveTraits<TECH>>
 static void assume_interface_is_active(std::function<void(const Connman::ServiceData &,
@@ -1520,7 +1540,7 @@ static void assume_interface_is_active(std::function<void(const Connman::Service
                                        std::function<void(Connman::ServiceData &,
                                                           Connman::TechData<TECH> &)> modify)
 {
-    Traits::activate_interface();
+    activate_interface(Traits::get_service_name());
 
     inject_service_changes<TECH>(Traits::get_service_name(),
         [&check, &modify]
@@ -1541,7 +1561,7 @@ template <Connman::Technology TECH, typename Traits = AssumeInterfaceIsActiveTra
 static void assume_interface_is_active(std::function<void(const Connman::ServiceData &)> check,
                                        std::function<void(Connman::ServiceData &)> modify)
 {
-    Traits::activate_interface();
+    activate_interface(Traits::get_service_name());
 
     inject_service_changes(Traits::get_service_name(),
         [&check, &modify]
@@ -4158,6 +4178,141 @@ void test_reading_out_ssids_without_scan_returns_empty_list()
                             buffer.data, buffer.pos);
 
     dynamic_buffer_free(&buffer);
+}
+
+static void expect_network_status(const std::array<uint8_t, 3> &expected_status)
+{
+    auto *reg = lookup_register_expect_handlers(50,
+                                                dcpregs_read_50_network_status,
+                                                NULL);
+    uint8_t status[expected_status.size()];
+    cppcut_assert_equal(ssize_t(sizeof(status)),
+                        reg->read_handler(status, sizeof(status)));
+
+    cut_assert_equal_memory(expected_status.data(), expected_status.size(),
+                            status, sizeof(status));
+}
+
+/*!\test
+ * In case there is a ready Ethernet and an idle WLAN service, the network
+ * status register indicates connected in Ethernet mode.
+ */
+void test_network_status__ethernet_ready__wlan_idle()
+{
+    expect_network_status({NETWORK_STATUS_IPV4_DHCP,
+                           NETWORK_STATUS_DEVICE_ETHERNET,
+                           NETWORK_STATUS_CONNECTION_CONNECTED});
+}
+
+/*!\test
+ * In case there is an idle Ethernet and a ready WLAN service, the network
+ * status register indicates connected in WLAN mode.
+ */
+void test_network_status__ethernet_idle__wlan_ready()
+{
+    inject_service_changes(ethernet_name,
+        [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::IDLE; });
+
+    inject_service_changes(wlan_name,
+        [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::READY; });
+
+    expect_network_status({NETWORK_STATUS_IPV4_DHCP,
+                           NETWORK_STATUS_DEVICE_WLAN,
+                           NETWORK_STATUS_CONNECTION_CONNECTED});
+}
+
+/*!\test
+ * In case of idle Ethernet and WLAN services, the network status register
+ * indicates disconnected in Ethernet mode.
+ */
+void test_network_status__ethernet_idle__wlan_idle()
+{
+    inject_service_changes(ethernet_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    inject_service_changes(wlan_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_ETHERNET,
+                           NETWORK_STATUS_CONNECTION_NONE});
+}
+
+/*!\test
+ * In case there is no WLAN, but an idle Ethernet service available, the status
+ * register indicates disconnected in Ethernet mode.
+ */
+void test_network_status__ethernet_idle___wlan_unavailable()
+{
+    {
+        auto locked(Connman::get_service_list_singleton_for_update());
+        auto &services(locked.first);
+        services.erase(wlan_name);
+    }
+
+    inject_service_changes(ethernet_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_ETHERNET,
+                           NETWORK_STATUS_CONNECTION_NONE});
+}
+
+/*!\test
+ * In case there is no Ethernet, but an idle WLAN service available, the status
+ * register indicates disconnected in WLAN mode.
+ */
+void test_network_status__ethernet_unavailable___wlan_idle()
+{
+    {
+        auto locked(Connman::get_service_list_singleton_for_update());
+        auto &services(locked.first);
+        services.erase(ethernet_name);
+    }
+
+    inject_service_changes(wlan_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_WLAN,
+                           NETWORK_STATUS_CONNECTION_NONE});
+}
+
+/*!\test
+ * In case there no service at all, the status register indicates disconnected
+ * in no specific mode.
+ */
+void test_network_status__ethernet_unavailable___wlan_unavailable()
+{
+    {
+        auto locked(Connman::get_service_list_singleton_for_update());
+        auto &services(locked.first);
+        services.clear();
+    }
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_NONE,
+                           NETWORK_STATUS_CONNECTION_NONE});
 }
 
 };

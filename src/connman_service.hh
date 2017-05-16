@@ -228,6 +228,11 @@ class IPSettings
     const IPAddressType &get_netmask() const { return netmask_; }
     const IPAddressType &get_gateway() const { return gateway_; }
 
+    bool is_configuration_valid() const
+    {
+        return !address_.empty() && !netmask_.empty() && !gateway_.empty();
+    }
+
     bool operator==(const IPSettings &other) const
     {
         return (dhcp_method_ == other.dhcp_method_ &&

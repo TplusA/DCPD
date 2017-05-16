@@ -101,9 +101,9 @@ enum class WPSMode
 static struct
 {
     /*!
-     * Active interface at the time the change request was commenced.
+     * Networking technology at the time the change request was commenced.
      */
-    const struct register_network_interface_t *selected_interface;
+    Connman::Technology selected_technology;
 
     /*!
      * Which configuration settings to change.
@@ -148,7 +148,7 @@ nwstatus_data;
 
 void dcpregs_networkconfig_init(void)
 {
-    nwconfig_write_data.selected_interface = nullptr;
+    nwconfig_write_data.selected_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
 
     nwstatus_data.shutdown_guard = shutdown_guard_alloc("networkconfig");
     nwstatus_data.previous_response[0] = UINT8_MAX;
@@ -163,15 +163,7 @@ void dcpregs_networkconfig_deinit(void)
 
 static bool in_edit_mode(void)
 {
-    return nwconfig_write_data.selected_interface != nullptr;
-}
-
-static const struct register_network_interface_t *
-get_network_iface_data(const struct register_configuration_t *config)
-{
-    return (config->active_interface != nullptr)
-        ? config->active_interface
-        : &config->builtin_ethernet_interface;
+    return nwconfig_write_data.selected_technology != Connman::Technology::UNKNOWN_TECHNOLOGY;
 }
 
 static void update_service_selection(const Connman::ServiceBase *service,
@@ -245,7 +237,8 @@ fixup_service_selection(const Connman::ServiceBase *active_match,
 }
 
 /*!
- * Find active service on NIC with MAC address matching one of the given ones.
+ * Find best ("most active") service on one of our interfaces, preferring the
+ * given technology on tie.
  *
  * In case there is a single, active service on any matching NIC, that service
  * will be returned.
@@ -258,10 +251,9 @@ fixup_service_selection(const Connman::ServiceBase *active_match,
  * then (and only then) any non-idle service is returned in the \p fallback
  * parameter, where those matching the \p default_tech parameter are preferred.
  */
-static const Connman::ServiceBase *
-find_service_on_primary_interface(const Connman::ServiceList &services,
-                                  const Connman::Technology default_tech,
-                                  const Connman::ServiceBase **fallback)
+static const Connman::ServiceBase *find_current_service(const Connman::ServiceList &services,
+                                                        const Connman::Technology default_tech,
+                                                        const Connman::ServiceBase **fallback)
 {
     log_assert(default_tech != Connman::Technology::UNKNOWN_TECHNOLOGY);
 
@@ -280,9 +272,6 @@ find_service_on_primary_interface(const Connman::ServiceList &services,
         const auto &service(s.second);
 
         if(!service->is_ours())
-            continue;
-
-        if(!service->is_active())
             continue;
 
         bool is_online = false;
@@ -325,6 +314,33 @@ find_service_on_primary_interface(const Connman::ServiceList &services,
                                    fallback);
 }
 
+static int rank_service_by_state(const Connman::ServiceBase &service)
+{
+    switch(service.get_service_data().state_.get())
+    {
+      case Connman::ServiceState::NOT_AVAILABLE:
+      case Connman::ServiceState::UNKNOWN_STATE:
+        break;
+
+      case Connman::ServiceState::IDLE:
+      case Connman::ServiceState::FAILURE:
+      case Connman::ServiceState::DISCONNECT:
+        return 0;
+
+      case Connman::ServiceState::ASSOCIATION:
+      case Connman::ServiceState::CONFIGURATION:
+        return 1;
+
+      case Connman::ServiceState::READY:
+        return 2;
+
+      case Connman::ServiceState::ONLINE:
+        return 3;
+    }
+
+    return -1;
+}
+
 static const Connman::ServiceBase *
 find_best_service_by_technology(const Connman::ServiceList &services,
                                 const Connman::Technology tech)
@@ -347,44 +363,12 @@ find_best_service_by_technology(const Connman::ServiceList &services,
         if(service->get_technology() != tech)
             continue;
 
-        switch(service->get_service_data().state_.get())
-        {
-          case Connman::ServiceState::NOT_AVAILABLE:
-          case Connman::ServiceState::UNKNOWN_STATE:
-            break;
+        const int temp = rank_service_by_state(*service);
 
-          case Connman::ServiceState::IDLE:
-          case Connman::ServiceState::FAILURE:
-          case Connman::ServiceState::DISCONNECT:
-            if(rank >= 0)
-                continue;
+        if(rank >= temp)
+            continue;
 
-            rank = 0;
-            break;
-
-          case Connman::ServiceState::ASSOCIATION:
-          case Connman::ServiceState::CONFIGURATION:
-            if(rank >= 1)
-                continue;
-
-            rank = 1;
-            break;
-
-          case Connman::ServiceState::READY:
-            if(rank >= 2)
-                continue;
-
-            rank = 2;
-            break;
-
-          case Connman::ServiceState::ONLINE:
-            if(rank >= 3)
-                continue;
-
-            rank = 3;
-            break;
-        }
-
+        rank = temp;
         found = service.get();
 
         if(rank >= 3)
@@ -394,21 +378,48 @@ find_best_service_by_technology(const Connman::ServiceList &services,
     return found;
 }
 
+static Connman::Technology
+determine_active_network_technology(const Connman::ServiceList &services,
+                                    bool must_be_valid)
+{
+    Connman::Technology candidate = Connman::Technology::UNKNOWN_TECHNOLOGY;
+    int candidate_rank = -2;
+
+    for(const auto &it : services)
+    {
+        const auto &s(*it.second);
+
+        if(!s.is_ours())
+            continue;
+
+        if(s.is_active())
+            return s.get_technology();
+
+        const int temp = rank_service_by_state(s);
+
+        if(candidate_rank >= temp)
+            continue;
+
+        candidate_rank = temp;
+        candidate = s.get_technology();
+    }
+
+    return (candidate != Connman::Technology::UNKNOWN_TECHNOLOGY
+            ? candidate
+            : (must_be_valid
+               ? Connman::Technology::ETHERNET
+               : Connman::Technology::UNKNOWN_TECHNOLOGY));
+}
+
 static const Connman::ServiceBase *get_connman_service_data(const Connman::ServiceList &services)
 {
-    const struct register_configuration_t *config = registers_get_data();
-
     if(in_edit_mode())
         return find_best_service_by_technology(services,
-                                               nwconfig_write_data.selected_interface->is_wired
-                                               ? Connman::Technology::ETHERNET
-                                               : Connman::Technology::WLAN);
+                                               nwconfig_write_data.selected_technology);
     else
-        return find_service_on_primary_interface(services,
-                                                 get_network_iface_data(config)->is_wired
-                                                 ? Connman::Technology::ETHERNET
-                                                 : Connman::Technology::WLAN,
-                                                 nullptr);
+        return find_current_service(services,
+                                    determine_active_network_technology(services, true),
+                                    nullptr);
 }
 
 /*!
@@ -985,7 +996,7 @@ static WPSMode apply_changes_to_prefs(const Connman::ServiceBase &service,
  */
 static WPSMode
 modify_network_configuration(
-        const struct register_network_interface_t *selected,
+        NetworkPrefsTechnology prefs_tech,
         std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> &previous_wlan_name_buffer,
         char **out_wps_network_name, char **out_wps_network_ssid)
 {
@@ -994,6 +1005,9 @@ modify_network_configuration(
         msg_info("Not writing network configuration during shutdown.");
         return WPSMode::INVALID;
     }
+
+    if(prefs_tech == NWPREFSTECH_UNKNOWN)
+        return WPSMode::INVALID;
 
     const auto locked_services(Connman::get_service_list_singleton_const());
     const auto &services(locked_services.first);
@@ -1015,14 +1029,14 @@ modify_network_configuration(
         return WPSMode::INVALID;
 
     struct network_prefs *selected_prefs =
-        selected->is_wired ? ethernet_prefs : wlan_prefs;
+        prefs_tech == NWPREFSTECH_ETHERNET ? ethernet_prefs : wlan_prefs;
 
-    network_prefs_generate_service_name(selected->is_wired ? nullptr : selected_prefs,
+    network_prefs_generate_service_name(prefs_tech == NWPREFSTECH_ETHERNET ? nullptr : selected_prefs,
                                         previous_wlan_name_buffer.data(),
                                         previous_wlan_name_buffer.size());
 
     if(selected_prefs == nullptr)
-        selected_prefs = network_prefs_add_prefs(cfg, selected->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN);
+        selected_prefs = network_prefs_add_prefs(cfg, prefs_tech);
 
     WPSMode wps_mode =
         apply_changes_to_prefs(*service, selected_prefs,
@@ -1097,6 +1111,23 @@ static bool data_length_is_unexpectedly_small(size_t length,
     return true;
 }
 
+static NetworkPrefsTechnology map_network_technology(const Connman::Technology tech)
+{
+    switch(tech)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        break;
+
+      case Connman::Technology::ETHERNET:
+        return NWPREFSTECH_ETHERNET;
+
+      case Connman::Technology::WLAN:
+        return NWPREFSTECH_WLAN;
+    }
+
+    return NWPREFSTECH_UNKNOWN;
+}
+
 int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 53 handler %p %zu", data, length);
@@ -1110,30 +1141,29 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     if(!may_change_config())
         return -1;
 
-    const struct register_network_interface_t *selected =
-        nwconfig_write_data.selected_interface;
+    const NetworkPrefsTechnology prefs_tech =
+        map_network_technology(nwconfig_write_data.selected_technology);
+
+    if(prefs_tech == NWPREFSTECH_UNKNOWN)
+        return -1;
 
     if(nwconfig_write_data.requested_changes == 0)
     {
         /* nothing to do */
-        nwconfig_write_data.selected_interface = nullptr;
+        nwconfig_write_data.selected_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
         return 0;
     }
 
-    const enum NetworkPrefsTechnology tech = selected->is_wired
-        ? NWPREFSTECH_ETHERNET
-        : NWPREFSTECH_WLAN;
-
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "Writing new network configuration for MAC address %s",
-              network_prefs_get_mac_address_by_tech(tech)->address);
+              network_prefs_get_mac_address_by_tech(prefs_tech)->address);
 
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
     std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> current_wlan_service_name;
     char *wps_network_name = nullptr;
     char *wps_network_ssid = nullptr;
     const WPSMode wps_mode =
-        modify_network_configuration(selected, current_wlan_service_name,
+        modify_network_configuration(prefs_tech, current_wlan_service_name,
                                      &wps_network_name, &wps_network_ssid);
     shutdown_guard_unlock(nwstatus_data.shutdown_guard);
 
@@ -1142,7 +1172,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
                (wps_mode != WPSMode::DIRECT &&
                 (wps_network_name == nullptr && wps_network_ssid == nullptr)));
 
-    nwconfig_write_data.selected_interface = nullptr;
+    nwconfig_write_data.selected_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
 
     switch(wps_mode)
     {
@@ -1150,12 +1180,12 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         break;
 
       case WPSMode::NONE:
-        dbussignal_connman_manager_connect_to_service(tech,
+        dbussignal_connman_manager_connect_to_service(prefs_tech,
                                                       current_wlan_service_name.data());
         return 0;
 
       case WPSMode::DIRECT:
-        log_assert(tech == NWPREFSTECH_WLAN);
+        log_assert(prefs_tech == NWPREFSTECH_WLAN);
         dbussignal_connman_manager_connect_to_wps_service(wps_network_name,
                                                           wps_network_ssid,
                                                           current_wlan_service_name.data());
@@ -1164,7 +1194,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         return 0;
 
       case WPSMode::SCAN:
-        log_assert(tech == NWPREFSTECH_WLAN);
+        log_assert(prefs_tech == NWPREFSTECH_WLAN);
         dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
                                                           current_wlan_service_name.data());
         return 0;
@@ -1185,19 +1215,17 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
 
     memset(&nwconfig_write_data, 0, sizeof(nwconfig_write_data));
 
-    nwconfig_write_data.selected_interface =
-        get_network_iface_data(registers_get_data());
-    log_assert(nwconfig_write_data.selected_interface != nullptr);
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+
+    nwconfig_write_data.selected_technology =
+        determine_active_network_technology(services, false);
 
     return 0;
 }
 
 static void fill_network_status_register_response(std::array<uint8_t, 3> &response)
 {
-    struct register_configuration_t *config = registers_get_nonconst_data();
-
-    config->active_interface = nullptr;
-
     response[0] = NETWORK_STATUS_IPV4_NOT_CONFIGURED;
     response[1] = NETWORK_STATUS_DEVICE_NONE;
     response[2] = NETWORK_STATUS_CONNECTION_NONE;
@@ -1206,69 +1234,59 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
     const auto &services(locked_services.first);
     const Connman::ServiceBase *fallback_service_data;
     const Connman::ServiceBase *service =
-        find_service_on_primary_interface(services,
-                                          get_network_iface_data(config)->is_wired
-                                          ? Connman::Technology::ETHERNET
-                                          : Connman::Technology::WLAN,
-                                          &fallback_service_data);
+        find_current_service(services,
+                             determine_active_network_technology(services, true),
+                             &fallback_service_data);
 
     bool need_check_connection_status = false;
 
-    if(service != nullptr)
-    {
+    if(service == nullptr)
+        service = fallback_service_data;
+    else
         log_assert(fallback_service_data == nullptr);
 
-        if(service->get_service_data().ip_settings_v4_.is_known())
-        {
-            const auto &settings(service->get_service_data().ip_settings_v4_.get());
+    if(service == nullptr)
+        return;
 
-            if(settings.get_address().get_string().empty())
-                need_check_connection_status = true;
-            else
-            {
-                response[0] = map_dhcp_method(settings.get_dhcp_method());
-                response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
-            }
+    if(service->get_service_data().ip_settings_v4_.is_known())
+    {
+        const auto &settings(service->get_service_data().ip_settings_v4_.get());
+
+        if(settings.is_configuration_valid())
+        {
+            response[0] = map_dhcp_method(settings.get_dhcp_method());
+            response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
         }
         else
             need_check_connection_status = true;
     }
-    else if(fallback_service_data != nullptr)
-    {
-        service = fallback_service_data;
-        fallback_service_data = nullptr;
+    else
         need_check_connection_status = true;
+
+    if(need_check_connection_status)
+    {
+        bool is_wps;
+        bool is_connecting = dbussignal_connman_manager_is_connecting(&is_wps);
+
+        if(is_connecting)
+            response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;
+
+        if(is_wps)
+            response[2] |= NETWORK_STATUS_CONNECTION_IS_WPS_MODE;
     }
 
-    if(service != nullptr)
+    switch(service->get_technology())
     {
-        if(need_check_connection_status)
-        {
-            bool is_wps;
-            bool is_connecting = dbussignal_connman_manager_is_connecting(&is_wps);
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        break;
 
-            if(is_connecting)
-                response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;
+      case Connman::Technology::ETHERNET:
+        response[1] = NETWORK_STATUS_DEVICE_ETHERNET;
+        break;
 
-            if(is_wps)
-                response[2] |= NETWORK_STATUS_CONNECTION_IS_WPS_MODE;
-        }
-
-        switch(service->get_technology())
-        {
-          case Connman::Technology::UNKNOWN_TECHNOLOGY:
-            break;
-
-          case Connman::Technology::ETHERNET:
-            response[1] = NETWORK_STATUS_DEVICE_ETHERNET;
-            config->active_interface = &config->builtin_ethernet_interface;
-            break;
-
-          case Connman::Technology::WLAN:
-            response[1] = NETWORK_STATUS_DEVICE_WLAN;
-            config->active_interface = &config->builtin_wlan_interface;
-            break;
-        }
+      case Connman::Technology::WLAN:
+        response[1] = NETWORK_STATUS_DEVICE_WLAN;
+        break;
     }
 }
 
@@ -1291,8 +1309,6 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 51 handler %p %zu", response, length);
 
-    const struct register_network_interface_t *const iface =
-        get_network_iface_data(registers_get_data());
     const struct network_prefs_mac_address *mac;
 
     if(data_length_is_unexpected(length, sizeof(mac->address)))
@@ -1301,9 +1317,13 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
     if(length < sizeof(mac->address))
         return -1;
 
-    const enum NetworkPrefsTechnology tech =
-        iface->is_wired ? NWPREFSTECH_ETHERNET : NWPREFSTECH_WLAN;
-    mac = network_prefs_get_mac_address_by_tech(tech);
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+
+    mac = network_prefs_get_mac_address_by_tech(map_network_technology(determine_active_network_technology(services, true)));
+
+    if(mac == nullptr)
+        return -1;
 
     memcpy(response, mac->address, sizeof(mac->address));
 
