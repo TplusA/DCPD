@@ -428,10 +428,10 @@ void MockConnman::expect_connman_start_wlan_site_survey(bool ret, SurveyCallback
 
 MockConnman *mock_connman_singleton = nullptr;
 
-const MockConnman::SecurityIterData MockConnman::sec_psk_wsp[] =
+const MockConnman::SecurityIterData MockConnman::sec_psk_wps[] =
 {
     MockConnman::SecurityIterData("psk"),
-    MockConnman::SecurityIterData("wsp"),
+    MockConnman::SecurityIterData("wps"),
 };
 
 const MockConnman::SecurityIterData MockConnman::sec_none("none");

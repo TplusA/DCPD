@@ -3955,7 +3955,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
 
     static constexpr const std::array<const MockConnman::ServiceIterData, 5> services_data =
     {
-        MockConnman::ServiceIterData("wifi",  "First WLAN",         100, MockConnman::sec_psk_wsp),
+        MockConnman::ServiceIterData("wifi",  "First WLAN",         100, MockConnman::sec_psk_wps),
         MockConnman::ServiceIterData("wired", "Some ethernet NIC",  100, MockConnman::sec_none),
         MockConnman::ServiceIterData("wifi",  "Not the Internet",    78, MockConnman::sec_none),
         MockConnman::ServiceIterData("wifi",  "Last on the list",    56, MockConnman::sec_psk),
@@ -3973,7 +3973,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
         "<quality>100</quality>"
         "<security_list count=\"2\">"
         "<security index=\"0\">psk</security>"
-        "<security index=\"1\">wsp</security>"
+        "<security index=\"1\">wps</security>"
         "</security_list>"
         "</bss>"
         "<bss index=\"1\">"

@@ -120,7 +120,7 @@ class MockConnman
         }
     };
 
-    static const SecurityIterData sec_psk_wsp[2];
+    static const SecurityIterData sec_psk_wps[2];
     static const SecurityIterData sec_psk;
     static const SecurityIterData sec_none;
 
