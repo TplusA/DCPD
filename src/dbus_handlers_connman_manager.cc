@@ -147,6 +147,12 @@ class WLANConnectionState
 
     State get_state() const { return state_; }
 
+    bool is_wps_mode() const
+    {
+        return state_ == State::ABOUT_TO_CONNECT_WPS ||
+               state_ == State::CONNECTING_WPS;
+    }
+
     const std::string &get_service_name() const
     {
         log_assert(next_wps_candidate_ < service_names_.size());
@@ -630,7 +636,8 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
         {
             if(connman_common_set_service_property(service_name.c_str(),
                                                    "AutoConnect",
-                                                   g_variant_new_variant(g_variant_new_boolean(true))))
+                                                   g_variant_new_variant(g_variant_new_boolean(true))) &&
+               !service.is_active())
             {
                 wlan_connection_state.about_to_connect_to(service_name);
                 wlan_connection_state.start_connecting_direct();
@@ -1273,12 +1280,29 @@ disconnect_nonmatching_active_services_on_our_interface(Connman::ServiceList &kn
                                                         const std::string &our_ethernet_name,
                                                         const std::string &our_wlan_name)
 {
+    if(our_ethernet_name.empty() && our_wlan_name.empty())
+        return;
+
     disconnect_active_services_if(known_services,
             [&our_ethernet_name, &our_wlan_name]
             (const Connman::ServiceBase &s, const std::string &name)
             {
-                return s.is_ours() &&
-                        name != our_ethernet_name && name != our_wlan_name;
+                if(!s.is_ours())
+                    return false;
+
+                switch(s.get_technology())
+                {
+                    case Connman::Technology::UNKNOWN_TECHNOLOGY:
+                        break;
+
+                    case Connman::Technology::ETHERNET:
+                        return !our_ethernet_name.empty() && name != our_ethernet_name;
+
+                    case Connman::Technology::WLAN:
+                        return !our_wlan_name.empty() && name != our_wlan_name;
+                }
+
+                return false;
             });
 }
 
@@ -1424,6 +1448,13 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
     auto our_wlan(have_wlan_service_prefs
                   ? known_services.find(configured_wlan_service_name)
                   : known_services.end());
+
+    if(wlan_connection_state.is_wps_mode())
+    {
+        /* do not interfere with Connman */
+        our_ethernet = known_services.end();
+        our_wlan = known_services.end();
+    }
 
     disconnect_nonmatching_active_services_on_our_interface(
             known_services,
