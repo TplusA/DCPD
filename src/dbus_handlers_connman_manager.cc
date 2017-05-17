@@ -1711,14 +1711,14 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
 
         g_variant_unref(value);
     }
-    else if(strcmp(signal_name, "TechnologyAdded"))
+    else if(strcmp(signal_name, "TechnologyAdded") == 0)
     {
         BUG("ConnMan added technology, must be handled");
 
         /* TODO: Maybe switch to alternative technology, automatic switching to
          *       wifi is disabled in ConnMan */
     }
-    else if(strcmp(signal_name, "TechnologyRemoved"))
+    else if(strcmp(signal_name, "TechnologyRemoved") == 0)
     {
         BUG("ConnMan removed technology, must be handled");
 
