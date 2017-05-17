@@ -619,7 +619,7 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
               "Our WLAN is %sa favorite, auto-connect %s, "
-              "make it auto-connect %d",
+              "make it favorite %d",
               service_data.is_favorite_.pick<const char *>("", "not ", "maybe "),
               service_data.is_auto_connect_.pick<const char *>("yes", "no", "maybe"),
               make_it_favorite);
