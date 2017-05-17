@@ -1463,7 +1463,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
              * have a set of WLAN configuration data */
            if(known_services.number_of_wlan_services() == 0)
            {
-               /* there are no known WLANs, maybe because the the WLAN adapter
+               /* there are no known WLANs, maybe because the WLAN adapter
                 * is in suspend mode */
                connman_wlan_power_on();
                return false;
