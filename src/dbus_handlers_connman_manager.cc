@@ -129,11 +129,10 @@ class WLANConnectionState
         state_ = State::FAILED;
     }
 
-    void remove_pending_wps_service(const char *service_name)
+    void remove_pending_wps_service(const std::string &service_name)
     {
         log_assert(state_ == State::ABOUT_TO_CONNECT_WPS || state_ == State::CONNECTING_WPS);
-        log_assert(service_name != nullptr);
-        log_assert(service_name[0] != '\0');
+        log_assert(!service_name.empty());
 
         if(next_wps_candidate_ >= service_names_.size())
             return;
@@ -353,23 +352,6 @@ void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
     }
 
     g_mutex_unlock(&data->lock);
-}
-
-static void unknown_signal(const char *iface_name, const char *signal_name,
-                           const char *sender_name)
-{
-    msg_error(ENOSYS, LOG_NOTICE, "Got unknown signal %s.%s from %s",
-              iface_name, signal_name, sender_name);
-}
-
-static void check_parameter_assertions(GVariant *parameters,
-                                       guint expected_number_of_parameters)
-{
-    /* we may use #log_assert() here because the GDBus code is supposed to do
-     * any type checks before calling us---here, we just make sure we can
-     * trust those type checks */
-    log_assert(g_variant_type_is_tuple(g_variant_get_type(parameters)));
-    log_assert(g_variant_n_children(parameters) == expected_number_of_parameters);
 }
 
 static bool ipv4_settings_are_different(const Maybe<Connman::IPSettings<Connman::AddressType::IPV4>> &maybe_settings,
@@ -660,20 +642,6 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
 }
 
 static void dump_removed_services(enum MessageVerboseLevel level,
-                                  GVariant *removed)
-{
-    if(!msg_is_verbose(level))
-        return;
-
-    GVariantIter iter;
-    g_variant_iter_init(&iter, removed);
-    const gchar *name;
-
-    while(g_variant_iter_loop(&iter, "&o", &name))
-        msg_info("Service removed: \"%s\"", name);
-}
-
-static void dump_removed_services(enum MessageVerboseLevel level,
                                   const std::vector<std::string> &removed)
 {
     if(!msg_is_verbose(level))
@@ -953,137 +921,80 @@ static bool parse_service_data(GVariantIter *props_iter,
     return parsed_any_property;
 }
 
-static void get_changed_services_names(GVariant *changes,
-                                       std::map<std::string, bool> &has_changed)
-{
-    GVariantIter iter;
-    g_variant_iter_init(&iter, changes);
-
-    GVariantIter *props_iter;
-    const char *name;
-
-    while(g_variant_iter_loop(&iter, "(&oa{sv})", &name, &props_iter))
-    {
-        if(name[0] != '\0' && g_variant_iter_n_children(props_iter) > 0)
-            has_changed[name] = true;
-    }
-
-}
-
-template <typename RemovedType>
-struct UpdateServiceListTraits;
-
-template <>
-struct UpdateServiceListTraits<GVariant *>
-{
-    static inline bool is_empty(const GVariant *rm) { return rm == nullptr; }
-
-    static inline void for_each(GVariant *rm,
-                                const std::function<void(const char *)> &fn)
-    {
-        GVariantIter iter;
-        const gchar *name;
-
-        g_variant_iter_init(&iter, rm);
-
-        while(g_variant_iter_loop(&iter, "&o", &name))
-            fn(name);
-    }
-};
-
-template <>
-struct UpdateServiceListTraits<std::vector<std::string>>
-{
-    using RemovedType = std::vector<std::string>;
-
-    static inline bool is_empty(const RemovedType &rm) { return rm.empty(); }
-
-    static inline void for_each(const RemovedType &rm,
-                                const std::function<void(const char *)> &fn)
-    {
-        for(const auto &name : rm)
-            fn(name.c_str());
-    }
-};
-
 /*!
  * Remove listed services from our list.
  */
-template <typename RemovedType, typename Traits = UpdateServiceListTraits<RemovedType>>
 static void update_service_list(Connman::ServiceList &known_services,
                                 WLANConnectionState &wlan_connection_state,
-                                const RemovedType &removed,
+                                const std::vector<std::string> &removed,
                                 bool &have_lost_active_ethernet_device,
                                 bool &have_lost_active_wlan_device)
 {
     have_lost_active_ethernet_device = false;
     have_lost_active_wlan_device = false;
 
-    if(Traits::is_empty(removed))
+    if(removed.empty())
         return;
 
     dump_removed_services(MESSAGE_LEVEL_TRACE, removed);
 
-    Traits::for_each(removed,
-        [&known_services, &wlan_connection_state,
-         &have_lost_active_ethernet_device, &have_lost_active_wlan_device]
-        (const char *name)
+    for(const auto &name : removed)
+    {
+        const Connman::ServiceBase *service(known_services[name]);
+
+        if(service == nullptr)
+            return;
+
+        if(service->is_ours() && service->is_active())
         {
-            const Connman::ServiceBase *service(known_services[name]);
-
-            if(service == nullptr)
-                return;
-
-            if(service->is_ours() && service->is_active())
+            switch(service->get_technology())
             {
-                switch(service->get_technology())
-                {
-                case Connman::Technology::UNKNOWN_TECHNOLOGY:
-                    BUG("Removed service \"%s\" of unknown technology", name);
-                    break;
+            case Connman::Technology::UNKNOWN_TECHNOLOGY:
+                BUG("Removed service \"%s\" of unknown technology", name.c_str());
+                break;
 
-                case Connman::Technology::ETHERNET:
-                    have_lost_active_ethernet_device = true;
-                    break;
+            case Connman::Technology::ETHERNET:
+                have_lost_active_ethernet_device = true;
+                break;
 
-                case Connman::Technology::WLAN:
-                    have_lost_active_wlan_device = true;
-                    break;
-                }
+            case Connman::Technology::WLAN:
+                have_lost_active_wlan_device = true;
+                break;
             }
+        }
 
-            switch(wlan_connection_state.get_state())
+        switch(wlan_connection_state.get_state())
+        {
+            case WLANConnectionState::State::IDLE:
+            case WLANConnectionState::State::CONNECTING:
+            case WLANConnectionState::State::DONE:
+            case WLANConnectionState::State::FAILED:
+            break;
+
+            case WLANConnectionState::State::ABOUT_TO_CONNECT:
+            if(wlan_connection_state.get_service_name() == name)
+                wlan_connection_state.reset();
+
+            break;
+
+            case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+            if(wlan_connection_state.get_service_name() == name &&
+                !wlan_connection_state.about_to_connect_next())
             {
-              case WLANConnectionState::State::IDLE:
-              case WLANConnectionState::State::CONNECTING:
-              case WLANConnectionState::State::DONE:
-              case WLANConnectionState::State::FAILED:
-                break;
-
-              case WLANConnectionState::State::ABOUT_TO_CONNECT:
-                if(wlan_connection_state.get_service_name() == name)
-                    wlan_connection_state.reset();
-
-                break;
-
-              case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
-                if(wlan_connection_state.get_service_name() == name &&
-                   !wlan_connection_state.about_to_connect_next())
-                {
-                    wlan_connection_state.reset();
-                }
-                else
-                    wlan_connection_state.remove_pending_wps_service(name);
-
-                break;
-
-              case WLANConnectionState::State::CONNECTING_WPS:
+                wlan_connection_state.reset();
+            }
+            else
                 wlan_connection_state.remove_pending_wps_service(name);
-                break;
-            }
 
-            known_services.erase(name);
-        });
+            break;
+
+            case WLANConnectionState::State::CONNECTING_WPS:
+            wlan_connection_state.remove_pending_wps_service(name);
+            break;
+        }
+
+        known_services.erase(name);
+    };
 }
 
 static void update_service_list(GVariant *all_services,
@@ -1565,7 +1476,7 @@ static void schedule_wlan_connect_if_necessary(bool is_necessary,
     g_mutex_unlock(&data.lock);
 }
 
-static bool update_all_services(GVariant *all_services, GVariant *changes,
+static bool update_all_services(GVariant *all_services,
                                 Connman::ServiceList &services,
                                 const char *context)
 {
@@ -1583,16 +1494,8 @@ static bool update_all_services(GVariant *all_services, GVariant *changes,
     log_assert(preferred_ethernet_mac != nullptr);
     log_assert(preferred_wlan_mac != nullptr);
 
-    if(changes != nullptr)
-    {
-        std::map<std::string, bool> has_changed;
-        get_changed_services_names(changes, has_changed);
-        update_service_list(all_services, services, &has_changed,
-                            *preferred_ethernet_mac, *preferred_wlan_mac);
-    }
-    else
-        update_service_list(all_services, services, nullptr,
-                            *preferred_ethernet_mac, *preferred_wlan_mac);
+    update_service_list(all_services, services, nullptr,
+                        *preferred_ethernet_mac, *preferred_wlan_mac);
 
     return true;
 }
@@ -1653,111 +1556,32 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                                 const gchar *signal_name, GVariant *parameters,
                                 gpointer user_data)
 {
-    static const char iface_name[] = "net.connman.Manager";
     auto *data = static_cast<DBusSignalManagerData *>(user_data);
+    const auto locked_services(Connman::get_service_list_singleton_for_update());
+    auto &services(locked_services.first);
 
-    if(strcmp(signal_name, "ServicesChanged") == 0)
+    GVariant *all_services =
+        connman_common_query_services(dbus_get_connman_manager_iface());
+
+    bool have_lost_active_ethernet_device = false;
+    bool have_lost_active_wlan_device = false;
+
+    if(all_services != nullptr)
     {
-        msg_vinfo(MESSAGE_LEVEL_DIAG, "ConnMan services changed");
-        check_parameter_assertions(parameters, 2);
+        const std::vector<std::string> removed(std::move(find_removed(services, all_services)));
 
-        GVariant *changes = g_variant_get_child_value(parameters, 0);
-        GVariant *removed = g_variant_get_child_value(parameters, 1);
-
-        const auto locked_services(Connman::get_service_list_singleton_for_update());
-        auto &services(locked_services.first);
-
-        bool have_lost_active_ethernet_device;
-        bool have_lost_active_wlan_device;
         update_service_list(services, data->wlan_connection_state,
                             removed,
                             have_lost_active_ethernet_device,
                             have_lost_active_wlan_device);
-
-        /* stupid as it may seem, there are some important information (such as
-         * the IP address...) missing in the changes reported by ConnMan, so we
-         * ask ConnMan again to get at the full list of services; the service
-         * names listed in the "has_changed" map below are used for filtering
-         * only */
-        GVariant *all_services =
-            connman_common_query_services(dbus_get_connman_manager_iface());
-
-        if(update_all_services(all_services, changes, services,
-                               "ServicesChanged"))
-            g_variant_unref(all_services);
-
-        g_variant_unref(changes);
-        g_variant_unref(removed);
-
-        process_pending_changes(*data, services,
-                                have_lost_active_ethernet_device,
-                                have_lost_active_wlan_device);
     }
-    else if(strcmp(signal_name, "PropertyChanged") == 0)
-    {
-        check_parameter_assertions(parameters, 2);
 
-        const auto locked_services(Connman::get_service_list_singleton_for_update());
-        auto &services(locked_services.first);
+    if(update_all_services(all_services, services, signal_name))
+        g_variant_unref(all_services);
 
-        GVariant *all_services =
-            connman_common_query_services(dbus_get_connman_manager_iface());
-
-        bool have_lost_active_ethernet_device = false;
-        bool have_lost_active_wlan_device = false;
-
-        if(all_services != nullptr)
-        {
-            const std::vector<std::string> removed(
-                    std::move(find_removed(services, all_services)));
-
-            update_service_list(services, data->wlan_connection_state,
-                                removed,
-                                have_lost_active_ethernet_device,
-                                have_lost_active_wlan_device);
-        }
-
-        if(update_all_services(all_services, nullptr, services, signal_name))
-            g_variant_unref(all_services);
-
-        process_pending_changes(*data, services,
-                                have_lost_active_ethernet_device,
-                                have_lost_active_wlan_device);
-
-        const char *param_name;
-        GVariant *value;
-        g_variant_get(parameters, "(&sv)", &param_name, &value);
-
-        log_assert(param_name != NULL);
-
-        if(strcmp(param_name, "State") == 0)
-        {
-            msg_vinfo(MESSAGE_LEVEL_DIAG, "ConnMan state changed -> %s",
-                      g_variant_get_string(value, NULL));
-            dcpregs_networkconfig_interfaces_changed();
-        }
-        else
-            msg_vinfo(MESSAGE_LEVEL_DIAG,
-                      "ConnMan property \"%s\" changed", param_name);
-
-        g_variant_unref(value);
-    }
-    else if(strcmp(signal_name, "TechnologyAdded") == 0)
-    {
-        BUG("ConnMan added technology, must be handled");
-
-        /* TODO: Maybe switch to alternative technology, automatic switching to
-         *       wifi is disabled in ConnMan */
-    }
-    else if(strcmp(signal_name, "TechnologyRemoved") == 0)
-    {
-        BUG("ConnMan removed technology, must be handled");
-
-        /* TODO: Maybe switch to alternative technology, automatic switching to
-         *       wifi is disabled in ConnMan */
-    }
-    else
-        unknown_signal(iface_name, signal_name, sender_name);
+    process_pending_changes(*data, services,
+                            have_lost_active_ethernet_device,
+                            have_lost_active_wlan_device);
 }
 
 static bool is_ssid_rejected(const std::string &ssid, const char *wanted_network_name,
@@ -1883,7 +1707,7 @@ void dbussignal_connman_manager_about_to_connect_signals(void)
     GVariant *all_services =
         connman_common_query_services(dbus_get_connman_manager_iface());
 
-    if(update_all_services(all_services, nullptr, services, "startup"))
+    if(update_all_services(all_services, services, "startup"))
         g_variant_unref(all_services);
 
     process_pending_changes(global_dbussignal_connman_manager_data,
