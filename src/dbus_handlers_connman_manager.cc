@@ -1297,6 +1297,12 @@ static void bug_if_not_processed(const Connman::ServiceList &known_services)
 }
 #endif /* NDEBUG */
 
+static void survey_after_suspend(enum ConnmanSiteScanResult result)
+{
+    msg_vinfo(MESSAGE_LEVEL_DIAG,
+              "Site survey result after suspend: %d", int(result));
+}
+
 /*!
  * Take care of ConnMan service changes.
  *
@@ -1413,7 +1419,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
            {
                /* there are no known WLANs, maybe because the WLAN adapter
                 * is in suspend mode */
-               connman_wlan_power_on();
+               connman_start_wlan_site_survey(survey_after_suspend);
                return false;
            }
 
