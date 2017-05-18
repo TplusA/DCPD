@@ -1128,6 +1128,101 @@ static NetworkPrefsTechnology map_network_technology(const Connman::Technology t
     return NWPREFSTECH_UNKNOWN;
 }
 
+static bool is_ethernet_service_auto_configured(const Connman::ServiceBase &s)
+{
+    const Connman::ServiceData &sdata(s.get_service_data());
+
+    if(sdata.dns_servers_.is_known() && !sdata.dns_servers_.get().empty())
+        return false;
+
+    if(!sdata.ip_settings_v4_.is_known())
+        return false;
+
+    const auto &settings(sdata.ip_settings_v4_.get());
+
+    switch(settings.get_dhcp_method())
+    {
+      case Connman::DHCPV4Method::NOT_AVAILABLE:
+      case Connman::DHCPV4Method::UNKNOWN_METHOD:
+      case Connman::DHCPV4Method::OFF:
+      case Connman::DHCPV4Method::MANUAL:
+      case Connman::DHCPV4Method::FIXED:
+        return false;
+
+      case Connman::DHCPV4Method::ON:
+        break;
+    }
+
+    if(settings.get_address().get_string().compare(0, 8, "168.254.") != 0)
+        return false;
+
+    if(settings.get_netmask().get_string().compare(0, 8, "255.255.") != 0)
+        return false;
+
+    if(!settings.get_gateway().empty())
+        return false;
+
+    return true;
+}
+
+/* switch to WLAN service in case WPS mode was requested while Ethernet is
+ * selected, but the Ethernet service is either unconfigured or was configured
+ * by IPv4LL */
+static bool auto_switch_to_wlan_if_necessary()
+{
+    if(!IS_REQUESTED(REQ_WLAN_SECURITY_MODE_92))
+        return false;
+
+    switch(nwconfig_write_data.selected_technology)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+      case Connman::Technology::WLAN:
+        return false;
+
+      case Connman::Technology::ETHERNET:
+        /* so we have WLAN security mode for the Ethernet interface */
+        break;
+    }
+
+    /* only switch for WPS */
+    if(strcmp(nwconfig_write_data.wlan_security_mode.data(), "wps") != 0)
+        return false;
+
+    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto &services(locked_services.first);
+
+    const Connman::ServiceBase *wlan_service(
+            find_best_service_by_technology(services, Connman::Technology::WLAN));
+
+    /* don't switch if there is no alternative */
+    if(wlan_service == nullptr)
+        return false;
+
+    const Connman::ServiceBase *ethernet_service(
+            find_best_service_by_technology(services, Connman::Technology::ETHERNET));
+
+    const bool result = ethernet_service != nullptr
+        ? is_ethernet_service_auto_configured(*ethernet_service)
+        : true;
+
+    if(result)
+    {
+        if(ethernet_service != nullptr)
+            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                      "Configuring WLAN %s instead of Ethernet %s",
+                      wlan_service->get_service_data().mac_address_.get_string().c_str(),
+                      ethernet_service->get_service_data().mac_address_.get_string().c_str());
+        else
+            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                      "Configuring WLAN %s instead of nonexistent Ethernet",
+                      wlan_service->get_service_data().mac_address_.get_string().c_str());
+
+        nwconfig_write_data.selected_technology = Connman::Technology::WLAN;
+    }
+
+    return result;
+}
+
 int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 53 handler %p %zu", data, length);
@@ -1140,6 +1235,8 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 
     if(!may_change_config())
         return -1;
+
+    auto_switch_to_wlan_if_necessary();
 
     const NetworkPrefsTechnology prefs_tech =
         map_network_technology(nwconfig_write_data.selected_technology);
