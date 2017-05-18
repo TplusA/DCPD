@@ -165,21 +165,26 @@ class DBusSignalManagerData
     GMutex lock;
 
     void (*schedule_connect_to_wlan)(void);
+    void (*schedule_refresh_connman_services)(void);
+
     WLANConnectionState wlan_connection_state;
 
     DBusSignalManagerData(const DBusSignalManagerData &) = delete;
     DBusSignalManagerData &operator=(const DBusSignalManagerData &) = delete;
 
     explicit DBusSignalManagerData():
-        schedule_connect_to_wlan(nullptr)
+        schedule_connect_to_wlan(nullptr),
+        schedule_refresh_connman_services(nullptr)
     {
         g_mutex_init(&lock);
     }
 
-    void init(void (*schedule_connect_to_wlan_fn)())
+    void init(void (*schedule_connect_to_wlan_fn)(),
+              void (*schedule_refresh_connman_services_fn)())
     {
         g_mutex_init(&lock);
         schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
+        schedule_refresh_connman_services = schedule_refresh_connman_services_fn;
         wlan_connection_state.reset();
         Connman::get_service_list_singleton_for_update().first.clear();
     }
@@ -212,6 +217,8 @@ static void service_connected(const char *service_name,
     }
 
     g_mutex_unlock(&data->lock);
+
+    data->schedule_refresh_connman_services();
 }
 
 static void schedule_wlan_connect__unlocked(DBusSignalManagerData &data)
@@ -236,7 +243,7 @@ static inline bool wps_bug_if(bool cond, const char *unknown)
         return false;
 }
 
-static void store_wlan_config_and_notify_slave(const Connman::ServiceBase *service)
+static void store_wlan_config(const Connman::ServiceBase *service)
 {
     if(wps_bug_if(service == nullptr, "service"))
         return;
@@ -271,9 +278,6 @@ static void store_wlan_config_and_notify_slave(const Connman::ServiceBase *servi
     }
 
     network_prefs_close(handle);
-
-    if(wlan != nullptr)
-        dcpregs_networkconfig_interfaces_changed();
 }
 
 static void wps_connected(const char *service_name,
@@ -291,7 +295,7 @@ static void wps_connected(const char *service_name,
     switch(result)
     {
       case CONNMAN_SERVICE_CONNECT_CONNECTED:
-        store_wlan_config_and_notify_slave(services[data.wlan_connection_state.get_service_name()]);
+        store_wlan_config(services[data.wlan_connection_state.get_service_name()]);
         data.wlan_connection_state.finished_successfully();
         break;
 
@@ -312,6 +316,8 @@ static void wps_connected(const char *service_name,
         connman_agent_set_wps_mode(false);
 
     g_mutex_unlock(&data.lock);
+
+    data.schedule_refresh_connman_services();
 }
 
 void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
@@ -1693,9 +1699,11 @@ static bool start_wps(DBusSignalManagerData &data,
 static DBusSignalManagerData global_dbussignal_connman_manager_data;
 
 DBusSignalManagerData *
-dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)())
+dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(),
+                                void (*schedule_refresh_connman_services_fn)())
 {
-    global_dbussignal_connman_manager_data.init(schedule_connect_to_wlan_fn);
+    global_dbussignal_connman_manager_data.init(schedule_connect_to_wlan_fn,
+                                                schedule_refresh_connman_services_fn);
     return &global_dbussignal_connman_manager_data;
 }
 
@@ -1883,4 +1891,10 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
     g_mutex_unlock(&d.lock);
 
     return retval;
+}
+
+void dbussignal_connman_manager_refresh_services(void)
+{
+    dbussignal_connman_manager(nullptr, "dcpd", __func__, nullptr,
+                               &global_dbussignal_connman_manager_data);
 }

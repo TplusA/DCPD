@@ -73,11 +73,13 @@
 #define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
 #define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 13)
 #define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 14)
+#define WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED    (1U << 15)
 
 enum PrimitiveQueueCommand
 {
     PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
     PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
+    PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES,
 };
 
 /*!
@@ -385,6 +387,10 @@ static unsigned int handle_primqueue_events(int fd, short revents)
                   case PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN:
                     result |= WAITEVENT_CONNECT_TO_WLAN_REQUESTED;
                     break;
+
+                  case PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES:
+                    result |= WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED;;
+                    break;
                 }
             }
 
@@ -665,6 +671,9 @@ static void handle_register_change(unsigned int wait_result, int fd,
 static void handle_connman_manager_events(unsigned int wait_result,
                                           struct DBusSignalManagerData *data)
 {
+    if((wait_result & WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED) != 0)
+        dbussignal_connman_manager_refresh_services();
+
     if((wait_result & WAITEVENT_CONNECT_TO_WLAN_REQUESTED) != 0)
         dbussignal_connman_manager_connect_our_wlan(data);
 }
@@ -745,6 +754,12 @@ static void try_connect_to_managed_wlan(void)
 {
     primitive_queue_send(PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
                          "connecting to WLAN");
+}
+
+static void deferred_connman_refresh(void)
+{
+    primitive_queue_send(PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES,
+                         "refreshing ConnMan service list");
 }
 
 /*!
@@ -1009,7 +1024,8 @@ static bool main_loop_init(const struct parameters *parameters,
 
     transaction_init_allocator();
 
-    *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan);
+    *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan,
+                                               deferred_connman_refresh);
 
     applink_init();
 

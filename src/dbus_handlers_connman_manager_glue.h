@@ -35,7 +35,8 @@ extern "C" {
 struct DBusSignalManagerData;
 
 struct DBusSignalManagerData *
-dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
+dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void),
+                                void (*schedule_refresh_connman_services_fn)(void));
 
 /*!
  * Tell ConnMan to connect to WLAN service with name stored in passed data.
@@ -58,6 +59,7 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *service_to_be_disabled);
 
 bool dbussignal_connman_manager_is_connecting(bool *is_wps);
+void dbussignal_connman_manager_refresh_services(void);
 
 #ifdef __cplusplus
 }
