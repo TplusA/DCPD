@@ -46,6 +46,7 @@
 #include "connman.h"
 #include "networkprefs.h"
 #include "configproxy.h"
+#include "configuration_dcpd.hh"
 #include "os.h"
 #include "versioninfo.h"
 
@@ -996,11 +997,14 @@ struct parameters
 };
 
 static bool main_loop_init(const struct parameters *parameters,
+                           Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager,
                            struct smartphone_app_connection_data *appconn,
                            struct DBusSignalManagerData **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
     configproxy_init();
+
+    config_manager.load();
 
     static const char network_preferences_dir[] = "/var/local/etc";
     static const char network_preferences_file[] = "network.ini";
@@ -1505,11 +1509,20 @@ int main(int argc, char *argv[])
     static struct DBusSignalManagerData *connman;
 
     /*!
+     * Data for de.tahifi.Configuration interfaces.
+     */
+    static const char appliance_ini_file[] = "/var/local/etc/appliance.ini";
+    static Configuration::ApplianceValues appliance_ini_defaults(
+                std::move(std::string("!unknown!")));
+    Configuration::ConfigManager<Configuration::ApplianceValues>
+        config_manager(appliance_ini_file, appliance_ini_defaults);
+
+    /*!
      * Data for handling DCP over TCP/IP.
      */
     static struct dcp_over_tcp_data dot;
 
-    main_loop_init(&parameters, &appconn, &connman, &dot, is_upgrading);
+    main_loop_init(&parameters, config_manager, &appconn, &connman, &dot, is_upgrading);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, connman) < 0)

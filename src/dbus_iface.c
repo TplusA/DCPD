@@ -64,6 +64,7 @@ static struct
     tdbusdcpdListNavigation *list_navigation_iface;
     tdbusdcpdListItem *list_item_iface;
     tdbusConfigurationProxy *configproxy_iface;
+    tdbusConfigurationRead *configuration_read_iface;
     tdbusdebugLogging *debug_logging_iface;
     tdbusdebugLoggingConfig *debug_logging_config_iface;
 }
@@ -159,13 +160,22 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
         dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
         dcpd_iface_data.configproxy_iface = tdbus_configuration_proxy_skeleton_new();
+        dcpd_iface_data.configuration_read_iface = tdbus_configuration_read_skeleton_new();
         dcpd_iface_data.debug_logging_iface = tdbus_debug_logging_skeleton_new();
         dcpd_iface_data.debug_logging_config_iface = tdbus_debug_logging_config_skeleton_new();
 
         g_signal_connect(dcpd_iface_data.playback_iface, "handle-set-stream-info",
                          G_CALLBACK(dbusmethod_set_stream_info), NULL);
+
         g_signal_connect(dcpd_iface_data.configproxy_iface, "handle-register",
                          G_CALLBACK(dbusmethod_configproxy_register), NULL);
+        g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-keys",
+                         G_CALLBACK(dbusmethod_config_get_all_keys), NULL);
+        g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-value",
+                         G_CALLBACK(dbusmethod_config_get_value), NULL);
+        g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-values",
+                         G_CALLBACK(dbusmethod_config_get_all_values), NULL);
+
         g_signal_connect(dcpd_iface_data.debug_logging_iface,
                          "handle-debug-level",
                          G_CALLBACK(dbusmethod_debug_logging_debug_level), NULL);
@@ -178,6 +188,7 @@ static void bus_acquired(GDBusConnection *connection,
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_item_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configproxy_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configuration_read_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_config_iface));
     }
@@ -448,6 +459,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(dcpd_iface_data.list_navigation_iface != NULL);
     log_assert(dcpd_iface_data.list_item_iface != NULL);
     log_assert(dcpd_iface_data.configproxy_iface != NULL);
+    log_assert(dcpd_iface_data.configuration_read_iface != NULL);
     log_assert(dcpd_iface_data.debug_logging_iface != NULL);
     log_assert(dcpd_iface_data.debug_logging_config_iface != NULL);
     log_assert(filetransfer_iface_data.iface != NULL);
@@ -517,6 +529,7 @@ void dbus_shutdown(void)
     g_object_unref(dcpd_iface_data.list_navigation_iface);
     g_object_unref(dcpd_iface_data.list_item_iface);
     g_object_unref(dcpd_iface_data.configproxy_iface);
+    g_object_unref(dcpd_iface_data.configuration_read_iface);
     g_object_unref(dcpd_iface_data.debug_logging_iface);
     g_object_unref(dcpd_iface_data.debug_logging_config_iface);
 

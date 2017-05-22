@@ -44,6 +44,9 @@ dcpd_SOURCES = \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.h connman_agent.h \
     dbus_handlers_connman_manager.h dbus_handlers_connman_manager_glue.h \
+    configuration.cc configuration.hh configuration_base.hh configuration_changed.hh \
+    configuration_settings.hh inifile.h \
+    configuration_dcpd.cc configuration_dcpd.hh \
     configproxy.h \
     networkprefs.h
 
