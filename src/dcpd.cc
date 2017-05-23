@@ -983,6 +983,20 @@ static void main_loop(struct files *files,
     transaction_free(&state.preallocated_inet_slave_transaction);
 }
 
+static void register_own_config_keys(Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager)
+{
+    auto managed_keys(config_manager.keys());
+    auto keys(static_cast<char **>(g_malloc_n(managed_keys.size() + 1, sizeof(char *))));
+
+    size_t i = 0;
+    for(auto &k : managed_keys)
+        keys[i++] = g_strdup(k);
+
+    keys[i] = nullptr;
+
+    configproxy_register_local_configuration_owner(Configuration::ApplianceValues::OWNER_NAME, keys);
+}
+
 struct parameters
 {
     enum MessageVerboseLevel verbose_level;
@@ -1004,6 +1018,8 @@ static bool main_loop_init(const struct parameters *parameters,
 {
     configproxy_init();
 
+    Configuration::register_configuration_manager(config_manager);
+    register_own_config_keys(config_manager);
     config_manager.load();
 
     static const char network_preferences_dir[] = "/var/local/etc";
@@ -1525,7 +1541,8 @@ int main(int argc, char *argv[])
     main_loop_init(&parameters, config_manager, &appconn, &connman, &dot, is_upgrading);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
-                  parameters.with_connman, &appconn, connman) < 0)
+                  parameters.with_connman, &appconn, connman,
+                  reinterpret_cast<struct ConfigurationManagementData *>(&config_manager)) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;

@@ -106,6 +106,7 @@ test_transactions_la_SOURCES = \
     mock_expectation.hh
 test_transactions_la_LIBADD = \
     $(top_builddir)/src/libtransactions.la \
+    $(top_builddir)/src/libconfigproxy.la \
     $(top_builddir)/src/libregisters.la \
     $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libnetworkprefs.la \

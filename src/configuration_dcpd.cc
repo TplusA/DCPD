@@ -20,9 +20,11 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <algorithm>
 #include <glib.h>
 
 #include "configuration_dcpd.hh"
+#include "configuration_dcpd.h"
 #include "dbus_handlers.h"
 
 constexpr char Configuration::ApplianceValues::OWNER_NAME[];
@@ -89,6 +91,100 @@ Configuration::UpdateSettings<Configuration::ApplianceValues>::insert_boxed(cons
     return InsertResult::KEY_UNKNOWN;
 }
 //! \endcond
+
+class ConfigurationData
+{
+  public:
+    Configuration::ConfigManager<Configuration::ApplianceValues> *cm;
+
+    ConfigurationData(const ConfigurationData &) = delete;
+    ConfigurationData &operator=(const ConfigurationData &) = delete;
+
+    explicit ConfigurationData():
+        cm(nullptr)
+    {}
+};
+
+static ConfigurationData configuration_data;
+
+static bool is_key_ours(const char *key, const char *our_key, size_t our_key_length)
+{
+    const size_t key_length(strlen(key));
+
+    auto beyond_database(std::find(key, key + key_length, ':'));
+    const size_t database_name_length(beyond_database - key);
+
+    if(database_name_length >= key_length)
+        return false;
+
+    auto beyond_section(std::find(beyond_database + 1, key + key_length, ':'));
+
+    if(beyond_section >= key + key_length)
+        return false;
+
+    if(database_name_length != our_key_length)
+        return false;
+
+    return strncmp(our_key, key, our_key_length) == 0;
+}
+
+bool configuration_set_key(const char *origin, const char *key, GVariant *value)
+{
+    log_assert(g_variant_n_children(value) == 1);
+
+    GVariantWrapper top_level(value);
+    GVariantWrapper v(g_variant_get_child_value(GVariantWrapper::get(top_level), 0),
+                      GVariantWrapper::Transfer::JUST_MOVE);
+
+    if(!is_key_ours(key, configuration_data.cm->get_database_name(),
+                    strlen(configuration_data.cm->get_database_name())))
+    {
+        msg_error(0, LOG_NOTICE,
+                  "Attempted to set foreign key %s by %s", key, origin);
+        return false;
+    }
+
+    auto scope(configuration_data.cm->get_update_scope(origin));
+
+    switch(scope().insert_boxed(key, std::move(v)))
+    {
+      case Configuration::InsertResult::UPDATED:
+      case Configuration::InsertResult::UNCHANGED:
+        return true;
+
+      case Configuration::InsertResult::KEY_UNKNOWN:
+      case Configuration::InsertResult::VALUE_TYPE_INVALID:
+      case Configuration::InsertResult::VALUE_INVALID:
+      case Configuration::InsertResult::PERMISSION_DENIED:
+        break;
+    }
+
+    return false;
+}
+
+GVariant *configuration_get_key(const char *key)
+{
+    if(!is_key_ours(key, configuration_data.cm->get_database_name(),
+                    strlen(configuration_data.cm->get_database_name())))
+    {
+        msg_error(0, LOG_NOTICE,
+                  "Attempted to read out foreign key %s", key);
+        return nullptr;
+    }
+
+    auto value = configuration_data.cm->lookup_boxed(key);
+
+    return (value != nullptr) ? GVariantWrapper::move(value) : nullptr;
+}
+
+void Configuration::register_configuration_manager(ConfigManager<ApplianceValues> &cm)
+{
+    /* FIXME: The configuration manager needs to be implemented by inheritance,
+     *        otherwise we'll not be able to add more than a single
+     *        configuration manager at a time. There is too much unnecessary
+     *        TMP involved. */
+    configuration_data.cm = &cm;
+}
 
 static void enter_config_read_handler(GDBusMethodInvocation *invocation)
 {

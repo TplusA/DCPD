@@ -123,6 +123,8 @@ class UpdateSettings<ApplianceValues>
     }
 };
 
+void register_configuration_manager(ConfigManager<ApplianceValues> &cm);
+
 }
 
 #endif /* !CONFIGURATION_DCPD_HH */

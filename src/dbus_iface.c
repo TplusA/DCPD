@@ -59,6 +59,9 @@ static struct dbus_data dbus_data_session_bus;
 static struct
 {
     bool connect_to_session_bus;
+
+    struct ConfigurationManagementData *config_management_data;
+
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
     tdbusdcpdListNavigation *list_navigation_iface;
@@ -170,11 +173,14 @@ static void bus_acquired(GDBusConnection *connection,
         g_signal_connect(dcpd_iface_data.configproxy_iface, "handle-register",
                          G_CALLBACK(dbusmethod_configproxy_register), NULL);
         g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-keys",
-                         G_CALLBACK(dbusmethod_config_get_all_keys), NULL);
+                         G_CALLBACK(dbusmethod_config_get_all_keys),
+                         dcpd_iface_data.config_management_data);
         g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-value",
-                         G_CALLBACK(dbusmethod_config_get_value), NULL);
+                         G_CALLBACK(dbusmethod_config_get_value),
+                         dcpd_iface_data.config_management_data);
         g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-values",
-                         G_CALLBACK(dbusmethod_config_get_all_values), NULL);
+                         G_CALLBACK(dbusmethod_config_get_all_values),
+                         dcpd_iface_data.config_management_data);
 
         g_signal_connect(dcpd_iface_data.debug_logging_iface,
                          "handle-debug-level",
@@ -376,7 +382,8 @@ static struct dbus_process_data process_data;
 
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
                struct smartphone_app_connection_data *appconn_data,
-               struct DBusSignalManagerData *connman_data)
+               struct DBusSignalManagerData *connman_data,
+               struct ConfigurationManagementData *configuration_data)
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();
@@ -405,6 +412,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     }
 
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
+    dcpd_iface_data.config_management_data = configuration_data;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.connect_to_session_bus = connect_to_session_bus;

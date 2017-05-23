@@ -40,6 +40,7 @@ void configproxy_deinit(void);
 bool configproxy_register_configuration_owner(const char *id,
                                               const char *dbus_dest,
                                               const char *dbus_path);
+bool configproxy_register_local_configuration_owner(const char *id, char **keys);
 
 typedef bool (*PatchUint32Fn)(uint32_t *value);
 

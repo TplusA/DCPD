@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,30 +16,20 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DBUS_IFACE_H
-#define DBUS_IFACE_H
+#ifndef CONFIGURATION_DCPD_H
+#define CONFIGURATION_DCPD_H
 
-#include <stdbool.h>
+#include <glib.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct smartphone_app_connection_data;
-struct DBusSignalManagerData;
-struct ConfigurationManagementData;
-
-int dbus_setup(bool connect_to_session_bus, bool with_connman,
-               struct smartphone_app_connection_data *appconn_data,
-               struct DBusSignalManagerData *connman_manager_data,
-               struct ConfigurationManagementData *configuration_data);
-void dbus_shutdown(void);
-
-void dbus_lock_shutdown_sequence(const char *why);
-void dbus_unlock_shutdown_sequence(void);
+bool configuration_set_key(const char *origin, const char *key, GVariant *value);
+GVariant *configuration_get_key(const char *key);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* !DBUS_IFACE_H */
+#endif /* !CONFIGURATION_DCPD_H */

@@ -46,7 +46,7 @@ dcpd_SOURCES = \
     dbus_handlers_connman_manager.h dbus_handlers_connman_manager_glue.h \
     configuration.cc configuration.hh configuration_base.hh configuration_changed.hh \
     configuration_settings.hh inifile.h \
-    configuration_dcpd.cc configuration_dcpd.hh \
+    configuration_dcpd.cc configuration_dcpd.hh configuration_dcpd.h \
     configproxy.h \
     networkprefs.h
 

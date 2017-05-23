@@ -23,11 +23,14 @@
 #include <cppcutter.h>
 #include <array>
 #include <algorithm>
+#include <glib.h>
 
 #include "transactions.h"
 #include "registers.h"
 #include "networkprefs.h"
 #include "connman_service_list.hh"
+#include "configproxy.h"
+#include "configuration_dcpd.h"
 #include "dcpdefs.h"
 
 #include "mock_messages.hh"
@@ -91,6 +94,12 @@ class read_data_t
 
 ssize_t (*os_read)(int fd, void *dest, size_t count) = NULL;
 ssize_t (*os_write)(int fd, const void *buf, size_t count) = NULL;
+
+GVariant *configuration_get_key(const char *key)
+{
+    cppcut_assert_equal("appliance:appliance:id", key);
+    return g_variant_new_string("strbo");
+}
 
 namespace dcp_transaction_tests_queue
 {
@@ -1983,6 +1992,16 @@ void test_waiting_for_master_ack_interrupted_by_nack_for_other_transaction()
  */
 void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
 {
+    auto keys(static_cast<char **>(g_malloc_n(2, sizeof(char *))));
+    keys[0] = g_strdup("appliance:appliance:id");
+    keys[1] = nullptr;
+    configproxy_init();
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
+                                              "Registered local key \"@dcpd:appliance:appliance:id\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Registered 1 local key for \"dcpd\"");
+    configproxy_register_local_configuration_owner("dcpd", keys);
+
     struct transaction_exception e;
     struct transaction *t_push =
         create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
@@ -2051,6 +2070,8 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
 
     transaction_free(&t_push);
     cppcut_assert_null(t_push);
+
+    configproxy_deinit();
 }
 
 };

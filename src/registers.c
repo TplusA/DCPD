@@ -58,6 +58,9 @@ struct RegistersPrivateData
 
 static struct RegistersPrivateData registers_private_data;
 
+static const char appliance_id_key[] = "@dcpd:appliance:appliance:id";
+static const char max_bitrate_key[]  = "@drcpd::maximum_stream_bit_rate";
+
 static bool update_status_register(uint8_t status, uint8_t code)
 {
     if(registers_private_data.status_byte == status &&
@@ -181,23 +184,36 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
 
 static ssize_t read_87_appliance_id(uint8_t *response, size_t length)
 {
-    static const char appliance_id[] = "strbo";
-
-    if(length < sizeof(appliance_id) - 1)
-        return -1;
-
-    memcpy(response, appliance_id, sizeof(appliance_id) - 1);
-
-    return sizeof(appliance_id) - 1;
+    return configproxy_get_value_as_string(appliance_id_key,
+                                           (char *)response, length,
+                                           NULL);
 }
 
 static int write_87_appliance_id(const uint8_t *data, size_t length)
 {
-    /* FIXME: Dummy implementation that accepts anything and does nothing */
+    if(length == 0 || data[0] == '\0')
+        return -1;
+
+    static const char log_message[] = "Appliance ID: \"%s\"";
+
+    if(data[length - 1] == '\0')
+    {
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, log_message, data);
+        configproxy_set_string(NULL, appliance_id_key, (const char *)data);
+    }
+    else
+    {
+        char buffer[length + 1];
+
+        memcpy(buffer, data, length);
+        buffer[length] = '\0';
+
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, log_message, buffer);
+        configproxy_set_string(NULL, appliance_id_key, buffer);
+    }
+
     return 0;
 }
-
-static const char max_bitrate_key[] = "@drcpd::maximum_stream_bit_rate";
 
 static bool to_kbits(uint32_t *value)
 {
