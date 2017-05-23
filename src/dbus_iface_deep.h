@@ -53,6 +53,7 @@ tdbuscredentialsWrite *dbus_get_credentials_write_iface(void);
 
 tdbusConfigurationRead *dbus_get_configuration_read_iface(const char *dest, const char *path);
 tdbusConfigurationWrite *dbus_get_configuration_write_iface(const char *dest, const char *path);
+tdbusConfigurationMonitor *dbus_get_configuration_monitor_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
 tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path);

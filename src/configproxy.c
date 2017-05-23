@@ -254,7 +254,13 @@ static bool set(const char *origin, const struct ConfigurationOwner *owner,
                                                   origin, key, value,
                                                   NULL, &error);
 
-    return dbus_common_handle_dbus_error(&error, "Set configuration value") == 0;
+    if(dbus_common_handle_dbus_error(&error, "Set configuration value") != 0)
+        return false;
+
+    const char *changed_keys[2] = { key, NULL, };
+    configproxy_notify_configuration_changed(origin, changed_keys);
+
+    return true;
 }
 
 static GVariant *get(const struct ConfigurationOwner *owner, const char *key)
@@ -458,6 +464,23 @@ error_exit:
     free_owner(&configproxy_data, configproxy_data.next_free_owner);
 
     return false;
+}
+
+void configproxy_notify_configuration_changed(const char *origin, const char **changed_keys)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+
+    for(const char **iter = changed_keys; *iter != NULL; ++iter)
+    {
+        GVariant *v = configuration_get_key(*iter);
+        g_variant_builder_add(&builder, "{sv}", *iter, v);
+        g_variant_unref(v);
+    }
+
+    tdbus_configuration_monitor_emit_updated(dbus_get_configuration_monitor_iface(),
+                                             origin,
+                                             g_variant_builder_end(&builder));
 }
 
 bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value)

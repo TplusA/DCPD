@@ -25,6 +25,7 @@
 
 #include "configuration_dcpd.hh"
 #include "configuration_dcpd.h"
+#include "configproxy.h"
 #include "dbus_handlers.h"
 
 constexpr char Configuration::ApplianceValues::OWNER_NAME[];
@@ -177,6 +178,24 @@ GVariant *configuration_get_key(const char *key)
     return (value != nullptr) ? GVariantWrapper::move(value) : nullptr;
 }
 
+static void notify_config_changed(const char *origin,
+                                  const std::array<bool, Configuration::ApplianceValues::NUMBER_OF_KEYS> &changed)
+{
+    std::vector<const char *> vec;
+
+    for(size_t i = 0; i < changed.size(); ++i)
+    {
+        if(changed[i])
+            vec.push_back(Configuration::ApplianceValues::all_keys[i].name_.c_str());
+    }
+
+    if(!vec.empty())
+    {
+        vec.push_back(nullptr);
+        configproxy_notify_configuration_changed(origin, vec.data());
+    }
+}
+
 void Configuration::register_configuration_manager(ConfigManager<ApplianceValues> &cm)
 {
     /* FIXME: The configuration manager needs to be implemented by inheritance,
@@ -184,6 +203,7 @@ void Configuration::register_configuration_manager(ConfigManager<ApplianceValues
      *        configuration manager at a time. There is too much unnecessary
      *        TMP involved. */
     configuration_data.cm = &cm;
+    configuration_data.cm->set_updated_notification_callback(notify_config_changed);
 }
 
 static void enter_config_read_handler(GDBusMethodInvocation *invocation)

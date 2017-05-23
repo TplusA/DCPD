@@ -42,6 +42,9 @@ bool configproxy_register_configuration_owner(const char *id,
                                               const char *dbus_path);
 bool configproxy_register_local_configuration_owner(const char *id, char **keys);
 
+void configproxy_notify_configuration_changed(const char *origin,
+                                              const char **changed_keys);
+
 typedef bool (*PatchUint32Fn)(uint32_t *value);
 
 bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value);
