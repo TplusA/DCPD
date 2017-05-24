@@ -606,7 +606,7 @@ static uint8_t map_dhcp_method(const Connman::DHCPV4Method method)
 
 static bool query_dhcp_mode(void)
 {
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *service(get_connman_service_data(services));
 
@@ -1009,7 +1009,7 @@ modify_network_configuration(
     if(prefs_tech == NWPREFSTECH_UNKNOWN)
         return WPSMode::INVALID;
 
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *service(get_connman_service_data(services));
 
@@ -1188,7 +1188,7 @@ static bool auto_switch_to_wlan_if_necessary()
     if(strcmp(nwconfig_write_data.wlan_security_mode.data(), "wps") != 0)
         return false;
 
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     const Connman::ServiceBase *wlan_service(
@@ -1312,7 +1312,7 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
 
     memset(&nwconfig_write_data, 0, sizeof(nwconfig_write_data));
 
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     nwconfig_write_data.selected_technology =
@@ -1327,7 +1327,7 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
     response[1] = NETWORK_STATUS_DEVICE_NONE;
     response[2] = NETWORK_STATUS_CONNECTION_NONE;
 
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *fallback_service_data;
     const Connman::ServiceBase *service =
@@ -1414,7 +1414,7 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
     if(length < sizeof(mac->address))
         return -1;
 
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     mac = network_prefs_get_mac_address_by_tech(map_network_technology(determine_active_network_technology(services, true)));
@@ -1488,7 +1488,7 @@ read_out_parameter(const std::function<ssize_t(const Connman::ServiceBase &, cha
                    Connman::Technology required_technology,
                    uint8_t *response, size_t length)
 {
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *service(get_connman_service_data(services));
 

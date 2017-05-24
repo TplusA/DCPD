@@ -138,13 +138,13 @@ class ServiceList
     Map::iterator find(const std::string &name) { return services_.find(name); }
     Map::iterator begin() { return services_.begin(); }
     Map::iterator end() { return services_.end(); }
+
+    static std::pair<const ServiceList &, std::unique_lock<std::recursive_mutex>>
+    get_singleton_const();
+
+    static std::pair<ServiceList &, std::unique_lock<std::recursive_mutex>>
+    get_singleton_for_update();
 };
-
-std::pair<const ServiceList &, std::unique_lock<std::recursive_mutex>>
-get_service_list_singleton_const();
-
-std::pair<ServiceList &, std::unique_lock<std::recursive_mutex>>
-get_service_list_singleton_for_update();
 
 }
 

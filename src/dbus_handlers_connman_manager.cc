@@ -186,7 +186,7 @@ class DBusSignalManagerData
         schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
         schedule_refresh_connman_services = schedule_refresh_connman_services_fn;
         wlan_connection_state.reset();
-        Connman::get_service_list_singleton_for_update().first.clear();
+        Connman::ServiceList::get_singleton_for_update().first.clear();
     }
 };
 
@@ -287,7 +287,7 @@ static void wps_connected(const char *service_name,
     auto &data(*static_cast<DBusSignalManagerData *>(user_data));
     bool leave_wps_mode = true;
 
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     g_mutex_lock(&data.lock);
@@ -1569,7 +1569,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                                 gpointer user_data)
 {
     auto *data = static_cast<DBusSignalManagerData *>(user_data);
-    const auto locked_services(Connman::get_service_list_singleton_for_update());
+    const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
 
     GVariant *all_services =
@@ -1715,7 +1715,7 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(),
 
 void dbussignal_connman_manager_about_to_connect_signals(void)
 {
-    const auto locked_services(Connman::get_service_list_singleton_for_update());
+    const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
 
     GVariant *all_services =
@@ -1745,7 +1745,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     char service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
     bool need_to_schedule_wlan_connection = false;
 
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
@@ -1811,7 +1811,7 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *network_ssid,
                                                        const char *service_to_be_disabled)
 {
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
@@ -1853,7 +1853,7 @@ static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s
 
 bool dbussignal_connman_manager_is_connecting(bool *is_wps)
 {
-    const auto locked_services(Connman::get_service_list_singleton_const());
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     auto &d(global_dbussignal_connman_manager_data);

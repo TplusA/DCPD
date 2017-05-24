@@ -32,14 +32,14 @@ struct ListData
 static ListData connman_service_list_singleton;
 
 std::pair<const Connman::ServiceList &, std::unique_lock<std::recursive_mutex>>
-Connman::get_service_list_singleton_const()
+Connman::ServiceList::get_singleton_const()
 {
     return std::make_pair(std::cref(connman_service_list_singleton.services),
                           std::move(std::unique_lock<std::recursive_mutex>(connman_service_list_singleton.lock)));
 }
 
 std::pair<Connman::ServiceList &, std::unique_lock<std::recursive_mutex>>
-Connman::get_service_list_singleton_for_update()
+Connman::ServiceList::get_singleton_for_update()
 {
     return std::make_pair(std::ref(connman_service_list_singleton.services),
                           std::move(std::unique_lock<std::recursive_mutex>(connman_service_list_singleton.lock)));

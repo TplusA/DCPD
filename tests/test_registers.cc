@@ -1388,7 +1388,7 @@ static void register_changed_callback(uint8_t reg_number)
 
 static void setup_default_connman_service_list()
 {
-    auto locked(Connman::get_service_list_singleton_for_update());
+    auto locked(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked.first);
 
     Connman::ServiceData data;
@@ -1473,7 +1473,7 @@ static bool do_inject_service_changes(Connman::ServiceList::Map::iterator::value
 static void inject_service_changes(const char *iface_name,
                                    std::function<void(Connman::ServiceData &)> modify)
 {
-    auto locked(Connman::get_service_list_singleton_for_update());
+    auto locked(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked.first);
 
     auto it(services.find(iface_name));
@@ -1487,7 +1487,7 @@ static void inject_service_changes(const char *iface_name,
                                    std::function<void(Connman::ServiceData &,
                                                       Connman::TechData<TECH> &)> modify)
 {
-    auto locked(Connman::get_service_list_singleton_for_update());
+    auto locked(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked.first);
 
     auto it(services.find(iface_name));
@@ -1520,7 +1520,7 @@ struct AssumeInterfaceIsActiveTraits<Connman::Technology::WLAN>
 
 static void activate_interface(const char *const service_name)
 {
-    auto locked(Connman::get_service_list_singleton_for_update());
+    auto locked(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked.first);
 
     for(auto &s : services)
@@ -1632,7 +1632,7 @@ void cut_teardown()
     register_deinit();
     network_prefs_deinit();
 
-    { Connman::get_service_list_singleton_for_update().first.clear(); }
+    { Connman::ServiceList::get_singleton_for_update().first.clear(); }
 
     register_changed_data->check();
 
@@ -4255,7 +4255,7 @@ void test_network_status__ethernet_idle__wlan_idle()
 void test_network_status__ethernet_idle___wlan_unavailable()
 {
     {
-        auto locked(Connman::get_service_list_singleton_for_update());
+        auto locked(Connman::ServiceList::get_singleton_for_update());
         auto &services(locked.first);
         services.erase(wlan_name);
     }
@@ -4280,7 +4280,7 @@ void test_network_status__ethernet_idle___wlan_unavailable()
 void test_network_status__ethernet_unavailable___wlan_idle()
 {
     {
-        auto locked(Connman::get_service_list_singleton_for_update());
+        auto locked(Connman::ServiceList::get_singleton_for_update());
         auto &services(locked.first);
         services.erase(ethernet_name);
     }
@@ -4305,7 +4305,7 @@ void test_network_status__ethernet_unavailable___wlan_idle()
 void test_network_status__ethernet_unavailable___wlan_unavailable()
 {
     {
-        auto locked(Connman::get_service_list_singleton_for_update());
+        auto locked(Connman::ServiceList::get_singleton_for_update());
         auto &services(locked.first);
         services.clear();
     }

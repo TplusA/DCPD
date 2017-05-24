@@ -118,7 +118,7 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
-    { Connman::get_service_list_singleton_for_update().first.clear(); }
+    { Connman::ServiceList::get_singleton_for_update().first.clear(); }
 
     register_zero_for_unit_tests = NULL;
     transaction_init_allocator();
@@ -126,7 +126,7 @@ void cut_setup()
 
 void cut_teardown()
 {
-    { Connman::get_service_list_singleton_for_update().first.clear(); }
+    { Connman::ServiceList::get_singleton_for_update().first.clear(); }
 
     mock_messages->check();
     mock_messages_singleton = nullptr;
@@ -687,7 +687,7 @@ void test_register_read_request_size_16_transaction()
     data.state_ = Connman::ServiceState::ONLINE;
     data.mac_address_.set("12:23:34:45:56:67");
     data.ip_settings_v4_ = std::move(ipv4_data);
-    Connman::get_service_list_singleton_for_update().first.insert(
+    Connman::ServiceList::get_singleton_for_update().first.insert(
             "/some/service", std::move(data),
             std::move(Connman::TechData<Connman::Technology::ETHERNET>()),
             true);
