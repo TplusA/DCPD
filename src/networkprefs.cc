@@ -408,7 +408,7 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
 
     networkprefs_data.is_writable = is_writable;
 
-    for(int try = 0; try < 2; ++try)
+    for(int try_count = 0; try_count < 2; ++try_count)
     {
         int ret = inifile_parse_from_file(&networkprefs_data.file,
                                           networkprefs_data.preferences_filename);
@@ -420,7 +420,7 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
         }
         else if(ret > 0)
         {
-            if(try == 0)
+            if(try_count == 0)
                 write_default_preferences(networkprefs_data.preferences_filename,
                                           networkprefs_data.preferences_path,
                                           networkprefs_data.ethernet_mac.address);
@@ -831,7 +831,7 @@ void network_prefs_disable_ipv4(struct network_prefs *prefs)
 /* taken from versions before f03d914 */
 struct config_filename_template
 {
-    const char *const template;
+    const char *const config_template;
     const size_t size_including_zero_terminator;
     const size_t replacement_start_offset;
 };
@@ -847,7 +847,7 @@ static char *generate_network_config_file_name(const char *connman_config_path,
     const bool is_wired = (ethernet_mac != NULL);
     static const struct config_filename_template cfg_template =
     {
-        .template = config_filename_template_for_builtin_interfaces,
+        .config_template = config_filename_template_for_builtin_interfaces,
         .size_including_zero_terminator = sizeof(config_filename_template_for_builtin_interfaces),
         .replacement_start_offset = 8,
     };
@@ -858,7 +858,7 @@ static char *generate_network_config_file_name(const char *connman_config_path,
                              ? cfg_template.size_including_zero_terminator
                              : sizeof(fixed_name_for_wlan_config));
 
-    char *filename = malloc(total_length);
+    char *filename = static_cast<char *>(malloc(total_length));
 
     if(filename == NULL)
     {
@@ -870,7 +870,7 @@ static char *generate_network_config_file_name(const char *connman_config_path,
     filename[prefix_length] = '/';
 
     if(is_wired)
-        memcpy(filename + prefix_length + 1, cfg_template.template,
+        memcpy(filename + prefix_length + 1, cfg_template.config_template,
                cfg_template.size_including_zero_terminator);
     else
     {
@@ -888,7 +888,13 @@ static char *generate_network_config_file_name(const char *connman_config_path,
         log_assert(dest[i + 0] == 'x');
         log_assert(dest[i + 1] == 'x');
 
+        /* NULL pointer dereference is actually not possible because is_wired
+         * is only true if ethernet_mac is not NULL, and we can only come to
+         * this point if is_wired is true. */
+
+        // cppcheck-suppress nullPointer */
         dest[i + 0] = tolower(ethernet_mac[j + 0]);
+        // cppcheck-suppress nullPointer */
         dest[i + 1] = tolower(ethernet_mac[j + 1]);
     }
 
@@ -957,7 +963,7 @@ static size_t tokenize_string(const char *key_name, const char *value,
             t->token = NULL;
         else
         {
-            t->token = malloc(t->length + 1);
+            t->token = static_cast<char *>(malloc(t->length + 1));
 
             if(t->token == NULL)
                 msg_out_of_memory("network config token");

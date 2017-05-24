@@ -136,7 +136,7 @@ libconfigproxy_la_SOURCES = configproxy.c configproxy.h
 libconfigproxy_la_CFLAGS = $(AM_CFLAGS)
 libconfigproxy_la_CXXFLAGS = $(AM_CXXFLAGS)
 
-libnetworkprefs_la_SOURCES = networkprefs.c networkprefs.h inifile.h
+libnetworkprefs_la_SOURCES = networkprefs.cc networkprefs.h inifile.h
 libnetworkprefs_la_CFLAGS = $(AM_CFLAGS)
 libnetworkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 
