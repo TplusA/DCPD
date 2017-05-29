@@ -30,6 +30,7 @@
 #include "network_status_bits.h"
 #include "registers_priv.h"
 #include "connman_service_list.hh"
+#include "network_device_list.hh"
 #include "connman.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "shutdown_guard.h"
@@ -159,6 +160,40 @@ void dcpregs_networkconfig_init(void)
 void dcpregs_networkconfig_deinit(void)
 {
     shutdown_guard_free(&nwstatus_data.shutdown_guard);
+}
+
+static NetworkPrefsTechnology map_network_technology(const Connman::Technology tech)
+{
+    switch(tech)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        break;
+
+      case Connman::Technology::ETHERNET:
+        return NWPREFSTECH_ETHERNET;
+
+      case Connman::Technology::WLAN:
+        return NWPREFSTECH_WLAN;
+    }
+
+    return NWPREFSTECH_UNKNOWN;
+}
+
+static Connman::Technology map_network_technology(const NetworkPrefsTechnology tech)
+{
+    switch(tech)
+    {
+      case NWPREFSTECH_UNKNOWN:
+        break;
+
+      case NWPREFSTECH_ETHERNET:
+        return Connman::Technology::ETHERNET;
+
+      case NWPREFSTECH_WLAN:
+        return Connman::Technology::WLAN;
+    }
+
+    return Connman::Technology::UNKNOWN_TECHNOLOGY;
 }
 
 static bool in_edit_mode(void)
@@ -380,8 +415,12 @@ find_best_service_by_technology(const Connman::ServiceList &services,
 
 static Connman::Technology
 determine_active_network_technology(const Connman::ServiceList &services,
-                                    bool must_be_valid)
+                                    bool must_be_valid,
+                                    const Connman::ServiceBase **service = nullptr)
 {
+    if(service != nullptr)
+        *service = nullptr;
+
     Connman::Technology candidate = Connman::Technology::UNKNOWN_TECHNOLOGY;
     int candidate_rank = -2;
 
@@ -389,11 +428,22 @@ determine_active_network_technology(const Connman::ServiceList &services,
     {
         const auto &s(*it.second);
 
+        if(s.get_service_data().device_ == nullptr)
+        {
+            BUG("Service \"%s\" has no device", it.first.c_str());
+            continue;
+        }
+
         if(!s.is_ours())
             continue;
 
         if(s.is_active())
+        {
+            if(service != nullptr)
+                *service = &s;
+
             return s.get_technology();
+        }
 
         const int temp = rank_service_by_state(s);
 
@@ -402,6 +452,9 @@ determine_active_network_technology(const Connman::ServiceList &services,
 
         candidate_rank = temp;
         candidate = s.get_technology();
+
+        if(service != nullptr)
+            *service = &s;
     }
 
     return (candidate != Connman::Technology::UNKNOWN_TECHNOLOGY
@@ -632,10 +685,13 @@ static int handle_set_dhcp_mode(struct network_prefs *prefs)
               REQ_DNS_SERVER1_62 | REQ_DNS_SERVER2_63);
     else if(!IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58))
     {
+        const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+        const auto &devices(locked_devices.first);
+
         msg_error(0, LOG_WARNING,
                   "Disabling IPv4 on interface %s because DHCPv4 was "
                   "disabled and static IPv4 configuration was not sent",
-                  network_prefs_get_mac_address_by_prefs(prefs)->address);
+                  devices.get_auto_select_mac_address(map_network_technology(network_prefs_get_technology_by_prefs(prefs))).get_string().c_str());
 
         network_prefs_disable_ipv4(prefs);
 
@@ -664,9 +720,12 @@ static int handle_set_static_ipv4_config(struct network_prefs *prefs)
                                       nwconfig_write_data.ipv4_gateway.data());
     else
     {
+        const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+        const auto &devices(locked_devices.first);
+
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "Disabling IPv4 on interface %s",
-                  network_prefs_get_mac_address_by_prefs(prefs)->address);
+                  devices.get_auto_select_mac_address(map_network_technology(network_prefs_get_technology_by_prefs(prefs))).get_string().c_str());
 
         network_prefs_put_ipv4_config(prefs, "", "", "");
     }
@@ -689,9 +748,12 @@ static int handle_set_dns_servers(const Connman::ServiceBase &service,
 
     else
     {
+        const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+        const auto &devices(locked_devices.first);
+
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "No nameservers on interface %s",
-                  network_prefs_get_mac_address_by_prefs(prefs)->address);
+                  devices.get_auto_select_mac_address(map_network_technology(network_prefs_get_technology_by_prefs(prefs))).get_string().c_str());
 
         network_prefs_put_nameservers(prefs, "", "");
     }
@@ -996,7 +1058,7 @@ static WPSMode apply_changes_to_prefs(const Connman::ServiceBase &service,
  */
 static WPSMode
 modify_network_configuration(
-        NetworkPrefsTechnology prefs_tech,
+        Connman::Technology prefs_tech,
         std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> &previous_wlan_name_buffer,
         char **out_wps_network_name, char **out_wps_network_ssid)
 {
@@ -1006,7 +1068,7 @@ modify_network_configuration(
         return WPSMode::INVALID;
     }
 
-    if(prefs_tech == NWPREFSTECH_UNKNOWN)
+    if(prefs_tech == Connman::Technology::UNKNOWN_TECHNOLOGY)
         return WPSMode::INVALID;
 
     const auto locked_services(Connman::ServiceList::get_singleton_const());
@@ -1029,14 +1091,16 @@ modify_network_configuration(
         return WPSMode::INVALID;
 
     struct network_prefs *selected_prefs =
-        prefs_tech == NWPREFSTECH_ETHERNET ? ethernet_prefs : wlan_prefs;
+        prefs_tech == Connman::Technology::ETHERNET ? ethernet_prefs : wlan_prefs;
 
-    network_prefs_generate_service_name(prefs_tech == NWPREFSTECH_ETHERNET ? nullptr : selected_prefs,
+    network_prefs_generate_service_name(prefs_tech == Connman::Technology::ETHERNET
+                                        ? nullptr
+                                        : selected_prefs,
                                         previous_wlan_name_buffer.data(),
                                         previous_wlan_name_buffer.size());
 
     if(selected_prefs == nullptr)
-        selected_prefs = network_prefs_add_prefs(cfg, prefs_tech);
+        selected_prefs = network_prefs_add_prefs(cfg, map_network_technology(prefs_tech));
 
     WPSMode wps_mode =
         apply_changes_to_prefs(*service, selected_prefs,
@@ -1109,23 +1173,6 @@ static bool data_length_is_unexpectedly_small(size_t length,
               length, expected_min);
 
     return true;
-}
-
-static NetworkPrefsTechnology map_network_technology(const Connman::Technology tech)
-{
-    switch(tech)
-    {
-      case Connman::Technology::UNKNOWN_TECHNOLOGY:
-        break;
-
-      case Connman::Technology::ETHERNET:
-        return NWPREFSTECH_ETHERNET;
-
-      case Connman::Technology::WLAN:
-        return NWPREFSTECH_WLAN;
-    }
-
-    return NWPREFSTECH_UNKNOWN;
 }
 
 static bool is_ethernet_service_auto_configured(const Connman::ServiceBase &s)
@@ -1210,12 +1257,12 @@ static bool auto_switch_to_wlan_if_necessary()
         if(ethernet_service != nullptr)
             msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                       "Configuring WLAN %s instead of Ethernet %s",
-                      wlan_service->get_service_data().mac_address_.get_string().c_str(),
-                      ethernet_service->get_service_data().mac_address_.get_string().c_str());
+                      wlan_service->get_service_data().device_->mac_address_.get_string().c_str(),
+                      ethernet_service->get_service_data().device_->mac_address_.get_string().c_str());
         else
             msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                       "Configuring WLAN %s instead of nonexistent Ethernet",
-                      wlan_service->get_service_data().mac_address_.get_string().c_str());
+                      wlan_service->get_service_data().device_->mac_address_.get_string().c_str());
 
         nwconfig_write_data.selected_technology = Connman::Technology::WLAN;
     }
@@ -1238,12 +1285,6 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
 
     auto_switch_to_wlan_if_necessary();
 
-    const NetworkPrefsTechnology prefs_tech =
-        map_network_technology(nwconfig_write_data.selected_technology);
-
-    if(prefs_tech == NWPREFSTECH_UNKNOWN)
-        return -1;
-
     if(nwconfig_write_data.requested_changes == 0)
     {
         /* nothing to do */
@@ -1251,16 +1292,22 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         return 0;
     }
 
+    {
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+    const auto &devices(locked_devices.first);
+
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "Writing new network configuration for MAC address %s",
-              network_prefs_get_mac_address_by_tech(prefs_tech)->address);
+              devices.get_auto_select_mac_address(nwconfig_write_data.selected_technology).get_string().c_str());
+    }
 
     shutdown_guard_lock(nwstatus_data.shutdown_guard);
     std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> current_wlan_service_name;
     char *wps_network_name = nullptr;
     char *wps_network_ssid = nullptr;
     const WPSMode wps_mode =
-        modify_network_configuration(prefs_tech, current_wlan_service_name,
+        modify_network_configuration(nwconfig_write_data.selected_technology,
+                                     current_wlan_service_name,
                                      &wps_network_name, &wps_network_ssid);
     shutdown_guard_unlock(nwstatus_data.shutdown_guard);
 
@@ -1268,6 +1315,8 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
                 (wps_network_name != nullptr || wps_network_ssid != nullptr)) ||
                (wps_mode != WPSMode::DIRECT &&
                 (wps_network_name == nullptr && wps_network_ssid == nullptr)));
+
+    const auto tech(nwconfig_write_data.selected_technology);
 
     nwconfig_write_data.selected_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
 
@@ -1277,12 +1326,12 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         break;
 
       case WPSMode::NONE:
-        dbussignal_connman_manager_connect_to_service(prefs_tech,
+        dbussignal_connman_manager_connect_to_service(map_network_technology(tech),
                                                       current_wlan_service_name.data());
         return 0;
 
       case WPSMode::DIRECT:
-        log_assert(prefs_tech == NWPREFSTECH_WLAN);
+        log_assert(tech == Connman::Technology::WLAN);
         dbussignal_connman_manager_connect_to_wps_service(wps_network_name,
                                                           wps_network_ssid,
                                                           current_wlan_service_name.data());
@@ -1291,7 +1340,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         return 0;
 
       case WPSMode::SCAN:
-        log_assert(prefs_tech == NWPREFSTECH_WLAN);
+        log_assert(tech == Connman::Technology::WLAN);
         dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
                                                           current_wlan_service_name.data());
         return 0;
@@ -1402,29 +1451,43 @@ ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
     return length;
 }
 
+static size_t copy_locally_administered_mac(uint8_t *response)
+{
+    const char local_address[] = "02:00:00:00:00:00";
+    memcpy(response, local_address, sizeof(local_address));
+    return sizeof(local_address);
+}
+
 ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 51 handler %p %zu", response, length);
 
-    const struct network_prefs_mac_address *mac;
-
-    if(data_length_is_unexpected(length, sizeof(mac->address)))
+    if(data_length_is_unexpected(length, Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH + 1))
         return -1;
 
-    if(length < sizeof(mac->address))
+    if(length < Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH)
         return -1;
 
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
+    const Connman::ServiceBase *service;
+    const auto tech(determine_active_network_technology(services, false, &service));
 
-    mac = network_prefs_get_mac_address_by_tech(map_network_technology(determine_active_network_technology(services, true)));
+    if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY)
+        return copy_locally_administered_mac(response);
 
-    if(mac == nullptr)
-        return -1;
+    if(service == nullptr || service->get_service_data().device_ == nullptr)
+        return copy_locally_administered_mac(response);
 
-    memcpy(response, mac->address, sizeof(mac->address));
+    const auto mac(service->get_service_data().device_->mac_address_);
 
-    return sizeof(mac->address);
+    if(mac.empty())
+        return copy_locally_administered_mac(response);
+
+    mac.get_string().copy(reinterpret_cast<char *>(response), length);
+    response[mac.get_string().length()] = '\0';
+
+    return mac.get_string().length() + 1;
 }
 
 ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)

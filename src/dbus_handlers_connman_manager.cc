@@ -36,6 +36,7 @@
 #include "connman_agent.h"
 #include "connman_common.h"
 #include "connman_service_list.hh"
+#include "network_device_list.hh"
 #include "messages.h"
 
 class WLANConnectionState
@@ -801,7 +802,8 @@ static void parse_ip_settings(GVariant *values,
 
 static bool parse_generic_service_data(const char *prop, GVariant *value,
                                        Connman::ServiceData &service_data,
-                                       Connman::Technology &tech)
+                                       Connman::Technology &tech,
+                                       Connman::Address<Connman::AddressType::MAC> &mac_address)
 {
     if(strcmp(prop, "Type") == 0)
         tech = Connman::parse_connman_technology(g_variant_get_string(value, NULL));
@@ -824,9 +826,9 @@ static bool parse_generic_service_data(const char *prop, GVariant *value,
 
         while(g_variant_iter_loop(&iter, "{&sv}", &iter_key, &iter_value))
         {
-            if(strcmp(iter_key, "Address") == 0)
+            if(strcmp(iter_key, "Address") == 0 &&
+               mac_address.set(g_variant_get_string(iter_value, NULL)))
             {
-                service_data.mac_address_.set(g_variant_get_string(iter_value, NULL));
                 g_variant_unref(iter_value);
                 break;
             }
@@ -904,6 +906,7 @@ static bool parse_wlan_data(const char *prop, GVariant *value,
 
 static bool parse_service_data(GVariantIter *props_iter,
                                Connman::Technology &tech,
+                               Connman::Address<Connman::AddressType::MAC> &mac_address,
                                Connman::ServiceData &service_data,
                                Connman::Service<Connman::Technology::ETHERNET>::TechDataType &ethernet_data,
                                Connman::Service<Connman::Technology::WLAN>::TechDataType &wlan_data)
@@ -916,7 +919,7 @@ static bool parse_service_data(GVariantIter *props_iter,
 
     while(g_variant_iter_loop(props_iter, "{&sv}", &prop, &value))
     {
-        if(parse_generic_service_data(prop, value, service_data, tech) ||
+        if(parse_generic_service_data(prop, value, service_data, tech, mac_address) ||
            parse_ethernet_data(prop, value, ethernet_data) ||
            parse_wlan_data(prop, value, wlan_data))
         {
@@ -1005,9 +1008,8 @@ static void update_service_list(Connman::ServiceList &known_services,
 
 static void update_service_list(GVariant *all_services,
                                 Connman::ServiceList &known_services,
-                                const std::map<std::string, bool> *has_changed,
-                                const struct network_prefs_mac_address &our_ethernet_mac,
-                                const struct network_prefs_mac_address &our_wlan_mac)
+                                Connman::NetworkDeviceList &network_devices,
+                                const std::map<std::string, bool> *has_changed)
 {
     if(has_changed != nullptr && has_changed->empty())
         return;
@@ -1036,8 +1038,9 @@ static void update_service_list(GVariant *all_services,
         Connman::Service<Connman::Technology::ETHERNET>::TechDataType ethernet_data;
         Connman::Service<Connman::Technology::WLAN>::TechDataType wlan_data;
         Connman::Technology tech;
+        Connman::Address<Connman::AddressType::MAC> mac_address;
 
-        if(!parse_service_data(props_iter, tech,
+        if(!parse_service_data(props_iter, tech, mac_address,
                                service_data, ethernet_data, wlan_data))
         {
             BUG("Reported service \"%s\" contains no information", name);
@@ -1046,6 +1049,13 @@ static void update_service_list(GVariant *all_services,
 
         Connman::ServiceBase *service = known_services[name];
 
+        auto dev = network_devices[mac_address];
+
+        if(dev != nullptr)
+            service_data.device_ = std::move(dev);
+        else
+            service_data.device_ = std::move(network_devices.insert(tech, std::move(mac_address)));
+
         switch(tech)
         {
           case Connman::Technology::UNKNOWN_TECHNOLOGY:
@@ -1053,10 +1063,7 @@ static void update_service_list(GVariant *all_services,
 
           case Connman::Technology::ETHERNET:
             if(service == nullptr)
-                known_services.insert(name,
-                                      std::move(service_data), std::move(ethernet_data),
-                                      our_ethernet_mac.is_real &&
-                                      service_data.mac_address_ != our_ethernet_mac.address);
+                known_services.insert(name, std::move(service_data), std::move(ethernet_data));
             else
                 static_cast<Connman::Service<Connman::Technology::ETHERNET> *>(service)->put_changes(std::move(service_data), std::move(ethernet_data));
 
@@ -1064,10 +1071,7 @@ static void update_service_list(GVariant *all_services,
 
           case Connman::Technology::WLAN:
             if(service == nullptr)
-                known_services.insert(name,
-                                      std::move(service_data), std::move(wlan_data),
-                                      our_wlan_mac.is_real &&
-                                      service_data.mac_address_ != our_wlan_mac.address);
+                known_services.insert(name, std::move(service_data), std::move(wlan_data));
             else
                 static_cast<Connman::Service<Connman::Technology::WLAN> *>(service)->put_changes(std::move(service_data), std::move(wlan_data));
 
@@ -1490,6 +1494,7 @@ static void schedule_wlan_connect_if_necessary(bool is_necessary,
 
 static bool update_all_services(GVariant *all_services,
                                 Connman::ServiceList &services,
+                                Connman::NetworkDeviceList &devices,
                                 const char *context)
 {
     if(all_services == nullptr)
@@ -1498,16 +1503,7 @@ static bool update_all_services(GVariant *all_services,
         return false;
     }
 
-    const struct network_prefs_mac_address *preferred_ethernet_mac =
-        network_prefs_get_mac_address_by_tech(NWPREFSTECH_ETHERNET);
-    const struct network_prefs_mac_address *preferred_wlan_mac =
-        network_prefs_get_mac_address_by_tech(NWPREFSTECH_WLAN);
-
-    log_assert(preferred_ethernet_mac != nullptr);
-    log_assert(preferred_wlan_mac != nullptr);
-
-    update_service_list(all_services, services, nullptr,
-                        *preferred_ethernet_mac, *preferred_wlan_mac);
+    update_service_list(all_services, services, devices, nullptr);
 
     return true;
 }
@@ -1569,8 +1565,12 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                                 gpointer user_data)
 {
     auto *data = static_cast<DBusSignalManagerData *>(user_data);
+
     const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
+
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    auto &devices(locked_devices.first);
 
     GVariant *all_services =
         connman_common_query_services(dbus_get_connman_manager_iface());
@@ -1588,7 +1588,7 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
                             have_lost_active_wlan_device);
     }
 
-    if(update_all_services(all_services, services, signal_name))
+    if(update_all_services(all_services, services, devices, signal_name))
         g_variant_unref(all_services);
 
     process_pending_changes(*data, services,
@@ -1718,10 +1718,13 @@ void dbussignal_connman_manager_about_to_connect_signals(void)
     const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
 
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    auto &devices(locked_devices.first);
+
     GVariant *all_services =
         connman_common_query_services(dbus_get_connman_manager_iface());
 
-    if(update_all_services(all_services, services, "startup"))
+    if(update_all_services(all_services, services, devices, "startup"))
         g_variant_unref(all_services);
 
     process_pending_changes(global_dbussignal_connman_manager_data,

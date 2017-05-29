@@ -131,6 +131,7 @@ test_networkprefs_la_SOURCES = \
     mock_expectation.hh
 test_networkprefs_la_LIBADD = \
     $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libinifile.la
 test_networkprefs_la_CFLAGS = $(AM_CFLAGS)
 test_networkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)

@@ -110,6 +110,18 @@ class Address
         address_.reserve(Traits::ADDRESS_STRING_LENGTH);
     }
 
+    explicit Address(const char *address)
+    {
+        address_.reserve(Traits::ADDRESS_STRING_LENGTH);
+        set(address);
+    }
+
+    explicit Address(std::string &&address)
+    {
+        address_.reserve(Traits::ADDRESS_STRING_LENGTH);
+        set(std::move(address));
+    }
+
     bool set(const char *address)
     {
         log_assert(address != nullptr);
@@ -125,6 +137,23 @@ class Address
 
         if(addrlen > 0)
             address_ = address;
+        else
+            unset();
+
+        return true;
+    }
+
+    bool set(std::string &&address)
+    {
+        if(address.length() > Traits::ADDRESS_STRING_LENGTH)
+        {
+            BUG("Length of address \"%s\" exceeds %zu",
+                address.c_str(), Traits::ADDRESS_STRING_LENGTH);
+            return false;
+        }
+
+        if(!address.empty())
+            address_ = std::move(address);
         else
             unset();
 

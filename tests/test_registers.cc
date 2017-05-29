@@ -44,6 +44,7 @@
 #include "drcp_command_codes.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "connman_service_list.hh"
+#include "network_device_list.hh"
 #include "stream_id.hh"
 #include "actor_id.h"
 #include "md5.hh"
@@ -570,7 +571,10 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -1090,6 +1094,9 @@ void cut_setup()
 
     dcpregs_protocol_level_init();
 
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
@@ -1097,7 +1104,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 
@@ -1364,9 +1371,9 @@ static constexpr char network_config_path[] = "/var/local/etc";
 static constexpr char network_config_file[] = "/var/local/etc/network.ini";
 
 static constexpr char ethernet_name[]        = "/connman/service/ethernet";
-static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
+static constexpr char ethernet_mac_address[] = "C4:FD:EC:AF:DE:AD";
 static constexpr char wlan_name[]            = "/connman/service/wlan";
-static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
+static constexpr char wlan_mac_address[]     = "B4:DD:EA:DB:EE:F1";
 
 static constexpr char standard_ipv4_address[] = "192.168.166.177";
 static constexpr char standard_ipv4_netmask[] = "255.255.255.0";
@@ -1402,13 +1409,25 @@ static void setup_default_connman_service_list()
     auto locked(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked.first);
 
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    auto &devices(locked_devices.first);
+
+    services.clear();
+    devices.clear();
+
     Connman::ServiceData data;
 
+    Connman::Address<Connman::AddressType::MAC> addr(ethernet_mac_address);
+    devices.set_auto_select_mac_address(Connman::Technology::ETHERNET, addr);
+    devices.insert(Connman::Technology::ETHERNET,
+                   Connman::Address<Connman::AddressType::MAC>(addr));
+    cppcut_assert_not_null(devices[addr].get());
+
     data.state_ = Connman::ServiceState::READY;
+    data.device_ = devices[addr];
     data.is_favorite_ = true;
     data.is_auto_connect_ = true;
     data.is_immutable_ = false;
-    data.mac_address_.set(ethernet_mac_address);
     data.ip_settings_v4_.set_known();
     data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
     data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
@@ -1421,14 +1440,17 @@ static void setup_default_connman_service_list()
     data.dns_servers_.get_rw().push_back(standard_dns2_address);
 
     services.insert(ethernet_name, std::move(data),
-                    std::move(Connman::TechData<Connman::Technology::ETHERNET>()),
-                    true);
+                    std::move(Connman::TechData<Connman::Technology::ETHERNET>()));
+
+    addr.set(wlan_mac_address);
+    devices.set_auto_select_mac_address(Connman::Technology::WLAN, addr);
+    devices.insert(Connman::Technology::WLAN, Connman::Address<Connman::AddressType::MAC>(addr));
 
     data.state_ = Connman::ServiceState::IDLE;
+    data.device_ = devices[addr];
     data.is_favorite_ = true;
     data.is_auto_connect_ = true;
     data.is_immutable_ = false;
-    data.mac_address_.set(wlan_mac_address);
     data.ip_settings_v4_.set_known();
     data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
     data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
@@ -1441,8 +1463,7 @@ static void setup_default_connman_service_list()
     data.dns_servers_.get_rw().push_back(standard_dns2_address);
 
     services.insert(wlan_name, std::move(data),
-                    std::move(Connman::TechData<Connman::Technology::WLAN>()),
-                    true);
+                    std::move(Connman::TechData<Connman::Technology::WLAN>()));
 }
 
 static bool do_inject_service_changes(Connman::ServiceList::Map::iterator::value_type &it,
@@ -1631,8 +1652,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(ethernet_mac_address, wlan_mac_address,
-                       network_config_path, network_config_file);
+    network_prefs_init(network_config_path, network_config_file);
     register_init(register_changed_callback);
 
     setup_default_connman_service_list();
@@ -1643,7 +1663,8 @@ void cut_teardown()
     register_deinit();
     network_prefs_deinit();
 
-    { Connman::ServiceList::get_singleton_for_update().first.clear(); }
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     register_changed_data->check();
 
@@ -1705,6 +1726,11 @@ void test_read_mac_address_default()
     register_deinit();
     network_prefs_deinit();
 
+    {
+        Connman::ServiceList::get_singleton_for_update().first.clear();
+        Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+    }
+
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
@@ -1712,14 +1738,14 @@ void test_read_mac_address_default()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
                                                 NULL);
     uint8_t buffer[18];
-    reg->read_handler(buffer, sizeof(buffer));
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
 
     const char *buffer_ptr = reinterpret_cast<const char *>(buffer);
     cppcut_assert_equal("02:00:00:00:00:00", buffer_ptr);
@@ -1846,7 +1872,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
                                               sizeof(standard_ipv4_gateway)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -1909,7 +1935,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     cppcut_assert_equal(0, reg->write_handler(&one, 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2079,7 +2105,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2088,7 +2114,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
                                               written_default_contents);
 
     mock_messages->expect_msg_error_formatted(0, LOG_WARNING,
-        "Disabling IPv4 on interface DE:CA:FD:EA:DB:AD because DHCPv4 "
+        "Disabling IPv4 on interface C4:FD:EC:AF:DE:AD because DHCPv4 "
         "was disabled and static IPv4 configuration was not sent");
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
@@ -2423,7 +2449,7 @@ static void set_one_dns_server()
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(RegTraits::expected_address), sizeof(RegTraits::expected_address)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
@@ -2509,7 +2535,7 @@ void test_set_both_dns_servers()
                                               sizeof(standard_dns2_address)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
@@ -2604,7 +2630,7 @@ void test_replace_primary_dns_server_of_two_servers()
                                               sizeof(new_primary_dns)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2656,7 +2682,7 @@ void test_replace_secondary_dns_server_of_two_servers()
                                               sizeof(new_secondary_dns)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2715,7 +2741,7 @@ void test_add_secondary_dns_server_to_primary_server()
                                               sizeof(standard_dns2_address)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2763,7 +2789,7 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("none"), 4));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2841,7 +2867,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(requested_security_mode), strlen(requested_security_mode)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2954,7 +2980,7 @@ void test_set_wlan_security_mode_wep()
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("wep"), 3));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -2989,7 +3015,7 @@ void test_set_invalid_wlan_security_mode()
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("foo"), 3));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3113,7 +3139,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(connman_security_mode), strlen(connman_security_mode)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3316,7 +3342,7 @@ void test_set_passphrase_without_security_mode_does_not_work()
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3445,7 +3471,7 @@ void test_set_simple_ascii_wlan_ssid()
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(ssid), sizeof(ssid) - 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3505,7 +3531,7 @@ void test_set_binary_wlan_ssid()
     cppcut_assert_equal(0, reg->write_handler(ssid, sizeof(ssid)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -3933,7 +3959,7 @@ void test_configuration_update_is_blocked_after_shutdown()
 
     /* ...but writing to file is blocked */
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
     mock_messages->expect_msg_info("Not writing network configuration during shutdown.");
     commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 }
@@ -4374,7 +4400,10 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -4592,7 +4621,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
     dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
 }
@@ -5634,7 +5663,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 
@@ -6862,7 +6891,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 
@@ -7229,7 +7258,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -7482,7 +7511,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 

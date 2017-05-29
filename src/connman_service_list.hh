@@ -81,15 +81,13 @@ class ServiceList
     }
 
     bool insert(const char *name, ServiceData &&service_data,
-                Service<Technology::ETHERNET>::TechDataType &&ethernet_data,
-                bool is_ours)
+                Service<Technology::ETHERNET>::TechDataType &&ethernet_data)
     {
         if(services_.find(name) != services_.end())
             return false;
 
         services_[name].reset(new Service<Technology::ETHERNET>(std::move(service_data),
-                                                                std::move(ethernet_data),
-                                                                is_ours));
+                                                                std::move(ethernet_data)));
 
         ++number_of_ethernet_services_;
 
@@ -97,15 +95,13 @@ class ServiceList
     }
 
     bool insert(const char *name, ServiceData &&service_data,
-                Service<Technology::WLAN>::TechDataType &&wlan_data,
-                bool is_ours)
+                Service<Technology::WLAN>::TechDataType &&wlan_data)
     {
         if(services_.find(name) != services_.end())
             return false;
 
         services_[name].reset(new Service<Technology::WLAN>(std::move(service_data),
-                                                            std::move(wlan_data),
-                                                            is_ours));
+                                                            std::move(wlan_data)));
 
         ++number_of_wlan_services_;
 

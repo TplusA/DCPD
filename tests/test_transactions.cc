@@ -29,6 +29,7 @@
 #include "registers.h"
 #include "networkprefs.h"
 #include "connman_service_list.hh"
+#include "network_device_list.hh"
 #include "configproxy.h"
 #include "configuration_dcpd.h"
 #include "dcpdefs.h"
@@ -118,7 +119,8 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
-    { Connman::ServiceList::get_singleton_for_update().first.clear(); }
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     register_zero_for_unit_tests = NULL;
     transaction_init_allocator();
@@ -126,7 +128,8 @@ void cut_setup()
 
 void cut_teardown()
 {
-    { Connman::ServiceList::get_singleton_for_update().first.clear(); }
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     mock_messages->check();
     mock_messages_singleton = nullptr;
@@ -544,6 +547,9 @@ void cut_setup()
     answer_written_to_fifo = new std::vector<uint8_t>;
 
     transaction_init_allocator();
+
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 }
 
 void cut_teardown()
@@ -611,8 +617,7 @@ void test_register_read_request_size_1_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
@@ -670,6 +675,31 @@ void test_register_read_request_size_1_transaction()
     network_prefs_deinit();
 }
 
+static void setup_network_config(const char *mac)
+{
+    Connman::Address<Connman::AddressType::MAC> addr(mac);
+    Connman::NetworkDeviceList::get_singleton_for_update().first.set_auto_select_mac_address(
+            Connman::Technology::ETHERNET, addr);
+    Connman::NetworkDeviceList::get_singleton_for_update().first.insert(
+            Connman::Technology::ETHERNET, Connman::Address<Connman::AddressType::MAC>(addr));
+    cppcut_assert_not_null(Connman::NetworkDeviceList::get_singleton_const().first[addr].get());
+
+    Connman::ServiceData data;
+    Connman::IPSettings<Connman::AddressType::IPV4> ipv4_data;
+    ipv4_data.set_address("111.222.255.100");
+    ipv4_data.set_netmask("255.255.255.0");
+    ipv4_data.set_gateway("111.222.255.1");
+    data.device_ = Connman::NetworkDeviceList::get_singleton_const().first[addr];
+    data.is_favorite_ = true;
+    data.is_auto_connect_ = true;
+    data.is_immutable_ = false;
+    data.state_ = Connman::ServiceState::ONLINE;
+    data.ip_settings_v4_ = std::move(ipv4_data);
+    Connman::ServiceList::get_singleton_for_update().first.insert(
+            "/some/service", std::move(data),
+            std::move(Connman::TechData<Connman::Technology::ETHERNET>()));
+}
+
 /*!\test
  * A whole simple register read transaction initiated by the slave device,
  * several bytes of payload.
@@ -683,25 +713,9 @@ void test_register_read_request_size_16_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
-
-    Connman::ServiceData data;
-    Connman::IPSettings<Connman::AddressType::IPV4> ipv4_data;
-    ipv4_data.set_address("111.222.255.100");
-    ipv4_data.set_netmask("255.255.255.0");
-    ipv4_data.set_gateway("111.222.255.1");
-    data.is_favorite_ = true;
-    data.is_auto_connect_ = true;
-    data.is_immutable_ = false;
-    data.state_ = Connman::ServiceState::ONLINE;
-    data.mac_address_.set("12:23:34:45:56:67");
-    data.ip_settings_v4_ = std::move(ipv4_data);
-    Connman::ServiceList::get_singleton_for_update().first.insert(
-            "/some/service", std::move(data),
-            std::move(Connman::TechData<Connman::Technology::ETHERNET>()),
-            true);
+    setup_network_config("11:23:34:45:56:67");
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -771,9 +785,9 @@ void test_register_multi_step_read_request_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("12:34:56:78:9A:BC", NULL,
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
+    setup_network_config("11:34:56:78:9A:BC");
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -815,8 +829,8 @@ void test_register_multi_step_read_request_transaction()
         /* command header, payload size is 18 bytes */
         DCP_COMMAND_MULTI_READ_REGISTER, 0x33, 0x12, 0x00,
 
-        /* MAC address 12:34:56:78:9A:BC */
-        0x31, 0x32, 0x3a, 0x33, 0x34, 0x3a, 0x35, 0x36,
+        /* MAC address 11:34:56:78:9A:BC */
+        0x31, 0x31, 0x3a, 0x33, 0x34, 0x3a, 0x35, 0x36,
         0x3a, 0x37, 0x38, 0x3a, 0x39, 0x41, 0x3a, 0x42,
         0x43, 0x00
     };
@@ -869,8 +883,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("00:11:ff:ee:22:dd", "dd:22:ee:ff:11:00",
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
@@ -1075,7 +1088,10 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -1083,6 +1099,9 @@ void cut_teardown()
 {
     register_deinit();
     network_prefs_deinit();
+
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     mock_messages->check();
     mock_os->check();

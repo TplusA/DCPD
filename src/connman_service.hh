@@ -20,8 +20,9 @@
 #define CONNMAN_SERVICE_HH
 
 #include <vector>
+#include <memory>
 
-#include "connman_address.hh"
+#include "network_device.hh"
 #include "maybe.hh"
 
 namespace Connman
@@ -96,7 +97,7 @@ class IPSettings
 
 struct ServiceData
 {
-    Address<AddressType::MAC> mac_address_;
+    std::shared_ptr<const NetworkDevice> device_;
 
     Maybe<bool> is_favorite_;
     Maybe<bool> is_auto_connect_;
@@ -113,11 +114,11 @@ struct ServiceData
     ServiceData(ServiceData &&) = default;
     ServiceData &operator=(const ServiceData &) = default;
 
-    explicit ServiceData() {}
+    explicit ServiceData() = default;
 
     bool operator==(const ServiceData &other) const
     {
-        return (mac_address_ == other.mac_address_ &&
+        return (device_.get() == other.device_.get() &&
                 is_favorite_ == other.is_favorite_ &&
                 is_auto_connect_ == other.is_auto_connect_ &&
                 is_immutable_ == other.is_immutable_ &&
@@ -184,14 +185,11 @@ struct TechData<Technology::WLAN>
 class ServiceBase
 {
   protected:
-    const bool is_ours_;
-
     ServiceData service_data_store_[2];
     ServiceData *service_data_;
     bool have_new_service_data_;
 
-    explicit ServiceBase(struct ServiceData &&data, bool ours):
-        is_ours_(ours),
+    explicit ServiceBase(struct ServiceData &&data):
         service_data_store_{ std::move(data), std::move(ServiceData()) },
         service_data_(&service_data_store_[0]),
         have_new_service_data_(true)
@@ -216,7 +214,14 @@ class ServiceBase
 
     virtual ~ServiceBase() {}
 
-    bool is_ours() const { return is_ours_; }
+    bool is_ours() const
+    {
+        log_assert(service_data_ != nullptr);
+        if(service_data_->device_ == nullptr)
+            *(static_cast<int *>(nullptr)) = 0;
+
+        return service_data_->device_->is_auto_selected_device();
+    }
 
     bool is_active() const
     {
@@ -265,9 +270,8 @@ class Service: public ServiceBase
     Service(const Service &) = delete;
     Service &operator=(const Service &) = delete;
 
-    explicit Service(ServiceData &&service_data, TechDataType &&tech_data,
-                     bool ours):
-        ServiceBase(std::move(service_data), ours),
+    explicit Service(ServiceData &&service_data, TechDataType &&tech_data):
+        ServiceBase(std::move(service_data)),
         tech_data_store_{ std::move(tech_data), std::move(TechDataType()) },
         tech_data_(&tech_data_store_[0]),
         have_new_tech_data_(true)

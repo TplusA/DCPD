@@ -39,6 +39,7 @@ dcpd_SOURCES = \
     connman_common.c connman_common.h \
     connman_service.cc connman_service.hh connman_service_list.hh maybe.hh \
     connman_address.hh \
+    network_device.hh network_device_list.hh \
     stream_id.h \
     coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
@@ -64,7 +65,6 @@ noinst_LTLIBRARIES = \
     libtransactions.la \
     libdynamic_buffer.la \
     libregisters.la \
-    libservicelist.la \
     libnetworkprefs.la \
     libinifile.la \
     libapplink.la \
@@ -81,6 +81,7 @@ noinst_LTLIBRARIES = \
     libcredentials_dbus.la \
     libconfigproxy.la \
     libconfiguration_dbus.la \
+    libservicelist.la \
     libconnman_dbus.la \
     liblogind_dbus.la \
     libdebug_dbus.la
@@ -109,6 +110,7 @@ libregisters_la_SOURCES = \
     dcpregs_status.h \
     dbus_handlers_connman_manager_glue.h networkprefs.h \
     connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
+    network_device.hh network_device_list.hh \
     dbusdl_dbus.h \
     stream_id.h \
     coverart.cc coverart.hh md5.cc md5.hh \
@@ -124,6 +126,7 @@ libregisters_la_CXXFLAGS = $(AM_CXXFLAGS)
 libservicelist_la_SOURCES = \
     connman_service_list.cc connman_service_list.hh \
     connman_service.hh connman_address.hh maybe.hh \
+    network_device_list.cc network_device.hh network_device_list.hh \
     messages.h
 libservicelist_la_CFLAGS = $(AM_CFLAGS)
 libservicelist_la_CXXFLAGS = $(AM_CXXFLAGS)

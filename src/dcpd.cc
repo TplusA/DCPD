@@ -1006,8 +1006,6 @@ struct parameters
     bool is_fixing_broken_update_state;
     bool is_upgrade_enforced;
     bool is_upgrade_strongly_enforced;
-    const char *ethernet_interface_mac_address;
-    const char *wlan_interface_mac_address;
 };
 
 static bool main_loop_init(const struct parameters *parameters,
@@ -1031,13 +1029,13 @@ static bool main_loop_init(const struct parameters *parameters,
     snprintf(network_preferences_full_file, sizeof(network_preferences_full_file),
              "%s/%s", network_preferences_dir, network_preferences_file);
 
-    network_prefs_init(parameters->ethernet_interface_mac_address,
-                       parameters->wlan_interface_mac_address,
-                       network_preferences_dir, network_preferences_full_file);
+    network_prefs_init(network_preferences_dir, network_preferences_full_file);
+
+    network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
+                                                 "/sys/bus/usb/devices/1-1.2:1.0");
 
     if(!is_upgrading)
-        network_prefs_migrate_old_network_configuration_files(connman_config_dir,
-                                                              parameters->ethernet_interface_mac_address);
+        network_prefs_migrate_old_network_configuration_files(connman_config_dir);
 
     register_init(push_register_to_slave);
     dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
@@ -1218,8 +1216,6 @@ static void usage(const char *program_name)
            "  --fg           Run in foreground, don't run as daemon.\n"
            "  --verbose lvl  Set verbosity level to given level.\n"
            "  --quiet        Short for \"--verbose quite\".\n"
-           "  --ethernet-mac MAC address of built-in Ethernet interface (mandatory).\n"
-           "  --wlan-mac     MAC address of built-in W-LAN interface.\n"
            "  --ispi  name   Name of the named pipe the DCPSPI daemon writes to.\n"
            "  --ospi  name   Name of the named pipe the DCPSPI daemon reads from.\n"
            "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
@@ -1323,16 +1319,6 @@ static int process_command_line(int argc, char *argv[],
             parameters->is_upgrade_enforced = true;
             parameters->is_upgrade_strongly_enforced = true;
         }
-        else if(strcmp(argv[i], "--ethernet-mac") == 0)
-        {
-            CHECK_ARGUMENT();
-            parameters->ethernet_interface_mac_address = argv[i];
-        }
-        else if(strcmp(argv[i], "--wlan-mac") == 0)
-        {
-            CHECK_ARGUMENT();
-            parameters->wlan_interface_mac_address = argv[i];
-        }
         else
         {
             fprintf(stderr, "Unknown option \"%s\". Please try --help.\n", argv[i]);
@@ -1341,13 +1327,6 @@ static int process_command_line(int argc, char *argv[],
     }
 
 #undef CHECK_ARGUMENT
-
-    if(parameters->ethernet_interface_mac_address == NULL)
-    {
-        /* missing W-LAN parameters are OK */
-        fprintf(stderr, "Missing options. Please try --help.\n");
-        return -1;
-    }
 
     return 0;
 }

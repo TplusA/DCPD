@@ -22,14 +22,14 @@
 
 #include "connman_service_list.hh"
 
-struct ListData
+struct ServiceListData
 {
     Connman::ServiceList services;
     std::recursive_mutex lock;
 };
 
 /* a locking wrapper around our global service list */
-static ListData connman_service_list_singleton;
+static ServiceListData connman_service_list_singleton;
 
 std::pair<const Connman::ServiceList &, std::unique_lock<std::recursive_mutex>>
 Connman::ServiceList::get_singleton_const()
