@@ -609,6 +609,7 @@ void register_deinit(void)
     dcpregs_filetransfer_deinit();
     dcpregs_playstream_deinit();
     dcpregs_upnpname_deinit();
+    memset(&registers_private_data, 0, sizeof(registers_private_data));
 }
 
 bool register_set_protocol_level(uint8_t major, uint8_t minor, uint8_t micro)

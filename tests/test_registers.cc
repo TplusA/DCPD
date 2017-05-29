@@ -789,12 +789,23 @@ void cut_teardown()
  */
 void test_dcp_register_72_calls_correct_write_handler()
 {
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
+
+    register_init(NULL);
+
     const struct dcp_register_t *reg = register_lookup(72);
 
     cppcut_assert_not_null(reg);
     cppcut_assert_equal(72U, unsigned(reg->address));
     cut_assert(reg->write_handler == dcpregs_write_drcp_command);
     cut_assert(reg->read_handler == NULL);
+
+    register_deinit();
 }
 
 /*!\test

@@ -185,6 +185,15 @@ void test_deallocation_frees_payload_buffer()
 {
     static const uint8_t payload_data[] = "test payload data";
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
+
+    register_init(NULL);
+
     struct transaction *t =
         transaction_fragments_from_data(payload_data, sizeof(payload_data),
                                         71, TRANSACTION_CHANNEL_SPI);
@@ -192,6 +201,8 @@ void test_deallocation_frees_payload_buffer()
 
     transaction_free(&t);
     cppcut_assert_null(t);
+
+    register_deinit();
 }
 
 /*!
