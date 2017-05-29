@@ -1723,9 +1723,7 @@ static void start_ipv4_config()
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
 }
 
-/* TODO: Remove add_message_expectation parameter */
-static void commit_ipv4_config(bool add_message_expectation,
-                               enum NetworkPrefsTechnology tech,
+static void commit_ipv4_config(enum NetworkPrefsTechnology tech,
                                int expected_return_value = 0,
                                bool is_taking_config_from_file = true,
                                const char *wps_name = nullptr,
@@ -1862,7 +1860,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -1924,7 +1922,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     return expect_default_network_preferences_content(written_config_file,
                                                       written_config_file_size,
@@ -2088,7 +2086,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2423,7 +2421,7 @@ static void set_one_dns_server()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2509,7 +2507,7 @@ void test_set_both_dns_servers()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2553,7 +2551,7 @@ void test_read_primary_dns_in_edit_mode_before_any_changes()
     cppcut_assert_equal(ssize_t(sizeof(standard_dns1_address)), dns_server_size);
     cppcut_assert_equal(standard_dns1_address, static_cast<const char *>(buffer));
 
-    commit_ipv4_config(true, NWPREFSTECH_UNKNOWN);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN);
 }
 
 /*!\test
@@ -2575,7 +2573,7 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes()
     cppcut_assert_equal(ssize_t(sizeof(standard_dns2_address)), dns_server_size);
     cppcut_assert_equal(standard_dns2_address, static_cast<const char *>(buffer));
 
-    commit_ipv4_config(true, NWPREFSTECH_UNKNOWN);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN);
 }
 
 /*!\test
@@ -2609,7 +2607,7 @@ void test_replace_primary_dns_server_of_two_servers()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2661,7 +2659,7 @@ void test_replace_secondary_dns_server_of_two_servers()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2720,7 +2718,7 @@ void test_add_secondary_dns_server_to_primary_server()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2771,7 +2769,7 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     expect_default_network_preferences_content(os_write_buffer);
 }
@@ -2854,7 +2852,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     else if(wps_name != nullptr)
         set_wlan_name(wps_name);
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN, 0,
+    commit_ipv4_config(NWPREFSTECH_WLAN, 0,
                        expecting_configuration_file_be_written,
                        wps_name, wps_ssid);
 
@@ -2959,7 +2957,7 @@ void test_set_wlan_security_mode_wep()
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 
     expect_default_network_preferences_content(written_default_contents);
 }
@@ -2993,7 +2991,7 @@ void test_set_invalid_wlan_security_mode()
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 
     expect_default_network_preferences_content(written_default_contents);
 }
@@ -3129,7 +3127,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    commit_ipv4_config(NWPREFSTECH_WLAN);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -3318,7 +3316,7 @@ void test_set_passphrase_without_security_mode_does_not_work()
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 
     expect_default_network_preferences_content(written_default_contents);
 }
@@ -3450,7 +3448,7 @@ void test_set_simple_ascii_wlan_ssid()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    commit_ipv4_config(NWPREFSTECH_WLAN);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -3510,7 +3508,7 @@ void test_set_binary_wlan_ssid()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    commit_ipv4_config(NWPREFSTECH_WLAN);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -3552,7 +3550,7 @@ void test_set_empty_wlan_ssid_is_an_error()
     uint8_t dummy = UINT8_MAX;
     cppcut_assert_equal(-1, reg->write_handler(&dummy, 0));
 
-    commit_ipv4_config(true, NWPREFSTECH_UNKNOWN);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN);
 }
 
 static char nibble_to_char(uint8_t nibble)
@@ -3926,7 +3924,7 @@ void test_configuration_update_is_blocked_after_shutdown()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
     mock_messages->expect_msg_info("Not writing network configuration during shutdown.");
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 }
 
 /*!\test
