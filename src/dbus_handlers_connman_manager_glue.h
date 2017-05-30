@@ -36,7 +36,8 @@ struct DBusSignalManagerData;
 
 struct DBusSignalManagerData *
 dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void),
-                                void (*schedule_refresh_connman_services_fn)(void));
+                                void (*schedule_refresh_connman_services_fn)(void),
+                                bool is_enabled);
 
 /*!
  * Tell ConnMan to connect to WLAN service with name stored in passed data.

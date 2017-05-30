@@ -161,6 +161,8 @@ class DBusSignalManagerData
   public:
     GMutex lock;
 
+    bool is_disabled;
+
     void (*schedule_connect_to_wlan)(void);
     void (*schedule_refresh_connman_services)(void);
 
@@ -170,6 +172,7 @@ class DBusSignalManagerData
     DBusSignalManagerData &operator=(const DBusSignalManagerData &) = delete;
 
     explicit DBusSignalManagerData():
+        is_disabled(false),
         schedule_connect_to_wlan(nullptr),
         schedule_refresh_connman_services(nullptr)
     {
@@ -177,9 +180,10 @@ class DBusSignalManagerData
     }
 
     void init(void (*schedule_connect_to_wlan_fn)(),
-              void (*schedule_refresh_connman_services_fn)())
+              void (*schedule_refresh_connman_services_fn)(), bool is_enabled)
     {
         g_mutex_init(&lock);
+        is_disabled = !is_enabled;
         schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
         schedule_refresh_connman_services = schedule_refresh_connman_services_fn;
         wlan_connection_state.reset();
@@ -1596,7 +1600,10 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
     auto *data = static_cast<DBusSignalManagerData *>(user_data);
 
     if(data != nullptr)
+    {
+        log_assert(!data->is_disabled);
         refresh_services(*data, false, signal_name);
+    }
     else
         BUG("Got no data in %s()", __func__);
 }
@@ -1711,15 +1718,19 @@ static DBusSignalManagerData global_dbussignal_connman_manager_data;
 
 DBusSignalManagerData *
 dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(),
-                                void (*schedule_refresh_connman_services_fn)())
+                                void (*schedule_refresh_connman_services_fn)(),
+                                bool is_enabled)
 {
     global_dbussignal_connman_manager_data.init(schedule_connect_to_wlan_fn,
-                                                schedule_refresh_connman_services_fn);
+                                                schedule_refresh_connman_services_fn,
+                                                is_enabled);
     return &global_dbussignal_connman_manager_data;
 }
 
 void dbussignal_connman_manager_about_to_connect_signals(void)
 {
+    log_assert(!global_dbussignal_connman_manager_data.is_disabled);
+
     const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
 
@@ -1739,6 +1750,9 @@ void dbussignal_connman_manager_about_to_connect_signals(void)
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled)
 {
+    if(global_dbussignal_connman_manager_data.is_disabled)
+        return;
+
     if(tech == NWPREFSTECH_UNKNOWN)
         return;
 
@@ -1819,6 +1833,9 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *network_ssid,
                                                        const char *service_to_be_disabled)
 {
+    if(global_dbussignal_connman_manager_data.is_disabled)
+        return;
+
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
@@ -1861,6 +1878,8 @@ static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s
 
 bool dbussignal_connman_manager_is_connecting(bool *is_wps)
 {
+    log_assert(!global_dbussignal_connman_manager_data.is_disabled);
+
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
@@ -1909,6 +1928,7 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
 
 void dbussignal_connman_manager_refresh_services(bool force_refresh_all)
 {
-    refresh_services(global_dbussignal_connman_manager_data,
-                     force_refresh_all, __func__);
+    if(!global_dbussignal_connman_manager_data.is_disabled)
+        refresh_services(global_dbussignal_connman_manager_data,
+                         force_refresh_all, __func__);
 }

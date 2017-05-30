@@ -1043,7 +1043,8 @@ static bool main_loop_init(const struct parameters *parameters,
     transaction_init_allocator();
 
     *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan,
-                                               deferred_connman_refresh);
+                                               deferred_connman_refresh,
+                                               parameters->with_connman);
 
     applink_init();
 
