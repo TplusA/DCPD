@@ -1032,7 +1032,7 @@ static bool main_loop_init(const struct parameters *parameters,
 
     network_prefs_init(network_preferences_dir, network_preferences_full_file);
 
-    dcpregs_appliance_id_configure_appliance();
+    dcpregs_appliance_id_init();
 
     if(!is_upgrading)
         network_prefs_migrate_old_network_configuration_files(connman_config_dir);
@@ -1540,6 +1540,8 @@ int main(int argc, char *argv[])
         connman_wlan_power_on();
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
+
+    dcpregs_appliance_id_configure();
 
     main_loop(&files, &dot, &appconn, connman,
               primitive_queue_fd, register_changed_fd);

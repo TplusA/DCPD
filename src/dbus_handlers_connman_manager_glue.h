@@ -59,7 +59,7 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *service_to_be_disabled);
 
 bool dbussignal_connman_manager_is_connecting(bool *is_wps);
-void dbussignal_connman_manager_refresh_services(void);
+void dbussignal_connman_manager_refresh_services(bool force_refresh_all = false);
 
 #ifdef __cplusplus
 }

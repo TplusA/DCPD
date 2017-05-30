@@ -1004,7 +1004,8 @@ static void update_service_list(Connman::ServiceList &known_services,
 
 static void update_service_list(GVariant *all_services,
                                 Connman::ServiceList &known_services,
-                                Connman::NetworkDeviceList &network_devices)
+                                Connman::NetworkDeviceList &network_devices,
+                                bool force_refresh_all)
 {
     if(all_services == nullptr)
         return;
@@ -1054,7 +1055,9 @@ static void update_service_list(GVariant *all_services,
             if(service == nullptr)
                 known_services.insert(name, std::move(service_data), std::move(ethernet_data));
             else
-                static_cast<Connman::Service<Connman::Technology::ETHERNET> *>(service)->put_changes(std::move(service_data), std::move(ethernet_data));
+                static_cast<Connman::Service<Connman::Technology::ETHERNET> *>(service)->put_changes(
+                        std::move(service_data), std::move(ethernet_data),
+                        force_refresh_all);
 
             break;
 
@@ -1062,7 +1065,9 @@ static void update_service_list(GVariant *all_services,
             if(service == nullptr)
                 known_services.insert(name, std::move(service_data), std::move(wlan_data));
             else
-                static_cast<Connman::Service<Connman::Technology::WLAN> *>(service)->put_changes(std::move(service_data), std::move(wlan_data));
+                static_cast<Connman::Service<Connman::Technology::WLAN> *>(service)->put_changes(
+                        std::move(service_data), std::move(wlan_data),
+                        force_refresh_all);
 
             break;
         }
@@ -1484,6 +1489,7 @@ static void schedule_wlan_connect_if_necessary(bool is_necessary,
 static bool update_all_services(GVariant *all_services,
                                 Connman::ServiceList &services,
                                 Connman::NetworkDeviceList &devices,
+                                bool force_refresh_all,
                                 const char *context)
 {
     if(all_services == nullptr)
@@ -1492,7 +1498,7 @@ static bool update_all_services(GVariant *all_services,
         return false;
     }
 
-    update_service_list(all_services, services, devices);
+    update_service_list(all_services, services, devices, force_refresh_all);
 
     return true;
 }
@@ -1549,12 +1555,9 @@ find_removed(const Connman::ServiceList &known_services, GVariant *all_services)
     return result;
 }
 
-void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
-                                const gchar *signal_name, GVariant *parameters,
-                                gpointer user_data)
+static void refresh_services(DBusSignalManagerData &data, bool force_refresh_all,
+                             const char *context)
 {
-    auto *data = static_cast<DBusSignalManagerData *>(user_data);
-
     const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
 
@@ -1571,18 +1574,31 @@ void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
     {
         const std::vector<std::string> removed(std::move(find_removed(services, all_services)));
 
-        update_service_list(services, data->wlan_connection_state,
+        update_service_list(services, data.wlan_connection_state,
                             removed,
                             have_lost_active_ethernet_device,
                             have_lost_active_wlan_device);
     }
 
-    if(update_all_services(all_services, services, devices, signal_name))
+    if(update_all_services(all_services, services, devices, force_refresh_all,
+                           context))
         g_variant_unref(all_services);
 
-    process_pending_changes(*data, services,
+    process_pending_changes(data, services,
                             have_lost_active_ethernet_device,
                             have_lost_active_wlan_device);
+}
+
+void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
+                                const gchar *signal_name, GVariant *parameters,
+                                gpointer user_data)
+{
+    auto *data = static_cast<DBusSignalManagerData *>(user_data);
+
+    if(data != nullptr)
+        refresh_services(*data, false, signal_name);
+    else
+        BUG("Got no data in %s()", __func__);
 }
 
 static bool is_ssid_rejected(const std::string &ssid, const char *wanted_network_name,
@@ -1713,7 +1729,7 @@ void dbussignal_connman_manager_about_to_connect_signals(void)
     GVariant *all_services =
         connman_common_query_services(dbus_get_connman_manager_iface());
 
-    if(update_all_services(all_services, services, devices, "startup"))
+    if(update_all_services(all_services, services, devices, true, "startup"))
         g_variant_unref(all_services);
 
     process_pending_changes(global_dbussignal_connman_manager_data,
@@ -1891,8 +1907,8 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
     return retval;
 }
 
-void dbussignal_connman_manager_refresh_services(void)
+void dbussignal_connman_manager_refresh_services(bool force_refresh_all)
 {
-    dbussignal_connman_manager(nullptr, "dcpd", __func__, nullptr,
-                               &global_dbussignal_connman_manager_data);
+    refresh_services(global_dbussignal_connman_manager_data,
+                     force_refresh_all, __func__);
 }

@@ -283,12 +283,16 @@ class Service: public ServiceBase
      * No return value, use #Connman::ServiceBase::needs_processing() to find
      * out if the service has been changed.
      */
-    void put_changes(ServiceData &&service_data, TechDataType &&tech_data)
+    void put_changes(ServiceData &&service_data, TechDataType &&tech_data,
+                     bool force_refresh = false)
     {
         put_service_data_changes(std::move(service_data));
 
         if(tech_data == *tech_data_)
+        {
+            have_new_tech_data_ = force_refresh;
             return;
+        }
 
         tech_data_ = (tech_data_ == &tech_data_store_[0]
                       ? &tech_data_store_[1]

@@ -20,6 +20,7 @@
 #define DCPREGS_APPLIANCE_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 
 /*!
@@ -34,7 +35,8 @@ extern "C" {
 ssize_t dcpregs_read_87_appliance_id(uint8_t *response, size_t length);
 int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length);
 
-void dcpregs_appliance_id_configure_appliance(void);
+bool dcpregs_appliance_id_init(void);
+void dcpregs_appliance_id_configure(void);
 
 #ifdef __cplusplus
 }

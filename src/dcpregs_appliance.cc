@@ -26,6 +26,7 @@
 
 #include "dcpregs_appliance.h"
 #include "networkprefs.h"
+#include "dbus_handlers_connman_manager_glue.h"
 #include "configproxy.h"
 #include "messages.h"
 
@@ -86,22 +87,34 @@ static Appliance map_appliance_id(const char *name)
 
 static const char appliance_id_key[] = "@dcpd:appliance:appliance:id";
 
-void dcpregs_appliance_id_configure_appliance()
+static Appliance global_appliance_id = Appliance::UNDEFINED;
+
+bool dcpregs_appliance_id_init()
 {
     char appliance_id[64];
+    auto prev_id = global_appliance_id;
 
     if(configproxy_get_value_as_string(appliance_id_key,
                                        appliance_id, sizeof(appliance_id),
                                        nullptr) > 0)
     {
         msg_info("Set up system for appliance ID %s", appliance_id);
-        setup_primary_network_devices_for_appliance(map_appliance_id(appliance_id));
+        global_appliance_id = map_appliance_id(appliance_id);
     }
     else
     {
         BUG("Have no appliance ID, system may not work");
-        setup_primary_network_devices_for_appliance(Appliance::UNDEFINED);
+        global_appliance_id = Appliance::UNDEFINED;
     }
+
+    setup_primary_network_devices_for_appliance(global_appliance_id);
+
+    return global_appliance_id != prev_id;
+}
+
+void dcpregs_appliance_id_configure()
+{
+    dbussignal_connman_manager_refresh_services(true);
 }
 
 ssize_t dcpregs_read_87_appliance_id(uint8_t *response, size_t length)
@@ -134,7 +147,8 @@ int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length)
         configproxy_set_string(nullptr, appliance_id_key, buffer);
     }
 
-    dcpregs_appliance_id_configure_appliance();
+    if(dcpregs_appliance_id_init())
+        dcpregs_appliance_id_configure();
 
     return 0;
 }
