@@ -20,12 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string>
-#include <map>
-#include <vector>
-#include <memory>
 #include <algorithm>
-#include <cstring>
 #include <cinttypes>
 
 #include "dbus_handlers_connman_manager.h"
@@ -37,6 +32,7 @@
 #include "connman_common.h"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
+#include "networkprefs.h"
 #include "messages.h"
 
 class WLANConnectionState
@@ -1008,12 +1004,8 @@ static void update_service_list(Connman::ServiceList &known_services,
 
 static void update_service_list(GVariant *all_services,
                                 Connman::ServiceList &known_services,
-                                Connman::NetworkDeviceList &network_devices,
-                                const std::map<std::string, bool> *has_changed)
+                                Connman::NetworkDeviceList &network_devices)
 {
-    if(has_changed != nullptr && has_changed->empty())
-        return;
-
     if(all_services == nullptr)
         return;
 
@@ -1027,9 +1019,6 @@ static void update_service_list(GVariant *all_services,
     while(g_variant_iter_loop(&iter, "(&oa{sv})", &name, &props_iter))
     {
         if(name[0] == '\0')
-            continue;
-
-        if(has_changed != nullptr && has_changed->find(name) == has_changed->end())
             continue;
 
         dump_service_changes(MESSAGE_LEVEL_TRACE, name, props_iter);
@@ -1503,7 +1492,7 @@ static bool update_all_services(GVariant *all_services,
         return false;
     }
 
-    update_service_list(all_services, services, devices, nullptr);
+    update_service_list(all_services, services, devices);
 
     return true;
 }
