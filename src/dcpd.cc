@@ -38,6 +38,7 @@
 #include "dbus_iface.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "registers.h"
+#include "dcpregs_appliance.h"
 #include "dcpregs_status.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
@@ -1031,8 +1032,7 @@ static bool main_loop_init(const struct parameters *parameters,
 
     network_prefs_init(network_preferences_dir, network_preferences_full_file);
 
-    network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
-                                                 "/sys/bus/usb/devices/1-1.2:1.0");
+    dcpregs_appliance_id_configure_appliance();
 
     if(!is_upgrading)
         network_prefs_migrate_old_network_configuration_files(connman_config_dir);

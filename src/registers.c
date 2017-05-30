@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "registers.h"
 #include "messages.h"
@@ -30,6 +31,7 @@
 #include "dcpregs_common.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.h"
+#include "dcpregs_appliance.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_upnpname.h"
@@ -58,8 +60,7 @@ struct RegistersPrivateData
 
 static struct RegistersPrivateData registers_private_data;
 
-static const char appliance_id_key[] = "@dcpd:appliance:appliance:id";
-static const char max_bitrate_key[]  = "@drcpd::maximum_stream_bit_rate";
+static const char max_bitrate_key[] = "@drcpd::maximum_stream_bit_rate";
 
 static bool update_status_register(uint8_t status, uint8_t code)
 {
@@ -180,39 +181,6 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
         msg_error(0, LOG_ERR, "No BUILD_ID in %s", osrelease_filename);
 
     return ok ? (ssize_t)length : -1;
-}
-
-static ssize_t read_87_appliance_id(uint8_t *response, size_t length)
-{
-    return configproxy_get_value_as_string(appliance_id_key,
-                                           (char *)response, length,
-                                           NULL);
-}
-
-static int write_87_appliance_id(const uint8_t *data, size_t length)
-{
-    if(length == 0 || data[0] == '\0')
-        return -1;
-
-    static const char log_message[] = "Appliance ID: \"%s\"";
-
-    if(data[length - 1] == '\0')
-    {
-        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, log_message, data);
-        configproxy_set_string(NULL, appliance_id_key, (const char *)data);
-    }
-    else
-    {
-        char buffer[length + 1];
-
-        memcpy(buffer, data, length);
-        buffer[length] = '\0';
-
-        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, log_message, buffer);
-        configproxy_set_string(NULL, appliance_id_key, buffer);
-    }
-
-    return 0;
 }
 
 static bool to_kbits(uint32_t *value)
@@ -446,8 +414,8 @@ static const struct dcp_register_t register_map[] =
         /* Set appliance ID */
         REGISTER(87, REGISTER_MK_VERSION(1, 0, 1)),
         .max_data_size = 32,
-        .read_handler = read_87_appliance_id,
-        .write_handler = write_87_appliance_id,
+        .read_handler = dcpregs_read_87_appliance_id,
+        .write_handler = dcpregs_write_87_appliance_id,
     },
     {
         /* Set UPnP friendly name */
