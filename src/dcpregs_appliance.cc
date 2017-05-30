@@ -33,6 +33,7 @@
 enum class Appliance
 {
     R1000E,
+    CALA_BERBEL,
     FALLBACK,
 
     LAST_APPLIANCE = FALLBACK,
@@ -57,6 +58,11 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance)
                                                      "/sys/bus/usb/devices/1-1.2:1.0");
         break;
 
+      case Appliance::CALA_BERBEL:
+        network_prefs_update_primary_network_devices(nullptr,
+                                                     "/sys/bus/usb/devices/1-1:1.0");
+        break;
+
       case Appliance::UNDEFINED:
         network_prefs_update_primary_network_devices(nullptr, nullptr);
         break;
@@ -68,8 +74,9 @@ static Appliance map_appliance_id(const char *name)
     static const std::array<std::pair<const std::string, const Appliance>,
                             size_t(Appliance::LAST_APPLIANCE) + 1> names
     {
-        std::move(std::make_pair("R1000E",    Appliance::R1000E)),
-        std::move(std::make_pair("!unknown!", Appliance::FALLBACK)),
+        std::move(std::make_pair("R1000E",     Appliance::R1000E)),
+        std::move(std::make_pair("CalaBerbel", Appliance::CALA_BERBEL)),
+        std::move(std::make_pair("!unknown!",  Appliance::FALLBACK)),
     };
 
     if(name == nullptr || name[0] == '\0')
