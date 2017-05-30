@@ -89,20 +89,14 @@ static size_t generate_service_name(char *const buffer,
     while(0)
 
     if(mac == NULL)
-    {
-        msg_error(0, LOG_ERR, "No MAC configured");
         return 0;
-    }
 
     bool is_wlan;
 
     if(strcmp(buffer + tech_offset, "wifi") == 0)
     {
         if(network_name == NULL && network_ssid == NULL)
-        {
-            msg_error(0, LOG_ERR, "No network name configured");
             return 0;
-        }
 
         if(network_security == NULL)
         {
@@ -236,6 +230,12 @@ static bool add_new_section_with_defaults(struct ini_file *inifile,
         break;
     }
 
+    if(mac_address.empty())
+    {
+        /* just empty section then */
+        return true;
+    }
+
     if(section == NULL ||
        inifile_section_store_value(section, "MAC", 3, mac_address.get_string().c_str(), 0) == NULL ||
        inifile_section_store_value(section, "DHCP", 4, "yes", 3) == NULL)
@@ -249,7 +249,8 @@ static bool add_new_section_with_defaults(struct ini_file *inifile,
 
 static void write_default_preferences(const char *filename,
                                       const char *containing_directory,
-                                      const Connman::Address<Connman::AddressType::MAC> &ethernet_mac_address)
+                                      const Connman::Address<Connman::AddressType::MAC> &ethernet_mac_address,
+                                      const Connman::Address<Connman::AddressType::MAC> &wlan_mac_address)
 {
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "Creating default network preferences file");
@@ -259,7 +260,9 @@ static void write_default_preferences(const char *filename,
     inifile_new(&inifile);
 
     if(add_new_section_with_defaults(&inifile, Connman::Technology::ETHERNET,
-                                     ethernet_mac_address))
+                                     ethernet_mac_address) &&
+       add_new_section_with_defaults(&inifile, Connman::Technology::WLAN,
+                                     wlan_mac_address))
     {
         if(inifile_write_to_file(&inifile, filename) == 0)
             os_sync_dir(containing_directory);
@@ -430,7 +433,8 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
 
                 write_default_preferences(networkprefs_data.preferences_filename,
                                           networkprefs_data.preferences_path,
-                                          devices.get_auto_select_mac_address(Connman::Technology::ETHERNET));
+                                          devices.get_auto_select_mac_address(Connman::Technology::ETHERNET),
+                                          devices.get_auto_select_mac_address(Connman::Technology::WLAN));
             }
             else
             {
@@ -650,6 +654,10 @@ size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
     static const size_t tech_offset = sizeof(service_prefix) - 1;
 
     const struct ini_section *const section = prefs->section;
+
+    if(section->values_head == NULL)
+        return 0;
+
     const size_t namelen = strlen(section->name);
     const size_t start_offset = tech_offset + namelen;
 

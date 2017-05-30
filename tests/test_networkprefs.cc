@@ -182,12 +182,13 @@ static void move_os_write_buffer_to_file(struct os_mapped_file_data &mapped_file
 
 static const struct os_mapped_file_data *
 expect_create_default_network_preferences(struct os_mapped_file_data &file_with_written_default_contents,
-                                          std::vector<char> &written_default_contents)
+                                          std::vector<char> &written_default_contents,
+                                          int expected_number_of_assignments)
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Creating default network preferences file");
     mock_os->expect_os_file_new(expected_os_write_fd, default_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + expected_number_of_assignments * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir_callback(default_path_to_config,
@@ -230,7 +231,7 @@ static void do_migration(const char *const old_ethernet_config_name,
     if(existing_new_config == nullptr)
     {
         mock_os->expect_os_map_file_to_memory(-1, false, default_config_file);
-        expect_create_default_network_preferences(network_ini, written_default_contents);
+        expect_create_default_network_preferences(network_ini, written_default_contents, 4);
     }
     else
     {
@@ -477,7 +478,7 @@ void test_migrate_old_ethernet_configuration_file_with_manual_config()
 
     do_migration("/connman/builtin_09fa01d467e2.config", &old_ethernet_config,
                  "/connman/wlan_device.config",          nullptr,
-                 1, 6);
+                 2, 8);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -487,11 +488,15 @@ void test_migrate_old_ethernet_configuration_file_with_manual_config()
         "IPv4Netmask = 255.255.255.0\n"
         "IPv4Gateway = 192.168.22.10\n"
         "PrimaryDNS = 192.168.22.200\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
         ;
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, default_ethernet_mac);
+             expected_config_file_format, default_ethernet_mac,
+             default_wlan_mac);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 

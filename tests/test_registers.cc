@@ -1797,12 +1797,13 @@ static void move_os_write_buffer_to_file(struct os_mapped_file_data &mapped_file
 
 static const struct os_mapped_file_data *
 expect_create_default_network_preferences(struct os_mapped_file_data &file_with_written_default_contents,
-                                          std::vector<char> &written_default_contents)
+                                          std::vector<char> &written_default_contents,
+                                          int expected_number_of_assignments)
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Creating default network preferences file");
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + expected_number_of_assignments * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir_callback(network_config_path,
@@ -1825,10 +1826,15 @@ static size_t expect_default_network_preferences_content(char *buffer_for_expect
     static const char expected_config_file_format[] =
         "[ethernet]\n"
         "MAC = %s\n"
-        "DHCP = yes\n";
+        "DHCP = yes\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     snprintf(buffer_for_expected, buffer_for_expected_size,
-             expected_config_file_format, ethernet_mac_address);
+             expected_config_file_format, ethernet_mac_address,
+             wlan_mac_address);
 
     const size_t written_config_file_length = strlen(buffer_for_expected);
 
@@ -1883,7 +1889,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
 
         existing_file =
             expect_create_default_network_preferences(file_with_written_default_contents,
-                                                      written_default_contents);
+                                                      written_default_contents, 4);
     }
     else
     {
@@ -1892,7 +1898,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     }
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 5 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 7 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -1905,12 +1911,16 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
         "DHCP = no\n"
         "IPv4Address = %s\n"
         "IPv4Netmask = %s\n"
-        "IPv4Gateway = %s\n";
+        "IPv4Gateway = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     snprintf(written_config_file, written_config_file_size,
              expected_config_file_format,
              ethernet_mac_address, standard_ipv4_address,
-             standard_ipv4_netmask, standard_ipv4_gateway);
+             standard_ipv4_netmask, standard_ipv4_gateway, wlan_mac_address);
 
     size_t written_config_file_length = strlen(written_config_file);
 
@@ -1946,7 +1956,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
 
         existing_file =
             expect_create_default_network_preferences(file_with_written_default_contents,
-                                                      written_default_contents);
+                                                      written_default_contents, 4);
     }
     else
     {
@@ -1955,7 +1965,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     }
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 4 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2111,14 +2121,14 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_error_formatted(0, LOG_WARNING,
         "Disabling IPv4 on interface C4:FD:EC:AF:DE:AD because DHCPv4 "
         "was disabled and static IPv4 configuration was not sent");
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4; ++i)
+    for(int i = 0; i < 2 * 3 + 3 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2127,11 +2137,15 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
-        "MAC = %s\n";
+        "MAC = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char buffer[512];
-    snprintf(buffer, sizeof(buffer),
-             expected_config_file_format, ethernet_mac_address);
+    snprintf(buffer, sizeof(buffer), expected_config_file_format,
+             ethernet_mac_address, wlan_mac_address);
 
     size_t written_config_file_length = strlen(buffer);
 
@@ -2453,7 +2467,7 @@ static void set_one_dns_server()
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 6 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 8 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2467,14 +2481,18 @@ static void set_one_dns_server()
         "IPv4Address = %s\n"
         "IPv4Netmask = %s\n"
         "IPv4Gateway = %s\n"
-        "PrimaryDNS = %s\n";
+        "PrimaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
              expected_config_file_format,
              ethernet_mac_address, standard_ipv4_address,
              standard_ipv4_netmask, standard_ipv4_gateway,
-             RegTraits::expected_address);
+             RegTraits::expected_address, wlan_mac_address);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2539,7 +2557,7 @@ void test_set_both_dns_servers()
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 7 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 9 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2554,14 +2572,18 @@ void test_set_both_dns_servers()
         "IPv4Netmask = %s\n"
         "IPv4Gateway = %s\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
              expected_config_file_format,
              ethernet_mac_address, standard_ipv4_address,
              standard_ipv4_netmask, standard_ipv4_gateway,
-             standard_dns1_address, standard_dns2_address);
+             standard_dns1_address, standard_dns2_address, wlan_mac_address);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2636,10 +2658,10 @@ void test_replace_primary_dns_server_of_two_servers()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2651,13 +2673,18 @@ void test_replace_primary_dns_server_of_two_servers()
         "MAC = %s\n"
         "DHCP = yes\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char output_config_file[512];
 
     snprintf(output_config_file, sizeof(output_config_file),
              expected_config_file_format,
-             ethernet_mac_address, new_primary_dns, standard_dns2_address);
+             ethernet_mac_address, new_primary_dns, standard_dns2_address,
+             wlan_mac_address);
 
     size_t output_config_file_length = strlen(output_config_file);
 
@@ -2688,10 +2715,10 @@ void test_replace_secondary_dns_server_of_two_servers()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2703,13 +2730,18 @@ void test_replace_secondary_dns_server_of_two_servers()
         "MAC = %s\n"
         "DHCP = yes\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char output_config_file[512];
 
     snprintf(output_config_file, sizeof(output_config_file),
              expected_config_file_format,
-             ethernet_mac_address, standard_dns1_address, new_secondary_dns);
+             ethernet_mac_address, standard_dns1_address, new_secondary_dns,
+             wlan_mac_address);
 
     size_t output_config_file_length = strlen(output_config_file);
 
@@ -2747,10 +2779,10 @@ void test_add_secondary_dns_server_to_primary_server()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2762,13 +2794,18 @@ void test_add_secondary_dns_server_to_primary_server()
         "MAC = %s\n"
         "DHCP = yes\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char output_config_file[512];
 
     snprintf(output_config_file, sizeof(output_config_file),
              expected_config_file_format,
-             ethernet_mac_address, assumed_primary_dns, standard_dns2_address);
+             ethernet_mac_address, assumed_primary_dns, standard_dns2_address,
+             wlan_mac_address);
 
     size_t output_config_file_length = strlen(output_config_file);
 
@@ -2795,13 +2832,13 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Ignoring wireless parameters for active wired interface");
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 4 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
@@ -2873,7 +2910,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     if(expecting_configuration_file_be_written)
     {
@@ -2986,7 +3023,7 @@ void test_set_wlan_security_mode_wep()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Support for insecure WLAN mode "
@@ -3021,7 +3058,7 @@ void test_set_invalid_wlan_security_mode()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
                                               "Invalid WLAN security mode \"foo\" (Invalid argument)");
@@ -3145,7 +3182,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
 
@@ -3348,7 +3385,7 @@ void test_set_passphrase_without_security_mode_does_not_work()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
@@ -3477,7 +3514,7 @@ void test_set_simple_ascii_wlan_ssid()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
@@ -3537,7 +3574,7 @@ void test_set_binary_wlan_ssid()
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
