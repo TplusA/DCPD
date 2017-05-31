@@ -439,8 +439,28 @@ static void patch_mac_address(struct ini_section *section,
                                     mac_address.get_string().length());
 }
 
+static void patch_prefs(struct network_prefs_handle *handle,
+                        struct network_prefs *prefs,
+                        const Connman::Address<Connman::AddressType::MAC> &mac_address,
+                        bool remove_prefs_for_missing_devices)
+{
+    if(prefs == nullptr)
+        return;
+
+    if((mac_address.empty() && remove_prefs_for_missing_devices) ||
+       inifile_section_lookup_kv_pair(prefs->section, "MAC", 3) == nullptr ||
+       inifile_section_lookup_kv_pair(prefs->section, "DHCP", 4) == nullptr)
+    {
+        network_prefs_remove_prefs(handle, prefs->technology);
+        network_prefs_add_prefs(handle, prefs->technology);
+    }
+    else
+        patch_mac_address(prefs->section, mac_address);
+}
+
 void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_path,
-                                                  const char *wlan_sysfs_path)
+                                                  const char *wlan_sysfs_path,
+                                                  bool remove_prefs_for_missing_devices)
 {
     Connman::Address<Connman::AddressType::MAC> ethernet_mac(read_out_mac_address(ethernet_sysfs_path));
     Connman::Address<Connman::AddressType::MAC> wlan_mac(read_out_mac_address(wlan_sysfs_path));
@@ -485,21 +505,8 @@ void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_pat
     {
         /* defaults will be fine, but here we have an existing file with
          * content that we have to patch now */
-        if(ethernet_mac.empty())
-        {
-            network_prefs_remove_prefs(prefs, NWPREFSTECH_ETHERNET);
-            network_prefs_add_prefs(prefs, NWPREFSTECH_ETHERNET);
-        }
-        else
-            patch_mac_address(ethernet_prefs->section, ethernet_mac);
-
-        if(wlan_mac.empty())
-        {
-            network_prefs_remove_prefs(prefs, NWPREFSTECH_WLAN);
-            network_prefs_add_prefs(prefs, NWPREFSTECH_WLAN);
-        }
-        else
-            patch_mac_address(wlan_prefs->section, wlan_mac);
+        patch_prefs(prefs, ethernet_prefs, ethernet_mac, remove_prefs_for_missing_devices);
+        patch_prefs(prefs, wlan_prefs, wlan_mac, remove_prefs_for_missing_devices);
     }
 
     network_prefs_write_to_file(prefs);

@@ -48,23 +48,27 @@ enum class Appliance
  *       schema. Thus, no code changes will be required to support new
  *       appliances in the future.
  */
-static void setup_primary_network_devices_for_appliance(Appliance appliance)
+static void setup_primary_network_devices_for_appliance(Appliance appliance,
+                                                        bool is_reconfiguration)
 {
     switch(appliance)
     {
       case Appliance::R1000E:
       case Appliance::FALLBACK:
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
-                                                     "/sys/bus/usb/devices/1-1.2:1.0");
+                                                     "/sys/bus/usb/devices/1-1.2:1.0",
+                                                     is_reconfiguration);
         break;
 
       case Appliance::CALA_BERBEL:
         network_prefs_update_primary_network_devices(nullptr,
-                                                     "/sys/bus/usb/devices/1-1:1.0");
+                                                     "/sys/bus/usb/devices/1-1:1.0",
+                                                     is_reconfiguration);
         break;
 
       case Appliance::UNDEFINED:
-        network_prefs_update_primary_network_devices(nullptr, nullptr);
+        network_prefs_update_primary_network_devices(nullptr, nullptr,
+                                                     is_reconfiguration);
         break;
     }
 }
@@ -130,7 +134,8 @@ bool dcpregs_appliance_id_init()
     if(changed || !global_appliance_data.is_initialized)
     {
         msg_info("Set up system for appliance \"%s\"", appliance_id);
-        setup_primary_network_devices_for_appliance(global_appliance_data.id);
+        setup_primary_network_devices_for_appliance(global_appliance_data.id,
+                                                    global_appliance_data.is_initialized);
     }
 
     global_appliance_data.is_initialized = true;
