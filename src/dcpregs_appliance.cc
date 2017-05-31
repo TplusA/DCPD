@@ -94,29 +94,48 @@ static Appliance map_appliance_id(const char *name)
 
 static const char appliance_id_key[] = "@dcpd:appliance:appliance:id";
 
-static Appliance global_appliance_id = Appliance::UNDEFINED;
+struct ApplianceData
+{
+    bool is_initialized;
+    Appliance id;
+
+    ApplianceData(const ApplianceData &) = delete;
+    ApplianceData &operator=(const ApplianceData &) = delete;
+
+    explicit ApplianceData():
+        is_initialized(false),
+        id(Appliance::UNDEFINED)
+    {}
+};
+
+static ApplianceData global_appliance_data;
 
 bool dcpregs_appliance_id_init()
 {
     char appliance_id[64];
-    auto prev_id = global_appliance_id;
+    auto prev_id = global_appliance_data.id;
 
     if(configproxy_get_value_as_string(appliance_id_key,
                                        appliance_id, sizeof(appliance_id),
                                        nullptr) > 0)
-    {
-        msg_info("Set up system for appliance ID %s", appliance_id);
-        global_appliance_id = map_appliance_id(appliance_id);
-    }
+        global_appliance_data.id = map_appliance_id(appliance_id);
     else
     {
         BUG("Have no appliance ID, system may not work");
-        global_appliance_id = Appliance::UNDEFINED;
+        global_appliance_data.id = Appliance::UNDEFINED;
     }
 
-    setup_primary_network_devices_for_appliance(global_appliance_id);
+    const bool changed = global_appliance_data.id != prev_id;
 
-    return global_appliance_id != prev_id;
+    if(changed || !global_appliance_data.is_initialized)
+    {
+        msg_info("Set up system for appliance \"%s\"", appliance_id);
+        setup_primary_network_devices_for_appliance(global_appliance_data.id);
+    }
+
+    global_appliance_data.is_initialized = true;
+
+    return changed;
 }
 
 void dcpregs_appliance_id_configure()
