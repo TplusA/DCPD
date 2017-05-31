@@ -1246,6 +1246,8 @@ static int process_command_line(int argc, char *argv[],
     files->drcp_fifo_in_name = "/tmp/drcpd_to_dcpd";
     files->drcp_fifo_out_name = "/tmp/dcpd_to_drcpd";
 
+    bool seen_unknown_parameters = false;
+
 #define CHECK_ARGUMENT() \
     do \
     { \
@@ -1323,11 +1325,14 @@ static int process_command_line(int argc, char *argv[],
         else
         {
             fprintf(stderr, "Unknown option \"%s\". Please try --help.\n", argv[i]);
-            return -1;
+            seen_unknown_parameters = true;
         }
     }
 
 #undef CHECK_ARGUMENT
+
+    if(seen_unknown_parameters && parameters->run_in_foreground)
+        return -1;
 
     return 0;
 }
