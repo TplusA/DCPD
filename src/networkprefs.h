@@ -50,7 +50,6 @@ void network_prefs_deinit(void);
 
 void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_path,
                                                   const char *wlan_sysfs_path);
-void network_prefs_update_primary_network_devices_for_appliance(void);
 
 struct network_prefs_handle *
 network_prefs_open_ro(const struct network_prefs **ethernet,
