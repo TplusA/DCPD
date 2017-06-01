@@ -27,6 +27,7 @@
 #include "dcpregs_appliance.h"
 #include "networkprefs.h"
 #include "dbus_handlers_connman_manager_glue.h"
+#include "network_device_list.hh"
 #include "configproxy.h"
 #include "messages.h"
 
@@ -40,6 +41,23 @@ enum class Appliance
 
     UNDEFINED,
 };
+
+static const char appliance_id_key[]        = "@dcpd:appliance:appliance:id";
+static const char appliance_device_id_key[] = "@dcpd:appliance:appliance:device_id";
+
+static void set_device_id_by_mac(const Connman::Technology tech)
+{
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    auto &devices(locked_devices.first);
+
+    configproxy_set_string(nullptr, appliance_device_id_key,
+                           devices.get_auto_select_mac_address(tech).get_string().c_str());
+}
+
+static void set_device_id_none()
+{
+    configproxy_set_string(nullptr, appliance_device_id_key, "");
+}
 
 /*
  * TODO: This is just a quick hack to get anything to work. The hardcoded
@@ -58,17 +76,20 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
                                                      "/sys/bus/usb/devices/1-1.2:1.0",
                                                      is_reconfiguration);
+        set_device_id_by_mac(Connman::Technology::ETHERNET);
         break;
 
       case Appliance::CALA_BERBEL:
         network_prefs_update_primary_network_devices(nullptr,
                                                      "/sys/bus/usb/devices/1-1:1.0",
                                                      is_reconfiguration);
+        set_device_id_by_mac(Connman::Technology::WLAN);
         break;
 
       case Appliance::UNDEFINED:
         network_prefs_update_primary_network_devices(nullptr, nullptr,
                                                      is_reconfiguration);
+        set_device_id_none();
         break;
     }
 }
@@ -95,8 +116,6 @@ static Appliance map_appliance_id(const char *name)
 
     return Appliance::FALLBACK;
 }
-
-static const char appliance_id_key[] = "@dcpd:appliance:appliance:id";
 
 struct ApplianceData
 {

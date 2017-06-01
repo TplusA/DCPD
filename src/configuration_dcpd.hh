@@ -39,8 +39,9 @@ struct ApplianceValues
     enum class KeyID
     {
         APPLIANCE_NAME,
+        DEVICE_ID,
 
-        LAST_ID = APPLIANCE_NAME,
+        LAST_ID = DEVICE_ID,
     };
 
     static constexpr size_t NUMBER_OF_KEYS = static_cast<size_t>(KeyID::LAST_ID) + 1;
@@ -48,11 +49,14 @@ struct ApplianceValues
     static const std::array<const ConfigKey, NUMBER_OF_KEYS> all_keys;
 
     std::string appliance_name_;
+    std::string device_id_;
 
     ApplianceValues() {}
 
-    explicit ApplianceValues(std::string &&appliance_name):
-        appliance_name_(std::move(appliance_name))
+    explicit ApplianceValues(std::string &&appliance_name,
+                             std::string &&device_id):
+        appliance_name_(std::move(appliance_name)),
+        device_id_(std::move(device_id))
     {}
 };
 
@@ -99,6 +103,7 @@ class ConfigKey: public ConfigKeyBase<ApplianceValues>
 template <ApplianceValues::KeyID ID> struct UpdateTraits;
 
 CONFIGURATION_UPDATE_TRAITS(UpdateTraits, ApplianceValues, APPLIANCE_NAME, appliance_name_);
+CONFIGURATION_UPDATE_TRAITS(UpdateTraits, ApplianceValues, DEVICE_ID,      device_id_);
 
 template <>
 class UpdateSettings<ApplianceValues>
@@ -120,6 +125,12 @@ class UpdateSettings<ApplianceValues>
     {
         return settings_.update<ApplianceValues::KeyID::APPLIANCE_NAME,
                                 UpdateTraits<ApplianceValues::KeyID::APPLIANCE_NAME>>(name);
+    }
+
+    bool device_id(const std::string &id)
+    {
+        return settings_.update<ApplianceValues::KeyID::DEVICE_ID,
+                                UpdateTraits<ApplianceValues::KeyID::DEVICE_ID>>(id);
     }
 };
 

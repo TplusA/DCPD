@@ -50,10 +50,25 @@ unbox_appliance_name(Configuration::UpdateSettings<Configuration::ApplianceValue
     return Configuration::InsertResult::UPDATED;
 };
 
+static Configuration::InsertResult
+unbox_device_id(Configuration::UpdateSettings<Configuration::ApplianceValues> &dest,
+                GVariantWrapper &&src)
+{
+    std::string temp;
+
+    if(!Configuration::default_unbox(temp, std::move(src)))
+        return Configuration::InsertResult::VALUE_TYPE_INVALID;
+
+    if(!dest.device_id(temp))
+        return Configuration::InsertResult::UNCHANGED;
+
+    return Configuration::InsertResult::UPDATED;
+};
+
 const std::array<const Configuration::ConfigKey, Configuration::ApplianceValues::NUMBER_OF_KEYS>
 Configuration::ApplianceValues::all_keys
 {
-#define ENTRY(ID, KEY) \
+#define ENTRY(ID, KEY, UNBOX) \
     Configuration::ConfigKey(Configuration::ApplianceValues::KeyID::ID, \
                              "appliance:appliance:" KEY, \
                              serialize_value<Configuration::ApplianceValues, \
@@ -62,9 +77,10 @@ Configuration::ApplianceValues::all_keys
                                                UpdateTraits<Configuration::ApplianceValues::KeyID::ID>>, \
                              box_value<Configuration::ApplianceValues, \
                                        UpdateTraits<Configuration::ApplianceValues::KeyID::ID>>, \
-                             unbox_appliance_name)
+                             UNBOX)
 
-    ENTRY(APPLIANCE_NAME, "id"),
+    ENTRY(APPLIANCE_NAME, "id",        unbox_appliance_name),
+    ENTRY(DEVICE_ID,      "device_id", unbox_device_id),
 
 #undef ENTRY
 };
