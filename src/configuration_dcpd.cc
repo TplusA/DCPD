@@ -140,12 +140,12 @@ bool configuration_set_key(const char *origin, const char *key, GVariant *value)
     if(!is_key_ours(key, configuration_data.cm->get_database_name(),
                     strlen(configuration_data.cm->get_database_name())))
     {
-        msg_error(0, LOG_NOTICE,
-                  "Attempted to set foreign key %s by %s", key, origin);
+        BUG("Attempted to set foreign key %s by %s", key, origin);
         return false;
     }
 
     auto scope(configuration_data.cm->get_update_scope(origin));
+    int err = 0;
 
     switch(scope().insert_boxed(key, std::move(v)))
     {
@@ -154,11 +154,25 @@ bool configuration_set_key(const char *origin, const char *key, GVariant *value)
         return true;
 
       case Configuration::InsertResult::KEY_UNKNOWN:
+        err = ENOKEY;
+        break;
+
       case Configuration::InsertResult::VALUE_TYPE_INVALID:
+        err = EDOM;
+        break;
+
       case Configuration::InsertResult::VALUE_INVALID:
+        err = EINVAL;
+        break;
+
       case Configuration::InsertResult::PERMISSION_DENIED:
+        err = EPERM;
         break;
     }
+
+    if(err != 0)
+        msg_error(err, LOG_NOTICE,
+                  "Setting key %s by %s not possible", key, origin);
 
     return false;
 }
