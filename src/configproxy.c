@@ -468,6 +468,9 @@ error_exit:
 
 void configproxy_notify_configuration_changed(const char *origin, const char **changed_keys)
 {
+    if(dbus_get_configuration_monitor_iface() == NULL)
+        return;
+
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
 
