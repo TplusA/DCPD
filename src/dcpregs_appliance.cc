@@ -34,6 +34,11 @@
 enum class Appliance
 {
     R1000E,
+    MP1000E,
+    MP2000R,
+    MP2500HV,
+    MP3100HV,
+    CALA_PLUS,
     CALA_BERBEL,
     FALLBACK,
 
@@ -72,6 +77,11 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
     switch(appliance)
     {
       case Appliance::R1000E:
+      case Appliance::MP1000E:
+      case Appliance::MP2000R:
+      case Appliance::MP2500HV:
+      case Appliance::MP3100HV:
+      case Appliance::CALA_PLUS:
       case Appliance::FALLBACK:
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
                                                      "/sys/bus/usb/devices/1-1.2:1.0",
@@ -100,6 +110,11 @@ static Appliance map_appliance_id(const char *name)
                             size_t(Appliance::LAST_APPLIANCE) + 1> names
     {
         std::move(std::make_pair("R1000E",     Appliance::R1000E)),
+        std::move(std::make_pair("MP1000E",    Appliance::MP1000E)),
+        std::move(std::make_pair("MP2000R",    Appliance::MP2000R)),
+        std::move(std::make_pair("MP2500HV",   Appliance::MP2500HV)),
+        std::move(std::make_pair("MP3100HV",   Appliance::MP3100HV)),
+        std::move(std::make_pair("CalaPlus",   Appliance::CALA_PLUS)),
         std::move(std::make_pair("CalaBerbel", Appliance::CALA_BERBEL)),
         std::move(std::make_pair("!unknown!",  Appliance::FALLBACK)),
     };
