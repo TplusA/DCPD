@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -82,6 +82,17 @@ void appconn_handle_incoming(struct smartphone_app_connection_data *appconn)
     }
 }
 
+static bool no_airable(const char *why)
+{
+    if(dbus_get_airable_sec_iface() != NULL &&
+       dbus_get_credentials_read_iface() != NULL)
+        return false;
+
+    BUG("Cannot %s, have no Airable D-Bus proxy", why);
+
+    return true;
+}
+
 static ssize_t process_applink_command(const struct ApplinkCommand *command,
                                        char *buffer, size_t buffer_size)
 {
@@ -123,6 +134,9 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
             if(locale_buffer[0] == '\0' || ipaddress_buffer[0] == '\0')
                 break;
 
+            if(no_airable("generate authentication URL"))
+                break;
+
             tdbus_airable_call_generate_authentication_url_sync(dbus_get_airable_sec_iface(),
                                                                 locale_buffer,
                                                                 &answer,
@@ -147,6 +161,9 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
             if(token_buffer[0] == '\0' || timestamp_buffer[0] == '\0')
                 break;
 
+            if(no_airable("generate password"))
+                break;
+
             tdbus_airable_call_generate_password_sync(dbus_get_airable_sec_iface(),
                                                       token_buffer,
                                                       timestamp_buffer,
@@ -161,6 +178,9 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
         break;
 
       case VAR_AIRABLE_ROOT_URL:
+        if(no_airable("get root URL"))
+            break;
+
         tdbus_airable_call_get_root_url_sync(dbus_get_airable_sec_iface(),
                                              &answer, NULL, &error);
         if(dbus_common_handle_dbus_error(&error, "Get Airable root URL") < 0)
@@ -178,6 +198,9 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
             applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
 
             if(service_id_buffer[0] == '\0')
+                break;
+
+            if(no_airable("get service credentials"))
                 break;
 
             gchar *password;
@@ -257,6 +280,9 @@ static void process_applink_answer(const struct ApplinkCommand *const command)
                       "App said it logged into \"%s\" with user \"%s\"",
                       service_id_buffer, username_buffer);
 
+            if(no_airable("log into service"))
+                break;
+
             tdbus_airable_call_external_service_login_sync(
                 dbus_get_airable_sec_iface(), service_id_buffer,
                 username_buffer, false, ACTOR_ID_SMARTPHONE_APP, NULL, NULL);
@@ -275,6 +301,9 @@ static void process_applink_answer(const struct ApplinkCommand *const command)
             msg_vinfo(MESSAGE_LEVEL_TRACE,
                       "App said it logged out from \"%s\" using URL \"%s\"",
                       service_id_buffer, url_buffer);
+
+            if(no_airable("log out from service"))
+                break;
 
             tdbus_airable_call_external_service_logout_sync(
                 dbus_get_airable_sec_iface(), service_id_buffer,

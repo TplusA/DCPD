@@ -89,10 +89,11 @@ static struct
 }
 streamplayer_iface_data;
 
-static struct
+static struct airable_iface_data
 {
     bool connect_to_session_bus;
     tdbusAirable *airable_sec_iface;
+    struct smartphone_app_connection_data *appconn_data;
 }
 airable_iface_data;
 
@@ -104,7 +105,7 @@ static struct
 }
 artcache_iface_data;
 
-static struct
+static struct credentials_iface_data
 {
     bool connect_to_session_bus;
     tdbuscredentialsRead *cred_read_iface;
@@ -225,6 +226,43 @@ static void bus_acquired(GDBusConnection *connection,
     }
 }
 
+static void created_airable_proxy(GObject *source_object, GAsyncResult *res,
+                                  gpointer user_data)
+{
+    struct airable_iface_data *data = user_data;
+    GError *error = NULL;
+
+    data->airable_sec_iface = tdbus_airable_proxy_new_finish(res, &error);
+
+    if(dbus_common_handle_dbus_error(&error, "Create Airable sec proxy") == 0)
+        g_signal_connect(data->airable_sec_iface, "g-signal",
+                         G_CALLBACK(dbussignal_airable), data->appconn_data);
+}
+
+static void created_cred_read_proxy(GObject *source_object, GAsyncResult *res,
+                                    gpointer user_data)
+{
+    struct credentials_iface_data *data = user_data;
+    GError *error = NULL;
+
+    data->cred_read_iface =
+        tdbus_credentials_read_proxy_new_finish(res, &error);
+
+    (void)dbus_common_handle_dbus_error(&error, "Create Airable credread proxy");
+}
+
+static void created_cred_write_proxy(GObject *source_object, GAsyncResult *res,
+                                     gpointer user_data)
+{
+    struct credentials_iface_data *data = user_data;
+    GError *error = NULL;
+
+    data->cred_write_iface =
+        tdbus_credentials_write_proxy_new_finish(res, &error);
+
+    (void)dbus_common_handle_dbus_error(&error, "Create Airable credwrite proxy");
+}
+
 static void name_acquired(GDBusConnection *connection,
                           const gchar *name, gpointer user_data)
 {
@@ -270,17 +308,10 @@ static void name_acquired(GDBusConnection *connection,
     }
 
     if(is_session_bus == airable_iface_data.connect_to_session_bus)
-    {
-        GError *error = NULL;
-
-        airable_iface_data.airable_sec_iface =
-            tdbus_airable_proxy_new_sync(connection,
-                                         G_DBUS_PROXY_FLAGS_NONE,
-                                         "de.tahifi.TuneInBroker",
-                                         "/de/tahifi/TuneInBroker",
-                                         NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error, "Create Airable sec proxy");
-    }
+        tdbus_airable_proxy_new(connection, G_DBUS_PROXY_FLAGS_NONE,
+                                "de.tahifi.TuneInBroker",
+                                "/de/tahifi/TuneInBroker", NULL,
+                                created_airable_proxy, &airable_iface_data);
 
     if(is_session_bus == artcache_iface_data.connect_to_session_bus)
     {
@@ -305,23 +336,19 @@ static void name_acquired(GDBusConnection *connection,
 
     if(is_session_bus == credentials_iface_data.connect_to_session_bus)
     {
-        GError *error = NULL;
+        tdbus_credentials_read_proxy_new(connection,
+                                         G_DBUS_PROXY_FLAGS_NONE,
+                                         "de.tahifi.TuneInBroker",
+                                         "/de/tahifi/TuneInBroker", NULL,
+                                         created_cred_read_proxy,
+                                         &credentials_iface_data);
 
-        credentials_iface_data.cred_read_iface =
-            tdbus_credentials_read_proxy_new_sync(connection,
-                                                  G_DBUS_PROXY_FLAGS_NONE,
-                                                  "de.tahifi.TuneInBroker",
-                                                  "/de/tahifi/TuneInBroker",
-                                                  NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error, "Create Airable credread proxy");
-
-        credentials_iface_data.cred_write_iface =
-            tdbus_credentials_write_proxy_new_sync(connection,
-                                                   G_DBUS_PROXY_FLAGS_NONE,
-                                                   "de.tahifi.TuneInBroker",
-                                                   "/de/tahifi/TuneInBroker",
-                                                   NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error, "Create Airable credwrite proxy");
+        tdbus_credentials_write_proxy_new(connection,
+                                          G_DBUS_PROXY_FLAGS_NONE,
+                                          "de.tahifi.TuneInBroker",
+                                          "/de/tahifi/TuneInBroker", NULL,
+                                          created_cred_write_proxy,
+                                          &credentials_iface_data);
     }
 
     if(!is_session_bus)
@@ -419,6 +446,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.connect_to_session_bus = connect_to_session_bus;
+    airable_iface_data.appconn_data = appconn_data;
     artcache_iface_data.connect_to_session_bus = connect_to_session_bus;
     credentials_iface_data.connect_to_session_bus = connect_to_session_bus;
 
@@ -477,11 +505,8 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(filetransfer_iface_data.iface != NULL);
     log_assert(streamplayer_iface_data.playback_iface != NULL);
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
-    log_assert(airable_iface_data.airable_sec_iface != NULL);
     log_assert(artcache_iface_data.artcache_read_iface != NULL);
     log_assert(artcache_iface_data.artcache_monitor_iface != NULL);
-    log_assert(credentials_iface_data.cred_read_iface != NULL);
-    log_assert(credentials_iface_data.cred_write_iface != NULL);
     log_assert(connman_iface_data.connman_agent_iface != NULL);
 
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
@@ -489,9 +514,6 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
 
     g_signal_connect(streamplayer_iface_data.playback_iface, "g-signal",
                      G_CALLBACK(dbussignal_splay_playback), NULL);
-
-    g_signal_connect(airable_iface_data.airable_sec_iface, "g-signal",
-                     G_CALLBACK(dbussignal_airable), appconn_data);
 
     g_signal_connect(artcache_iface_data.artcache_monitor_iface, "g-signal",
                      G_CALLBACK(dbussignal_artcache_monitor), NULL);
@@ -549,11 +571,19 @@ void dbus_shutdown(void)
     g_object_unref(filetransfer_iface_data.iface);
     g_object_unref(streamplayer_iface_data.playback_iface);
     g_object_unref(streamplayer_iface_data.urlfifo_iface);
-    g_object_unref(airable_iface_data.airable_sec_iface);
+
+    if(airable_iface_data.airable_sec_iface != NULL)
+        g_object_unref(airable_iface_data.airable_sec_iface);
+
     g_object_unref(artcache_iface_data.artcache_read_iface);
     g_object_unref(artcache_iface_data.artcache_monitor_iface);
-    g_object_unref(credentials_iface_data.cred_read_iface);
-    g_object_unref(credentials_iface_data.cred_write_iface);
+
+    if(credentials_iface_data.cred_read_iface != NULL)
+        g_object_unref(credentials_iface_data.cred_read_iface);
+
+    if(credentials_iface_data.cred_write_iface != NULL)
+        g_object_unref(credentials_iface_data.cred_write_iface);
+
     g_object_unref(connman_iface_data.connman_agent_iface);
 
     if(connman_iface_data.connman_manager_iface != NULL)

@@ -75,10 +75,13 @@ static int delete_credentials(const char *service_id, bool logout_on_failure)
         g_free(dummy);
     }
 
-    tdbus_airable_call_external_service_logout_sync(dbus_get_airable_sec_iface(),
-                                                    service_id, "",
-                                                    true, ACTOR_ID_LOCAL_UI,
-                                                    NULL, &error);
+    if(dbus_get_airable_sec_iface() != NULL)
+        tdbus_airable_call_external_service_logout_sync(dbus_get_airable_sec_iface(),
+                                                        service_id, "",
+                                                        true, ACTOR_ID_LOCAL_UI,
+                                                        NULL, &error);
+    else
+        BUG("Cannot logout from %s, have no Airable D-Bus proxy", service_id);
 
     const int logout_ret = dbus_common_handle_dbus_error(&error, "Service logout");
 
@@ -106,6 +109,13 @@ static int set_credentials(const char *service_id,
 int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 106 handler %p %zu", data, length);
+
+    if(dbus_get_credentials_write_iface() == NULL)
+    {
+        msg_error(0, LOG_ERR,
+                  "Cannot write service credentials, no Airable D-Bus proxy");
+        return false;
+    }
 
     if(length == 0)
     {
@@ -338,6 +348,13 @@ bool dcpregs_read_106_media_service_list(struct dynamic_buffer *buffer)
     log_assert(dynamic_buffer_is_empty(buffer));
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 106 handler");
+
+    if(dbus_get_credentials_read_iface() == NULL)
+    {
+        msg_error(0, LOG_ERR,
+                  "Cannot read out service list, no Airable D-Bus proxy");
+        return false;
+    }
 
     GVariant *service_ids_and_names_variant = NULL;
     GError *error = NULL;

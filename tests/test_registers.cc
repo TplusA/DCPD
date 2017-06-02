@@ -6978,6 +6978,7 @@ void test_read_out_empty_external_media_services()
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories;
 
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
 
     cut_assert_true(reg->read_handler_dynamic(&buffer));
@@ -7000,6 +7001,7 @@ void test_read_out_external_media_services()
 
     /* survey */
     static const uint8_t dummy = 0;
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
     register_changed_data->check(106);
@@ -7035,6 +7037,7 @@ void test_read_out_external_media_services()
         std::make_pair("Not the default", "funny&\"42>"),
     };
 
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
@@ -7085,6 +7088,7 @@ void test_read_out_unconfigured_external_media_services()
 
     /* survey */
     static const uint8_t dummy = 0;
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
     register_changed_data->check(106);
@@ -7111,6 +7115,7 @@ void test_read_out_unconfigured_external_media_services()
         TRUE, dbus_cred_read_iface_dummy,
         no_accounts, "");
 
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     cut_assert_true(reg->read_handler_dynamic(&buffer));
 
     const std::string expected_answer =
@@ -7134,6 +7139,7 @@ void test_trigger_media_services_survey()
                                                 dcpregs_write_106_media_service_list);
 
     static const uint8_t dummy = 0;
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
     register_changed_data->check(106);
@@ -7151,9 +7157,11 @@ void test_set_service_credentials()
     static const uint8_t data[] = "tidal\0login email\0my password";
 
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "tidal", "", "");
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_airable_dbus->expect_tdbus_airable_call_external_service_logout_sync(
         TRUE, dbus_airable_iface_dummy,
@@ -7178,9 +7186,11 @@ void test_password_may_be_zero_terminated()
     static const uint8_t data[] = "deezer\0login\0password\0";
 
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "deezer", "", "");
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_airable_dbus->expect_tdbus_airable_call_external_service_logout_sync(
         TRUE, dbus_airable_iface_dummy,
@@ -7205,6 +7215,7 @@ void test_set_service_credentials_requires_service_id()
     static const uint8_t data[] = "\0login email\0my password";
 
     mock_messages->expect_msg_error(0, EINVAL, "Empty service ID sent to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
@@ -7221,6 +7232,7 @@ void test_set_service_credentials_requires_login_for_password()
     static const uint8_t data[] = "tidal\0\0my password";
 
     mock_messages->expect_msg_error(0, EINVAL, "Empty login sent to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
@@ -7237,6 +7249,7 @@ void test_set_service_credentials_requires_password_for_login()
     static const uint8_t data[] = "tidal\0login\0";
 
     mock_messages->expect_msg_error(0, EINVAL, "Empty password sent to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
@@ -7253,6 +7266,7 @@ void test_no_junk_after_password_allowed()
     static const uint8_t data[] = "tidal\0login\0password\0\0";
 
     mock_messages->expect_msg_error(0, EINVAL, "Malformed data written to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
