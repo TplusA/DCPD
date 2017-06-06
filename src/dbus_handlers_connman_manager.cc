@@ -1438,8 +1438,13 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 
     if(wlan_connection_state.is_wps_mode())
     {
+        if(our_ethernet != known_services.end())
+        {
+            /* cable was plugged, taking precedence over WLAN */
+            stop_wps(wlan_connection_state, true);
+        }
+
         /* do not interfere with Connman */
-        our_ethernet = known_services.end();
         our_wlan = known_services.end();
     }
 
