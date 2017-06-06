@@ -147,6 +147,12 @@ static enum RequestID string_to_request_id(const char *string)
     return REQUEST_UNKNOWN;
 }
 
+static const char *request_id_to_string(const enum RequestID id)
+{
+    const char *result = request_string_ids[id];
+    return result != NULL ? result : "*UNKNOWN*";
+}
+
 static enum RequestRequirement string_to_request_requirement(const char *string)
 {
     static const char *const string_ids[] =
@@ -500,8 +506,8 @@ static bool insert_answer(GVariantBuilder *result_builder,
     if((preferences != NULL && prefgetters[request_id] == NULL) ||
        (preferences == NULL && wpsgetters[request_id] == NULL))
     {
-        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                  "ConnMan request %u not supported", request_id);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "ConnMan request %s not supported",
+                  request_id_to_string(request_id));
         return false;
     }
 
@@ -512,7 +518,8 @@ static bool insert_answer(GVariantBuilder *result_builder,
     if(value == NULL)
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                  "Have no answer for ConnMan request %u", request_id);
+                  "Have no answer for ConnMan request %s",
+                  request_id_to_string(request_id));
         return false;
     }
 
@@ -530,7 +537,8 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
                                     const struct network_prefs *preferences)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE,
-              "FIND ALTERNATE answer for unanswered request %u", related_id);
+              "FIND ALTERNATE answer for unanswered request %s",
+              request_id_to_string(related_id));
 
     if(requests[related_id].alternates != 0)
     {
@@ -556,7 +564,8 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
         }
     }
 
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %u", related_id);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %s",
+              request_id_to_string(related_id));
 
     return false;
 }
@@ -565,8 +574,8 @@ static void wipe_out_alternates(struct Request *requests, enum RequestID related
 {
     uint32_t alternates = requests[related_id].alternates;
 
-    msg_vinfo(MESSAGE_LEVEL_TRACE,
-              "WIPE OUT alternates 0x%08x for %u", alternates, related_id);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "WIPE OUT alternates 0x%08x for %s",
+              alternates, request_id_to_string(related_id));
 
     if(alternates == 0)
         return;
@@ -585,7 +594,9 @@ static void wipe_out_alternates(struct Request *requests, enum RequestID related
         log_assert(alternate_id <= REQUEST_LAST_REQUEST_ID);
 
         msg_vinfo(MESSAGE_LEVEL_TRACE,
-                  "Wipe out alternate %u for processed %u", alternate_id, related_id);
+                  "Wipe out alternate %s for processed %s",
+                  request_id_to_string(alternate_id),
+                  request_id_to_string(related_id));
 
         requests[alternate_id].requirement = REQREQ_NOT_REQUESTED;
         wipe_out_alternates(requests, alternate_id);
@@ -706,12 +717,15 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
             {
                 if(request->requirement == REQREQ_MANDATORY)
                 {
-                    msg_error(0, LOG_ERR, "Answer to mandatory request %u not known", i);
+                    msg_error(0, LOG_ERR,
+                              "Answer to mandatory request %s not known",
+                              request_id_to_string(i));
                     error_message = "Answer to mandatory request unknown";
                 }
                 else
                     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                              "Answer to optional request %u not known", i);
+                              "Answer to optional request %s not known",
+                              request_id_to_string(i));
             }
 
             if(error_message == NULL)
