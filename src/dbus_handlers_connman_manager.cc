@@ -958,15 +958,15 @@ static void update_service_list(Connman::ServiceList &known_services,
         {
             switch(service->get_technology())
             {
-            case Connman::Technology::UNKNOWN_TECHNOLOGY:
+              case Connman::Technology::UNKNOWN_TECHNOLOGY:
                 BUG("Removed service \"%s\" of unknown technology", name.c_str());
                 break;
 
-            case Connman::Technology::ETHERNET:
+              case Connman::Technology::ETHERNET:
                 have_lost_active_ethernet_device = true;
                 break;
 
-            case Connman::Technology::WLAN:
+              case Connman::Technology::WLAN:
                 have_lost_active_wlan_device = true;
                 break;
             }
@@ -974,21 +974,21 @@ static void update_service_list(Connman::ServiceList &known_services,
 
         switch(wlan_connection_state.get_state())
         {
-            case WLANConnectionState::State::IDLE:
-            case WLANConnectionState::State::CONNECTING:
-            case WLANConnectionState::State::DONE:
-            case WLANConnectionState::State::FAILED:
+          case WLANConnectionState::State::IDLE:
+          case WLANConnectionState::State::CONNECTING:
+          case WLANConnectionState::State::DONE:
+          case WLANConnectionState::State::FAILED:
             break;
 
-            case WLANConnectionState::State::ABOUT_TO_CONNECT:
+          case WLANConnectionState::State::ABOUT_TO_CONNECT:
             if(wlan_connection_state.get_service_name() == name)
                 wlan_connection_state.reset();
 
             break;
 
-            case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+          case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
             if(wlan_connection_state.get_service_name() == name &&
-                !wlan_connection_state.about_to_connect_next())
+               !wlan_connection_state.about_to_connect_next())
             {
                 wlan_connection_state.reset();
             }
@@ -997,7 +997,7 @@ static void update_service_list(Connman::ServiceList &known_services,
 
             break;
 
-            case WLANConnectionState::State::CONNECTING_WPS:
+          case WLANConnectionState::State::CONNECTING_WPS:
             wlan_connection_state.remove_pending_wps_service(name);
             break;
         }
