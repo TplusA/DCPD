@@ -453,6 +453,44 @@ static std::ostream &operator<<(std::ostream &os, ConnectToConnManServiceData::M
 
 static ConnectToConnManServiceData connect_to_connman_service_data;
 
+class CancelWPSData
+{
+  private:
+    bool expected_call_;
+    bool was_called_;
+
+  public:
+    CancelWPSData(const CancelWPSData &) = delete;
+    CancelWPSData &operator=(const CancelWPSData &) = delete;
+
+    explicit CancelWPSData() { init(); }
+
+    void init()
+    {
+        expected_call_ = false;
+        was_called_ = false;
+    }
+
+    void expect()
+    {
+        expected_call_ = true;
+    }
+
+    void called()
+    {
+        cut_assert_true(expected_call_);
+        was_called_ = true;
+    }
+
+    void check()
+    {
+        cppcut_assert_equal(expected_call_, was_called_);
+        init();
+    }
+};
+
+static CancelWPSData cancel_wps_data;
+
 /* Instead of writing a full mock for the ConnMan D-Bus API, we'll just have
  * this little function as a poor, but quick replacement */
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
@@ -468,6 +506,12 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
 {
     connect_to_connman_service_data.called(network_name, network_ssid,
                                            service_to_be_disabled);
+}
+
+/* And another quick replacement. Should write a mock, right? */
+void dbussignal_connman_manager_cancel_wps(void)
+{
+    cancel_wps_data.called();
 }
 
 /* Always tell caller that we are currently not in the progress of connecting
@@ -1643,6 +1687,7 @@ void cut_setup()
 
     survey_complete_notification_data.init();
     connect_to_connman_service_data.init();
+    cancel_wps_data.init();
     register_changed_data->init();
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
@@ -1671,6 +1716,7 @@ void cut_teardown()
     delete register_changed_data;
     register_changed_data = nullptr;
 
+    cancel_wps_data.check();
     connect_to_connman_service_data.check();
     survey_complete_notification_data.check();
 
@@ -1780,12 +1826,18 @@ static void commit_ipv4_config(enum NetworkPrefsTechnology tech,
                                int expected_return_value = 0,
                                bool is_taking_config_from_file = true,
                                const char *wps_name = nullptr,
-                               const std::vector<uint8_t> *wps_ssid = nullptr)
+                               const std::vector<uint8_t> *wps_ssid = nullptr,
+                               bool force_expect_wps_canceled = false)
 {
     auto *reg = lookup_register_expect_handlers(53,
                                                 dcpregs_write_53_active_ip_profile);
 
-    if(tech != NWPREFSTECH_UNKNOWN)
+    if(tech == NWPREFSTECH_UNKNOWN)
+    {
+        if(expected_return_value != 0 || force_expect_wps_canceled)
+            cancel_wps_data.expect();
+    }
+    else
     {
         /* XXX: The empty string passed as second parameter is most certainly
          *      incorrect. Likely, there is something wrong with the test setup
@@ -2910,6 +2962,8 @@ static void set_wlan_security_mode(const char *requested_security_mode,
                                    const char *wps_name = nullptr,
                                    const std::vector<uint8_t> *wps_ssid = nullptr)
 {
+    cppcut_assert_not_null(requested_security_mode);
+
     assume_wlan_interface_is_active();
 
     start_ipv4_config(Connman::Technology::WLAN);
@@ -2942,9 +2996,11 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     else if(wps_name != nullptr)
         set_wlan_name(wps_name);
 
-    commit_ipv4_config(NWPREFSTECH_WLAN, 0,
-                       expecting_configuration_file_be_written,
-                       wps_name, wps_ssid);
+    const bool is_wps_abort(strcmp(requested_security_mode, "wps-abort") == 0);
+
+    commit_ipv4_config(is_wps_abort ? NWPREFSTECH_UNKNOWN : NWPREFSTECH_WLAN,
+                       0, expecting_configuration_file_be_written,
+                       wps_name, wps_ssid, is_wps_abort);
 
     if(expecting_configuration_file_be_written)
     {
@@ -3016,6 +3072,14 @@ void test_set_wlan_security_mode_wps_with_ssid()
 void test_set_wlan_security_mode_wps()
 {
     set_wlan_security_mode("wps", false, nullptr, nullptr);
+}
+
+/*!\test
+ * Set WLAN security mode to pseudo mode "wps-abort" to abort WPS.
+ */
+void test_set_wlan_security_mode_to_abort_wps()
+{
+    set_wlan_security_mode("wps-abort", false, nullptr, nullptr);
 }
 
 /*!\test

@@ -47,6 +47,7 @@ class WLANConnectionState
         CONNECTING_WPS,
         DONE,
         FAILED,
+        ABORTED_WPS,
     };
 
   private:
@@ -70,6 +71,26 @@ class WLANConnectionState
         state_ = State::IDLE;
     }
 
+    void abort_wps()
+    {
+        switch(state_)
+        {
+          case WLANConnectionState::State::IDLE:
+          case WLANConnectionState::State::ABOUT_TO_CONNECT:
+          case WLANConnectionState::State::CONNECTING:
+          case WLANConnectionState::State::DONE:
+          case WLANConnectionState::State::FAILED:
+          case WLANConnectionState::State::ABORTED_WPS:
+            break;
+
+          case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+          case WLANConnectionState::State::CONNECTING_WPS:
+            next_wps_candidate_ = service_names_.size();
+            state_ = State::ABORTED_WPS;
+            break;
+        }
+    }
+
     void about_to_connect_to(const std::string &service_name)
     {
         log_assert(state_ == State::IDLE);
@@ -88,7 +109,8 @@ class WLANConnectionState
 
     bool about_to_connect_next()
     {
-        log_assert(state_ == State::CONNECTING_WPS);
+        log_assert(state_ == State::CONNECTING_WPS ||
+                   state_ == State::ABORTED_WPS);
 
         if(next_wps_candidate_ < service_names_.size() &&
            ++next_wps_candidate_ < service_names_.size())
@@ -115,12 +137,16 @@ class WLANConnectionState
     void finished_successfully()
     {
         log_assert(state_ == State::CONNECTING ||
-                   state_ == State::CONNECTING_WPS);
+                   state_ == State::CONNECTING_WPS ||
+                   state_ == State::ABORTED_WPS);
         state_ = State::DONE;
     }
 
     void finished_with_failure()
     {
+        if(state_ == State::ABORTED_WPS)
+            return;
+
         log_assert(state_ == State::CONNECTING ||
                    state_ == State::CONNECTING_WPS);
         state_ = State::FAILED;
@@ -190,6 +216,39 @@ class DBusSignalManagerData
         Connman::ServiceList::get_singleton_for_update().first.clear();
     }
 };
+
+static bool stop_wps(WLANConnectionState &state, bool emit_warning_if_idle)
+{
+    switch(state.get_state())
+    {
+      case WLANConnectionState::State::IDLE:
+      case WLANConnectionState::State::ABOUT_TO_CONNECT:
+      case WLANConnectionState::State::CONNECTING:
+        if(emit_warning_if_idle)
+            msg_info("Cannot stop WPS, not connecting");
+
+        return false;
+
+      case WLANConnectionState::State::DONE:
+      case WLANConnectionState::State::FAILED:
+      case WLANConnectionState::State::ABORTED_WPS:
+        return true;
+
+      case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:
+      case WLANConnectionState::State::CONNECTING_WPS:
+        break;
+    }
+
+    const std::string &service_name(state.get_service_name());
+
+    msg_info("Stopping WPS connection with %s", service_name.c_str());
+
+    connman_agent_set_wps_mode(false);
+    connman_common_disconnect_service_by_object_path(service_name.c_str());
+    state.abort_wps();
+
+    return true;
+}
 
 static void service_connected(const char *service_name,
                               enum ConnmanCommonConnectServiceCallbackResult result,
@@ -353,6 +412,7 @@ void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
       case WLANConnectionState::State::CONNECTING_WPS:
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
+      case WLANConnectionState::State::ABORTED_WPS:
         BUG("Tried to connect to WLAN in state %d",
             static_cast<int>(data->wlan_connection_state.get_state()));
         break;
@@ -597,6 +657,7 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
 
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
+      case WLANConnectionState::State::ABORTED_WPS:
         wlan_connection_state.reset();
         break;
 
@@ -978,6 +1039,7 @@ static void update_service_list(Connman::ServiceList &known_services,
           case WLANConnectionState::State::CONNECTING:
           case WLANConnectionState::State::DONE:
           case WLANConnectionState::State::FAILED:
+          case WLANConnectionState::State::ABORTED_WPS:
             break;
 
           case WLANConnectionState::State::ABOUT_TO_CONNECT:
@@ -1456,6 +1518,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
     {
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
+      case WLANConnectionState::State::ABORTED_WPS:
         BUG("WLAN connection state for \"%s\" is %d",
             wlan_connection_state.get_service_name().c_str(),
             static_cast<int>(wlan_connection_state.get_state()));
@@ -1637,6 +1700,7 @@ static bool start_wps(DBusSignalManagerData &data,
 
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
+      case WLANConnectionState::State::ABORTED_WPS:
         data.wlan_connection_state.reset();
         break;
 
@@ -1843,7 +1907,16 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
     start_wps(global_dbussignal_connman_manager_data, services,
               network_name, network_ssid, service_to_be_disabled);
     g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
+}
 
+void dbussignal_connman_manager_cancel_wps()
+{
+    if(global_dbussignal_connman_manager_data.is_disabled)
+        return;
+
+    g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
+    stop_wps(global_dbussignal_connman_manager_data.wlan_connection_state, false);
+    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
 }
 
 static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s,
@@ -1895,6 +1968,10 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
       case WLANConnectionState::State::IDLE:
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
+        break;
+
+      case WLANConnectionState::State::ABORTED_WPS:
+        *is_wps = true;
         break;
 
       case WLANConnectionState::State::ABOUT_TO_CONNECT_WPS:

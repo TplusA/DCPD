@@ -84,6 +84,7 @@ enum class WPSMode
     NONE,
     DIRECT,
     SCAN,
+    ABORT,
 };
 
 /*!
@@ -860,12 +861,13 @@ static bool is_wlan_ssid_simple_ascii(const uint8_t *ssid, size_t len)
 
 static bool is_known_security_mode_name(const std::array<char, SIZE_OF_WLAN_SECURITY_MODE> &name)
 {
-    static const std::array<const char *const, 5> names =
+    static const std::array<const char *const, 6> names =
     {
         "none",
         "psk",
         "ieee8021x",
         "wps",
+        "wps-abort",
         "wep",
     };
 
@@ -973,7 +975,9 @@ static WPSMode handle_set_wireless_config(const Connman::ServiceBase &service,
             : (network_name != empty_string || network_ssid != empty_string
                ? WPSMode::DIRECT
                : WPSMode::INVALID))
-         : WPSMode::NONE);
+         : (strcmp(nwconfig_write_data.wlan_security_mode.data(), "wps-abort") == 0
+            ? WPSMode::ABORT
+            : WPSMode::NONE));
 
     if(IS_REQUESTED(REQ_WLAN_WPA_PASSPHRASE_102))
     {
@@ -1001,6 +1005,7 @@ static WPSMode handle_set_wireless_config(const Connman::ServiceBase &service,
       case WPSMode::INVALID:
       case WPSMode::NONE:
       case WPSMode::SCAN:
+      case WPSMode::ABORT:
         break;
 
       case WPSMode::DIRECT:
@@ -1124,6 +1129,7 @@ modify_network_configuration(
       case WPSMode::INVALID:
       case WPSMode::DIRECT:
       case WPSMode::SCAN:
+      case WPSMode::ABORT:
         break;
     }
 
@@ -1330,6 +1336,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     switch(wps_mode)
     {
       case WPSMode::INVALID:
+        dbussignal_connman_manager_cancel_wps();
         break;
 
       case WPSMode::NONE:
@@ -1350,6 +1357,10 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
         log_assert(tech == Connman::Technology::WLAN);
         dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
                                                           current_wlan_service_name.data());
+        return 0;
+
+      case WPSMode::ABORT:
+        dbussignal_connman_manager_cancel_wps();
         return 0;
     }
 
