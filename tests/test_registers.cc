@@ -1751,10 +1751,26 @@ void test_read_mac_address_default()
     cppcut_assert_equal("02:00:00:00:00:00", buffer_ptr);
 }
 
-static void start_ipv4_config()
+static void start_ipv4_config(Connman::Technology expected_technology)
 {
     auto *reg = lookup_register_expect_handlers(54,
                                                 dcpregs_write_54_selected_ip_profile);
+
+    switch(expected_technology)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        mock_messages->expect_msg_error(0, LOG_ERR,
+                                        "No active network technology, cannot modify configuration");
+        break;
+
+      case Connman::Technology::ETHERNET:
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
+        break;
+
+      case Connman::Technology::WLAN:
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify WLAN configuration");
+        break;
+    }
 
     static const uint8_t zero = 0;
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
@@ -1854,7 +1870,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
                                              char *written_config_file,
                                              size_t written_config_file_size)
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(56,
                                                 dcpregs_read_56_ipv4_address,
@@ -1934,7 +1950,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
                                            char *written_config_file,
                                            size_t written_config_file_size)
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -1995,7 +2011,7 @@ void test_set_initial_static_ipv4_configuration()
  */
 void test_leading_zeros_are_removed_from_ipv4_addresses()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(56,
                                                 dcpregs_read_56_ipv4_address,
@@ -2078,7 +2094,7 @@ void test_switch_to_static_ipv4_configuration()
  */
 void test_dhcp_parameter_boundaries()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -2103,7 +2119,7 @@ void test_dhcp_parameter_boundaries()
  */
 void test_explicitly_disabling_dhcp_disables_whole_interface()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -2213,7 +2229,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
  */
 void test_read_dhcp_mode_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -2231,7 +2247,7 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
  */
 void test_read_dhcp_mode_in_edit_mode_after_change()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -2309,7 +2325,7 @@ static void read_ipv4_parameter_in_normal_mode()
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
 static void read_ipv4_parameter_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
@@ -2327,7 +2343,7 @@ static void read_ipv4_parameter_in_edit_mode_before_any_changes()
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
 static void read_ipv4_parameter_in_edit_mode_after_change()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
@@ -2455,7 +2471,7 @@ static void set_one_dns_server()
             sdata.dns_servers_.set_unknown();
         });
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
@@ -2538,7 +2554,7 @@ void test_set_both_dns_servers()
 
     os_write_buffer.clear();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(62,
                                                 dcpregs_read_62_primary_dns,
@@ -2597,7 +2613,7 @@ void test_set_both_dns_servers()
  */
 void test_read_primary_dns_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(62,
                                                 dcpregs_read_62_primary_dns,
@@ -2619,7 +2635,7 @@ void test_read_primary_dns_in_edit_mode_before_any_changes()
  */
 void test_read_secondary_dns_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(63,
                                                 dcpregs_read_63_secondary_dns,
@@ -2640,7 +2656,7 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes()
  */
 void test_replace_primary_dns_server_of_two_servers()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     static constexpr char new_primary_dns[] = "50.60.117.208";
 
@@ -2697,7 +2713,7 @@ void test_replace_primary_dns_server_of_two_servers()
  */
 void test_replace_secondary_dns_server_of_two_servers()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     static constexpr char new_secondary_dns[] = "50.60.117.209";
 
@@ -2763,7 +2779,7 @@ void test_add_secondary_dns_server_to_primary_server()
                                sdata.dns_servers_.get_rw().push_back(assumed_primary_dns);
                            });
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(63,
                                                 dcpregs_read_63_secondary_dns,
@@ -2818,7 +2834,7 @@ void test_add_secondary_dns_server_to_primary_server()
  */
 void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
@@ -2896,7 +2912,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
@@ -3009,7 +3025,7 @@ void test_set_wlan_security_mode_wep()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
@@ -3044,7 +3060,7 @@ void test_set_invalid_wlan_security_mode()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
@@ -3163,7 +3179,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
@@ -3262,7 +3278,7 @@ void test_ascii_passphrase_minimum_and_maximum_length()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static constexpr char passphrase[] =
         "12345678901234567890"
@@ -3313,7 +3329,7 @@ void test_ascii_passphrase_character_set()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
@@ -3370,7 +3386,7 @@ void test_set_passphrase_without_security_mode_does_not_work()
             tdata.security_.set_unknown();
         });
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static constexpr char passphrase[] = "SuperSecret";
     auto *reg = lookup_register_expect_handlers(102,
@@ -3402,7 +3418,7 @@ void test_get_wlan_passphrase_in_edit_mode()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static const uint8_t redzone_content[] =
     {
@@ -3497,7 +3513,7 @@ void test_set_simple_ascii_wlan_ssid()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3552,7 +3568,7 @@ void test_set_binary_wlan_ssid()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3612,7 +3628,7 @@ void test_set_empty_wlan_ssid_is_an_error()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3701,7 +3717,7 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static constexpr uint8_t redzone_content[] =
     {
@@ -3759,7 +3775,7 @@ void test_get_wlan_ssid_in_edit_mode_after_change()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3803,7 +3819,7 @@ void test_set_ibss_mode_adhoc_is_not_supported()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(93,
                                                 dcpregs_read_93_ibss,
@@ -3823,7 +3839,7 @@ void test_set_ibss_mode_infrastructure_is_ignored()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(93,
                                                 dcpregs_read_93_ibss,
@@ -3842,7 +3858,7 @@ void test_set_junk_ibss_mode_is_an_error()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static const std::array<StringWithLength, 13> junk_requests =
     {
@@ -3897,7 +3913,7 @@ void test_set_wpa_cipher_is_ignored()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(101,
                                                 dcpregs_read_101_wpa_cipher,
@@ -3924,7 +3940,7 @@ void test_set_junk_wpa_cipher_is_an_error()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static const std::array<StringWithLength, 16> junk_requests =
     {
@@ -3979,7 +3995,7 @@ void test_get_wpa_cipher_returns_aes()
  */
 void test_configuration_update_is_blocked_after_shutdown()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"networkconfig\" down");

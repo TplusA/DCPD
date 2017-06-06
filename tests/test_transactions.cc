@@ -32,6 +32,7 @@
 #include "network_device_list.hh"
 #include "configproxy.h"
 #include "configuration_dcpd.h"
+#include "dcpregs_networkconfig.hh"
 #include "dcpdefs.h"
 
 #include "mock_messages.hh"
@@ -1207,6 +1208,9 @@ void test_register_write_request_transaction()
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
+    dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+    mock_messages->expect_msg_info("Could not determine active network technology, trying fallback");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54, 1 bytes");
 
     cppcut_assert_equal(TRANSACTION_FINISHED,

@@ -28,6 +28,7 @@
 #include "networkprefs.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "network_device_list.hh"
+#include "dcpregs_networkconfig.hh"
 #include "configproxy.h"
 #include "messages.h"
 
@@ -83,6 +84,7 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
       case Appliance::MP3100HV:
       case Appliance::CALA_PLUS:
       case Appliance::FALLBACK:
+        dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
                                                      "/sys/bus/usb/devices/1-1.2:1.0",
                                                      is_reconfiguration);
@@ -90,6 +92,7 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
         break;
 
       case Appliance::CALA_BERBEL:
+        dcpregs_networkconfig_set_primary_technology(Connman::Technology::WLAN);
         network_prefs_update_primary_network_devices(nullptr,
                                                      "/sys/bus/usb/devices/1-1:1.0",
                                                      is_reconfiguration);
@@ -97,6 +100,7 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
         break;
 
       case Appliance::UNDEFINED:
+        dcpregs_networkconfig_set_primary_technology(Connman::Technology::UNKNOWN_TECHNOLOGY);
         network_prefs_update_primary_network_devices(nullptr, nullptr,
                                                      is_reconfiguration);
         set_device_id_none();

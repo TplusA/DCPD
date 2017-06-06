@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 
 #include "dcpregs_networkconfig.h"
+#include "dcpregs_networkconfig.hh"
 #include "dcpregs_common.h"
 #include "network_status_bits.h"
 #include "registers_priv.h"
@@ -131,11 +132,16 @@ static struct
 nwconfig_write_data;
 
 /*!
- * Network status register data.
+ * Network status register data and other stuff.
  */
 static struct
 {
     struct ShutdownGuard *shutdown_guard;
+
+    /*!
+     * Appliance-specific networking technology to use as fallback.
+     */
+    Connman::Technology fallback_technology;
 
     /*!
      * The status last communicated to the slave device.
@@ -152,6 +158,7 @@ void dcpregs_networkconfig_init(void)
     nwconfig_write_data.selected_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
 
     nwstatus_data.shutdown_guard = shutdown_guard_alloc("networkconfig");
+    nwstatus_data.fallback_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
     nwstatus_data.previous_response[0] = UINT8_MAX;
     nwstatus_data.previous_response[1] = UINT8_MAX;
     nwstatus_data.previous_response[2] = UINT8_MAX;
@@ -1367,7 +1374,29 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
     nwconfig_write_data.selected_technology =
         determine_active_network_technology(services, false);
 
-    return 0;
+    if(nwconfig_write_data.selected_technology == Connman::Technology::UNKNOWN_TECHNOLOGY)
+    {
+        msg_info("Could not determine active network technology, "
+                 "trying fallback");
+        nwconfig_write_data.selected_technology = nwstatus_data.fallback_technology;
+    }
+
+    switch(nwconfig_write_data.selected_technology)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        msg_error(0, LOG_ERR, "No active network technology, cannot modify configuration");
+        break;
+
+      case Connman::Technology::ETHERNET:
+      case Connman::Technology::WLAN:
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "Modify %s configuration",
+                  nwconfig_write_data.selected_technology == Connman::Technology::ETHERNET
+                  ? "Ethernet"
+                  : "WLAN");
+        return 0;
+    }
+
+    return -1;
 }
 
 static void fill_network_status_register_response(std::array<uint8_t, 3> &response)
@@ -2111,4 +2140,9 @@ void dcpregs_networkconfig_interfaces_changed(void)
 void dcpregs_networkconfig_prepare_for_shutdown(void)
 {
     (void)shutdown_guard_down(nwstatus_data.shutdown_guard);
+}
+
+void dcpregs_networkconfig_set_primary_technology(Connman::Technology tech)
+{
+    nwstatus_data.fallback_technology = tech;
 }
