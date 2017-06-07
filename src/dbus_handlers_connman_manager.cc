@@ -190,7 +190,7 @@ class WLANConnectionState
 class DBusSignalManagerData
 {
   public:
-    GMutex lock;
+    GRecMutex lock;
 
     bool is_disabled;
 
@@ -207,13 +207,13 @@ class DBusSignalManagerData
         schedule_connect_to_wlan(nullptr),
         schedule_refresh_connman_services(nullptr)
     {
-        g_mutex_init(&lock);
+        g_rec_mutex_init(&lock);
     }
 
     void init(void (*schedule_connect_to_wlan_fn)(),
               void (*schedule_refresh_connman_services_fn)(), bool is_enabled)
     {
-        g_mutex_init(&lock);
+        g_rec_mutex_init(&lock);
         is_disabled = !is_enabled;
         schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
         schedule_refresh_connman_services = schedule_refresh_connman_services_fn;
@@ -261,7 +261,7 @@ static void service_connected(const char *service_name,
 {
     auto *data = static_cast<DBusSignalManagerData *>(user_data);
 
-    g_mutex_lock(&data->lock);
+    g_rec_mutex_lock(&data->lock);
 
     switch(result)
     {
@@ -281,7 +281,7 @@ static void service_connected(const char *service_name,
         break;
     }
 
-    g_mutex_unlock(&data->lock);
+    g_rec_mutex_unlock(&data->lock);
 
     data->schedule_refresh_connman_services();
 }
@@ -355,7 +355,7 @@ static void wps_connected(const char *service_name,
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    g_mutex_lock(&data.lock);
+    g_rec_mutex_lock(&data.lock);
 
     switch(result)
     {
@@ -380,14 +380,14 @@ static void wps_connected(const char *service_name,
     if(leave_wps_mode)
         connman_agent_set_wps_mode(false);
 
-    g_mutex_unlock(&data.lock);
+    g_rec_mutex_unlock(&data.lock);
 
     data.schedule_refresh_connman_services();
 }
 
 void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
 {
-    g_mutex_lock(&data->lock);
+    g_rec_mutex_lock(&data->lock);
 
     switch(data->wlan_connection_state.get_state())
     {
@@ -423,7 +423,7 @@ void dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
         break;
     }
 
-    g_mutex_unlock(&data->lock);
+    g_rec_mutex_unlock(&data->lock);
 }
 
 static bool ipv4_settings_are_different(const Maybe<Connman::IPSettings<Connman::AddressType::IPV4>> &maybe_settings,
@@ -1557,12 +1557,12 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 static void schedule_wlan_connect_if_necessary(bool is_necessary,
                                                DBusSignalManagerData &data)
 {
-    g_mutex_lock(&data.lock);
+    g_rec_mutex_lock(&data.lock);
 
     if(is_necessary)
         schedule_wlan_connect__unlocked(data);
 
-    g_mutex_unlock(&data.lock);
+    g_rec_mutex_unlock(&data.lock);
 }
 
 static bool update_all_services(GVariant *all_services,
@@ -1856,7 +1856,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
+    g_rec_mutex_lock(&global_dbussignal_connman_manager_data.lock);
 
     switch(tech)
     {
@@ -1909,7 +1909,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
             avoid_service(*service->second, service->first);
     }
 
-    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
+    g_rec_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
 
     schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
                                        global_dbussignal_connman_manager_data);
@@ -1925,10 +1925,10 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
+    g_rec_mutex_lock(&global_dbussignal_connman_manager_data.lock);
     start_wps(global_dbussignal_connman_manager_data, services,
               network_name, network_ssid, service_to_be_disabled);
-    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
+    g_rec_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
 }
 
 void dbussignal_connman_manager_cancel_wps()
@@ -1936,9 +1936,9 @@ void dbussignal_connman_manager_cancel_wps()
     if(global_dbussignal_connman_manager_data.is_disabled)
         return;
 
-    g_mutex_lock(&global_dbussignal_connman_manager_data.lock);
+    g_rec_mutex_lock(&global_dbussignal_connman_manager_data.lock);
     stop_wps(global_dbussignal_connman_manager_data.wlan_connection_state, false);
-    g_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
+    g_rec_mutex_unlock(&global_dbussignal_connman_manager_data.lock);
 }
 
 static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s,
@@ -1980,7 +1980,7 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
 
     auto &d(global_dbussignal_connman_manager_data);
 
-    g_mutex_lock(&d.lock);
+    g_rec_mutex_lock(&d.lock);
 
     bool retval = false;
     *is_wps = false;
@@ -2020,7 +2020,7 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
         }
     }
 
-    g_mutex_unlock(&d.lock);
+    g_rec_mutex_unlock(&d.lock);
 
     return retval;
 }
