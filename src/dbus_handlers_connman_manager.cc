@@ -1767,6 +1767,16 @@ static bool start_wps(DBusSignalManagerData &data,
         return false;
     }
 
+    /* sort by strength */
+    std::sort(wps_candidates.begin(), wps_candidates.end(),
+        [&services] (const std::string &a, const std::string &b) -> bool
+        {
+            const auto &td_a(static_cast<const Connman::Service<Connman::Technology::WLAN> *>(services[a])->get_tech_data());
+            const auto &td_b(static_cast<const Connman::Service<Connman::Technology::WLAN> *>(services[b])->get_tech_data());
+
+            return td_a.strength_.get() > td_b.strength_.get();
+        });
+
     data.wlan_connection_state.about_to_connect_to(std::move(wps_candidates));
 
     if(service_to_be_disabled != NULL && service_to_be_disabled[0] != '\0')
