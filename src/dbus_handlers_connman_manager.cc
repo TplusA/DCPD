@@ -175,6 +175,11 @@ class WLANConnectionState
                state_ == State::CONNECTING_WPS;
     }
 
+    bool have_candidates() const
+    {
+        return next_wps_candidate_ < service_names_.size();
+    }
+
     const std::string &get_service_name() const
     {
         log_assert(next_wps_candidate_ < service_names_.size());
@@ -1524,9 +1529,11 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
       case WLANConnectionState::State::ABORTED_WPS:
-        BUG("WLAN connection state for \"%s\" is %d",
-            wlan_connection_state.get_service_name().c_str(),
-            static_cast<int>(wlan_connection_state.get_state()));
+        msg_info("Minor glitch: WLAN connection state for \"%s\" is %d",
+                 wlan_connection_state.have_candidates()
+                 ? wlan_connection_state.get_service_name().c_str()
+                 : "*NONE*",
+                 static_cast<int>(wlan_connection_state.get_state()));
         wlan_connection_state.reset();
 
         /* fall-through */
