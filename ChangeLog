@@ -1,3 +1,19 @@
+2017-06-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.5 released.
+
+	* WLAN: Make WPS operation more stable.
+
+	* WLAN: Enable canceling WPS connection attempt. To cancel, the SPI
+	  slave needs to send "wps-abort" as security string.
+
+	* Networking: Select appliance-specific fallback networking technology
+	  for configuration in case there is no obvious candidate. This
+	  enables WLAN configuration at any time in appliances with no
+	  Ethernet.
+
+	* Networking: Cancel WPS mode when Ethernet cable is plugged in.
+
 2017-06-02  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.4 released.
