@@ -1534,6 +1534,15 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
                  ? wlan_connection_state.get_service_name().c_str()
                  : "*NONE*",
                  static_cast<int>(wlan_connection_state.get_state()));
+
+        if(wlan_connection_state.have_candidates() &&
+           wlan_connection_state.get_service_name() == our_wlan->first)
+        {
+            msg_info("Not trying to connect to failed service again");
+            wlan_connection_state.reset();
+            break;
+        }
+
         wlan_connection_state.reset();
 
         /* fall-through */
