@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,28 +30,16 @@
 
 static const char key_assignment[] = "FRIENDLY_NAME_OVERRIDE=";
 
-/*!
- * Read UPnP friendly name from configuration file.
- *
- * Note: This is not a general parser for shell variable assignments.
- */
-static ssize_t read_name_from_config_file(const char *filename,
-                                          char *buffer, size_t buffer_size)
+static ssize_t do_read_name(struct os_mapped_file_data &mapped_file,
+                            char *buffer, size_t buffer_size)
 {
-    struct os_mapped_file_data mapped_file;
-
-    if(os_map_file_to_memory(&mapped_file, filename) < 0)
-        return -1;
-
-    ssize_t ret = -1;
-
     if(mapped_file.length < (sizeof(key_assignment) - 1 + 2 + 1))
     {
         msg_error(0, LOG_ERR, "UPnP configuration file too short");
-        goto exit_unmap;
+        return -1;
     }
 
-    const char *file = mapped_file.ptr;
+    const char *file = static_cast<const char *>(mapped_file.ptr);
 
     if(strncmp(file, key_assignment, sizeof(key_assignment) - 1) != 0 ||
        file[sizeof(key_assignment) - 1] != '\'' ||
@@ -59,14 +47,13 @@ static ssize_t read_name_from_config_file(const char *filename,
        file[mapped_file.length - 1] != '\n')
     {
         msg_error(0, LOG_ERR, "Unexpected file content");
-        goto exit_unmap;
+        return -1;
     }
 
     const char *name = file + sizeof(key_assignment);
+    ssize_t ret = 0;
     size_t i = 0;
     const size_t end = mapped_file.length - sizeof(key_assignment) - 2;
-
-    ret = 0;
 
     while(i < end && (size_t)ret < buffer_size)
     {
@@ -92,7 +79,24 @@ static ssize_t read_name_from_config_file(const char *filename,
         }
     }
 
-exit_unmap:
+    return ret;
+}
+
+/*!
+ * Read UPnP friendly name from configuration file.
+ *
+ * Note: This is not a general parser for shell variable assignments.
+ */
+static ssize_t read_name_from_config_file(const char *filename,
+                                          char *buffer, size_t buffer_size)
+{
+    struct os_mapped_file_data mapped_file;
+
+    if(os_map_file_to_memory(&mapped_file, filename) < 0)
+        return -1;
+
+    const ssize_t ret = do_read_name(mapped_file, buffer, buffer_size);
+
     os_unmap_file(&mapped_file);
 
     return ret;
