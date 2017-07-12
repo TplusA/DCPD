@@ -20,106 +20,205 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include <array>
+#include <map>
 
 #include "dcpregs_upnpname.h"
 #include "shutdown_guard.h"
 #include "messages.h"
 
-static const char key_assignment[] = "FRIENDLY_NAME_OVERRIDE=";
-
-static ssize_t do_read_name(struct os_mapped_file_data &mapped_file,
-                            char *buffer, size_t buffer_size)
+enum class Key
 {
-    if(mapped_file.length < (sizeof(key_assignment) - 1 + 2 + 1))
+    FRIENDLY_NAME_OVERRIDE,
+    APPLIANCE_ID,
+
+    LAST_KEY = APPLIANCE_ID,
+
+    INVALID,
+    UNKNOWN,
+};
+
+static const std::array<const std::string, size_t(Key::LAST_KEY) + 1> keys
+{
+    "FRIENDLY_NAME_OVERRIDE",
+    "APPLIANCE_ID",
+};
+
+using Values = std::map<Key, std::string>;
+
+struct ParserContext
+{
+    const os_mapped_file_data &file;
+
+    size_t line;
+    size_t pos;
+    size_t token_length;
+
+    explicit ParserContext(const os_mapped_file_data &f):
+        file(f),
+        line(1),
+        pos(0),
+        token_length(0)
+    {}
+};
+
+static ssize_t find_eol(const os_mapped_file_data &mapped_file,
+                        const size_t pos)
+{
+    const char *const file = static_cast<const char *>(mapped_file.ptr);
+
+    for(size_t i = pos; i < mapped_file.length; ++i)
     {
-        msg_error(0, LOG_ERR, "UPnP configuration file too short");
-        return -1;
+        if(file[i] == '\n')
+            return i;
     }
 
-    const char *file = static_cast<const char *>(mapped_file.ptr);
+    return -1;
+}
 
-    if(strncmp(file, key_assignment, sizeof(key_assignment) - 1) != 0 ||
-       file[sizeof(key_assignment) - 1] != '\'' ||
-       file[mapped_file.length - 2] != '\'' ||
-       file[mapped_file.length - 1] != '\n')
+static void skip_line(ParserContext &ctx, const ssize_t pos)
+{
+    const ssize_t i = pos >= 0 ? find_eol(ctx.file, pos) : -1;
+
+    if(i >= 0)
     {
-        msg_error(0, LOG_ERR, "Unexpected file content");
-        return -1;
+        ctx.pos = i + 1;
+        ++ctx.line;
+    }
+    else
+        ctx.pos = ctx.file.length;
+}
+
+static Key read_key_assignment(ParserContext &ctx)
+{
+    ctx.token_length = 0;
+
+    /* shortest possible assignment is "A=''", consisting of 4 characters and a
+     * terminating new line character */
+    if(ctx.pos + 5 > ctx.file.length)
+    {
+        ctx.pos = ctx.file.length;
+        msg_error(0, LOG_ERR,
+                  "UPnP configuration file too short in line %zu", ctx.line);
+        return Key::INVALID;
     }
 
-    const char *name = file + sizeof(key_assignment);
-    ssize_t ret = 0;
+    const char *const assignment = static_cast<const char *>(ctx.file.ptr) + ctx.pos;
+    size_t key_index = 0;
+
+    for(const auto k : keys)
+    {
+        if(k.compare(0, k.length(), assignment, k.length()) != 0 ||
+           assignment[k.length()] != '=')
+        {
+            ++key_index;
+            continue;
+        }
+
+        const ssize_t eolpos = find_eol(ctx.file, ctx.pos + k.length() + 2);
+
+        if(assignment[k.length() + 1] != '\'' ||
+           eolpos < 0 ||
+           size_t(eolpos) <= ctx.pos + k.length() + 2 ||
+           static_cast<const char *>(ctx.file.ptr)[eolpos - 1] != '\'')
+        {
+            msg_error(0, LOG_ERR,
+                      "Unexpected file content in line %zu", ctx.line);
+            skip_line(ctx, eolpos);
+            return Key::INVALID;
+        }
+
+        ctx.pos += k.length() + 2;
+        ctx.token_length = eolpos - ctx.pos - 1;
+
+        return Key(key_index);
+    }
+
+    msg_error(0, LOG_ERR, "Unknown key in line %zu", ctx.line);
+    skip_line(ctx, ctx.pos);
+
+    return Key::UNKNOWN;
+}
+
+static bool read_value(ParserContext &ctx, std::string &value)
+{
+    if(ctx.token_length == 0)
+        return true;
+
+    const char *const token = static_cast<const char *>(ctx.file.ptr) + ctx.pos;
     size_t i = 0;
-    const size_t end = mapped_file.length - sizeof(key_assignment) - 2;
 
-    while(i < end && (size_t)ret < buffer_size)
+    value.reserve(ctx.token_length);
+
+    while(i < ctx.token_length)
     {
-        const char ch = name[i];
+        const char ch = token[i];
 
         if(ch != '\'')
         {
-            buffer[ret++] = ch;
+            value.push_back(ch);
             ++i;
         }
-        else if(i < end - 4 && name[i + 1] == '\\' &&
-                name[i + 2] == '\'' && name[i + 3] == '\'')
+        else if(i + 4 < ctx.token_length && token[i + 1] == '\\' &&
+                token[i + 2] == '\'' && token[i + 3] == '\'')
         {
-            buffer[ret++] = '\'';
+            value.push_back('\'');
             i += 4;
         }
         else
         {
             msg_error(0, LOG_ERR,
                       "Unexpected end of assignment at position %zu", i);
-            ret = -1;
-            break;
+            value.clear();
+            return false;
         }
     }
 
-    return ret;
+    return true;
 }
 
-/*!
- * Read UPnP friendly name from configuration file.
- *
- * Note: This is not a general parser for shell variable assignments.
- */
-static ssize_t read_name_from_config_file(const char *filename,
-                                          char *buffer, size_t buffer_size)
+static void read_config_file(const char *filename, Values &values)
 {
     struct os_mapped_file_data mapped_file;
 
     if(os_map_file_to_memory(&mapped_file, filename) < 0)
-        return -1;
+        return;
 
-    const ssize_t ret = do_read_name(mapped_file, buffer, buffer_size);
+    ParserContext ctx(mapped_file);
 
-    os_unmap_file(&mapped_file);
-
-    return ret;
-}
-
-static bool is_stored_name_equal(const char *filename,
-                                 const char *new_name, size_t new_name_size)
-{
-    char buffer[256];
-    const ssize_t len =
-        read_name_from_config_file(filename, buffer, sizeof(buffer));
-
-    if(len < 0 || (size_t)len > new_name_size)
-        return false;
-
-    for(size_t i = 0; i < (size_t)len; ++i)
+    while(ctx.pos < mapped_file.length)
     {
-        if(new_name[i] != buffer[i])
-            return false;
+        const auto key = read_key_assignment(ctx);
+
+        if(key == Key::INVALID || key == Key::UNKNOWN)
+            continue;
+
+        if(!read_value(ctx, values[key]))
+            values.erase(key);
+
+        skip_line(ctx, ctx.pos + ctx.token_length);
     }
 
+    os_unmap_file(&mapped_file);
+}
+
+static bool is_stored_name_equal(const Values &values,
+                                 const char *new_name, size_t new_name_size)
+{
+    const auto val(values.find(Key::FRIENDLY_NAME_OVERRIDE));
+
+    if(val == values.end())
+        return false;
+
+    if(val->second.length() > new_name_size)
+        return false;
+
+    if(val->second.compare(0, val->second.length(),
+                           new_name, val->second.length()) != 0)
+        return false;
+
     /* detect and allow zero-padding */
-    for(size_t i = (size_t)len; i < new_name_size; ++i)
+    for(size_t i = val->second.length(); i < new_name_size; ++i)
     {
         if(new_name[i] != '\0')
             return false;
@@ -128,60 +227,32 @@ static bool is_stored_name_equal(const char *filename,
     return true;
 }
 
-static size_t fill_output_buffer(char *buffer, size_t max_escaped_name_length,
-                                 const char *name, size_t name_length)
+static bool is_stored_value_equal(const Values &values, Key key,
+                                  const std::string &v)
+{
+    const auto val(values.find(key));
+    return (val != values.end()) ? val->second == v : false;
+}
+
+static void fill_output_buffer(std::string &buffer, const Values &values)
 {
     static const char escaped_tick[] = "'\\''";
 
-    size_t output_size = 0;
-
-    for(size_t i = 0; i < name_length; ++i)
+    for(auto it = values.begin(); it != values.end(); ++it)
     {
-        const char ch = name[i];
+        buffer.append(keys[size_t(it->first)]);
+        buffer.append("=\'");
 
-        if(ch == '\'')
-            output_size += sizeof(escaped_tick) - 1;
-        else
-            ++output_size;
-    }
-
-    if(output_size > max_escaped_name_length)
-    {
-        msg_error(0, EINVAL, "UPnP name too long");
-        return 0;
-    }
-
-    char *ptr = buffer;
-
-    memcpy(ptr, key_assignment, sizeof(key_assignment) - 1);
-    ptr += sizeof(key_assignment) - 1;
-    *ptr++ = '\'';
-
-    if(output_size == name_length)
-    {
-        memcpy(ptr, name, name_length);
-        ptr += name_length;
-    }
-    else
-    {
-        for(size_t i = 0; i < name_length; ++i)
+        for(const char &ch : it->second)
         {
-            const char ch = name[i];
-
             if(ch != '\'')
-                *ptr++ = ch;
+                buffer.push_back(ch);
             else
-            {
-                memcpy(ptr, escaped_tick, sizeof(escaped_tick) - 1);
-                ptr += sizeof(escaped_tick) - 1;
-            }
+                buffer.append(escaped_tick);
         }
+
+        buffer.append("\'\n");
     }
-
-    *ptr++ = '\'';
-    *ptr++ = '\n';
-
-    return ptr - buffer;
 }
 
 /*!
@@ -191,9 +262,9 @@ static size_t fill_output_buffer(char *buffer, size_t max_escaped_name_length,
  * \retval  1 File system changed, but failed writing configuration.
  * \retval -1 Failed, file system unchanged.
  */
-static int write_name_to_config_file(const char *filename, const char *rcpath,
-                                     const char *name, size_t name_length,
-                                     struct ShutdownGuard *shutdown_guard)
+static int write_config_file(const char *filename, const char *rcpath,
+                             const Values &values,
+                             struct ShutdownGuard *shutdown_guard)
 {
     if(shutdown_guard_is_shutting_down_unlocked(shutdown_guard))
     {
@@ -201,25 +272,16 @@ static int write_name_to_config_file(const char *filename, const char *rcpath,
         return -1;
     }
 
-    char buffer[512];
-
-    static const size_t maximum_allowed_output_size =
-        sizeof(buffer) - (sizeof(key_assignment) - 1 + 2 + 1);
-
-    const size_t bytes =
-        fill_output_buffer(buffer, maximum_allowed_output_size,
-                           name, name_length);
-
-    log_assert(bytes <= sizeof(buffer));
-
-    if(bytes == 0)
-        return -1;
+    std::string buffer;
+    fill_output_buffer(buffer, values);
 
     int fd = os_file_new(filename);
     if(fd < 0)
         return -1;
 
-    const int ret = (os_write_from_buffer(buffer, bytes, fd) == 0) ? 0 : 1;
+    const int ret = buffer.empty()
+        ? 0
+        : ((os_write_from_buffer(buffer.c_str(), buffer.length(), fd) == 0) ? 0 : 1);
 
     os_file_close(fd);
 
@@ -234,20 +296,27 @@ static int write_name_to_config_file(const char *filename, const char *rcpath,
 static const char path_to_rcfile[] = "/var/local/etc";
 static const char name_of_rcfile[] = "upnp_settings.rc";
 
-static struct
+struct UPnPNameData
 {
     char rcfile[sizeof(path_to_rcfile) + sizeof(name_of_rcfile)];
     struct ShutdownGuard *shutdown_guard;
-}
-upnpname_private_data;
+
+    void clear()
+    {
+        std::fill(rcfile, &rcfile[sizeof(rcfile)], '\0');
+        shutdown_guard = nullptr;
+    }
+};
+
+static UPnPNameData upnpname_private_data;
 
 void dcpregs_upnpname_init(void)
 {
-    memcpy(upnpname_private_data.rcfile,
-           path_to_rcfile, sizeof(path_to_rcfile) - 1);
+    std::copy(path_to_rcfile, path_to_rcfile + sizeof(path_to_rcfile) - 1,
+              upnpname_private_data.rcfile);
     upnpname_private_data.rcfile[sizeof(path_to_rcfile) - 1] = '/';
-    memcpy(upnpname_private_data.rcfile + sizeof(path_to_rcfile),
-           name_of_rcfile, sizeof(name_of_rcfile));
+    std::copy(name_of_rcfile, name_of_rcfile + sizeof(name_of_rcfile),
+              upnpname_private_data.rcfile + sizeof(path_to_rcfile));
 
     upnpname_private_data.shutdown_guard = shutdown_guard_alloc("upnpname");
 }
@@ -255,7 +324,7 @@ void dcpregs_upnpname_init(void)
 void dcpregs_upnpname_deinit(void)
 {
     shutdown_guard_free(&upnpname_private_data.shutdown_guard);
-    memset(&upnpname_private_data, 0, sizeof(upnpname_private_data));
+    upnpname_private_data.clear();
 }
 
 /*!
@@ -275,20 +344,27 @@ ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 88 handler %p %zu", response, length);
 
-    ssize_t len = read_name_from_config_file(upnpname_private_data.rcfile,
-                                             (char *)response, length);
+    Values values;
+    read_config_file(upnpname_private_data.rcfile, values);
 
-    if(len >= 0)
+    const auto val(values.find(Key::FRIENDLY_NAME_OVERRIDE));
+
+    if(val != values.end())
+    {
+        const size_t len = std::min(val->second.length(), length);
+
+        if(len > 0)
+            std::copy(val->second.begin(), val->second.begin() + len, response);
+
         return len;
+    }
 
     static const char fallback_name[] = "T+A Streaming Board";
 
-    len = sizeof(fallback_name) - 1;
-    if((size_t)len > length)
-        len = length;
+    const size_t len = std::min(sizeof(fallback_name) - 1, length);
 
     if(len > 0)
-        memcpy(response, fallback_name, len);
+        std::copy(fallback_name, fallback_name + len, response);
 
     return len;
 }
@@ -303,8 +379,10 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 88 handler %p %zu", data, length);
 
-    if(is_stored_name_equal(upnpname_private_data.rcfile,
-                            (const char *)data, length))
+    Values values;
+    read_config_file(upnpname_private_data.rcfile, values);
+
+    if(is_stored_name_equal(values, (const char *)data, length))
     {
         msg_vinfo(MESSAGE_LEVEL_DEBUG, "UPnP name unchanged");
         return 0;
@@ -312,10 +390,12 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
 
     shutdown_guard_lock(upnpname_private_data.shutdown_guard);
 
+    std::copy(data, data + length,
+              std::back_inserter(values[Key::FRIENDLY_NAME_OVERRIDE]));
+
     const int result =
-        write_name_to_config_file(upnpname_private_data.rcfile, path_to_rcfile,
-                                  (char *)data, length,
-                                  upnpname_private_data.shutdown_guard);
+        write_config_file(upnpname_private_data.rcfile, path_to_rcfile,
+                          values, upnpname_private_data.shutdown_guard);
 
     shutdown_guard_unlock(upnpname_private_data.shutdown_guard);
 
@@ -326,6 +406,31 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
         return 0;
 
     return (result != 0) ? -1 : 0;
+}
+
+void dcpregs_upnpname_set_appliance_id(const std::string &appliance)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE,
+              "Set UPnP appliance ID \"%s\"", appliance.c_str());
+
+    Values values;
+    read_config_file(upnpname_private_data.rcfile, values);
+
+    if(is_stored_value_equal(values, Key::APPLIANCE_ID, appliance))
+        return;
+
+    shutdown_guard_lock(upnpname_private_data.shutdown_guard);
+
+    values[Key::APPLIANCE_ID] = appliance;
+
+    const int result =
+        write_config_file(upnpname_private_data.rcfile, path_to_rcfile,
+                          values, upnpname_private_data.shutdown_guard);
+
+    shutdown_guard_unlock(upnpname_private_data.shutdown_guard);
+
+    if(result >= 0)
+        os_system(true, "/bin/systemctl restart flagpole");
 }
 
 void dcpregs_upnpname_prepare_for_shutdown(void)
