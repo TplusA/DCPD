@@ -21,9 +21,11 @@
 
 #include <string>
 #include <functional>
+#include <algorithm>
 
 #include "configuration.hh"
 #include "configuration_settings.hh"
+#include "dcpregs_upnpname.hh"
 
 namespace Configuration
 {
@@ -123,14 +125,29 @@ class UpdateSettings<ApplianceValues>
 
     bool appliance_name(const std::string &name)
     {
-        return settings_.update<ApplianceValues::KeyID::APPLIANCE_NAME,
-                                UpdateTraits<ApplianceValues::KeyID::APPLIANCE_NAME>>(name);
+        const bool ret =
+            settings_.update<ApplianceValues::KeyID::APPLIANCE_NAME,
+                             UpdateTraits<ApplianceValues::KeyID::APPLIANCE_NAME>>(name);
+
+        dcpregs_upnpname_set_appliance_id(name);
+
+        return ret;
     }
 
     bool device_id(const std::string &id)
     {
-        return settings_.update<ApplianceValues::KeyID::DEVICE_ID,
-                                UpdateTraits<ApplianceValues::KeyID::DEVICE_ID>>(id);
+        const bool ret =
+            settings_.update<ApplianceValues::KeyID::DEVICE_ID,
+                             UpdateTraits<ApplianceValues::KeyID::DEVICE_ID>>(id);
+
+        std::string temp;
+        temp.reserve(id.length());
+        std::copy_if(id.begin(), id.end(), std::back_inserter(temp),
+                     [] (const char &ch) { return ch != ':'; });
+
+        dcpregs_upnpname_set_device_uuid(temp);
+
+        return ret;
     }
 };
 

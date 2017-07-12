@@ -300,6 +300,7 @@ static const char name_of_rcfile[] = "upnp_settings.rc";
 
 struct UPnPNameData
 {
+    bool is_initialized;
     char rcfile[sizeof(path_to_rcfile) + sizeof(name_of_rcfile)];
     struct ShutdownGuard *shutdown_guard;
 
@@ -307,6 +308,7 @@ struct UPnPNameData
     {
         std::fill(rcfile, &rcfile[sizeof(rcfile)], '\0');
         shutdown_guard = nullptr;
+        is_initialized = false;
     }
 };
 
@@ -314,6 +316,9 @@ static UPnPNameData upnpname_private_data;
 
 void dcpregs_upnpname_init(void)
 {
+    if(upnpname_private_data.is_initialized)
+        return;
+
     std::copy(path_to_rcfile, path_to_rcfile + sizeof(path_to_rcfile) - 1,
               upnpname_private_data.rcfile);
     upnpname_private_data.rcfile[sizeof(path_to_rcfile) - 1] = '/';
@@ -321,6 +326,8 @@ void dcpregs_upnpname_init(void)
               upnpname_private_data.rcfile + sizeof(path_to_rcfile));
 
     upnpname_private_data.shutdown_guard = shutdown_guard_alloc("upnpname");
+
+    upnpname_private_data.is_initialized = true;
 }
 
 void dcpregs_upnpname_deinit(void)

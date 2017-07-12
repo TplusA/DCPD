@@ -44,6 +44,7 @@
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_playstream.hh"
+#include "dcpregs_upnpname.h"
 #include "connman.h"
 #include "networkprefs.h"
 #include "configproxy.h"
@@ -1015,6 +1016,7 @@ static bool main_loop_init(const struct parameters *parameters,
                            struct DBusSignalManagerData **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
+    dcpregs_upnpname_init();
     configproxy_init();
 
     Configuration::register_configuration_manager(config_manager);
