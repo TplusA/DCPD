@@ -4628,6 +4628,43 @@ void test_write_and_read_out_friendly_name_with_special_characters()
     write_and_read_name(evil_name, escaped);
 }
 
+void test_writing_different_friendly_name_restarts_flagpole_service()
+{
+    static char config_file_content[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        ;
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    auto *reg = lookup_register_expect_handlers(88,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name);
+    cppcut_assert_not_null(reg);
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TheDevice"), 9));
+
+    static const char expected_config_file[] =
+        "FRIENDLY_NAME_OVERRIDE='TheDevice'\n"
+        ;
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
 void test_writing_same_name_does_not_change_files_nor_flagpole_service()
 {
     auto *reg = lookup_register_expect_handlers(88,
@@ -4719,6 +4756,38 @@ void test_writing_same_appliance_id_does_not_change_files_nor_flagpole_service()
     mock_os->expect_os_unmap_file(&config_file);
 
     dcpregs_upnpname_set_appliance_id("UnitTestAppliance");
+}
+
+void test_writing_new_different_appliance_id_restarts_flagpole_service()
+{
+    static char config_file_content[] =
+        "APPLIANCE_ID='Whateverest'\n"
+        ;
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_appliance_id("X 9000");
+
+    static const char expected_config_file[] =
+        "APPLIANCE_ID='X 9000'\n"
+        ;
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
 }
 
 void test_writing_new_device_uuid_restarts_flagpole_service()

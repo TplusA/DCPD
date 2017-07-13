@@ -399,6 +399,7 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
 
     shutdown_guard_lock(upnpname_private_data.shutdown_guard);
 
+    values[Key::FRIENDLY_NAME_OVERRIDE].clear();
     std::copy(data, data + length,
               std::back_inserter(values[Key::FRIENDLY_NAME_OVERRIDE]));
 
