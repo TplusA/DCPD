@@ -31,8 +31,9 @@ enum class Key
 {
     FRIENDLY_NAME_OVERRIDE,
     APPLIANCE_ID,
+    DEVICE_UUID,
 
-    LAST_KEY = APPLIANCE_ID,
+    LAST_KEY = DEVICE_UUID,
 
     INVALID,
     UNKNOWN,
@@ -42,6 +43,7 @@ static const std::array<const std::string, size_t(Key::LAST_KEY) + 1> keys
 {
     "FRIENDLY_NAME_OVERRIDE",
     "APPLIANCE_ID",
+    "UUID",
 };
 
 using Values = std::map<Key, std::string>;
@@ -408,20 +410,17 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
     return (result != 0) ? -1 : 0;
 }
 
-void dcpregs_upnpname_set_appliance_id(const std::string &appliance)
+static void set_variable(const Key key, const std::string &value)
 {
-    msg_vinfo(MESSAGE_LEVEL_TRACE,
-              "Set UPnP appliance ID \"%s\"", appliance.c_str());
-
     Values values;
     read_config_file(upnpname_private_data.rcfile, values);
 
-    if(is_stored_value_equal(values, Key::APPLIANCE_ID, appliance))
+    if(is_stored_value_equal(values, key, value))
         return;
 
     shutdown_guard_lock(upnpname_private_data.shutdown_guard);
 
-    values[Key::APPLIANCE_ID] = appliance;
+    values[key] = value;
 
     const int result =
         write_config_file(upnpname_private_data.rcfile, path_to_rcfile,
@@ -431,6 +430,22 @@ void dcpregs_upnpname_set_appliance_id(const std::string &appliance)
 
     if(result >= 0)
         os_system(true, "/bin/systemctl restart flagpole");
+}
+
+void dcpregs_upnpname_set_appliance_id(const std::string &appliance)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE,
+              "Set UPnP appliance ID \"%s\"", appliance.c_str());
+
+    set_variable(Key::APPLIANCE_ID, appliance);
+}
+
+void dcpregs_upnpname_set_device_uuid(const std::string &uuid)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE,
+              "Set UPnP device UUID \"%s\"", uuid.c_str());
+
+    set_variable(Key::DEVICE_UUID, uuid);
 }
 
 void dcpregs_upnpname_prepare_for_shutdown(void)

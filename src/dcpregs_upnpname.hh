@@ -22,5 +22,6 @@
 #include <string>
 
 void dcpregs_upnpname_set_appliance_id(const std::string &appliance);
+void dcpregs_upnpname_set_device_uuid(const std::string &uuid);
 
 #endif /* !DCPREGS_UPNPNAME_HH */

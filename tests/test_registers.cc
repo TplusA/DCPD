@@ -4721,6 +4721,76 @@ void test_writing_same_appliance_id_does_not_change_files_nor_flagpole_service()
     dcpregs_upnpname_set_appliance_id("UnitTestAppliance");
 }
 
+void test_writing_new_device_uuid_restarts_flagpole_service()
+{
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_device_uuid("09AB7C8F0013");
+
+    static const char expected_config_file[] = "UUID='09AB7C8F0013'\n";
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+void test_writing_new_device_uuid_leaves_other_values_untouched()
+{
+    static char config_file_content[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        "UUID='020000000000'\n"
+        "APPLIANCE_ID='Default'\n"
+        ;
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_device_uuid("30f9e75521bb60ec05bcc4b2dc414924");
+
+    static const char expected_config_file[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        "APPLIANCE_ID='Default'\n"
+        "UUID='30f9e75521bb60ec05bcc4b2dc414924'\n"
+        ;
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+void test_writing_same_device_uuid_does_not_change_files_nor_flagpole_service()
+{
+    static char config_file_content[] = "UUID='UnitTestUUID'\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    dcpregs_upnpname_set_device_uuid("UnitTestUUID");
+}
+
 };
 
 namespace spi_registers_file_transfer
