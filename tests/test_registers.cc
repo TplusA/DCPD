@@ -4791,6 +4791,85 @@ void test_writing_same_device_uuid_does_not_change_files_nor_flagpole_service()
     dcpregs_upnpname_set_device_uuid("UnitTestUUID");
 }
 
+void test_set_all_upnp_variables()
+{
+    /* write UUID to non-existent file */
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_device_uuid("09AB7C8F0013");
+
+    static char config_file_content_first[] =
+        "UUID='09AB7C8F0013'\n"
+        ;
+
+    cut_assert_equal_memory(config_file_content_first, sizeof(config_file_content_first) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+    os_write_buffer.clear();
+
+    /* add appliance ID */
+    const struct os_mapped_file_data config_file_first =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content_first,
+        .length = sizeof(config_file_content_first) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file_first, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file_first);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_appliance_id("MY_APPLIANCE");
+
+    static char config_file_content_second[] =
+        "APPLIANCE_ID='MY_APPLIANCE'\n"
+        "UUID='09AB7C8F0013'\n"
+        ;
+
+    cut_assert_equal_memory(config_file_content_second, sizeof(config_file_content_second) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+    os_write_buffer.clear();
+
+    /* finally, add friendly name */
+    const struct os_mapped_file_data config_file_second =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content_second,
+        .length = sizeof(config_file_content_second) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file_second, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file_second);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    auto *reg = lookup_register_expect_handlers(88,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name);
+    cppcut_assert_not_null(reg);
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("Unit test device"), 16));
+
+    static char config_file_content_third[] =
+        "FRIENDLY_NAME_OVERRIDE='Unit test device'\n"
+        "APPLIANCE_ID='MY_APPLIANCE'\n"
+        "UUID='09AB7C8F0013'\n"
+        ;
+
+    cut_assert_equal_memory(config_file_content_third, sizeof(config_file_content_third) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
 };
 
 namespace spi_registers_file_transfer
