@@ -217,10 +217,10 @@ class ServiceBase
     bool is_ours() const
     {
         log_assert(service_data_ != nullptr);
-        if(service_data_->device_ == nullptr)
-            *(static_cast<int *>(nullptr)) = 0;
 
-        return service_data_->device_->is_auto_selected_device();
+        return (service_data_->device_ != nullptr)
+            ? service_data_->device_->is_auto_selected_device()
+            : false;
     }
 
     bool is_active() const
