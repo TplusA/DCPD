@@ -505,7 +505,6 @@ static bool nameservers_are_different(const Maybe<std::vector<std::string>> &dns
 static void avoid_service(const Connman::Service<Connman::Technology::ETHERNET> *const service,
                           const std::string &service_name)
 {
-
     log_assert(service != nullptr);
     log_assert(service->is_active());
 
@@ -515,7 +514,6 @@ static void avoid_service(const Connman::Service<Connman::Technology::ETHERNET> 
 static void avoid_service(const Connman::Service<Connman::Technology::WLAN> *const service,
                           const std::string &service_name)
 {
-
     log_assert(service != nullptr);
     log_assert(service->is_active());
 
