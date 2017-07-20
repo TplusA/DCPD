@@ -39,7 +39,8 @@ enum class Appliance
     MP2000R,
     MP2500R,
     MP3100HV,
-    CALA_PLUS,
+    CALA_CDR,
+    CALA_SR,
     CALA_BERBEL,
     FALLBACK,
 
@@ -82,7 +83,8 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
       case Appliance::MP2000R:
       case Appliance::MP2500R:
       case Appliance::MP3100HV:
-      case Appliance::CALA_PLUS:
+      case Appliance::CALA_CDR:
+      case Appliance::CALA_SR:
       case Appliance::FALLBACK:
         dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
@@ -118,7 +120,8 @@ static Appliance map_appliance_id(const char *name)
         std::move(std::make_pair("MP2000R",    Appliance::MP2000R)),
         std::move(std::make_pair("MP2500R",    Appliance::MP2500R)),
         std::move(std::make_pair("MP3100HV",   Appliance::MP3100HV)),
-        std::move(std::make_pair("CalaPlus",   Appliance::CALA_PLUS)),
+        std::move(std::make_pair("CalaCDR",    Appliance::CALA_CDR)),
+        std::move(std::make_pair("CalaSR",     Appliance::CALA_SR)),
         std::move(std::make_pair("CalaBerbel", Appliance::CALA_BERBEL)),
         std::move(std::make_pair("!unknown!",  Appliance::FALLBACK)),
     };
