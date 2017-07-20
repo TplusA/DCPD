@@ -1484,6 +1484,7 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
             break;
 
           case LIST_ERROR_INVALID_ID:
+          case LIST_ERROR_INVALID_URI:
           case LIST_ERROR_PERMISSION_DENIED:
             filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_FILE_NOT_FOUND;
             break;
@@ -1494,6 +1495,16 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
 
           case LIST_ERROR_PHYSICAL_MEDIA_IO:
             filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_USB_MEDIA_ERROR;
+            break;
+
+          case LIST_ERROR_BUSY_500:
+          case LIST_ERROR_BUSY_1000:
+          case LIST_ERROR_BUSY_1500:
+          case LIST_ERROR_BUSY_3000:
+          case LIST_ERROR_BUSY_5000:
+          case LIST_ERROR_BUSY:
+            BUG("List broker is busy, should retry download");
+            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_NETWORK_ERROR;
             break;
         }
 
