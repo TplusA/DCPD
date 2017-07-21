@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -247,6 +247,140 @@ void test_read_single_variable_request_after_empty_lines()
 
     applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
     cppcut_assert_equal("password", static_cast<const char *>(buffer));
+
+    /* done */
+    expect_read_but_return_nothing();
+    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
+                        applink_get_next_command(&conn, &default_command));
+}
+
+/*!\test
+ * Parse single request coming in as multiple fragments.
+ */
+void test_read_scattered_variable_request()
+{
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("GET A", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
+                        applink_get_next_command(&conn, &default_command));
+
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("IRABLE_PASS", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
+                        applink_get_next_command(&conn, &default_command));
+
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("WORD token passwor", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
+                        applink_get_next_command(&conn, &default_command));
+
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("d", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
+                        applink_get_next_command(&conn, &default_command));
+
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("\n", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
+                        applink_get_next_command(&conn, &default_command));
+
+    check_expected_command(default_command, "AIRABLE_PASSWORD");
+
+    static const char expected_parameters[] = "token password";
+    cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
+                            default_command.private_data.parameters_buffer.data,
+                            default_command.private_data.parameters_buffer.pos);
+
+    char buffer[512];
+    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
+    cppcut_assert_equal("token", static_cast<const char *>(buffer));
+
+    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
+    cppcut_assert_equal("password", static_cast<const char *>(buffer));
+
+    /* done */
+    expect_read_but_return_nothing();
+    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
+                        applink_get_next_command(&conn, &default_command));
+}
+
+/*!\test
+ * Parse two requests coming in as multiple fragments.
+ */
+void test_read_two_scattered_variable_requests()
+{
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("GET AIRABLE_PASS", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
+                        applink_get_next_command(&conn, &default_command));
+
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("WORD token password\nGET SERVICE_CREDE", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
+                        applink_get_next_command(&conn, &default_command));
+
+    check_expected_command(default_command, "AIRABLE_PASSWORD");
+
+    static const char expected_parameters_first[] = "token password";
+    cut_assert_equal_memory(expected_parameters_first,
+                            sizeof(expected_parameters_first) - 1,
+                            default_command.private_data.parameters_buffer.data,
+                            default_command.private_data.parameters_buffer.pos);
+
+    char buffer[512];
+    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
+    cppcut_assert_equal("token", static_cast<const char *>(buffer));
+
+    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
+    cppcut_assert_equal("password", static_cast<const char *>(buffer));
+
+    /* more to come */
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("NTIALS qobuz\n", 0, 0);
+    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
+                        applink_get_next_command(&conn, &default_command));
+
+    check_expected_command(default_command, "SERVICE_CREDENTIALS");
+
+    static const char expected_parameters_second[] = "qobuz";
+    cut_assert_equal_memory(expected_parameters_second,
+                            sizeof(expected_parameters_second) - 1,
+                            default_command.private_data.parameters_buffer.data,
+                            default_command.private_data.parameters_buffer.pos);
+
+    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
+    cppcut_assert_equal("qobuz", static_cast<const char *>(buffer));
+
+    /* done */
+    expect_read_but_return_nothing();
+    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
+                        applink_get_next_command(&conn, &default_command));
+}
+
+/*!\test
+ * Parse single request containing short parameters
+ */
+void test_read_single_variable_request_with_one_character_parameters()
+{
+    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    fill_buffer_data->set("GET AIRABLE_PASSWORD ab 1\n", 0, 0);
+
+    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
+                        applink_get_next_command(&conn, &default_command));
+
+    check_expected_command(default_command, "AIRABLE_PASSWORD");
+
+    static const char expected_parameters[] = "ab 1";
+    cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
+                            default_command.private_data.parameters_buffer.data,
+                            default_command.private_data.parameters_buffer.pos);
+
+    char buffer[512];
+    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
+    cppcut_assert_equal("ab", static_cast<const char *>(buffer));
+
+    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
+    cppcut_assert_equal("1", static_cast<const char *>(buffer));
 
     /* done */
     expect_read_but_return_nothing();

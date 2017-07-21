@@ -45,10 +45,8 @@ class MockDcpdDBus
     void expect_tdbus_dcpd_playback_emit_pause(tdbusdcpdPlayback *object);
     void expect_tdbus_dcpd_playback_emit_next(tdbusdcpdPlayback *object);
     void expect_tdbus_dcpd_playback_emit_previous(tdbusdcpdPlayback *object);
-    void expect_tdbus_dcpd_playback_emit_fast_forward(tdbusdcpdPlayback *object);
-    void expect_tdbus_dcpd_playback_emit_fast_rewind(tdbusdcpdPlayback *object);
-    void expect_tdbus_dcpd_playback_emit_fast_wind_stop(tdbusdcpdPlayback *object);
-    void expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(tdbusdcpdPlayback *object, gdouble arg_speed);
+    void expect_tdbus_dcpd_playback_emit_set_speed(tdbusdcpdPlayback *object, gdouble arg_speed);
+    void expect_tdbus_dcpd_playback_emit_seek(tdbusdcpdPlayback *object, gint64 arg_position, const gchar *arg_position_units);
     void expect_tdbus_dcpd_playback_emit_repeat_mode_toggle(tdbusdcpdPlayback *object);
     void expect_tdbus_dcpd_playback_emit_shuffle_mode_toggle(tdbusdcpdPlayback *object);
     void expect_tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg_stream_id, const gchar *arg_artist, const gchar *arg_album, const gchar *arg_title, const gchar *arg_alttrack, const gchar *arg_url);

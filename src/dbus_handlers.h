@@ -87,6 +87,16 @@ gboolean dbusmethod_debug_logging_config_set_level(tdbusdebugLoggingConfig *obje
                                                    const gchar *arg_new_level,
                                                    void *user_data);
 
+gboolean dbusmethod_config_get_all_keys(tdbusConfigurationRead *object,
+                                        GDBusMethodInvocation *invocation,
+                                        gpointer user_data);
+gboolean dbusmethod_config_get_value(tdbusConfigurationRead *object,
+                                     GDBusMethodInvocation *invocation,
+                                     const gchar *key, gpointer user_data);
+gboolean dbusmethod_config_get_all_values(tdbusConfigurationRead *object,
+                                          GDBusMethodInvocation *invocation,
+                                          const gchar *database, gpointer user_data);
+
 #ifdef __cplusplus
 }
 #endif

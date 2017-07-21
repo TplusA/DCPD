@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -165,7 +165,6 @@ static size_t count_parameters(struct ParserContext *ctx,
             overflow = true;
 
         ++count;
-
     }
 
     if(overflow)
@@ -298,6 +297,7 @@ static enum ApplinkResult parse_command_or_answer(struct ApplinkConnection *conn
                                                   struct ApplinkCommand *command)
 {
     size_t begin_pos = 0;
+    size_t last_scan_pos = conn->scan_pos;
 
     for(/* nothing */; conn->scan_pos < conn->input_buffer.pos; ++conn->scan_pos)
     {
@@ -305,6 +305,8 @@ static enum ApplinkResult parse_command_or_answer(struct ApplinkConnection *conn
             continue;
 
         const enum ApplinkResult result = parse_line(conn, command, begin_pos);
+
+        last_scan_pos = conn->scan_pos + 1;
 
         switch(result)
         {
@@ -329,6 +331,7 @@ static enum ApplinkResult parse_command_or_answer(struct ApplinkConnection *conn
         begin_pos = conn->scan_pos + 1;
     }
 
+    conn->scan_pos = last_scan_pos;
     remove_processed_data_from_buffer(conn);
 
     return conn->scan_pos < conn->input_buffer.pos

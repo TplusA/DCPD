@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "registers.h"
 #include "messages.h"
@@ -30,6 +31,7 @@
 #include "dcpregs_common.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.h"
+#include "dcpregs_appliance.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_upnpname.h"
@@ -57,6 +59,8 @@ struct RegistersPrivateData
 };
 
 static struct RegistersPrivateData registers_private_data;
+
+static const char max_bitrate_key[] = "@drcpd::maximum_stream_bit_rate";
 
 static bool update_status_register(uint8_t status, uint8_t code)
 {
@@ -179,26 +183,6 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     return ok ? (ssize_t)length : -1;
 }
 
-static ssize_t read_87_appliance_id(uint8_t *response, size_t length)
-{
-    static const char appliance_id[] = "strbo";
-
-    if(length < sizeof(appliance_id) - 1)
-        return -1;
-
-    memcpy(response, appliance_id, sizeof(appliance_id) - 1);
-
-    return sizeof(appliance_id) - 1;
-}
-
-static int write_87_appliance_id(const uint8_t *data, size_t length)
-{
-    /* FIXME: Dummy implementation that accepts anything and does nothing */
-    return 0;
-}
-
-static const char max_bitrate_key[] = "@drcpd::maximum_stream_bit_rate";
-
 static bool to_kbits(uint32_t *value)
 {
     *value /= 1000U;
@@ -313,7 +297,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* Network status */
         REGISTER(50, REGISTER_MK_VERSION(1, 0, 0)),
-        .max_data_size = 2,
+        .max_data_size = 3,
         .read_handler = dcpregs_read_50_network_status,
     },
     {
@@ -390,6 +374,12 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_drcp_command,
     },
     {
+        /* Seek in stream or set playback speed/direction */
+        REGISTER(73, REGISTER_MK_VERSION(1, 0, 3)),
+        .max_data_size = 5,
+        .write_handler = dcpregs_write_73_seek_or_set_speed,
+    },
+    {
         /* Search parameters */
         REGISTER(74, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 256,
@@ -424,8 +414,8 @@ static const struct dcp_register_t register_map[] =
         /* Set appliance ID */
         REGISTER(87, REGISTER_MK_VERSION(1, 0, 1)),
         .max_data_size = 32,
-        .read_handler = read_87_appliance_id,
-        .write_handler = write_87_appliance_id,
+        .read_handler = dcpregs_read_87_appliance_id,
+        .write_handler = dcpregs_write_87_appliance_id,
     },
     {
         /* Set UPnP friendly name */
@@ -518,6 +508,7 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_209_download_url,
     },
     {
+        /* Cover art hash value (cover art itself is retrieved via XMODEM) */
         REGISTER(210, REGISTER_MK_VERSION(1, 0, 2)),
         .max_data_size = 16,
         .read_handler = dcpregs_read_210_current_cover_art_hash,
@@ -564,20 +555,10 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
     registers_private_data.configured_protocol_level.code =
-        REGISTER_MK_VERSION(1, 0, 2);
+        REGISTER_MK_VERSION(1, 0, 3);
 
     struct register_configuration_t *config = registers_get_nonconst_data();
-    struct register_network_interface_t *iface_data;
 
-    iface_data = &config->builtin_ethernet_interface;
-    iface_data->is_builtin = true;
-    iface_data->is_wired = true;
-
-    iface_data = &config->builtin_wlan_interface;
-    iface_data->is_builtin = true;
-    iface_data->is_wired = false;
-
-    config->active_interface = NULL;
     config->register_changed_notification_fn = register_changed_callback;
 
     register_zero_for_unit_tests = NULL;
@@ -596,6 +577,7 @@ void register_deinit(void)
     dcpregs_filetransfer_deinit();
     dcpregs_playstream_deinit();
     dcpregs_upnpname_deinit();
+    memset(&registers_private_data, 0, sizeof(registers_private_data));
 }
 
 bool register_set_protocol_level(uint8_t major, uint8_t minor, uint8_t micro)
@@ -632,7 +614,7 @@ size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel
     {
 #define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
 
-        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 2)),
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 3)),
 
 #undef MK_RANGE
     };

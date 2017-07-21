@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -32,53 +32,76 @@
 bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
                             size_t *expected_size, size_t *payload_offset)
 {
-    /*
-     * FIXME: Stupid timing-based hack.
-     *
-     * We get partial data from DRCPD because it is writing to its pipe end
-     * using several system calls. The code below does not handle this
-     * situation very well because it assumes that named pipe read/write
-     * operations are atomic (which is true up to a certain size) and that
-     * DRCPD is using a single operation for sending data (which is not true,
-     * hence the breakage). This hack waits for data to accumulate so that we
-     * can be reasonably sure that our read operation looks like the other side
-     * has written atomically.
-     */
-    usleep(50U * 1000U);
+    size_t token_start_pos = buffer->pos;
+    bool expecting_size_header = true;
+    bool expecting_size_value = false;
+    const char *number_string = NULL;
 
-    if(os_try_read_to_buffer(buffer->data, buffer->size,
-                             &buffer->pos, in_fd, false) < 0)
+    while(true)
     {
-        msg_error(errno, LOG_CRIT, "Reading XML size failed");
-        return false;
+        const size_t prev_pos = buffer->pos;
+        const int read_result =
+            os_try_read_to_buffer(buffer->data, buffer->size,
+                                  &buffer->pos, in_fd, true);
+
+        if(read_result < 0)
+        {
+            msg_error(errno, LOG_CRIT, "Reading XML size failed");
+            return false;
+        }
+
+        if(buffer->pos == prev_pos)
+        {
+            /* try again later */
+            os_sched_yield();
+            continue;
+        }
+
+        if(expecting_size_header)
+        {
+            static const char size_header[] = "Size: ";
+
+            if(buffer->pos - token_start_pos >= sizeof(size_header))
+            {
+                if(memcmp(buffer->data, size_header, sizeof(size_header) - 1) != 0)
+                {
+                    msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
+                    return false;
+                }
+
+                expecting_size_header = false;
+                expecting_size_value = true;
+                token_start_pos += sizeof(size_header) - 1;
+            }
+            else
+            {
+                /* size header is incomplete, need to read more data */
+            }
+        }
+
+        if(expecting_size_value)
+        {
+            char *const eol = memchr(buffer->data + token_start_pos, '\n',
+                                     buffer->pos - token_start_pos);
+
+            if(eol != NULL)
+            {
+                expecting_size_value = false;
+                number_string = (const char *)buffer->data + token_start_pos;
+                *eol = '\0';
+                token_start_pos += eol - number_string + 1;
+                break;
+            }
+            else
+            {
+                /* size field is incomplete, need to read more data */
+            }
+        }
+
+        os_sched_yield();
     }
-
-    static const char size_header[] = "Size: ";
-
-    if(buffer->pos < sizeof(size_header))
-    {
-        msg_error(EINVAL, LOG_CRIT, "Too short input, expected XML size");
-        return false;
-    }
-
-    if(memcmp(buffer->data, size_header, sizeof(size_header) - 1) != 0)
-    {
-        msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
-        return false;
-    }
-
-    uint8_t *const eol = memchr(buffer->data, '\n', buffer->pos);
-    if(!eol)
-    {
-        msg_error(EINVAL, LOG_CRIT, "Incomplete XML size");
-        return false;
-    }
-
-    *eol = '\0';
 
     char *endptr;
-    const char *number_string =
-        (const char *)buffer->data + sizeof(size_header) - 1;
     unsigned long temp = strtoul(number_string, &endptr, 10);
 
     if(*endptr != '\0')
@@ -95,7 +118,7 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
     }
 
     *expected_size = temp;
-    *payload_offset = (eol - buffer->data) + 1;
+    *payload_offset = token_start_pos;
 
     return true;
 }

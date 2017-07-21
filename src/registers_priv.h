@@ -21,22 +21,12 @@
 
 #include <stdbool.h>
 
-struct register_network_interface_t
-{
-    bool is_builtin;
-    bool is_wired;
-};
-
 /*!
  * \internal
  * DCP registers configuration data.
  */
 struct register_configuration_t
 {
-    struct register_network_interface_t builtin_ethernet_interface;
-    struct register_network_interface_t builtin_wlan_interface;
-    struct register_network_interface_t *active_interface;
-
     void (*register_changed_notification_fn)(uint8_t reg_number);
 };
 

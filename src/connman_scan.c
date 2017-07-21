@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -44,12 +44,9 @@ static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powe
     if(is_powered)
         return false;
 
-    GError *error = NULL;
     GVariant *bool_variant = g_variant_new("v", g_variant_new("b", true));
-    tdbus_connman_technology_call_set_property_sync(proxy,
-                                                    "Powered", bool_variant,
-                                                    NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error, "Enable WLAN");
+    tdbus_connman_technology_call_set_property(proxy, "Powered", bool_variant,
+                                               NULL, NULL, NULL);
 
     return true;
 }

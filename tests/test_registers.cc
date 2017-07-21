@@ -26,13 +26,14 @@
 #include <glib.h>
 
 #include "registers.h"
-#include "registers_priv.h"
 #include "networkprefs.h"
+#include "network_status_bits.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_upnpname.h"
+#include "dcpregs_upnpname.hh"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
@@ -43,6 +44,8 @@
 #include "dcpregs_status.h"
 #include "drcp_command_codes.h"
 #include "dbus_handlers_connman_manager_glue.h"
+#include "connman_service_list.hh"
+#include "network_device_list.hh"
 #include "stream_id.hh"
 #include "actor_id.h"
 #include "md5.hh"
@@ -267,12 +270,26 @@ static void survey_complete(ConnmanSurveyDoneFn callback,
 
 class ConnectToConnManServiceData
 {
+  public:
+    enum class Mode
+    {
+        NONE,
+        FROM_CONFIG,
+        WPS_DIRECT_BY_SSID,
+        WPS_DIRECT_BY_NAME,
+        WPS_SCAN,
+    };
+
   private:
-    bool is_expected_;
+    Mode expected_mode_;
     enum NetworkPrefsTechnology expected_tech_;
     std::string expected_service_;
+    const char *expected_service_cstr_;
+    std::string expected_network_name_;
+    const char *expected_network_name_cstr_;
+    std::vector<uint8_t> expected_network_ssid_;
 
-    bool was_called_;
+    Mode called_mode_;
 
   public:
     ConnectToConnManServiceData(const ConnectToConnManServiceData &) = delete;
@@ -282,10 +299,14 @@ class ConnectToConnManServiceData
 
     void init()
     {
-        is_expected_ = false;
+        expected_mode_ = Mode::NONE;
         expected_tech_ = NWPREFSTECH_UNKNOWN;
         expected_service_.clear();
-        was_called_ = false;
+        expected_service_cstr_ = nullptr;
+        expected_network_name_.clear();
+        expected_network_name_cstr_ = nullptr;
+        expected_network_ssid_.clear();
+        called_mode_ = Mode::NONE;
     }
 
     void expect(enum NetworkPrefsTechnology expected_tech,
@@ -293,33 +314,184 @@ class ConnectToConnManServiceData
     {
         cppcut_assert_not_equal(NWPREFSTECH_UNKNOWN, expected_tech);
 
-        is_expected_ = true;
+        expected_mode_ = Mode::FROM_CONFIG;
         expected_tech_ = expected_tech;
-        expected_service_ = expected_service_to_be_disabled;
 
-        was_called_ = false;
+        if(expected_service_to_be_disabled != nullptr)
+        {
+            expected_service_ = expected_service_to_be_disabled;
+            expected_service_cstr_ = expected_service_.c_str();
+        }
+
+        called_mode_ = Mode::NONE;
+    }
+
+    void expect(const char *expected_service_to_be_disabled,
+                const char *expected_network_name,
+                const std::vector<uint8_t> *expected_network_ssid)
+    {
+        if(expected_service_to_be_disabled != nullptr)
+        {
+            expected_service_ = expected_service_to_be_disabled;
+            expected_service_cstr_ = expected_service_.c_str();
+        }
+
+        if(expected_network_name != nullptr)
+        {
+            expected_network_name_ = expected_network_name;
+            expected_network_name_cstr_ = expected_network_name_.c_str();
+            expected_mode_ = Mode::WPS_DIRECT_BY_NAME;
+        }
+        else if(expected_network_ssid != nullptr)
+        {
+            expected_network_ssid_ = *expected_network_ssid;
+            expected_mode_ = Mode::WPS_DIRECT_BY_SSID;
+        }
+        else
+            expected_mode_ = Mode::WPS_SCAN;
+
+        called_mode_ = Mode::NONE;
     }
 
     void called(enum NetworkPrefsTechnology tech,
                 const char *service_to_be_disabled)
     {
-        cut_assert_true(is_expected_);
-        cut_assert_false(was_called_);
+        cppcut_assert_equal(Mode::FROM_CONFIG, expected_mode_);
+        cppcut_assert_equal(Mode::NONE, called_mode_);
 
-        was_called_ = true;
+        called_mode_ = Mode::FROM_CONFIG;
 
         cppcut_assert_equal(expected_tech_, tech);
-        cppcut_assert_equal(expected_service_.c_str(), service_to_be_disabled);
+        cppcut_assert_equal(expected_service_cstr_, service_to_be_disabled);
+    }
+
+    void called(const char *network_name, const char *network_ssid,
+                const char *service_to_be_disabled)
+    {
+        cppcut_assert_equal(Mode::NONE, called_mode_);
+
+        switch(expected_mode_)
+        {
+          case Mode::NONE:
+            cut_fail("Unexpected mode NONE");
+            break;
+
+          case Mode::FROM_CONFIG:
+            cut_fail("Unexpected mode FROM_CONFIG");
+            break;
+
+          case Mode::WPS_DIRECT_BY_SSID:
+            called_mode_ = expected_mode_;
+
+            {
+                std::string temp;
+                for(const uint8_t &byte : expected_network_ssid_)
+                {
+                    temp.push_back(nibble_to_char(byte >> 4));
+                    temp.push_back(nibble_to_char(byte & 0x0f));
+                }
+
+                cppcut_assert_equal(temp.c_str(), network_ssid);
+            }
+
+            break;
+
+          case Mode::WPS_DIRECT_BY_NAME:
+            called_mode_ = expected_mode_;
+            cppcut_assert_equal(expected_network_name_cstr_, network_name);
+            cppcut_assert_null(network_ssid);
+            break;
+
+          case Mode::WPS_SCAN:
+            called_mode_ = expected_mode_;
+            cppcut_assert_null(network_name);
+            cppcut_assert_null(network_ssid);
+            break;
+        }
+
+        cppcut_assert_equal(expected_service_cstr_, service_to_be_disabled);
     }
 
     void check()
     {
-        cppcut_assert_equal(is_expected_, was_called_);
+        cppcut_assert_equal(expected_mode_, called_mode_);
+        init();
+    }
+
+  private:
+    static char nibble_to_char(uint8_t nibble)
+    {
+        return (nibble < 10) ? '0' + nibble : 'a' + nibble - 10;
+    }
+};
+
+static std::ostream &operator<<(std::ostream &os, ConnectToConnManServiceData::Mode mode)
+{
+    switch(mode)
+    {
+      case ConnectToConnManServiceData::Mode::NONE:
+        os << "NONE";
+        break;
+
+      case ConnectToConnManServiceData::Mode::FROM_CONFIG:
+        os << "FROM_CONFIG";
+        break;
+
+      case ConnectToConnManServiceData::Mode::WPS_DIRECT_BY_SSID:
+        os << "WPS_DIRECT_BY_SSID";
+        break;
+
+      case ConnectToConnManServiceData::Mode::WPS_DIRECT_BY_NAME:
+        os << "WPS_DIRECT_BY_NAME";
+        break;
+
+      case ConnectToConnManServiceData::Mode::WPS_SCAN:
+        os << "WPS_SCAN";
+        break;
+    }
+
+    return os;
+}
+
+static ConnectToConnManServiceData connect_to_connman_service_data;
+
+class CancelWPSData
+{
+  private:
+    bool expected_call_;
+    bool was_called_;
+
+  public:
+    CancelWPSData(const CancelWPSData &) = delete;
+    CancelWPSData &operator=(const CancelWPSData &) = delete;
+
+    explicit CancelWPSData() { init(); }
+
+    void init()
+    {
+        expected_call_ = false;
+        was_called_ = false;
+    }
+
+    void expect()
+    {
+        expected_call_ = true;
+    }
+
+    void called()
+    {
+        cut_assert_true(expected_call_);
+        was_called_ = true;
+    }
+
+    void check()
+    {
+        cppcut_assert_equal(expected_call_, was_called_);
         init();
     }
 };
 
-static ConnectToConnManServiceData connect_to_connman_service_data;
+static CancelWPSData cancel_wps_data;
 
 /* Instead of writing a full mock for the ConnMan D-Bus API, we'll just have
  * this little function as a poor, but quick replacement */
@@ -329,11 +501,60 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     connect_to_connman_service_data.called(tech, service_to_be_disabled);
 }
 
+/* Another quick replacement for the Connman D-Bus API */
+void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
+                                                       const char *network_ssid,
+                                                       const char *service_to_be_disabled)
+{
+    connect_to_connman_service_data.called(network_name, network_ssid,
+                                           service_to_be_disabled);
+}
+
+/* And another quick replacement. Should write a mock, right? */
+void dbussignal_connman_manager_cancel_wps(void)
+{
+    cancel_wps_data.called();
+}
+
+/* Always tell caller that we are currently not in the progress of connecting
+ * the service */
+bool dbussignal_connman_manager_is_connecting(bool *is_wps)
+{
+    *is_wps = false;
+    return false;
+}
+
 namespace spi_registers_tests
 {
 
 static MockMessages *mock_messages;
 static MockDcpdDBus *mock_dcpd_dbus;
+
+class RegisterSetPerVersion
+{
+  public:
+    const uint8_t version_major_;
+    const uint8_t version_minor_;
+    const uint8_t version_patch_;
+    const uint8_t *const registers_;
+    const size_t number_of_registers_;
+
+    RegisterSetPerVersion(const RegisterSetPerVersion &) = delete;
+    RegisterSetPerVersion(RegisterSetPerVersion &&) = default;
+    RegisterSetPerVersion &operator=(const RegisterSetPerVersion &) = delete;
+
+    template <size_t N>
+    constexpr explicit RegisterSetPerVersion(uint8_t version_major,
+                                             uint8_t version_minor,
+                                             uint8_t version_patch,
+                                             const std::array<uint8_t, N> &registers):
+        version_major_(version_major),
+        version_minor_(version_minor),
+        version_patch_(version_patch),
+        registers_(registers.data()),
+        number_of_registers_(N)
+    {}
+};
 
 static const std::array<uint8_t, 38> existing_registers_v1_0_0 =
 {
@@ -362,6 +583,19 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_2 =
     95, 210,
 };
 
+static const std::array<uint8_t, 1> existing_registers_v1_0_3 =
+{
+   73,
+};
+
+static const std::array<RegisterSetPerVersion, 4> all_registers
+{
+    RegisterSetPerVersion(1, 0, 0, existing_registers_v1_0_0),
+    RegisterSetPerVersion(1, 0, 1, existing_registers_v1_0_1),
+    RegisterSetPerVersion(1, 0, 2, existing_registers_v1_0_2),
+    RegisterSetPerVersion(1, 0, 3, existing_registers_v1_0_3),
+};
+
 void cut_setup()
 {
     mock_messages = new MockMessages;
@@ -383,7 +617,10 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -431,46 +668,24 @@ void test_lookup_nonexistent_register_fails_gracefully()
  */
 void test_lookup_all_existing_registers()
 {
-    cut_assert_true(register_set_protocol_level(1, 0, 0));
-
-    for(auto r : existing_registers_v1_0_0)
+    for(const auto &regset : all_registers)
     {
-        const struct dcp_register_t *reg = register_lookup(r);
+        cut_assert_true(register_set_protocol_level(regset.version_major_,
+                                                    regset.version_minor_,
+                                                    regset.version_patch_));
 
-        cppcut_assert_not_null(reg);
-        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
-        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
-        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 0)),
-                               <=, reg->minimum_protocol_version.code);
-    }
+        for(size_t i = 0; i < regset.number_of_registers_; ++i)
+        {
+            const uint8_t &r = regset.registers_[i];
+            const struct dcp_register_t *reg = register_lookup(r);
 
-    cut_assert_true(register_set_protocol_level(1, 0, 1));
-
-    for(auto r : existing_registers_v1_0_1)
-    {
-        const struct dcp_register_t *reg = register_lookup(r);
-
-        cppcut_assert_not_null(reg);
-        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
-        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
-        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
-                               <=, reg->minimum_protocol_version.code);
-    }
-
-    cut_assert_true(register_set_protocol_level(1, 0, 2));
-
-    for(auto r : existing_registers_v1_0_2)
-    {
-        const struct dcp_register_t *reg = register_lookup(r);
-
-        cppcut_assert_not_null(reg);
-        cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-        cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
-        cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
-        cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 2)),
-                               <=, reg->minimum_protocol_version.code);
+            cppcut_assert_not_null(reg);
+            cppcut_assert_equal(unsigned(r), unsigned(reg->address));
+            cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
+            cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
+            cppcut_assert_equal(uint32_t(REGISTER_MK_VERSION(regset.version_major_, regset.version_minor_, regset.version_patch_)),
+                                reg->minimum_protocol_version.code);
+        }
     }
 }
 
@@ -479,61 +694,59 @@ void test_lookup_all_existing_registers()
  */
 void test_lookup_all_nonexistent_registers()
 {
-    for(unsigned int r = 0; r <= UINT8_MAX; ++r)
+    std::vector<uint8_t> all_registers_up_to_selected_version;
+
+    for(const auto &regset : all_registers)
     {
-        auto found_v1_0_0 =
-            std::find(existing_registers_v1_0_0.begin(), existing_registers_v1_0_0.end(), r);
-        auto found_v1_0_1 =
-            std::find(existing_registers_v1_0_1.begin(), existing_registers_v1_0_1.end(), r);
-        auto found_v1_0_2 =
-            std::find(existing_registers_v1_0_2.begin(), existing_registers_v1_0_2.end(), r);
+        std::copy(regset.registers_,
+                  &regset.registers_[regset.number_of_registers_],
+                  std::back_inserter(all_registers_up_to_selected_version));
 
-        cut_assert_true(register_set_protocol_level(1, 0, 0));
+        cut_assert_true(register_set_protocol_level(regset.version_major_,
+                                                    regset.version_minor_,
+                                                    regset.version_patch_));
 
-        if(found_v1_0_0 == existing_registers_v1_0_0.end())
-            cppcut_assert_null(register_lookup(r));
-        else
+        const uint32_t selected_version_code(REGISTER_MK_VERSION(regset.version_major_,
+                                                                 regset.version_minor_,
+                                                                 regset.version_patch_));
+
+        for(unsigned int r = 0; r <= UINT8_MAX; ++r)
         {
-            const struct dcp_register_t *reg = register_lookup(r);
+            const auto found(std::find(all_registers_up_to_selected_version.begin(),
+                                       all_registers_up_to_selected_version.end(),
+                                       r));
 
-            cppcut_assert_not_null(reg);
-            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 0)),
-                                   <=, reg->minimum_protocol_version.code);
-        }
-
-        cut_assert_true(register_set_protocol_level(1, 0, 1));
-
-        if(found_v1_0_1 == existing_registers_v1_0_1.end())
-        {
-            if(found_v1_0_0 == existing_registers_v1_0_0.end())
+            if(found == all_registers_up_to_selected_version.end())
                 cppcut_assert_null(register_lookup(r));
-        }
-        else
-        {
-            const struct dcp_register_t *reg = register_lookup(r);
+            else
+            {
+                const struct dcp_register_t *reg = register_lookup(r);
 
-            cppcut_assert_not_null(reg);
-            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 1)),
-                                   <=, reg->minimum_protocol_version.code);
-        }
-
-        cut_assert_true(register_set_protocol_level(1, 0, 2));
-
-        if(found_v1_0_2 == existing_registers_v1_0_2.end())
-        {
-            if(found_v1_0_0 == existing_registers_v1_0_0.end() &&
-               found_v1_0_1 == existing_registers_v1_0_1.end())
-                cppcut_assert_null(register_lookup(r));
-        }
-        else
-        {
-            const struct dcp_register_t *reg = register_lookup(r);
-
-            cppcut_assert_not_null(reg);
-            cppcut_assert_operator(uint32_t(REGISTER_MK_VERSION(1, 0, 2)),
-                                   <=, reg->minimum_protocol_version.code);
+                cppcut_assert_not_null(reg);
+                cppcut_assert_operator(selected_version_code, >=, reg->minimum_protocol_version.code);
+            }
         }
     }
+}
+
+/*!\test
+ * Make sure we are actually testing all registers from all protocol versions.
+ * */
+void test_assert_all_registers_are_checked_by_unit_tests()
+{
+    const struct RegisterProtocolLevel *level_ranges = nullptr;
+    const size_t level_ranges_count = register_get_supported_protocol_levels(&level_ranges);
+
+    cppcut_assert_equal(size_t(1), level_ranges_count);
+
+    const uint32_t lowest_checked_version(REGISTER_MK_VERSION(all_registers[0].version_major_,
+                                                              all_registers[0].version_minor_,
+                                                              all_registers[0].version_patch_));
+    const uint32_t highest_checked_version(REGISTER_MK_VERSION(all_registers[all_registers.size() - 1].version_major_,
+                                                               all_registers[all_registers.size() - 1].version_minor_,
+                                                               all_registers[all_registers.size() - 1].version_patch_));
+    cppcut_assert_equal(level_ranges[0].code, lowest_checked_version);
+    cppcut_assert_equal(level_ranges[1].code, highest_checked_version);
 }
 
 };
@@ -639,12 +852,23 @@ void cut_teardown()
  */
 void test_dcp_register_72_calls_correct_write_handler()
 {
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
+
+    register_init(NULL);
+
     const struct dcp_register_t *reg = register_lookup(72);
 
     cppcut_assert_not_null(reg);
     cppcut_assert_equal(72U, unsigned(reg->address));
     cut_assert(reg->write_handler == dcpregs_write_drcp_command);
     cut_assert(reg->read_handler == NULL);
+
+    register_deinit();
 }
 
 /*!\test
@@ -670,63 +894,6 @@ void test_slave_drc_playback_start()
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_start(dbus_dcpd_playback_iface_dummy);
     cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor.
- */
-void test_slave_drc_playback_fast_find_set_speed()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4 };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_fast_wind_set_factor(dbus_dcpd_playback_iface_dummy, 15.0);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor, but
- * with an invalid out-of-range parameter.
- */
-void test_slave_drc_playback_fast_find_set_speed_invalid_parameter()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_BROWSE_PLAY_VIEW_SET };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor, but
- * without any parameter.
- */
-void test_slave_drc_playback_fast_find_set_speed_without_parameter()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 0, expected 1 (Invalid argument)");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
-}
-
-/*!\test
- * Slave sends complex DRC command for setting the fast wind speed factor, but
- * with two parameters instead of one.
- */
-void test_slave_drc_playback_fast_find_set_speed_with_two_parameters()
-{
-    static const uint8_t buffer[] = { DRCP_FAST_WIND_SET_SPEED, DRCP_KEY_DIGIT_4, DRCP_KEY_DIGIT_4 };
-
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xc4");
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 2, expected 1 (Invalid argument)");
-    mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0xc4 failed: -1");
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -986,6 +1153,9 @@ void cut_setup()
 
     dcpregs_protocol_level_init();
 
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
@@ -993,7 +1163,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 
@@ -1259,16 +1429,16 @@ static constexpr char connman_config_path[] = "/var/lib/connman";
 static constexpr char network_config_path[] = "/var/local/etc";
 static constexpr char network_config_file[] = "/var/local/etc/network.ini";
 
-static constexpr char ethernet_mac_address[] = "DE:CA:FD:EA:DB:AD";
-static constexpr char wlan_mac_address[]     = "BA:DD:EA:DB:EE:F1";
-static struct ConnmanInterfaceData *const dummy_connman_iface =
-    reinterpret_cast<struct ConnmanInterfaceData *>(0xbeefbeef);
+static constexpr char ethernet_name[]        = "/connman/service/ethernet";
+static constexpr char ethernet_mac_address[] = "C4:FD:EC:AF:DE:AD";
+static constexpr char wlan_name[]            = "/connman/service/wlan";
+static constexpr char wlan_mac_address[]     = "B4:DD:EA:DB:EE:F1";
 
 static constexpr char standard_ipv4_address[] = "192.168.166.177";
 static constexpr char standard_ipv4_netmask[] = "255.255.255.0";
 static constexpr char standard_ipv4_gateway[] = "192.168.166.15";
-static constexpr char standard_dns1_address[] = "113.224.135.246";
-static constexpr char standard_dns2_address[] = "114.225.136.247";
+static constexpr char standard_dns1_address[] = "13.24.35.246";
+static constexpr char standard_dns2_address[] = "4.225.136.7";
 
 static std::vector<char> os_write_buffer;
 static constexpr int expected_os_write_fd = 42;
@@ -1291,6 +1461,220 @@ static RegisterChangedData *register_changed_data;
 static void register_changed_callback(uint8_t reg_number)
 {
     register_changed_data->append(reg_number);
+}
+
+static void setup_default_connman_service_list()
+{
+    auto locked(Connman::ServiceList::get_singleton_for_update());
+    auto &services(locked.first);
+
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    auto &devices(locked_devices.first);
+
+    services.clear();
+    devices.clear();
+
+    Connman::ServiceData data;
+
+    Connman::Address<Connman::AddressType::MAC> addr(ethernet_mac_address);
+    devices.set_auto_select_mac_address(Connman::Technology::ETHERNET, addr);
+    devices.insert(Connman::Technology::ETHERNET,
+                   Connman::Address<Connman::AddressType::MAC>(addr));
+    cppcut_assert_not_null(devices[addr].get());
+
+    data.state_ = Connman::ServiceState::READY;
+    data.device_ = devices[addr];
+    data.is_favorite_ = true;
+    data.is_auto_connect_ = true;
+    data.is_immutable_ = false;
+    data.ip_settings_v4_.set_known();
+    data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
+    data.ip_settings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
+    data.ip_settings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
+    data.ip_configuration_v4_.set_known();
+    data.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.dns_servers_.set_known();
+    data.dns_servers_.get_rw().push_back(standard_dns1_address);
+    data.dns_servers_.get_rw().push_back(standard_dns2_address);
+
+    services.insert(ethernet_name, std::move(data),
+                    std::move(Connman::TechData<Connman::Technology::ETHERNET>()));
+
+    addr.set(wlan_mac_address);
+    devices.set_auto_select_mac_address(Connman::Technology::WLAN, addr);
+    devices.insert(Connman::Technology::WLAN, Connman::Address<Connman::AddressType::MAC>(addr));
+
+    data.state_ = Connman::ServiceState::IDLE;
+    data.device_ = devices[addr];
+    data.is_favorite_ = true;
+    data.is_auto_connect_ = true;
+    data.is_immutable_ = false;
+    data.ip_settings_v4_.set_known();
+    data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
+    data.ip_settings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
+    data.ip_settings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
+    data.ip_configuration_v4_.set_known();
+    data.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.dns_servers_.set_known();
+    data.dns_servers_.get_rw().push_back(standard_dns1_address);
+    data.dns_servers_.get_rw().push_back(standard_dns2_address);
+
+    services.insert(wlan_name, std::move(data),
+                    std::move(Connman::TechData<Connman::Technology::WLAN>()));
+}
+
+static bool do_inject_service_changes(Connman::ServiceList::Map::iterator::value_type &it,
+                                      std::function<void(Connman::ServiceData &)> &&modify)
+{
+    auto &service(it.second);
+    Connman::ServiceData service_data(service->get_service_data());
+
+    modify(service_data);
+
+    switch(service->get_technology())
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        cut_fail("Unexpected case");
+        break;
+
+      case Connman::Technology::ETHERNET:
+        {
+            auto &s(static_cast<Connman::Service<Connman::Technology::ETHERNET> &>(*service));
+            auto temp(s.get_tech_data());
+            s.put_changes(std::move(service_data), std::move(temp));
+        }
+
+        return true;
+
+      case Connman::Technology::WLAN:
+        {
+            auto &s(static_cast<Connman::Service<Connman::Technology::WLAN> &>(*service));
+            auto temp(s.get_tech_data());
+            s.put_changes(std::move(service_data), std::move(temp));
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+static void inject_service_changes(const char *iface_name,
+                                   std::function<void(Connman::ServiceData &)> modify)
+{
+    auto locked(Connman::ServiceList::get_singleton_for_update());
+    auto &services(locked.first);
+
+    auto it(services.find(iface_name));
+    cut_assert(it != services.end());
+
+    do_inject_service_changes(*it, std::move(modify));
+}
+
+template <Connman::Technology TECH>
+static void inject_service_changes(const char *iface_name,
+                                   std::function<void(Connman::ServiceData &,
+                                                      Connman::TechData<TECH> &)> modify)
+{
+    auto locked(Connman::ServiceList::get_singleton_for_update());
+    auto &services(locked.first);
+
+    auto it(services.find(iface_name));
+    cut_assert(it != services.end());
+    cppcut_assert_equal(int(TECH), int(it->second->get_technology()));
+
+    auto &service(static_cast<Connman::Service<TECH> &>(*it->second));
+    Connman::ServiceData service_data(service.get_service_data());
+    Connman::TechData<TECH> tech_data(service.get_tech_data());
+
+    modify(service_data, tech_data);
+
+    service.put_changes(std::move(service_data), std::move(tech_data));
+}
+
+template <Connman::Technology>
+struct AssumeInterfaceIsActiveTraits;
+
+template <>
+struct AssumeInterfaceIsActiveTraits<Connman::Technology::ETHERNET>
+{
+    static const char *get_service_name() { return ethernet_name; }
+};
+
+template <>
+struct AssumeInterfaceIsActiveTraits<Connman::Technology::WLAN>
+{
+    static const char *get_service_name() { return wlan_name; }
+};
+
+static void activate_interface(const char *const service_name)
+{
+    auto locked(Connman::ServiceList::get_singleton_for_update());
+    auto &services(locked.first);
+
+    for(auto &s : services)
+    {
+        if(s.first == service_name)
+            do_inject_service_changes(s,
+                [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::READY; });
+        else
+            do_inject_service_changes(s,
+                [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::IDLE; });
+    }
+}
+
+template <Connman::Technology TECH, typename Traits = AssumeInterfaceIsActiveTraits<TECH>>
+static void assume_interface_is_active(std::function<void(const Connman::ServiceData &,
+                                                          const Connman::TechData<TECH> &)> check,
+                                       std::function<void(Connman::ServiceData &,
+                                                          Connman::TechData<TECH> &)> modify)
+{
+    activate_interface(Traits::get_service_name());
+
+    inject_service_changes<TECH>(Traits::get_service_name(),
+        [&check, &modify]
+        (Connman::ServiceData &sdata, Connman::TechData<TECH> &tdata)
+        {
+            if(check != nullptr)
+                check(sdata, tdata);
+
+            sdata.state_ = Connman::ServiceState::ONLINE;
+            tdata.security_ = "none";
+
+            if(modify != nullptr)
+                modify(sdata, tdata);
+        });
+}
+
+template <Connman::Technology TECH, typename Traits = AssumeInterfaceIsActiveTraits<TECH>>
+static void assume_interface_is_active(std::function<void(const Connman::ServiceData &)> check,
+                                       std::function<void(Connman::ServiceData &)> modify)
+{
+    activate_interface(Traits::get_service_name());
+
+    inject_service_changes(Traits::get_service_name(),
+        [&check, &modify]
+        (Connman::ServiceData &sdata)
+        {
+            if(check != nullptr)
+                check(sdata);
+
+            sdata.state_ = Connman::ServiceState::ONLINE;
+
+            if(modify != nullptr)
+                modify(sdata);
+        });
+}
+
+static void assume_wlan_interface_is_active()
+{
+    assume_interface_is_active<Connman::Technology::WLAN>(
+        std::function<void(const Connman::ServiceData &,
+                           const Connman::TechData<Connman::Technology::WLAN> &)>(nullptr),
+        nullptr);
+
 }
 
 void cut_setup()
@@ -1318,6 +1702,7 @@ void cut_setup()
 
     survey_complete_notification_data.init();
     connect_to_connman_service_data.init();
+    cancel_wps_data.init();
     register_changed_data->init();
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
@@ -1327,9 +1712,10 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(ethernet_mac_address, wlan_mac_address,
-                       network_config_path, network_config_file);
+    network_prefs_init(network_config_path, network_config_file);
     register_init(register_changed_callback);
+
+    setup_default_connman_service_list();
 }
 
 void cut_teardown()
@@ -1337,11 +1723,15 @@ void cut_teardown()
     register_deinit();
     network_prefs_deinit();
 
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
     register_changed_data->check();
 
     delete register_changed_data;
     register_changed_data = nullptr;
 
+    cancel_wps_data.check();
     connect_to_connman_service_data.check();
     survey_complete_notification_data.check();
 
@@ -1397,6 +1787,11 @@ void test_read_mac_address_default()
     register_deinit();
     network_prefs_deinit();
 
+    {
+        Connman::ServiceList::get_singleton_for_update().first.clear();
+        Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+    }
+
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"networkconfig\"");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
@@ -1404,42 +1799,68 @@ void test_read_mac_address_default()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
                                                 NULL);
     uint8_t buffer[18];
-    reg->read_handler(buffer, sizeof(buffer));
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
 
-    const char *buffer_ptr = static_cast<const char *>(static_cast<void *>(buffer));
+    const char *buffer_ptr = reinterpret_cast<const char *>(buffer);
     cppcut_assert_equal("02:00:00:00:00:00", buffer_ptr);
 }
 
-static void start_ipv4_config()
+static void start_ipv4_config(Connman::Technology expected_technology)
 {
     auto *reg = lookup_register_expect_handlers(54,
                                                 dcpregs_write_54_selected_ip_profile);
+
+    switch(expected_technology)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        mock_messages->expect_msg_error(0, LOG_ERR,
+                                        "No active network technology, cannot modify configuration");
+        break;
+
+      case Connman::Technology::ETHERNET:
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
+        break;
+
+      case Connman::Technology::WLAN:
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify WLAN configuration");
+        break;
+    }
 
     static const uint8_t zero = 0;
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
 }
 
-/* TODO: Remove add_message_expectation parameter */
-static void commit_ipv4_config(bool add_message_expectation,
-                               enum NetworkPrefsTechnology tech,
-                               int expected_return_value = 0)
+static void commit_ipv4_config(enum NetworkPrefsTechnology tech,
+                               int expected_return_value = 0,
+                               bool is_taking_config_from_file = true,
+                               const char *wps_name = nullptr,
+                               const std::vector<uint8_t> *wps_ssid = nullptr,
+                               bool force_expect_wps_canceled = false)
 {
     auto *reg = lookup_register_expect_handlers(53,
                                                 dcpregs_write_53_active_ip_profile);
 
-    if(tech != NWPREFSTECH_UNKNOWN)
+    if(tech == NWPREFSTECH_UNKNOWN)
+    {
+        if(expected_return_value != 0 || force_expect_wps_canceled)
+            cancel_wps_data.expect();
+    }
+    else
     {
         /* XXX: The empty string passed as second parameter is most certainly
          *      incorrect. Likely, there is something wrong with the test setup
          *      and/or mocks. */
-        connect_to_connman_service_data.expect(tech, "");
+        if(is_taking_config_from_file)
+            connect_to_connman_service_data.expect(tech, "");
+        else
+            connect_to_connman_service_data.expect("", wps_name, wps_ssid);
     }
 
     static const uint8_t zero = 0;
@@ -1459,12 +1880,13 @@ static void move_os_write_buffer_to_file(struct os_mapped_file_data &mapped_file
 
 static const struct os_mapped_file_data *
 expect_create_default_network_preferences(struct os_mapped_file_data &file_with_written_default_contents,
-                                          std::vector<char> &written_default_contents)
+                                          std::vector<char> &written_default_contents,
+                                          int expected_number_of_assignments)
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Creating default network preferences file");
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + expected_number_of_assignments * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir_callback(network_config_path,
@@ -1487,10 +1909,15 @@ static size_t expect_default_network_preferences_content(char *buffer_for_expect
     static const char expected_config_file_format[] =
         "[ethernet]\n"
         "MAC = %s\n"
-        "DHCP = yes\n";
+        "DHCP = yes\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     snprintf(buffer_for_expected, buffer_for_expected_size,
-             expected_config_file_format, ethernet_mac_address);
+             expected_config_file_format, ethernet_mac_address,
+             wlan_mac_address);
 
     const size_t written_config_file_length = strlen(buffer_for_expected);
 
@@ -1510,28 +1937,31 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
                                              char *written_config_file,
                                              size_t written_config_file_size)
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(56,
                                                 dcpregs_read_56_ipv4_address,
                                                 dcpregs_write_56_ipv4_address);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_ipv4_address)), sizeof(standard_ipv4_address)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_ipv4_address),
+                                              sizeof(standard_ipv4_address)));
 
     reg = lookup_register_expect_handlers(57,
                                           dcpregs_read_57_ipv4_netmask,
                                           dcpregs_write_57_ipv4_netmask);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_ipv4_netmask)), sizeof(standard_ipv4_netmask)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_ipv4_netmask),
+                                              sizeof(standard_ipv4_netmask)));
 
     reg = lookup_register_expect_handlers(58,
                                           dcpregs_read_58_ipv4_gateway,
                                           dcpregs_write_58_ipv4_gateway);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_ipv4_gateway)), sizeof(standard_ipv4_gateway)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_ipv4_gateway),
+                                              sizeof(standard_ipv4_gateway)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -1542,7 +1972,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
 
         existing_file =
             expect_create_default_network_preferences(file_with_written_default_contents,
-                                                      written_default_contents);
+                                                      written_default_contents, 4);
     }
     else
     {
@@ -1551,12 +1981,12 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     }
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 5 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 7 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -1564,12 +1994,16 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
         "DHCP = no\n"
         "IPv4Address = %s\n"
         "IPv4Netmask = %s\n"
-        "IPv4Gateway = %s\n";
+        "IPv4Gateway = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     snprintf(written_config_file, written_config_file_size,
              expected_config_file_format,
              ethernet_mac_address, standard_ipv4_address,
-             standard_ipv4_netmask, standard_ipv4_gateway);
+             standard_ipv4_netmask, standard_ipv4_gateway, wlan_mac_address);
 
     size_t written_config_file_length = strlen(written_config_file);
 
@@ -1583,7 +2017,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
                                            char *written_config_file,
                                            size_t written_config_file_size)
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -1594,7 +2028,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     cppcut_assert_equal(0, reg->write_handler(&one, 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
@@ -1605,7 +2039,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
 
         existing_file =
             expect_create_default_network_preferences(file_with_written_default_contents,
-                                                      written_default_contents);
+                                                      written_default_contents, 4);
     }
     else
     {
@@ -1614,11 +2048,11 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     }
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 4 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     return expect_default_network_preferences_content(written_config_file,
                                                       written_config_file_size,
@@ -1644,7 +2078,7 @@ void test_set_initial_static_ipv4_configuration()
  */
 void test_leading_zeros_are_removed_from_ipv4_addresses()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(56,
                                                 dcpregs_read_56_ipv4_address,
@@ -1659,12 +2093,12 @@ void test_leading_zeros_are_removed_from_ipv4_addresses()
 
     for(const auto &p : addresses_with_zeros)
     {
-        cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(p.first)), strlen(p.first)));
+        cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(p.first), strlen(p.first)));
 
         uint8_t buffer[32];
         const ssize_t len = reg->read_handler(buffer, sizeof(buffer));
         buffer[sizeof(buffer) - 1] = '\0';
-        cppcut_assert_equal(p.second, static_cast<const char *>(static_cast<const void *>(buffer)));
+        cppcut_assert_equal(p.second, reinterpret_cast<const char *>(buffer));
         cppcut_assert_equal(ssize_t(strlen(p.second) + 1), len);
     }
 }
@@ -1727,7 +2161,7 @@ void test_switch_to_static_ipv4_configuration()
  */
 void test_dhcp_parameter_boundaries()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -1752,7 +2186,7 @@ void test_dhcp_parameter_boundaries()
  */
 void test_explicitly_disabling_dhcp_disables_whole_interface()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -1764,33 +2198,37 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     cppcut_assert_equal(0, reg->write_handler(&zero, 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_error_formatted(0, LOG_WARNING,
-        "Disabling IPv4 on interface DE:CA:FD:EA:DB:AD because DHCPv4 "
+        "Disabling IPv4 on interface C4:FD:EC:AF:DE:AD because DHCPv4 "
         "was disabled and static IPv4 configuration was not sent");
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4; ++i)
+    for(int i = 0; i < 2 * 3 + 3 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
-        "MAC = %s\n";
+        "MAC = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char buffer[512];
-    snprintf(buffer, sizeof(buffer),
-             expected_config_file_format, ethernet_mac_address);
+    snprintf(buffer, sizeof(buffer), expected_config_file_format,
+             ethernet_mac_address, wlan_mac_address);
 
     size_t written_config_file_length = strlen(buffer);
 
@@ -1804,18 +2242,21 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
  */
 void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
 {
+    assume_interface_is_active<Connman::Technology::ETHERNET>(
+        [] (const Connman::ServiceData &sdata)
+        {
+            cut_assert_true(sdata.ip_settings_v4_.is_known());
+            cut_assert_true(sdata.ip_configuration_v4_.is_known());
+        },
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::MANUAL);
+            sdata.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::MANUAL);
+        });
+
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
-
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       ethernet_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface,
-                                       CONNMAN_IP_VERSION_4,
-                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
@@ -1829,18 +2270,19 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
  */
 void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
 {
+    assume_interface_is_active<Connman::Technology::ETHERNET>(
+        [] (const Connman::ServiceData &sdata)
+        {
+            cut_assert_true(sdata.ip_settings_v4_.is_known());
+            cut_assert_true(sdata.ip_settings_v4_.get().get_dhcp_method() == Connman::DHCPV4Method::ON);
+            cut_assert_true(sdata.ip_configuration_v4_.is_known());
+            cut_assert_true(sdata.ip_configuration_v4_.get().get_dhcp_method() == Connman::DHCPV4Method::ON);
+        },
+        nullptr);
+
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
-
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       ethernet_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
-                                       CONNMAN_IP_VERSION_4,
-                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
@@ -1854,17 +2296,11 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
  */
 void test_read_dhcp_mode_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
                                                 dcpregs_write_55_dhcp_enabled);
-
-    mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_ON, dummy_connman_iface,
-                                       CONNMAN_IP_VERSION_4,
-                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
@@ -1878,7 +2314,7 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
  */
 void test_read_dhcp_mode_in_edit_mode_after_change()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
                                                 dcpregs_read_55_dhcp_enabled,
@@ -1902,7 +2338,7 @@ struct RegisterTraits<56U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_56_ipv4_address;
     static constexpr auto expected_write_handler = &dcpregs_write_56_ipv4_address;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_address_string;
+    static constexpr auto &expected_address = standard_ipv4_address;
 };
 
 template <>
@@ -1910,7 +2346,7 @@ struct RegisterTraits<57U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_57_ipv4_netmask;
     static constexpr auto expected_write_handler = &dcpregs_write_57_ipv4_netmask;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_netmask_string;
+    static constexpr auto &expected_address = standard_ipv4_netmask;
 };
 
 template <>
@@ -1918,7 +2354,7 @@ struct RegisterTraits<58U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_58_ipv4_gateway;
     static constexpr auto expected_write_handler = &dcpregs_write_58_ipv4_gateway;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_gateway_string;
+    static constexpr auto &expected_address = standard_ipv4_gateway;
 };
 
 template <>
@@ -1926,7 +2362,7 @@ struct RegisterTraits<62U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_62_primary_dns;
     static constexpr auto expected_write_handler = &dcpregs_write_62_primary_dns;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_gateway_string;
+    static constexpr auto &expected_address = standard_dns1_address;
 };
 
 template <>
@@ -1934,7 +2370,7 @@ struct RegisterTraits<63U>
 {
     static constexpr auto expected_read_handler = &dcpregs_read_63_secondary_dns;
     static constexpr auto expected_write_handler = &dcpregs_write_63_secondary_dns;
-    static constexpr auto expect_get_string_memberfn = &MockConnman::expect_get_gateway_string;
+    static constexpr auto &expected_address = standard_dns2_address;
 };
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
@@ -1946,29 +2382,17 @@ static void read_ipv4_parameter_in_normal_mode()
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       ethernet_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    (mock_connman->*RegTraits::expect_get_string_memberfn)(standard_ipv4_address,
-                                                           dummy_connman_iface,
-                                                           CONNMAN_IP_VERSION_4,
-                                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                                           false,
-                                                           sizeof(buffer));
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
-
-    cppcut_assert_equal(ssize_t(sizeof(standard_ipv4_address)),
+    cppcut_assert_equal(ssize_t(sizeof(RegTraits::expected_address)),
                         reg->read_handler(buffer, sizeof(buffer)));
 
-    cut_assert_equal_memory(standard_ipv4_address, sizeof(standard_ipv4_address),
-                            buffer, sizeof(standard_ipv4_address));
+    cut_assert_equal_memory(RegTraits::expected_address, sizeof(RegTraits::expected_address),
+                            buffer, sizeof(RegTraits::expected_address));
 }
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
 static void read_ipv4_parameter_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
@@ -1976,26 +2400,17 @@ static void read_ipv4_parameter_in_edit_mode_before_any_changes()
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    (mock_connman->*RegTraits::expect_get_string_memberfn)(standard_ipv4_address,
-                                                           dummy_connman_iface,
-                                                           CONNMAN_IP_VERSION_4,
-                                                           CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                                           false,
-                                                           sizeof(buffer));
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
-
-    cppcut_assert_equal(ssize_t(sizeof(standard_ipv4_address)),
+    cppcut_assert_equal(ssize_t(sizeof(RegTraits::expected_address)),
                         reg->read_handler(buffer, sizeof(buffer)));
 
-    cut_assert_equal_memory(standard_ipv4_address, sizeof(standard_ipv4_address),
-                            buffer, sizeof(standard_ipv4_address));
+    cut_assert_equal_memory(RegTraits::expected_address, sizeof(RegTraits::expected_address),
+                            buffer, sizeof(RegTraits::expected_address));
 }
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
 static void read_ipv4_parameter_in_edit_mode_after_change()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
@@ -2103,9 +2518,7 @@ void test_read_ipv4_gateway_in_edit_mode_after_change()
 }
 
 template <uint8_t Register, typename RegTraits = RegisterTraits<Register>>
-static void set_one_dns_server(const char *dns_server_address, size_t dns_server_size,
-                               const char *old_primary_dns,
-                               const char *old_secondary_dns)
+static void set_one_dns_server()
 {
     char config_file_buffer[512];
     const struct os_mapped_file_data config_file =
@@ -2118,30 +2531,31 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
 
     os_write_buffer.clear();
 
-    start_ipv4_config();
+    assume_interface_is_active<Connman::Technology::ETHERNET>(
+        nullptr,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.dns_servers_.set_unknown();
+        });
+
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
                                                 RegTraits::expected_write_handler);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(dns_server_address)), dns_server_size));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(RegTraits::expected_address), sizeof(RegTraits::expected_address)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
-    mock_connman->expect_find_active_primary_interface(
-        dummy_connman_iface,
-        ethernet_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_primary_dns_string(old_primary_dns, dummy_connman_iface, false, 16);
-    mock_connman->expect_get_secondary_dns_string(old_secondary_dns, dummy_connman_iface, false, 16);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 6 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 8 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2150,14 +2564,18 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
         "IPv4Address = %s\n"
         "IPv4Netmask = %s\n"
         "IPv4Gateway = %s\n"
-        "PrimaryDNS = %s\n";
+        "PrimaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
              expected_config_file_format,
              ethernet_mac_address, standard_ipv4_address,
              standard_ipv4_netmask, standard_ipv4_gateway,
-             dns_server_address);
+             RegTraits::expected_address, wlan_mac_address);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2171,8 +2589,7 @@ static void set_one_dns_server(const char *dns_server_address, size_t dns_server
  */
 void test_set_only_first_dns_server()
 {
-    set_one_dns_server<62>(standard_dns1_address, sizeof(standard_dns1_address),
-                           NULL, NULL);
+    set_one_dns_server<62>();
 }
 
 /*!\test
@@ -2184,8 +2601,7 @@ void test_set_only_first_dns_server()
  */
 void test_set_only_second_dns_server()
 {
-    set_one_dns_server<63>(standard_dns2_address, sizeof(standard_dns2_address),
-                           NULL, NULL);
+    set_one_dns_server<63>();
 }
 
 /*!\test
@@ -2205,29 +2621,31 @@ void test_set_both_dns_servers()
 
     os_write_buffer.clear();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(62,
                                                 dcpregs_read_62_primary_dns,
                                                 dcpregs_write_62_primary_dns);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns1_address)), sizeof(standard_dns1_address)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_dns1_address),
+                                              sizeof(standard_dns1_address)));
 
     reg = lookup_register_expect_handlers(63,
                                           dcpregs_read_63_secondary_dns,
                                           dcpregs_write_63_secondary_dns);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns2_address)), sizeof(standard_dns2_address)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_dns2_address),
+                                              sizeof(standard_dns2_address)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
     mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
     mock_os->expect_os_unmap_file(&config_file);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 7 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 9 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2237,14 +2655,18 @@ void test_set_both_dns_servers()
         "IPv4Netmask = %s\n"
         "IPv4Gateway = %s\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
              expected_config_file_format,
              ethernet_mac_address, standard_ipv4_address,
              standard_ipv4_netmask, standard_ipv4_gateway,
-             standard_dns1_address, standard_dns2_address);
+             standard_dns1_address, standard_dns2_address, wlan_mac_address);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -2258,28 +2680,20 @@ void test_set_both_dns_servers()
  */
 void test_read_primary_dns_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(62,
                                                 dcpregs_read_62_primary_dns,
                                                 dcpregs_write_62_primary_dns);
 
-    static constexpr char assumed_primary_dns[] = "50.60.117.208";
-
     char buffer[128];
 
-    mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
-                                                dummy_connman_iface,
-                                                false, sizeof(buffer));
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
+    ssize_t dns_server_size = reg->read_handler(reinterpret_cast<uint8_t *>(buffer), sizeof(buffer));
 
-    ssize_t dns_server_size = reg->read_handler(static_cast<uint8_t *>(static_cast<void *>(buffer)), sizeof(buffer));
+    cppcut_assert_equal(ssize_t(sizeof(standard_dns1_address)), dns_server_size);
+    cppcut_assert_equal(standard_dns1_address, static_cast<const char *>(buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(assumed_primary_dns)), dns_server_size);
-    cppcut_assert_equal(assumed_primary_dns, static_cast<const char *>(buffer));
-
-    commit_ipv4_config(true, NWPREFSTECH_UNKNOWN);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN);
 }
 
 /*!\test
@@ -2288,28 +2702,20 @@ void test_read_primary_dns_in_edit_mode_before_any_changes()
  */
 void test_read_secondary_dns_in_edit_mode_before_any_changes()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(63,
                                                 dcpregs_read_63_secondary_dns,
                                                 dcpregs_write_63_secondary_dns);
 
-    static constexpr char assumed_secondary_dns[] = "1.2.3.4";
-
     char buffer[128];
 
-    mock_connman->expect_find_interface(dummy_connman_iface, ethernet_mac_address);
-    mock_connman->expect_get_secondary_dns_string(assumed_secondary_dns,
-                                                  dummy_connman_iface,
-                                                  false, sizeof(buffer));
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
+    ssize_t dns_server_size = reg->read_handler(reinterpret_cast<uint8_t *>(buffer), sizeof(buffer));
 
-    ssize_t dns_server_size = reg->read_handler(static_cast<uint8_t *>(static_cast<void *>(buffer)), sizeof(buffer));
+    cppcut_assert_equal(ssize_t(sizeof(standard_dns2_address)), dns_server_size);
+    cppcut_assert_equal(standard_dns2_address, static_cast<const char *>(buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(assumed_secondary_dns)), dns_server_size);
-    cppcut_assert_equal("1.2.3.4", static_cast<const char *>(buffer));
-
-    commit_ipv4_config(true, NWPREFSTECH_UNKNOWN);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN);
 }
 
 /*!\test
@@ -2317,57 +2723,51 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes()
  */
 void test_replace_primary_dns_server_of_two_servers()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
-    static constexpr char assumed_primary_dns[] = "50.60.117.208";
-    static constexpr char assumed_secondary_dns[] = "1.2.3.4";
+    static constexpr char new_primary_dns[] = "50.60.117.208";
 
     auto *reg = lookup_register_expect_handlers(62,
                                                 dcpregs_read_62_primary_dns,
                                                 dcpregs_write_62_primary_dns);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns1_address)), sizeof(standard_dns1_address)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(new_primary_dns),
+                                              sizeof(new_primary_dns)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       ethernet_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
-                                                dummy_connman_iface,
-                                                false, 16);
-    mock_connman->expect_get_secondary_dns_string(assumed_secondary_dns,
-                                                  dummy_connman_iface,
-                                                  false, 16);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
         "MAC = %s\n"
         "DHCP = yes\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char output_config_file[512];
 
     snprintf(output_config_file, sizeof(output_config_file),
              expected_config_file_format,
-             ethernet_mac_address, standard_dns1_address, assumed_secondary_dns);
+             ethernet_mac_address, new_primary_dns, standard_dns2_address,
+             wlan_mac_address);
 
     size_t output_config_file_length = strlen(output_config_file);
 
@@ -2380,57 +2780,51 @@ void test_replace_primary_dns_server_of_two_servers()
  */
 void test_replace_secondary_dns_server_of_two_servers()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
-    static constexpr char assumed_primary_dns[] = "50.60.117.208";
-    static constexpr char assumed_secondary_dns[] = "1.2.3.4";
+    static constexpr char new_secondary_dns[] = "50.60.117.209";
 
     auto *reg = lookup_register_expect_handlers(63,
                                                 dcpregs_read_63_secondary_dns,
                                                 dcpregs_write_63_secondary_dns);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns2_address)), sizeof(standard_dns2_address)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(new_secondary_dns),
+                                              sizeof(new_secondary_dns)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       ethernet_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
-                                                dummy_connman_iface,
-                                                false, 16);
-    mock_connman->expect_get_secondary_dns_string(assumed_secondary_dns,
-                                                  dummy_connman_iface,
-                                                  false, 16);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
         "MAC = %s\n"
         "DHCP = yes\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char output_config_file[512];
 
     snprintf(output_config_file, sizeof(output_config_file),
              expected_config_file_format,
-             ethernet_mac_address, assumed_primary_dns, standard_dns2_address);
+             ethernet_mac_address, standard_dns1_address, new_secondary_dns,
+             wlan_mac_address);
 
     size_t output_config_file_length = strlen(output_config_file);
 
@@ -2443,56 +2837,58 @@ void test_replace_secondary_dns_server_of_two_servers()
  */
 void test_add_secondary_dns_server_to_primary_server()
 {
-    start_ipv4_config();
-
     static constexpr char assumed_primary_dns[] = "213.1.92.9";
+
+    inject_service_changes(ethernet_name,
+                           [] (Connman::ServiceData &sdata)
+                           {
+                               sdata.dns_servers_.get_rw().clear();
+                               sdata.dns_servers_.get_rw().push_back(assumed_primary_dns);
+                           });
+
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(63,
                                                 dcpregs_read_63_secondary_dns,
                                                 dcpregs_write_63_secondary_dns);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(standard_dns2_address)), sizeof(standard_dns2_address)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_dns2_address),
+                                              sizeof(standard_dns2_address)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       ethernet_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_primary_dns_string(assumed_primary_dns,
-                                                dummy_connman_iface,
-                                                false, 16);
-    mock_connman->expect_get_secondary_dns_string("",
-                                                  dummy_connman_iface,
-                                                  false, 16);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 4 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
         "MAC = %s\n"
         "DHCP = yes\n"
         "PrimaryDNS = %s\n"
-        "SecondaryDNS = %s\n";
+        "SecondaryDNS = %s\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
+        ;
 
     char output_config_file[512];
 
     snprintf(output_config_file, sizeof(output_config_file),
              expected_config_file_format,
-             ethernet_mac_address, assumed_primary_dns, standard_dns2_address);
+             ethernet_mac_address, assumed_primary_dns, standard_dns2_address,
+             wlan_mac_address);
 
     size_t output_config_file_length = strlen(output_config_file);
 
@@ -2505,32 +2901,32 @@ void test_add_secondary_dns_server_to_primary_server()
  */
 void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("none")), 4));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("none"), 4));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Ignoring wireless parameters for active wired interface");
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + 4 * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_ETHERNET);
+    commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     expect_default_network_preferences_content(os_write_buffer);
 }
@@ -2547,73 +2943,101 @@ void test_get_wlan_security_mode_for_ethernet_returns_error()
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       ethernet_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(false, "", dummy_connman_iface, false, sizeof(buffer));
-    mock_messages->expect_msg_error(EINVAL, LOG_ERR,
-                                    "No Connman security type set for active interface");
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
-
     cppcut_assert_equal(ssize_t(-1), reg->read_handler(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0), buffer[0]);
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[1]);
 }
 
-static void assume_wlan_interface_is_active()
+static void set_wlan_name(const char *wps_name)
 {
-    struct register_configuration_t *config = registers_get_nonconst_data();
+    cppcut_assert_not_null(wps_name);
 
-    config->active_interface = &config->builtin_wlan_interface;
+    auto *reg = lookup_register_expect_handlers(94,
+                                                dcpregs_read_94_ssid,
+                                                dcpregs_write_94_ssid);
+
+    cppcut_assert_equal(0,
+                        reg->write_handler(reinterpret_cast<const uint8_t *>(wps_name),
+                                           strlen(wps_name)));
 }
 
-static void set_wlan_security_mode(const char *requested_security_mode)
+static void set_wlan_name(const std::vector<uint8_t> &wps_ssid)
 {
+    cut_assert_false(wps_ssid.empty());
+
+    auto *reg = lookup_register_expect_handlers(94,
+                                                dcpregs_read_94_ssid,
+                                                dcpregs_write_94_ssid);
+
+    cppcut_assert_equal(0, reg->write_handler(wps_ssid.data(), wps_ssid.size()));
+}
+
+static void set_wlan_security_mode(const char *requested_security_mode,
+                                   bool expecting_configuration_file_be_written = true,
+                                   const char *wps_name = nullptr,
+                                   const std::vector<uint8_t> *wps_ssid = nullptr)
+{
+    cppcut_assert_not_null(requested_security_mode);
+
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(requested_security_mode)), strlen(requested_security_mode)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(requested_security_mode), strlen(requested_security_mode)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
-    for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+    if(expecting_configuration_file_be_written)
+    {
+        mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+        for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
+            mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+        mock_os->expect_os_file_close(expected_os_write_fd);
+        mock_os->expect_os_sync_dir(network_config_path);
+    }
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    if(wps_ssid != nullptr)
+        set_wlan_name(*wps_ssid);
+    else if(wps_name != nullptr)
+        set_wlan_name(wps_name);
 
-    static const char expected_config_file_format[] =
-        "[ethernet]\n"
-        "MAC = %s\n"
-        "DHCP = yes\n"
-        "[wifi]\n"
-        "MAC = %s\n"
-        "DHCP = yes\n"
-        "Security = %s\n";
+    const bool is_wps_abort(strcmp(requested_security_mode, "wps-abort") == 0);
 
-    char new_config_file_buffer[512];
-    snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, ethernet_mac_address,
-             wlan_mac_address, requested_security_mode);
+    commit_ipv4_config(is_wps_abort ? NWPREFSTECH_UNKNOWN : NWPREFSTECH_WLAN,
+                       0, expecting_configuration_file_be_written,
+                       wps_name, wps_ssid, is_wps_abort);
 
-    size_t written_config_file_length = strlen(new_config_file_buffer);
+    if(expecting_configuration_file_be_written)
+    {
+        static const char expected_config_file_format[] =
+            "[ethernet]\n"
+            "MAC = %s\n"
+            "DHCP = yes\n"
+            "[wifi]\n"
+            "MAC = %s\n"
+            "DHCP = yes\n"
+            "Security = %s\n";
 
-    cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
-                            os_write_buffer.data(), os_write_buffer.size());
+        char new_config_file_buffer[512];
+        snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
+                 expected_config_file_format, ethernet_mac_address,
+                 wlan_mac_address, requested_security_mode);
+
+        size_t written_config_file_length = strlen(new_config_file_buffer);
+
+        cut_assert_equal_memory(new_config_file_buffer, written_config_file_length,
+                                os_write_buffer.data(), os_write_buffer.size());
+    }
 }
 
 /*!\test
@@ -2641,11 +3065,36 @@ void test_set_wlan_security_mode_wpa_eap()
 }
 
 /*!\test
- * Set WLAN security mode to WPS.
+ * Set WLAN security mode to WPS, name is given.
+ */
+void test_set_wlan_security_mode_wps_with_name()
+{
+    set_wlan_security_mode("wps", false, "MyNetwork", nullptr);
+}
+
+/*!\test
+ * Set WLAN security mode to WPS, SSID is given.
+ */
+void test_set_wlan_security_mode_wps_with_ssid()
+{
+    const std::vector<uint8_t> ssid { 0x05, 0xfb, 0x81, 0xc2, 0x7a, };
+    set_wlan_security_mode("wps", false, nullptr, &ssid);
+}
+
+/*!\test
+ * Set WLAN security mode to WPS, scan mode.
  */
 void test_set_wlan_security_mode_wps()
 {
-    set_wlan_security_mode("wps");
+    set_wlan_security_mode("wps", false, nullptr, nullptr);
+}
+
+/*!\test
+ * Set WLAN security mode to pseudo mode "wps-abort" to abort WPS.
+ */
+void test_set_wlan_security_mode_to_abort_wps()
+{
+    set_wlan_security_mode("wps-abort", false, nullptr, nullptr);
 }
 
 /*!\test
@@ -2655,21 +3104,21 @@ void test_set_wlan_security_mode_wep()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("wep")), 3));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("wep"), 3));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Support for insecure WLAN mode "
@@ -2677,7 +3126,7 @@ void test_set_wlan_security_mode_wep()
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 
     expect_default_network_preferences_content(written_default_contents);
 }
@@ -2690,28 +3139,28 @@ void test_set_invalid_wlan_security_mode()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("foo")), 3));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("foo"), 3));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
                                               "Invalid WLAN security mode \"foo\" (Invalid argument)");
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 
     expect_default_network_preferences_content(written_default_contents);
 }
@@ -2719,7 +3168,13 @@ void test_set_invalid_wlan_security_mode()
 static void get_wlan_security_mode(const char *assumed_connman_security_mode,
                                    const char *expected_error_message = nullptr)
 {
-    assume_wlan_interface_is_active();
+    assume_interface_is_active<Connman::Technology::WLAN>(
+        nullptr,
+        [assumed_connman_security_mode]
+        (Connman::ServiceData &sdata, Connman::TechData<Connman::Technology::WLAN> &tdata)
+        {
+            tdata.security_ = assumed_connman_security_mode;
+        });
 
     static const uint8_t redzone_content[] =
     {
@@ -2741,22 +3196,12 @@ static void get_wlan_security_mode(const char *assumed_connman_security_mode,
         mock_messages->expect_msg_error_formatted(0, LOG_ERR,
                                                   expected_error_message);
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       wlan_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(true,
-                                                       assumed_connman_security_mode,
-                                                       dummy_connman_iface,
-                                                       false, read_size);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
-
     const ssize_t mode_length = reg->read_handler(dest, read_size);
 
     cppcut_assert_operator(ssize_t(0), <, mode_length);
     cppcut_assert_equal('\0', static_cast<char>(dest[mode_length - 1]));
     cppcut_assert_equal(assumed_connman_security_mode,
-                        static_cast<char *>(static_cast<void *>(dest)));
+                        reinterpret_cast<char *>(dest));
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
                             buffer, sizeof(redzone_content));
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -2813,26 +3258,26 @@ static void set_passphrase_with_security_mode(const char *passphrase,
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
                                                 dcpregs_write_102_passphrase);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(passphrase)), passphrase_size));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), passphrase_size));
 
     reg = lookup_register_expect_handlers(92,
                                           dcpregs_read_92_wlan_security,
                                           dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(connman_security_mode)), strlen(connman_security_mode)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(connman_security_mode), strlen(connman_security_mode)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
 
@@ -2851,7 +3296,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    commit_ipv4_config(NWPREFSTECH_WLAN);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -2912,15 +3357,14 @@ void test_ascii_passphrase_minimum_and_maximum_length()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static constexpr char passphrase[] =
         "12345678901234567890"
         "abcdefghijklmnopqrst"
         "12345678901234567890"
         "1234";
-    static const uint8_t *passphrase_arg =
-        static_cast<const uint8_t *>(static_cast<const void *>(passphrase));
+    static auto *passphrase_arg = reinterpret_cast<const uint8_t *>(passphrase);
 
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
@@ -2953,7 +3397,7 @@ struct StringWithLength
     template <size_t Length>
     explicit StringWithLength(const char (&str)[Length]):
         length_(Length - 1),
-        string_(static_cast<const uint8_t *>(static_cast<const void *>(str)))
+        string_(reinterpret_cast<const uint8_t *>(str))
     {}
 };
 
@@ -2964,7 +3408,7 @@ void test_ascii_passphrase_character_set()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
@@ -3014,35 +3458,34 @@ void test_set_empty_passphrase_with_security_mode_none_works()
  */
 void test_set_passphrase_without_security_mode_does_not_work()
 {
-    assume_wlan_interface_is_active();
+    assume_interface_is_active<Connman::Technology::WLAN>(
+        nullptr,
+        [] (Connman::ServiceData &sdata, Connman::TechData<Connman::Technology::WLAN> &tdata)
+        {
+            tdata.security_.set_unknown();
+        });
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static constexpr char passphrase[] = "SuperSecret";
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
                                                 dcpregs_write_102_passphrase);
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(passphrase)), sizeof(passphrase) - 1));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       wlan_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(true, "", dummy_connman_iface, false, 12);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 
     expect_default_network_preferences_content(written_default_contents);
 }
@@ -3054,7 +3497,7 @@ void test_get_wlan_passphrase_in_edit_mode()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static const uint8_t redzone_content[] =
     {
@@ -3082,7 +3525,7 @@ void test_get_wlan_passphrase_in_edit_mode()
         "12345678901234567890"
         "abcd";
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(passphrase)), sizeof(passphrase) - 1));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1));
 
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
     const ssize_t passphrase_length = reg->read_handler(dest, 64);
@@ -3097,7 +3540,7 @@ void test_get_wlan_passphrase_in_edit_mode()
                             sizeof(redzone_content));
 
     /* wipe out passphrase and read back */
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(passphrase)), 0));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), 0));
 
     mock_messages->expect_msg_info("Passphrase set, but empty");
 
@@ -3149,7 +3592,7 @@ void test_set_simple_ascii_wlan_ssid()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3157,29 +3600,24 @@ void test_set_simple_ascii_wlan_ssid()
 
     static constexpr char ssid[] = "MyNiceWLAN";
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(ssid)), sizeof(ssid) - 1));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(ssid), sizeof(ssid) - 1));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
-    mock_connman->expect_find_active_primary_interface(
-        dummy_connman_iface,
-        wlan_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 12);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    commit_ipv4_config(NWPREFSTECH_WLAN);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -3209,7 +3647,7 @@ void test_set_binary_wlan_ssid()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3225,26 +3663,21 @@ void test_set_binary_wlan_ssid()
     cppcut_assert_equal(0, reg->write_handler(ssid, sizeof(ssid)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address BA:DD:EA:DB:EE:F1");
+        "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
-                                              written_default_contents);
+                                              written_default_contents, 4);
 
-    mock_connman->expect_find_active_primary_interface(
-        dummy_connman_iface,
-        wlan_mac_address, ethernet_mac_address, wlan_mac_address);
-    mock_connman->expect_get_wlan_security_type_string(true, "none", dummy_connman_iface, false, 12);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
     mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(network_config_path);
 
-    commit_ipv4_config(false, NWPREFSTECH_WLAN);
+    commit_ipv4_config(NWPREFSTECH_WLAN);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -3274,7 +3707,7 @@ void test_set_empty_wlan_ssid_is_an_error()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3286,7 +3719,18 @@ void test_set_empty_wlan_ssid_is_an_error()
     uint8_t dummy = UINT8_MAX;
     cppcut_assert_equal(-1, reg->write_handler(&dummy, 0));
 
-    commit_ipv4_config(true, NWPREFSTECH_UNKNOWN);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN);
+}
+
+static char nibble_to_char(uint8_t nibble)
+{
+    static const std::array<const char, 16> tab
+    {
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
+    };
+
+    return nibble < sizeof(tab) ? tab[nibble] : '?';
 }
 
 /*!\test
@@ -3310,6 +3754,20 @@ void test_get_wlan_ssid_in_normal_mode()
         0x7f, 0x80, 0x01, 0x09, 0x62, 0xcc, 0xa8, 0xd1,
     };
 
+    assume_interface_is_active<Connman::Technology::WLAN>(
+        nullptr,
+        [] (Connman::ServiceData &sdata, Connman::TechData<Connman::Technology::WLAN> &tdata)
+        {
+            tdata.network_name_.set_unknown();
+            tdata.network_ssid_ = "";
+
+            for(const uint8_t &byte : assumed_ssid)
+            {
+                tdata.network_ssid_.get_rw().push_back(nibble_to_char(byte >> 4));
+                tdata.network_ssid_.get_rw().push_back(nibble_to_char(byte & 0x0f));
+            }
+        });
+
     uint8_t buffer[32 + 2 * sizeof(redzone_content)];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
@@ -3318,16 +3776,9 @@ void test_get_wlan_ssid_in_normal_mode()
                                                 dcpregs_write_94_ssid);
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
 
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface,
-                                                       wlan_mac_address,
-                                                       ethernet_mac_address,
-                                                       wlan_mac_address);
-    mock_connman->expect_get_wlan_ssid(assumed_ssid, sizeof(assumed_ssid),
-                                       dummy_connman_iface, false, 32);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
-
     const ssize_t ssid_length = reg->read_handler(dest, 32);
 
+    cppcut_assert_operator(ssize_t(0), <=, ssid_length);
     cut_assert_equal_memory(assumed_ssid, ssize_t(sizeof(assumed_ssid)),
                             dest, ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -3345,7 +3796,7 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static constexpr uint8_t redzone_content[] =
     {
@@ -3360,6 +3811,20 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes()
         0x0a, 0x21, 0x61, 0xff, 0x01, 0x02, 0x00, 0x81,
     };
 
+    assume_interface_is_active<Connman::Technology::WLAN>(
+        nullptr,
+        [] (Connman::ServiceData &sdata, Connman::TechData<Connman::Technology::WLAN> &tdata)
+        {
+            tdata.network_name_.set_unknown();
+            tdata.network_ssid_ = "";
+
+            for(const uint8_t &byte : assumed_ssid)
+            {
+                tdata.network_ssid_.get_rw().push_back(nibble_to_char(byte >> 4));
+                tdata.network_ssid_.get_rw().push_back(nibble_to_char(byte & 0x0f));
+            }
+        });
+
     cppcut_assert_operator(size_t(32), <=, sizeof(assumed_ssid) + sizeof(redzone_content));
 
     uint8_t buffer[sizeof(assumed_ssid) + 2 * sizeof(redzone_content)];
@@ -3370,13 +3835,9 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes()
                                                 dcpregs_write_94_ssid);
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
 
-    mock_connman->expect_find_interface(dummy_connman_iface, wlan_mac_address);
-    mock_connman->expect_get_wlan_ssid(assumed_ssid, sizeof(assumed_ssid),
-                                       dummy_connman_iface, false, 32);
-    mock_connman->expect_free_interface_data(dummy_connman_iface);
-
     const ssize_t ssid_length = reg->read_handler(dest, 32);
 
+    cppcut_assert_operator(ssize_t(0), <=, ssid_length);
     cut_assert_equal_memory(dest, ssize_t(sizeof(assumed_ssid)),
                             buffer + sizeof(redzone_content), ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -3393,7 +3854,7 @@ void test_get_wlan_ssid_in_edit_mode_after_change()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
                                                 dcpregs_read_94_ssid,
@@ -3421,6 +3882,7 @@ void test_get_wlan_ssid_in_edit_mode_after_change()
 
     const ssize_t ssid_length = reg->read_handler(buffer, sizeof(buffer));
 
+    cppcut_assert_operator(ssize_t(0), <=, ssid_length);
     cut_assert_equal_memory(ssid, ssize_t(sizeof(ssid)),
                             buffer, ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -3436,7 +3898,7 @@ void test_set_ibss_mode_adhoc_is_not_supported()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(93,
                                                 dcpregs_read_93_ibss,
@@ -3445,7 +3907,7 @@ void test_set_ibss_mode_adhoc_is_not_supported()
     mock_messages->expect_msg_error(EINVAL, LOG_NOTICE,
                                     "Cannot change IBSS mode to ad-hoc, "
                                     "always using infrastructure mode");
-    cppcut_assert_equal(-1, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("true")), 4));
+    cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>("true"), 4));
 }
 
 /*!\test
@@ -3456,7 +3918,7 @@ void test_set_ibss_mode_infrastructure_is_ignored()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(93,
                                                 dcpregs_read_93_ibss,
@@ -3464,7 +3926,7 @@ void test_set_ibss_mode_infrastructure_is_ignored()
 
     mock_messages->expect_msg_info("Ignoring IBSS infrastructure mode request "
                                    "(always using that mode)");
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("false")), 5));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("false"), 5));
 }
 
 /*!\test
@@ -3475,7 +3937,7 @@ void test_set_junk_ibss_mode_is_an_error()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static const std::array<StringWithLength, 13> junk_requests =
     {
@@ -3519,7 +3981,7 @@ void test_get_ibss_mode_returns_infrastructure_mode()
 
     uint8_t response[8];
     cppcut_assert_equal(ssize_t(6), reg->read_handler(response, sizeof(response)));
-    cppcut_assert_equal("false", static_cast<const char *>(static_cast<const void *>(response)));
+    cppcut_assert_equal("false", reinterpret_cast<const char *>(response));
 }
 
 /*!\test
@@ -3530,23 +3992,23 @@ void test_set_wpa_cipher_is_ignored()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(101,
                                                 dcpregs_read_101_wpa_cipher,
                                                 dcpregs_write_101_wpa_cipher);
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("TKIP")), 4));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TKIP"), 4));
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("TKIP")), 5));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TKIP"), 5));
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("AES")), 3));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("AES"), 3));
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>("AES")), 4));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("AES"), 4));
 }
 
 /*!\test
@@ -3557,7 +4019,7 @@ void test_set_junk_wpa_cipher_is_an_error()
 {
     assume_wlan_interface_is_active();
 
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::WLAN);
 
     static const std::array<StringWithLength, 16> junk_requests =
     {
@@ -3604,7 +4066,7 @@ void test_get_wpa_cipher_returns_aes()
 
     uint8_t response[8];
     cppcut_assert_equal(ssize_t(4), reg->read_handler(response, sizeof(response)));
-    cppcut_assert_equal("AES", static_cast<const char *>(static_cast<const void *>(response)));
+    cppcut_assert_equal("AES", reinterpret_cast<const char *>(response));
 }
 
 /*!\test
@@ -3612,7 +4074,7 @@ void test_get_wpa_cipher_returns_aes()
  */
 void test_configuration_update_is_blocked_after_shutdown()
 {
-    start_ipv4_config();
+    start_ipv4_config(Connman::Technology::ETHERNET);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"networkconfig\" down");
@@ -3629,9 +4091,9 @@ void test_configuration_update_is_blocked_after_shutdown()
 
     /* ...but writing to file is blocked */
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-        "Writing new network configuration for MAC address DE:CA:FD:EA:DB:AD");
+        "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
     mock_messages->expect_msg_info("Not writing network configuration during shutdown.");
-    commit_ipv4_config(false, NWPREFSTECH_UNKNOWN, -1);
+    commit_ipv4_config(NWPREFSTECH_UNKNOWN, -1);
 }
 
 /*!\test
@@ -3680,7 +4142,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
 
     static constexpr const std::array<const MockConnman::ServiceIterData, 5> services_data =
     {
-        MockConnman::ServiceIterData("wifi",  "First WLAN",         100, MockConnman::sec_psk_wsp),
+        MockConnman::ServiceIterData("wifi",  "First WLAN",         100, MockConnman::sec_psk_wps),
         MockConnman::ServiceIterData("wired", "Some ethernet NIC",  100, MockConnman::sec_none),
         MockConnman::ServiceIterData("wifi",  "Not the Internet",    78, MockConnman::sec_none),
         MockConnman::ServiceIterData("wifi",  "Last on the list",    56, MockConnman::sec_psk),
@@ -3698,7 +4160,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
         "<quality>100</quality>"
         "<security_list count=\"2\">"
         "<security index=\"0\">psk</security>"
-        "<security index=\"1\">wsp</security>"
+        "<security index=\"1\">wps</security>"
         "</security_list>"
         "</bss>"
         "<bss index=\"1\">"
@@ -3885,6 +4347,141 @@ void test_reading_out_ssids_without_scan_returns_empty_list()
     dynamic_buffer_free(&buffer);
 }
 
+static void expect_network_status(const std::array<uint8_t, 3> &expected_status)
+{
+    auto *reg = lookup_register_expect_handlers(50,
+                                                dcpregs_read_50_network_status,
+                                                NULL);
+    uint8_t status[expected_status.size()];
+    cppcut_assert_equal(ssize_t(sizeof(status)),
+                        reg->read_handler(status, sizeof(status)));
+
+    cut_assert_equal_memory(expected_status.data(), expected_status.size(),
+                            status, sizeof(status));
+}
+
+/*!\test
+ * In case there is a ready Ethernet and an idle WLAN service, the network
+ * status register indicates connected in Ethernet mode.
+ */
+void test_network_status__ethernet_ready__wlan_idle()
+{
+    expect_network_status({NETWORK_STATUS_IPV4_DHCP,
+                           NETWORK_STATUS_DEVICE_ETHERNET,
+                           NETWORK_STATUS_CONNECTION_CONNECTED});
+}
+
+/*!\test
+ * In case there is an idle Ethernet and a ready WLAN service, the network
+ * status register indicates connected in WLAN mode.
+ */
+void test_network_status__ethernet_idle__wlan_ready()
+{
+    inject_service_changes(ethernet_name,
+        [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::IDLE; });
+
+    inject_service_changes(wlan_name,
+        [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::READY; });
+
+    expect_network_status({NETWORK_STATUS_IPV4_DHCP,
+                           NETWORK_STATUS_DEVICE_WLAN,
+                           NETWORK_STATUS_CONNECTION_CONNECTED});
+}
+
+/*!\test
+ * In case of idle Ethernet and WLAN services, the network status register
+ * indicates disconnected in Ethernet mode.
+ */
+void test_network_status__ethernet_idle__wlan_idle()
+{
+    inject_service_changes(ethernet_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    inject_service_changes(wlan_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_ETHERNET,
+                           NETWORK_STATUS_CONNECTION_NONE});
+}
+
+/*!\test
+ * In case there is no WLAN, but an idle Ethernet service available, the status
+ * register indicates disconnected in Ethernet mode.
+ */
+void test_network_status__ethernet_idle___wlan_unavailable()
+{
+    {
+        auto locked(Connman::ServiceList::get_singleton_for_update());
+        auto &services(locked.first);
+        services.erase(wlan_name);
+    }
+
+    inject_service_changes(ethernet_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_ETHERNET,
+                           NETWORK_STATUS_CONNECTION_NONE});
+}
+
+/*!\test
+ * In case there is no Ethernet, but an idle WLAN service available, the status
+ * register indicates disconnected in WLAN mode.
+ */
+void test_network_status__ethernet_unavailable___wlan_idle()
+{
+    {
+        auto locked(Connman::ServiceList::get_singleton_for_update());
+        auto &services(locked.first);
+        services.erase(ethernet_name);
+    }
+
+    inject_service_changes(wlan_name,
+        [] (Connman::ServiceData &sdata)
+        {
+            sdata.state_ = Connman::ServiceState::IDLE;
+            sdata.ip_settings_v4_.set_unknown();
+            sdata.ip_settings_v6_.set_unknown();
+        });
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_WLAN,
+                           NETWORK_STATUS_CONNECTION_NONE});
+}
+
+/*!\test
+ * In case there no service at all, the status register indicates disconnected
+ * in no specific mode.
+ */
+void test_network_status__ethernet_unavailable___wlan_unavailable()
+{
+    {
+        auto locked(Connman::ServiceList::get_singleton_for_update());
+        auto &services(locked.first);
+        services.clear();
+    }
+
+    expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
+                           NETWORK_STATUS_DEVICE_NONE,
+                           NETWORK_STATUS_CONNECTION_NONE});
+}
+
 };
 
 namespace spi_registers_upnp
@@ -3935,7 +4532,10 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -4042,6 +4642,43 @@ void test_write_and_read_out_friendly_name_with_special_characters()
     write_and_read_name(evil_name, escaped);
 }
 
+void test_writing_different_friendly_name_restarts_flagpole_service()
+{
+    static char config_file_content[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        ;
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    auto *reg = lookup_register_expect_handlers(88,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name);
+    cppcut_assert_not_null(reg);
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TheDevice"), 9));
+
+    static const char expected_config_file[] =
+        "FRIENDLY_NAME_OVERRIDE='TheDevice'\n"
+        ;
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
 void test_writing_same_name_does_not_change_files_nor_flagpole_service()
 {
     auto *reg = lookup_register_expect_handlers(88,
@@ -4065,6 +4702,255 @@ void test_writing_same_name_does_not_change_files_nor_flagpole_service()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "UPnP name unchanged");
 
     cppcut_assert_equal(0, reg->write_handler((const uint8_t *)upnp_name, sizeof(upnp_name)));
+}
+
+void test_writing_new_appliance_id_restarts_flagpole_service()
+{
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_appliance_id("MY_APPLIANCE");
+
+    static const char expected_config_file[] = "APPLIANCE_ID='MY_APPLIANCE'\n";
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+void test_writing_new_appliance_id_leaves_other_values_untouched()
+{
+    static char config_file_content[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        "APPLIANCE_ID='Default'\n"
+        ;
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_appliance_id("MyAppliance");
+
+    static const char expected_config_file[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        "APPLIANCE_ID='MyAppliance'\n"
+        ;
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+void test_writing_same_appliance_id_does_not_change_files_nor_flagpole_service()
+{
+    static char config_file_content[] = "APPLIANCE_ID='UnitTestAppliance'\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    dcpregs_upnpname_set_appliance_id("UnitTestAppliance");
+}
+
+void test_writing_new_different_appliance_id_restarts_flagpole_service()
+{
+    static char config_file_content[] =
+        "APPLIANCE_ID='Whateverest'\n"
+        ;
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_appliance_id("X 9000");
+
+    static const char expected_config_file[] =
+        "APPLIANCE_ID='X 9000'\n"
+        ;
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+void test_writing_new_device_uuid_restarts_flagpole_service()
+{
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_device_uuid("09AB7C8F0013");
+
+    static const char expected_config_file[] = "UUID='09AB7C8F0013'\n";
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+void test_writing_new_device_uuid_leaves_other_values_untouched()
+{
+    static char config_file_content[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        "UUID='020000000000'\n"
+        "APPLIANCE_ID='Default'\n"
+        ;
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_device_uuid("30f9e75521bb60ec05bcc4b2dc414924");
+
+    static const char expected_config_file[] =
+        "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
+        "APPLIANCE_ID='Default'\n"
+        "UUID='30f9e75521bb60ec05bcc4b2dc414924'\n"
+        ;
+
+    cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+}
+
+void test_writing_same_device_uuid_does_not_change_files_nor_flagpole_service()
+{
+    static char config_file_content[] = "UUID='UnitTestUUID'\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content,
+        .length = sizeof(config_file_content) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file);
+
+    dcpregs_upnpname_set_device_uuid("UnitTestUUID");
+}
+
+void test_set_all_upnp_variables()
+{
+    /* write UUID to non-existent file */
+    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_device_uuid("09AB7C8F0013");
+
+    static char config_file_content_first[] =
+        "UUID='09AB7C8F0013'\n"
+        ;
+
+    cut_assert_equal_memory(config_file_content_first, sizeof(config_file_content_first) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+    os_write_buffer.clear();
+
+    /* add appliance ID */
+    const struct os_mapped_file_data config_file_first =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content_first,
+        .length = sizeof(config_file_content_first) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file_first, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file_first);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    dcpregs_upnpname_set_appliance_id("MY_APPLIANCE");
+
+    static char config_file_content_second[] =
+        "APPLIANCE_ID='MY_APPLIANCE'\n"
+        "UUID='09AB7C8F0013'\n"
+        ;
+
+    cut_assert_equal_memory(config_file_content_second, sizeof(config_file_content_second) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
+    os_write_buffer.clear();
+
+    /* finally, add friendly name */
+    const struct os_mapped_file_data config_file_second =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_content_second,
+        .length = sizeof(config_file_content_second) - 1,
+    };
+
+    mock_os->expect_os_map_file_to_memory(&config_file_second, expected_rc_filename);
+    mock_os->expect_os_unmap_file(&config_file_second);
+    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+    mock_os->expect_os_file_close(expected_os_write_fd);
+    mock_os->expect_os_sync_dir(expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+
+    auto *reg = lookup_register_expect_handlers(88,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name);
+    cppcut_assert_not_null(reg);
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("Unit test device"), 16));
+
+    static char config_file_content_third[] =
+        "FRIENDLY_NAME_OVERRIDE='Unit test device'\n"
+        "APPLIANCE_ID='MY_APPLIANCE'\n"
+        "UUID='09AB7C8F0013'\n"
+        ;
+
+    cut_assert_equal_memory(config_file_content_third, sizeof(config_file_content_third) - 1,
+                            os_write_buffer.data(), os_write_buffer.size());
 }
 
 };
@@ -4153,7 +5039,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
     dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
 }
@@ -4546,8 +5432,12 @@ void test_download_empty_cover_art()
     auto *reg =
         lookup_register_expect_handlers(210, dcpregs_read_210_current_cover_art_hash, nullptr);
 
+    mock_messages->expect_msg_info("Cover art: Send empty hash to SPI slave");
+
     uint8_t buffer[16];
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+
+    mock_messages->check();
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_COVER_ART };
@@ -4556,7 +5446,7 @@ void test_download_empty_cover_art()
     reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
 
     mock_messages->expect_msg_info("Download of cover art requested");
-    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "No cover art available");
+    mock_messages->expect_msg_info("No cover art available");
 
     cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
 }
@@ -5200,7 +6090,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 
@@ -5276,7 +6166,8 @@ static void set_start_title(const std::string title,
 
     const auto *const reg = register_lookup(78);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(title.c_str()),
+                                              title.length()));
 
     if(switching_to_app_mode && immediate_audio_source_selection)
     {
@@ -5293,7 +6184,8 @@ static void set_next_title(const std::string title, bool is_in_app_mode)
 
     const auto *const reg = register_lookup(238);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(title.c_str())), title.length()));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(title.c_str()),
+                                              title.length()));
 }
 
 static GVariantWrapper hash_to_variant(const MD5::Hash &hash)
@@ -5363,7 +6255,7 @@ static void set_start_url(const std::string expected_artist,
                                        url, stream_id, hash,
                                        assume_already_playing);
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(url.c_str()), url.length()));
 
     uint8_t buffer[8];
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
@@ -5397,7 +6289,7 @@ static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_da
 {
     set_start_title(meta_data, meta_data_length, true, immediate_audio_source_selection);
     set_start_url(expected_artist, expected_album, expected_title,
-                  std::string(static_cast<const char *>(static_cast<const void *>(meta_data)),
+                  std::string(reinterpret_cast<const char *>(meta_data),
                               meta_data_length),
                   url, stream_id, assume_already_playing,
                   immediate_audio_source_selection, expected_stream_key);
@@ -5516,7 +6408,7 @@ static void set_next_url(const std::string title, const std::string url,
             expected_stream_key->release();
     }
 
-    cppcut_assert_equal(0, reg->write_handler(static_cast<const uint8_t *>(static_cast<const void *>(url.c_str())), url.length()));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(url.c_str()), url.length()));
 }
 
 static void set_next_title_and_url(const std::string title, const std::string url,
@@ -6606,7 +7498,6 @@ void test_pause_and_continue()
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
                                           GVariantWrapper::move(skey_first));
-    register_changed_data->check({210});
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* also works a second time */
@@ -6614,7 +7505,6 @@ void test_pause_and_continue()
     expect_empty_cover_art_notification(skey_first);
     dcpregs_playstream_start_notification(stream_id_first.get().get_raw_id(),
                                           GVariantWrapper::move(skey_first));
-    register_changed_data->check({210});
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* now assume the next stream has started */
@@ -6689,7 +7579,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 
@@ -6739,6 +7629,7 @@ void test_read_out_empty_external_media_services()
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories;
 
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
 
     cut_assert_true(reg->read_handler_dynamic(&buffer));
@@ -6761,6 +7652,7 @@ void test_read_out_external_media_services()
 
     /* survey */
     static const uint8_t dummy = 0;
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
     register_changed_data->check(106);
@@ -6796,6 +7688,7 @@ void test_read_out_external_media_services()
         std::make_pair("Not the default", "funny&\"42>"),
     };
 
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
@@ -6846,6 +7739,7 @@ void test_read_out_unconfigured_external_media_services()
 
     /* survey */
     static const uint8_t dummy = 0;
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
     register_changed_data->check(106);
@@ -6872,6 +7766,7 @@ void test_read_out_unconfigured_external_media_services()
         TRUE, dbus_cred_read_iface_dummy,
         no_accounts, "");
 
+    mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     cut_assert_true(reg->read_handler_dynamic(&buffer));
 
     const std::string expected_answer =
@@ -6895,6 +7790,7 @@ void test_trigger_media_services_survey()
                                                 dcpregs_write_106_media_service_list);
 
     static const uint8_t dummy = 0;
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
 
     register_changed_data->check(106);
@@ -6912,9 +7808,11 @@ void test_set_service_credentials()
     static const uint8_t data[] = "tidal\0login email\0my password";
 
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "tidal", "", "");
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_airable_dbus->expect_tdbus_airable_call_external_service_logout_sync(
         TRUE, dbus_airable_iface_dummy,
@@ -6939,9 +7837,11 @@ void test_password_may_be_zero_terminated()
     static const uint8_t data[] = "deezer\0login\0password\0";
 
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_write_call_delete_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "deezer", "", "");
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_airable_dbus->expect_tdbus_airable_call_external_service_logout_sync(
         TRUE, dbus_airable_iface_dummy,
@@ -6966,6 +7866,7 @@ void test_set_service_credentials_requires_service_id()
     static const uint8_t data[] = "\0login email\0my password";
 
     mock_messages->expect_msg_error(0, EINVAL, "Empty service ID sent to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
@@ -6982,6 +7883,7 @@ void test_set_service_credentials_requires_login_for_password()
     static const uint8_t data[] = "tidal\0\0my password";
 
     mock_messages->expect_msg_error(0, EINVAL, "Empty login sent to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
@@ -6998,6 +7900,7 @@ void test_set_service_credentials_requires_password_for_login()
     static const uint8_t data[] = "tidal\0login\0";
 
     mock_messages->expect_msg_error(0, EINVAL, "Empty password sent to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
@@ -7014,6 +7917,7 @@ void test_no_junk_after_password_allowed()
     static const uint8_t data[] = "tidal\0login\0password\0\0";
 
     mock_messages->expect_msg_error(0, EINVAL, "Malformed data written to register 106");
+    mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
     cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
 }
@@ -7056,7 +7960,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -7257,6 +8161,11 @@ namespace spi_registers_misc
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
+static MockDcpdDBus *mock_dcpd_dbus;
+static MockDBusIface *mock_dbus_iface;
+
+static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
+    reinterpret_cast<tdbusdcpdPlayback *>(0x12345678);
 
 static constexpr char expected_config_filename[] = "/etc/os-release";
 
@@ -7283,6 +8192,16 @@ void cut_setup()
     mock_os->init();
     mock_os_singleton = mock_os;
 
+    mock_dcpd_dbus = new MockDcpdDBus();
+    cppcut_assert_not_null(mock_dcpd_dbus);
+    mock_dcpd_dbus->init();
+    mock_dcpd_dbus_singleton = mock_dcpd_dbus;
+
+    mock_dbus_iface = new MockDBusIface;
+    cppcut_assert_not_null(mock_dbus_iface);
+    mock_dbus_iface->init();
+    mock_dbus_iface_singleton = mock_dbus_iface;
+
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
     register_changed_data->init();
@@ -7294,7 +8213,7 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
 }
 
@@ -7310,15 +8229,23 @@ void cut_teardown()
 
     mock_messages->check();
     mock_os->check();
+    mock_dcpd_dbus->check();
+    mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
+    mock_dcpd_dbus_singleton = nullptr;
+    mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
+    delete mock_dcpd_dbus;
+    delete mock_dbus_iface;
 
     mock_messages = nullptr;
     mock_os = nullptr;
+    mock_dcpd_dbus = nullptr;
+    mock_dbus_iface = nullptr;
 }
 
 /*!\test
@@ -7667,6 +8594,219 @@ void test_status_byte_updates_are_only_sent_if_changed()
 
     dcpregs_status_set_reboot_required();
     register_changed_data->check();
+}
+
+static void set_speed_factor_successful_cases(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+    const double sign_mul = (subcommand == 0xc1) ? 1.0 : -1.0;
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 4.0);
+
+    const uint8_t buffer_fraction_lower_boundary[] = { subcommand, 0x04, 0x00, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_fraction_lower_boundary,
+                                              sizeof(buffer_fraction_lower_boundary)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 4.18);
+
+    const uint8_t buffer_generic[] = { subcommand, 0x04, 0x12, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_generic, sizeof(buffer_generic)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 4.99);
+
+    const uint8_t buffer_fraction_upper_boundary[] = { subcommand, 0x04, 0x63, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_fraction_upper_boundary,
+                                              sizeof(buffer_fraction_upper_boundary)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 0.01);
+
+    const uint8_t buffer_absolute_minimum[] = { subcommand, 0x00, 0x01, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_absolute_minimum,
+                                              sizeof(buffer_absolute_minimum)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
+                                                              sign_mul * 255.99);
+
+    const uint8_t buffer_absolute_maximum[] = { subcommand, 0xff, 0x63, };
+    cppcut_assert_equal(0, reg->write_handler(buffer_absolute_maximum,
+                                              sizeof(buffer_absolute_maximum)));
+}
+
+static void set_speed_factor_wrong_command_format(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    /* too long */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
+
+    const uint8_t buffer_too_long[] = { subcommand, 0x04, 0x00, 0x00 };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_too_long, sizeof(buffer_too_long)));
+
+    mock_messages->check();
+
+    /* too short */
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
+
+    const uint8_t buffer_too_short[] = { subcommand, 0x04 };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_too_short, sizeof(buffer_too_short)));
+}
+
+static void set_speed_factor_invalid_factor(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
+
+    const uint8_t buffer_first_invalid[] = { subcommand, 0x04, 0x64, };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_first_invalid, sizeof(buffer_first_invalid)));
+
+    mock_messages->check();
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
+
+    const uint8_t buffer_last_invalid[] = { subcommand, 0x04, 0xff, };
+    cppcut_assert_equal(-1, reg->write_handler(buffer_last_invalid, sizeof(buffer_last_invalid)));
+}
+
+static void set_speed_factor_zero(uint8_t subcommand)
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor too small (Invalid argument)");
+
+    const uint8_t buffer[] = { subcommand, 0x00, 0x00, };
+    cppcut_assert_equal(-1, reg->write_handler(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Slave sends command for fast forward.
+ */
+void test_playback_set_speed_forward()
+{
+    set_speed_factor_successful_cases(0xc1);
+}
+
+/*!\test
+ * Slave sends fast forward command with wrong command length.
+ */
+void test_playback_set_speed_forward_command_has_2_bytes_of_data()
+{
+    set_speed_factor_wrong_command_format(0xc1);
+}
+
+/*!\test
+ * Slave sends fast forward command with invalid factor.
+ */
+void test_playback_set_speed_forward_fraction_part_is_two_digits_decimal()
+{
+    set_speed_factor_invalid_factor(0xc1);
+}
+
+/*!\test
+ * Slave sends fast forward command with factor 0.
+ */
+void test_playback_set_speed_forward_zero_factor_is_invalid()
+{
+    set_speed_factor_zero(0xc1);
+}
+
+/*!\test
+ * Slave sends command for fast reverse.
+ */
+void test_playback_set_speed_reverse()
+{
+    set_speed_factor_successful_cases(0xc2);
+}
+
+/*!\test
+ * Slave sends fast reverse command with wrong command length.
+ */
+void test_playback_set_speed_reverse_command_has_2_bytes_of_data()
+{
+    set_speed_factor_wrong_command_format(0xc2);
+}
+
+/*!\test
+ * Slave sends fast reverse command with invalid factor.
+ */
+void test_playback_set_speed_reverse_fraction_part_is_two_digits_decimal()
+{
+    set_speed_factor_invalid_factor(0xc2);
+}
+
+/*!\test
+ * Slave sends fast reverse command with factor 0.
+ */
+void test_playback_set_speed_reverse_zero_factor_is_invalid()
+{
+    set_speed_factor_zero(0xc2);
+}
+
+/*!\test
+ * Reverting to regular speed is done via own subcommand.
+ */
+void test_playback_regular_speed()
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy, 0.0);
+
+    static const uint8_t buffer[] = { 0xc3 };
+    cppcut_assert_equal(0, reg->write_handler(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Stream seek position is given in milliseconds as 32 bit little-endian value.
+ */
+void test_playback_stream_seek()
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
+                                                         264781241, "ms");
+
+    static const uint8_t buffer[] = { 0xc4, 0xb9, 0x3d, 0xc8, 0x0f };
+    cppcut_assert_equal(0, reg->write_handler(buffer, sizeof(buffer)));
+}
+
+/*!\test
+ * Stream seek position can be any 32 bit unsigned integer value.
+ */
+void test_playback_stream_seek_boundaries()
+{
+    const struct dcp_register_t *reg =
+        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
+                                                         0, "ms");
+
+    static const uint8_t buffer_min[] = { 0xc4, 0x00, 0x00, 0x00, 0x00 };
+    cppcut_assert_equal(0, reg->write_handler(buffer_min, sizeof(buffer_min)));
+
+    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
+                                                         UINT32_MAX, "ms");
+
+    static const uint8_t buffer_max[] = { 0xc4, 0xff, 0xff, 0xff, 0xff };
+    cppcut_assert_equal(0, reg->write_handler(buffer_max, sizeof(buffer_max)));
 }
 
 };

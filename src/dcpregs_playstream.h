@@ -37,6 +37,7 @@ void dcpregs_playstream_init(void);
 void dcpregs_playstream_late_init(void);
 void dcpregs_playstream_deinit(void);
 
+int dcpregs_write_73_seek_or_set_speed(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length);
 ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length);
 int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length);

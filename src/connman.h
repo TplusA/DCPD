@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,37 +20,6 @@
 #define CONNMAN_H
 
 #include <stdbool.h>
-#include <stdint.h>
-#include <unistd.h>
-
-/*!
- * Internal type for Connman interface code for storing D-Bus results.
- *
- * This is just a GLib \c GVariant, but to keep unit testing smooth and easy,
- * we don't want anything to depend on GLib that doesn't have to. Neither do we
- * want to pull in the whole \c glib.h insanity just for a typedef.
- */
-struct ConnmanInterfaceData;
-
-enum ConnmanConnectionType
-{
-    CONNMAN_CONNECTION_TYPE_UNKNOWN,
-    CONNMAN_CONNECTION_TYPE_ETHERNET,
-    CONNMAN_CONNECTION_TYPE_WLAN,
-};
-
-enum ConnmanReadConfigSource
-{
-    CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-    CONNMAN_READ_CONFIG_SOURCE_REQUESTED,
-    CONNMAN_READ_CONFIG_SOURCE_ANY,
-};
-
-enum ConnmanIPVersion
-{
-    CONNMAN_IP_VERSION_4,
-    CONNMAN_IP_VERSION_6,
-};
 
 /*!
  * WLAN site survey result.
@@ -71,29 +40,6 @@ enum ConnmanSiteScanResult
 
 typedef void (*ConnmanSurveyDoneFn)(enum ConnmanSiteScanResult result);
 
-enum ConnmanDHCPMode
-{
-    CONNMAN_DHCP_NOT_AVAILABLE,
-    CONNMAN_DHCP_UNKNOWN_METHOD,
-    CONNMAN_DHCP_ON,
-    CONNMAN_DHCP_OFF,
-    CONNMAN_DHCP_AUTO,
-    CONNMAN_DHCP_MANUAL,
-    CONNMAN_DHCP_FIXED,
-};
-
-enum ConnmanServiceState
-{
-    CONNMAN_STATE_NOT_SPECIFIED,
-    CONNMAN_STATE_IDLE,
-    CONNMAN_STATE_FAILURE,
-    CONNMAN_STATE_ASSOCIATION,
-    CONNMAN_STATE_CONFIGURATION,
-    CONNMAN_STATE_READY,
-    CONNMAN_STATE_DISCONNECT,
-    CONNMAN_STATE_ONLINE,
-};
-
 struct ConnmanServiceIterator;
 struct ConnmanServiceSecurityIterator;
 
@@ -101,62 +47,11 @@ struct ConnmanServiceSecurityIterator;
 extern "C" {
 #endif
 
-/*!
- * Find information about NIC with given MAC address, regardless of state.
- */
-struct ConnmanInterfaceData *connman_find_interface(const char *mac_address);
-struct ConnmanInterfaceData *connman_find_interface_by_object_path(const char *path);
-
-/*!
- * Find active NIC with MAC address matching one of the given ones.
- *
- * In case both, the wired and the wireless, NICs are found and both are
- * active, then the NIC with the MAC address given in \p default_mac_address is
- * returned (making it a tiebreaker).
- *
- * In case any of the NICs is found, but all of them are in inactive
- * (unconfigured) state, then (and only then) the first discovered device will
- * be returned in \p fallback.
- */
-struct ConnmanInterfaceData *
-connman_find_active_primary_interface(const char *default_mac_address,
-                                      const char *wired_mac_address,
-                                      const char *wireless_mac_address,
-                                      struct ConnmanInterfaceData **fallback);
-
-bool connman_get_favorite(struct ConnmanInterfaceData *iface_data);
-bool connman_get_auto_connect_mode(struct ConnmanInterfaceData *iface_data);
-enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
-                                           enum ConnmanIPVersion ipver,
-                                           enum ConnmanReadConfigSource src);
-enum ConnmanConnectionType connman_get_connection_type(struct ConnmanInterfaceData *iface_data);
-enum ConnmanServiceState connman_get_state(struct ConnmanInterfaceData *iface_data);
-bool connman_get_address_string(struct ConnmanInterfaceData *iface_data,
-                                enum ConnmanIPVersion ipver,
-                                enum ConnmanReadConfigSource src,
-                                char *dest, size_t dest_size);
-bool connman_get_netmask_string(struct ConnmanInterfaceData *iface_data,
-                                enum ConnmanIPVersion ipver,
-                                enum ConnmanReadConfigSource src,
-                                char *dest, size_t dest_size);
-bool connman_get_gateway_string(struct ConnmanInterfaceData *iface_data,
-                                enum ConnmanIPVersion ipver,
-                                enum ConnmanReadConfigSource src,
-                                char *dest, size_t dest_size);
-bool connman_get_primary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                    char *dest, size_t dest_size);
-bool connman_get_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                      char *dest, size_t dest_size);
-bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
-                                           char *dest, size_t dest_size);
-size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,
-                             uint8_t *dest, size_t dest_size);
-void connman_free_interface_data(struct ConnmanInterfaceData *iface_data);
-
 struct ConnmanServiceIterator *connman_service_iterator_get(void);
 void connman_service_iterator_rewind(struct ConnmanServiceIterator *iter);
 bool connman_service_iterator_next(struct ConnmanServiceIterator *iter);
 void connman_service_iterator_free(struct ConnmanServiceIterator *iter);
+const char *connman_service_iterator_get_service_name(struct ConnmanServiceIterator *iter);
 const char *connman_service_iterator_get_technology_type(struct ConnmanServiceIterator *iter);
 const char *connman_service_iterator_get_ssid(struct ConnmanServiceIterator *iter);
 int connman_service_iterator_get_strength(struct ConnmanServiceIterator *iter);

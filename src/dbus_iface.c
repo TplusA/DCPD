@@ -59,12 +59,17 @@ static struct dbus_data dbus_data_session_bus;
 static struct
 {
     bool connect_to_session_bus;
+
+    struct ConfigurationManagementData *config_management_data;
+
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
     tdbusdcpdListNavigation *list_navigation_iface;
     tdbusdcpdListItem *list_item_iface;
     tdbusaupathSource *audiopath_source_iface;
     tdbusConfigurationProxy *configproxy_iface;
+    tdbusConfigurationRead *configuration_read_iface;
+    tdbusConfigurationMonitor *configuration_monitor_iface;
     tdbusdebugLogging *debug_logging_iface;
     tdbusdebugLoggingConfig *debug_logging_config_iface;
 }
@@ -85,10 +90,11 @@ static struct
 }
 streamplayer_iface_data;
 
-static struct
+static struct airable_iface_data
 {
     bool connect_to_session_bus;
     tdbusAirable *airable_sec_iface;
+    struct smartphone_app_connection_data *appconn_data;
 }
 airable_iface_data;
 
@@ -107,7 +113,7 @@ static struct
 }
 audiopath_iface_data;
 
-static struct
+static struct credentials_iface_data
 {
     bool connect_to_session_bus;
     tdbuscredentialsRead *cred_read_iface;
@@ -168,17 +174,31 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
         dcpd_iface_data.audiopath_source_iface = tdbus_aupath_source_skeleton_new();
         dcpd_iface_data.configproxy_iface = tdbus_configuration_proxy_skeleton_new();
+        dcpd_iface_data.configuration_read_iface = tdbus_configuration_read_skeleton_new();
+        dcpd_iface_data.configuration_monitor_iface = tdbus_configuration_monitor_skeleton_new();
         dcpd_iface_data.debug_logging_iface = tdbus_debug_logging_skeleton_new();
         dcpd_iface_data.debug_logging_config_iface = tdbus_debug_logging_config_skeleton_new();
 
         g_signal_connect(dcpd_iface_data.playback_iface, "handle-set-stream-info",
                          G_CALLBACK(dbusmethod_set_stream_info), NULL);
+
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-selected",
                          G_CALLBACK(dbusmethod_audiopath_source_selected), NULL);
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-deselected",
                          G_CALLBACK(dbusmethod_audiopath_source_deselected), NULL);
+
         g_signal_connect(dcpd_iface_data.configproxy_iface, "handle-register",
                          G_CALLBACK(dbusmethod_configproxy_register), NULL);
+        g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-keys",
+                         G_CALLBACK(dbusmethod_config_get_all_keys),
+                         dcpd_iface_data.config_management_data);
+        g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-value",
+                         G_CALLBACK(dbusmethod_config_get_value),
+                         dcpd_iface_data.config_management_data);
+        g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-values",
+                         G_CALLBACK(dbusmethod_config_get_all_values),
+                         dcpd_iface_data.config_management_data);
+
         g_signal_connect(dcpd_iface_data.debug_logging_iface,
                          "handle-debug-level",
                          G_CALLBACK(dbusmethod_debug_logging_debug_level), NULL);
@@ -192,6 +212,8 @@ static void bus_acquired(GDBusConnection *connection,
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_item_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.audiopath_source_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configproxy_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configuration_read_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configuration_monitor_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_config_iface));
     }
@@ -217,6 +239,43 @@ static void bus_acquired(GDBusConnection *connection,
 
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(connman_iface_data.connman_agent_iface));
     }
+}
+
+static void created_airable_proxy(GObject *source_object, GAsyncResult *res,
+                                  gpointer user_data)
+{
+    struct airable_iface_data *data = user_data;
+    GError *error = NULL;
+
+    data->airable_sec_iface = tdbus_airable_proxy_new_finish(res, &error);
+
+    if(dbus_common_handle_dbus_error(&error, "Create Airable sec proxy") == 0)
+        g_signal_connect(data->airable_sec_iface, "g-signal",
+                         G_CALLBACK(dbussignal_airable), data->appconn_data);
+}
+
+static void created_cred_read_proxy(GObject *source_object, GAsyncResult *res,
+                                    gpointer user_data)
+{
+    struct credentials_iface_data *data = user_data;
+    GError *error = NULL;
+
+    data->cred_read_iface =
+        tdbus_credentials_read_proxy_new_finish(res, &error);
+
+    (void)dbus_common_handle_dbus_error(&error, "Create Airable credread proxy");
+}
+
+static void created_cred_write_proxy(GObject *source_object, GAsyncResult *res,
+                                     gpointer user_data)
+{
+    struct credentials_iface_data *data = user_data;
+    GError *error = NULL;
+
+    data->cred_write_iface =
+        tdbus_credentials_write_proxy_new_finish(res, &error);
+
+    (void)dbus_common_handle_dbus_error(&error, "Create Airable credwrite proxy");
 }
 
 static void name_acquired(GDBusConnection *connection,
@@ -264,17 +323,10 @@ static void name_acquired(GDBusConnection *connection,
     }
 
     if(is_session_bus == airable_iface_data.connect_to_session_bus)
-    {
-        GError *error = NULL;
-
-        airable_iface_data.airable_sec_iface =
-            tdbus_airable_proxy_new_sync(connection,
-                                         G_DBUS_PROXY_FLAGS_NONE,
-                                         "de.tahifi.TuneInBroker",
-                                         "/de/tahifi/TuneInBroker",
-                                         NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error, "Create Airable sec proxy");
-    }
+        tdbus_airable_proxy_new(connection, G_DBUS_PROXY_FLAGS_NONE,
+                                "de.tahifi.TuneInBroker",
+                                "/de/tahifi/TuneInBroker", NULL,
+                                created_airable_proxy, &airable_iface_data);
 
     if(is_session_bus == artcache_iface_data.connect_to_session_bus)
     {
@@ -312,23 +364,19 @@ static void name_acquired(GDBusConnection *connection,
 
     if(is_session_bus == credentials_iface_data.connect_to_session_bus)
     {
-        GError *error = NULL;
+        tdbus_credentials_read_proxy_new(connection,
+                                         G_DBUS_PROXY_FLAGS_NONE,
+                                         "de.tahifi.TuneInBroker",
+                                         "/de/tahifi/TuneInBroker", NULL,
+                                         created_cred_read_proxy,
+                                         &credentials_iface_data);
 
-        credentials_iface_data.cred_read_iface =
-            tdbus_credentials_read_proxy_new_sync(connection,
-                                                  G_DBUS_PROXY_FLAGS_NONE,
-                                                  "de.tahifi.TuneInBroker",
-                                                  "/de/tahifi/TuneInBroker",
-                                                  NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error, "Create Airable credread proxy");
-
-        credentials_iface_data.cred_write_iface =
-            tdbus_credentials_write_proxy_new_sync(connection,
-                                                   G_DBUS_PROXY_FLAGS_NONE,
-                                                   "de.tahifi.TuneInBroker",
-                                                   "/de/tahifi/TuneInBroker",
-                                                   NULL, &error);
-        (void)dbus_common_handle_dbus_error(&error, "Create Airable credwrite proxy");
+        tdbus_credentials_write_proxy_new(connection,
+                                          G_DBUS_PROXY_FLAGS_NONE,
+                                          "de.tahifi.TuneInBroker",
+                                          "/de/tahifi/TuneInBroker", NULL,
+                                          created_cred_write_proxy,
+                                          &credentials_iface_data);
     }
 
     if(!is_session_bus)
@@ -392,7 +440,8 @@ static struct dbus_process_data process_data;
 
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
                struct smartphone_app_connection_data *appconn_data,
-               struct dbussignal_connman_manager_data *connman_data)
+               struct DBusSignalManagerData *connman_data,
+               struct ConfigurationManagementData *configuration_data)
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();
@@ -422,9 +471,11 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     }
 
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
+    dcpd_iface_data.config_management_data = configuration_data;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.connect_to_session_bus = connect_to_session_bus;
+    airable_iface_data.appconn_data = appconn_data;
     artcache_iface_data.connect_to_session_bus = connect_to_session_bus;
     audiopath_iface_data.connect_to_session_bus = connect_to_session_bus;
     credentials_iface_data.connect_to_session_bus = connect_to_session_bus;
@@ -478,17 +529,16 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(dcpd_iface_data.list_item_iface != NULL);
     log_assert(dcpd_iface_data.audiopath_source_iface != NULL);
     log_assert(dcpd_iface_data.configproxy_iface != NULL);
+    log_assert(dcpd_iface_data.configuration_read_iface != NULL);
+    log_assert(dcpd_iface_data.configuration_monitor_iface != NULL);
     log_assert(dcpd_iface_data.debug_logging_iface != NULL);
     log_assert(dcpd_iface_data.debug_logging_config_iface != NULL);
     log_assert(filetransfer_iface_data.iface != NULL);
     log_assert(streamplayer_iface_data.playback_iface != NULL);
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
-    log_assert(airable_iface_data.airable_sec_iface != NULL);
     log_assert(artcache_iface_data.artcache_read_iface != NULL);
     log_assert(artcache_iface_data.artcache_monitor_iface != NULL);
     log_assert(audiopath_iface_data.audiopath_manager_proxy != NULL);
-    log_assert(credentials_iface_data.cred_read_iface != NULL);
-    log_assert(credentials_iface_data.cred_write_iface != NULL);
     log_assert(connman_iface_data.connman_agent_iface != NULL);
 
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
@@ -497,9 +547,6 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     g_signal_connect(streamplayer_iface_data.playback_iface, "g-signal",
                      G_CALLBACK(dbussignal_splay_playback), NULL);
 
-    g_signal_connect(airable_iface_data.airable_sec_iface, "g-signal",
-                     G_CALLBACK(dbussignal_airable), appconn_data);
-
     g_signal_connect(artcache_iface_data.artcache_monitor_iface, "g-signal",
                      G_CALLBACK(dbussignal_artcache_monitor), NULL);
 
@@ -507,6 +554,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     {
         log_assert(connman_iface_data.connman_manager_iface != NULL);
 
+        dbussignal_connman_manager_about_to_connect_signals();
         g_signal_connect(connman_iface_data.connman_manager_iface, "g-signal",
                          G_CALLBACK(dbussignal_connman_manager), connman_data);
     }
@@ -548,18 +596,28 @@ void dbus_shutdown(void)
     g_object_unref(dcpd_iface_data.list_item_iface);
     g_object_unref(dcpd_iface_data.audiopath_source_iface);
     g_object_unref(dcpd_iface_data.configproxy_iface);
+    g_object_unref(dcpd_iface_data.configuration_read_iface);
+    g_object_unref(dcpd_iface_data.configuration_monitor_iface);
     g_object_unref(dcpd_iface_data.debug_logging_iface);
     g_object_unref(dcpd_iface_data.debug_logging_config_iface);
 
     g_object_unref(filetransfer_iface_data.iface);
     g_object_unref(streamplayer_iface_data.playback_iface);
     g_object_unref(streamplayer_iface_data.urlfifo_iface);
-    g_object_unref(airable_iface_data.airable_sec_iface);
+
+    if(airable_iface_data.airable_sec_iface != NULL)
+        g_object_unref(airable_iface_data.airable_sec_iface);
+
     g_object_unref(artcache_iface_data.artcache_read_iface);
     g_object_unref(artcache_iface_data.artcache_monitor_iface);
     g_object_unref(audiopath_iface_data.audiopath_manager_proxy);
-    g_object_unref(credentials_iface_data.cred_read_iface);
-    g_object_unref(credentials_iface_data.cred_write_iface);
+
+    if(credentials_iface_data.cred_read_iface != NULL)
+        g_object_unref(credentials_iface_data.cred_read_iface);
+
+    if(credentials_iface_data.cred_write_iface != NULL)
+        g_object_unref(credentials_iface_data.cred_write_iface);
+
     g_object_unref(connman_iface_data.connman_agent_iface);
 
     if(connman_iface_data.connman_manager_iface != NULL)
@@ -734,6 +792,11 @@ tdbusConfigurationWrite *dbus_get_configuration_write_iface(const char *dest, co
     (void)dbus_common_handle_dbus_error(&error, "Create Configuration.Write proxy");
 
     return proxy;
+}
+
+tdbusConfigurationMonitor *dbus_get_configuration_monitor_iface(void)
+{
+    return dcpd_iface_data.configuration_monitor_iface;
 }
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void)

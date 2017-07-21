@@ -38,15 +38,18 @@
 #include "dbus_iface.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "registers.h"
+#include "dcpregs_appliance.h"
 #include "dcpregs_status.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
+#include "dcpregs_upnpname.h"
 #include "connman.h"
 #include "networkprefs.h"
 #include "configproxy.h"
+#include "configuration_dcpd.hh"
 #include "os.h"
 #include "versioninfo.h"
 
@@ -74,11 +77,13 @@
 #define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
 #define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 13)
 #define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 14)
+#define WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED    (1U << 15)
 
 enum PrimitiveQueueCommand
 {
     PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
     PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
+    PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES,
 };
 
 /*!
@@ -386,6 +391,10 @@ static unsigned int handle_primqueue_events(int fd, short revents)
                   case PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN:
                     result |= WAITEVENT_CONNECT_TO_WLAN_REQUESTED;
                     break;
+
+                  case PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES:
+                    result |= WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED;;
+                    break;
                 }
             }
 
@@ -664,8 +673,11 @@ static void handle_register_change(unsigned int wait_result, int fd,
 }
 
 static void handle_connman_manager_events(unsigned int wait_result,
-                                          struct dbussignal_connman_manager_data *data)
+                                          struct DBusSignalManagerData *data)
 {
+    if((wait_result & WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED) != 0)
+        dbussignal_connman_manager_refresh_services();
+
     if((wait_result & WAITEVENT_CONNECT_TO_WLAN_REQUESTED) != 0)
         dbussignal_connman_manager_connect_our_wlan(data);
 }
@@ -746,6 +758,12 @@ static void try_connect_to_managed_wlan(void)
 {
     primitive_queue_send(PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
                          "connecting to WLAN");
+}
+
+static void deferred_connman_refresh(void)
+{
+    primitive_queue_send(PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES,
+                         "refreshing ConnMan service list");
 }
 
 /*!
@@ -841,7 +859,7 @@ static void handle_transaction_exception(struct state *const state,
 static void main_loop(struct files *files,
                       struct dcp_over_tcp_data *dot,
                       struct smartphone_app_connection_data *appconn,
-                      struct dbussignal_connman_manager_data *connman,
+                      struct DBusSignalManagerData *connman,
                       int primitive_queue_fd, int register_changed_fd)
 {
     static struct state state;
@@ -875,7 +893,7 @@ static void main_loop(struct files *files,
         {
             if(try_preallocate_buffer(&state.drcp_buffer, &files->drcp_fifo) &&
                dynamic_buffer_fill_from_fd(&state.drcp_buffer,
-                                           files->drcp_fifo.in_fd, false,
+                                           files->drcp_fifo.in_fd, true,
                                            "DRCP data"))
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
@@ -968,6 +986,20 @@ static void main_loop(struct files *files,
     transaction_free(&state.preallocated_inet_slave_transaction);
 }
 
+static void register_own_config_keys(Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager)
+{
+    auto managed_keys(config_manager.keys());
+    auto keys(static_cast<char **>(g_malloc_n(managed_keys.size() + 1, sizeof(char *))));
+
+    size_t i = 0;
+    for(auto &k : managed_keys)
+        keys[i++] = g_strdup(k);
+
+    keys[i] = nullptr;
+
+    configproxy_register_local_configuration_owner(Configuration::ApplianceValues::OWNER_NAME, keys);
+}
+
 struct parameters
 {
     enum MessageVerboseLevel verbose_level;
@@ -977,16 +1009,20 @@ struct parameters
     bool is_fixing_broken_update_state;
     bool is_upgrade_enforced;
     bool is_upgrade_strongly_enforced;
-    const char *ethernet_interface_mac_address;
-    const char *wlan_interface_mac_address;
 };
 
 static bool main_loop_init(const struct parameters *parameters,
+                           Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager,
                            struct smartphone_app_connection_data *appconn,
-                           struct dbussignal_connman_manager_data **connman,
+                           struct DBusSignalManagerData **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
+    dcpregs_upnpname_init();
     configproxy_init();
+
+    Configuration::register_configuration_manager(config_manager);
+    register_own_config_keys(config_manager);
+    config_manager.load();
 
     static const char network_preferences_dir[] = "/var/local/etc";
     static const char network_preferences_file[] = "network.ini";
@@ -997,20 +1033,21 @@ static bool main_loop_init(const struct parameters *parameters,
     snprintf(network_preferences_full_file, sizeof(network_preferences_full_file),
              "%s/%s", network_preferences_dir, network_preferences_file);
 
-    network_prefs_init(parameters->ethernet_interface_mac_address,
-                       parameters->wlan_interface_mac_address,
-                       network_preferences_dir, network_preferences_full_file);
+    network_prefs_init(network_preferences_dir, network_preferences_full_file);
+
+    dcpregs_appliance_id_init();
 
     if(!is_upgrading)
-        network_prefs_migrate_old_network_configuration_files(connman_config_dir,
-                                                              parameters->ethernet_interface_mac_address);
+        network_prefs_migrate_old_network_configuration_files(connman_config_dir);
 
     register_init(push_register_to_slave);
     dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
 
     transaction_init_allocator();
 
-    *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan);
+    *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan,
+                                               deferred_connman_refresh,
+                                               parameters->with_connman);
 
     applink_init();
 
@@ -1183,8 +1220,6 @@ static void usage(const char *program_name)
            "  --fg           Run in foreground, don't run as daemon.\n"
            "  --verbose lvl  Set verbosity level to given level.\n"
            "  --quiet        Short for \"--verbose quite\".\n"
-           "  --ethernet-mac MAC address of built-in Ethernet interface (mandatory).\n"
-           "  --wlan-mac     MAC address of built-in W-LAN interface.\n"
            "  --ispi  name   Name of the named pipe the DCPSPI daemon writes to.\n"
            "  --ospi  name   Name of the named pipe the DCPSPI daemon reads from.\n"
            "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
@@ -1213,6 +1248,8 @@ static int process_command_line(int argc, char *argv[],
     files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
     files->drcp_fifo_in_name = "/tmp/drcpd_to_dcpd";
     files->drcp_fifo_out_name = "/tmp/dcpd_to_drcpd";
+
+    bool seen_unknown_parameters = false;
 
 #define CHECK_ARGUMENT() \
     do \
@@ -1288,31 +1325,17 @@ static int process_command_line(int argc, char *argv[],
             parameters->is_upgrade_enforced = true;
             parameters->is_upgrade_strongly_enforced = true;
         }
-        else if(strcmp(argv[i], "--ethernet-mac") == 0)
-        {
-            CHECK_ARGUMENT();
-            parameters->ethernet_interface_mac_address = argv[i];
-        }
-        else if(strcmp(argv[i], "--wlan-mac") == 0)
-        {
-            CHECK_ARGUMENT();
-            parameters->wlan_interface_mac_address = argv[i];
-        }
         else
         {
             fprintf(stderr, "Unknown option \"%s\". Please try --help.\n", argv[i]);
-            return -1;
+            seen_unknown_parameters = true;
         }
     }
 
 #undef CHECK_ARGUMENT
 
-    if(parameters->ethernet_interface_mac_address == NULL)
-    {
-        /* missing W-LAN parameters are OK */
-        fprintf(stderr, "Missing options. Please try --help.\n");
+    if(seen_unknown_parameters && parameters->run_in_foreground)
         return -1;
-    }
 
     return 0;
 }
@@ -1487,17 +1510,28 @@ int main(int argc, char *argv[])
     /*!
      * Data for net.connman.Manager D-Bus signal handlers.
      */
-    static struct dbussignal_connman_manager_data *connman;
+    static struct DBusSignalManagerData *connman;
+
+    /*!
+     * Data for de.tahifi.Configuration interfaces.
+     */
+    static const char appliance_ini_file[] = "/var/local/etc/appliance.ini";
+    static Configuration::ApplianceValues appliance_ini_defaults(
+                std::move(std::string("!unknown!")),
+                "");
+    Configuration::ConfigManager<Configuration::ApplianceValues>
+        config_manager(appliance_ini_file, appliance_ini_defaults);
 
     /*!
      * Data for handling DCP over TCP/IP.
      */
     static struct dcp_over_tcp_data dot;
 
-    main_loop_init(&parameters, &appconn, &connman, &dot, is_upgrading);
+    main_loop_init(&parameters, config_manager, &appconn, &connman, &dot, is_upgrading);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
-                  parameters.with_connman, &appconn, connman) < 0)
+                  parameters.with_connman, &appconn, connman,
+                  reinterpret_cast<struct ConfigurationManagementData *>(&config_manager)) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
@@ -1518,6 +1552,8 @@ int main(int argc, char *argv[])
         connman_wlan_power_on();
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
+
+    dcpregs_appliance_id_configure();
 
     main_loop(&files, &dot, &appconn, connman,
               primitive_queue_fd, register_changed_fd);

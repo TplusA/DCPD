@@ -26,6 +26,7 @@
 #include <ctype.h>
 
 #include "configproxy.h"
+#include "configuration_dcpd.h"
 #include "messages.h"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
@@ -42,6 +43,8 @@ struct ConfigurationOwner
     char dbus_path[256];
     char **keys;
     size_t number_of_keys;
+
+    bool is_remote;
 
     tdbusConfigurationRead *read_iface;
     tdbusConfigurationWrite *write_iface;
@@ -129,38 +132,50 @@ allocate_owner(struct ConfigProxyData *data,
         return NULL;
     }
 
-    if(dbus_path[0] == '\0')
+    tdbusConfigurationRead *read_iface = NULL;
+    tdbusConfigurationWrite *write_iface = NULL;
+
+    if(!(dbus_dest == NULL && dbus_path == NULL))
     {
-        msg_error(0, LOG_ALERT, "Configuration owner path empty");
-        return NULL;
-    }
 
-    if(strlen(dbus_path) >= MAX_DBUS_PATH_LENGTH)
-    {
-        msg_error(0, LOG_ALERT, "Configuration owner path too long");
-        return NULL;
-    }
+        if(dbus_path[0] == '\0')
+        {
+            msg_error(0, LOG_ALERT, "Configuration owner path empty");
+            return NULL;
+        }
 
-    tdbusConfigurationRead *read_iface =
-        dbus_get_configuration_read_iface(dbus_dest, dbus_path);
-    tdbusConfigurationWrite *write_iface =
-        dbus_get_configuration_write_iface(dbus_dest, dbus_path);
+        if(strlen(dbus_path) >= MAX_DBUS_PATH_LENGTH)
+        {
+            msg_error(0, LOG_ALERT, "Configuration owner path too long");
+            return NULL;
+        }
 
-    if(read_iface == NULL || write_iface == NULL)
-    {
-        if(read_iface != NULL)
-            g_object_unref(read_iface);
+        read_iface = dbus_get_configuration_read_iface(dbus_dest, dbus_path);
+        write_iface = dbus_get_configuration_write_iface(dbus_dest, dbus_path);
 
-        if(write_iface != NULL)
-            g_object_unref(write_iface);
+        if(read_iface == NULL || write_iface == NULL)
+        {
+            if(read_iface != NULL)
+                g_object_unref(read_iface);
 
-        return NULL;
+            if(write_iface != NULL)
+                g_object_unref(write_iface);
+
+            return NULL;
+        }
     }
 
     struct ConfigurationOwner *owner = &data->owners[data->next_free_owner++];
 
     strcpy(owner->id, id);
-    strcpy(owner->dbus_path, dbus_path);
+
+    owner->is_remote = dbus_path != NULL;
+
+    if(owner->is_remote)
+        strcpy(owner->dbus_path, dbus_path);
+    else
+        owner->dbus_path[0] = '\0';
+
     owner->keys = NULL;
     owner->number_of_keys = 0;
     owner->read_iface = read_iface;
@@ -178,7 +193,8 @@ static bool set_key_table(struct ConfigurationOwner *owner, char **keys)
 
     for(char **key = keys; *key != NULL; ++key)
     {
-        msg_vinfo(MESSAGE_LEVEL_DEBUG, "Registered key \"@%s:%s\"", owner->id, *key);
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "Registered %skey \"@%s:%s\"",
+                  owner->is_remote ? "" : "local ", owner->id, *key);
         ++owner->number_of_keys;
     }
 
@@ -230,18 +246,30 @@ static bool set(const char *origin, const struct ConfigurationOwner *owner,
     if(origin == NULL)
         origin = origin_this;
 
+    if(!owner->is_remote)
+        return configuration_set_key(origin, key, value);
+
     GError *error = NULL;
     tdbus_configuration_write_call_set_value_sync(owner->write_iface,
                                                   origin, key, value,
                                                   NULL, &error);
 
-    return dbus_common_handle_dbus_error(&error, "Set configuration value") == 0;
+    if(dbus_common_handle_dbus_error(&error, "Set configuration value") != 0)
+        return false;
+
+    const char *changed_keys[2] = { key, NULL, };
+    configproxy_notify_configuration_changed(origin, changed_keys);
+
+    return true;
 }
 
 static GVariant *get(const struct ConfigurationOwner *owner, const char *key)
 {
     if(owner == NULL)
         return NULL;
+
+    if(!owner->is_remote)
+        return configuration_get_key(key);
 
     GVariant *value = NULL;
     GError *error = NULL;
@@ -318,6 +346,27 @@ static ssize_t write_uint32(uint32_t value, PatchUint32Fn patcher,
     return is_buffer_big_enough(dest_size, len + 1, key) ? len : -1;
 }
 
+static struct ConfigurationOwner *try_allocate_owner(struct ConfigProxyData *data,
+                                                     const char *id,
+                                                     const char *dbus_dest,
+                                                     const char *dbus_path,
+                                                     bool *retval)
+{
+    if(find_owner_by_id(data, id) != NULL)
+    {
+        BUG("Configuration owner \"%s\" already registered", id);
+        *retval = true;
+        return NULL;
+    }
+
+    struct ConfigurationOwner *owner =
+        allocate_owner(data, id, dbus_dest, dbus_path);
+
+    *retval = owner != NULL;
+
+    return owner;
+}
+
 static struct ConfigProxyData configproxy_data;
 
 void configproxy_init(void)
@@ -340,17 +389,13 @@ bool configproxy_register_configuration_owner(const char *id,
     log_assert(id != NULL);
     log_assert(dbus_path != NULL);
 
-    if(find_owner_by_id(&configproxy_data, id) != NULL)
-    {
-        BUG("Configuration owner \"%s\" already registered", id);
-        return true;
-    }
-
-    struct ConfigurationOwner *owner =
-        allocate_owner(&configproxy_data, id, dbus_dest, dbus_path);
+    bool retval;
+    struct ConfigurationOwner *const owner =
+        try_allocate_owner(&configproxy_data, id, dbus_dest, dbus_path,
+                           &retval);
 
     if(owner == NULL)
-        return false;
+        return retval;
 
     gchar *owner_id = NULL;
     gchar **keys = NULL;
@@ -390,6 +435,55 @@ error_exit:
     free_owner(&configproxy_data, configproxy_data.next_free_owner);
 
     return false;
+}
+
+bool configproxy_register_local_configuration_owner(const char *id, char **keys)
+{
+    log_assert(id != NULL);
+    log_assert(keys != NULL);
+
+    bool retval;
+    struct ConfigurationOwner *const owner =
+        try_allocate_owner(&configproxy_data, id, NULL, NULL, &retval);
+
+    if(owner == NULL)
+        return retval;
+
+    if(!set_key_table(owner, keys))
+        goto error_exit;
+
+    msg_vinfo(MESSAGE_LEVEL_DIAG,
+              "Registered %zu local key%s for \"%s\"",
+              owner->number_of_keys, owner->number_of_keys != 1 ? "s" : "",
+              owner->id);
+
+    return true;
+
+error_exit:
+    --configproxy_data.next_free_owner;
+    free_owner(&configproxy_data, configproxy_data.next_free_owner);
+
+    return false;
+}
+
+void configproxy_notify_configuration_changed(const char *origin, const char **changed_keys)
+{
+    if(dbus_get_configuration_monitor_iface() == NULL)
+        return;
+
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+
+    for(const char **iter = changed_keys; *iter != NULL; ++iter)
+    {
+        GVariant *v = configuration_get_key(*iter);
+        g_variant_builder_add(&builder, "{sv}", *iter, v);
+        g_variant_unref(v);
+    }
+
+    tdbus_configuration_monitor_emit_updated(dbus_get_configuration_monitor_iface(),
+                                             origin,
+                                             g_variant_builder_end(&builder));
 }
 
 bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value)

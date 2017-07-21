@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -26,11 +26,13 @@ extern "C" {
 #endif
 
 struct smartphone_app_connection_data;
-struct dbussignal_connman_manager_data;
+struct DBusSignalManagerData;
+struct ConfigurationManagementData;
 
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
                struct smartphone_app_connection_data *appconn_data,
-               struct dbussignal_connman_manager_data *connman_manager_data);
+               struct DBusSignalManagerData *connman_manager_data,
+               struct ConfigurationManagementData *configuration_data);
 void dbus_shutdown(void);
 
 void dbus_lock_shutdown_sequence(const char *why);

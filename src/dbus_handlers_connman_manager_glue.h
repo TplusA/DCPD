@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,6 +19,8 @@
 #ifndef DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
 #define DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
 
+#include <stdbool.h>
+
 #include "networkprefs.h"
 
 /*!
@@ -30,10 +32,12 @@
 extern "C" {
 #endif
 
-struct dbussignal_connman_manager_data;
+struct DBusSignalManagerData;
 
-struct dbussignal_connman_manager_data *
-dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
+struct DBusSignalManagerData *
+dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void),
+                                void (*schedule_refresh_connman_services_fn)(void),
+                                bool is_enabled);
 
 /*!
  * Tell ConnMan to connect to WLAN service with name stored in passed data.
@@ -44,12 +48,20 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void));
  * Usually called from main context.
  *
  * \see
- *     #dbussignal_connman_manager_data::schedule_connect_to_wlan()
+ *     #DBusSignalManagerData::schedule_connect_to_wlan()
  */
-void dbussignal_connman_manager_connect_our_wlan(struct dbussignal_connman_manager_data *data);
+void dbussignal_connman_manager_connect_our_wlan(struct DBusSignalManagerData *data);
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled);
+
+void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
+                                                       const char *network_ssid,
+                                                       const char *service_to_be_disabled);
+void dbussignal_connman_manager_cancel_wps(void);
+
+bool dbussignal_connman_manager_is_connecting(bool *is_wps);
+void dbussignal_connman_manager_refresh_services(bool force_refresh_all = false);
 
 #ifdef __cplusplus
 }

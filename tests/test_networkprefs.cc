@@ -25,6 +25,8 @@
 #include <algorithm>
 
 #include "networkprefs.h"
+#include "connman_service_list.hh"
+#include "network_device_list.hh"
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
@@ -41,6 +43,15 @@ static constexpr char default_path_to_config[] = "/cfg";
 static constexpr char default_path_to_connman[] = "/connman";
 static constexpr char default_config_file[] = "/cfg/network.ini";
 
+static constexpr char ethernet_name[]         = "/connman/service/ethernet";
+static constexpr char wlan_name[]             = "/connman/service/wlan";
+
+static constexpr char standard_ipv4_address[] = "210.132.108.248";
+static constexpr char standard_ipv4_netmask[] = "255.255.63.0";
+static constexpr char standard_ipv4_gateway[] = "210.132.116.67";
+static constexpr char standard_dns1_address[] = "13.24.35.246";
+static constexpr char standard_dns2_address[] = "4.225.136.7";
+
 static std::vector<char> os_write_buffer;
 static constexpr int expected_os_write_fd = 17;
 static constexpr int expected_os_map_file_to_memory_fd = 24;
@@ -55,6 +66,63 @@ static int write_from_buffer_callback(const void *src, size_t count, int fd)
                 std::back_inserter<std::vector<char>>(os_write_buffer));
 
     return 0;
+}
+
+static void setup_default_connman_service_list()
+{
+    auto locked(Connman::ServiceList::get_singleton_for_update());
+    auto &services(locked.first);
+
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    auto &devices(locked_devices.first);
+
+    Connman::ServiceData data;
+
+    Connman::Address<Connman::AddressType::MAC> addr(default_ethernet_mac);
+    devices.set_auto_select_mac_address(Connman::Technology::ETHERNET, addr);
+    devices.insert(Connman::Technology::ETHERNET, Connman::Address<Connman::AddressType::MAC>(addr));
+
+    data.state_ = Connman::ServiceState::READY;
+    data.device_ = devices[addr];
+    data.is_favorite_ = true;
+    data.is_auto_connect_ = true;
+    data.is_immutable_ = false;
+    data.ip_settings_v4_.set_known();
+    data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
+    data.ip_settings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
+    data.ip_settings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
+    data.ip_configuration_v4_.set_known();
+    data.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.dns_servers_.set_known();
+    data.dns_servers_.get_rw().push_back(standard_dns1_address);
+    data.dns_servers_.get_rw().push_back(standard_dns2_address);
+
+    services.insert(ethernet_name, std::move(data),
+                    std::move(Connman::TechData<Connman::Technology::ETHERNET>()));
+
+    addr.set(default_wlan_mac);
+    devices.set_auto_select_mac_address(Connman::Technology::WLAN, addr);
+    devices.insert(Connman::Technology::WLAN, Connman::Address<Connman::AddressType::MAC>(addr));
+
+    data.state_ = Connman::ServiceState::IDLE;
+    data.device_ = devices[addr];
+    data.is_favorite_ = true;
+    data.is_auto_connect_ = true;
+    data.is_immutable_ = false;
+    data.ip_settings_v4_.set_known();
+    data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
+    data.ip_settings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
+    data.ip_settings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
+    data.ip_configuration_v4_.set_known();
+    data.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.dns_servers_.set_known();
+    data.dns_servers_.get_rw().push_back(standard_dns1_address);
+    data.dns_servers_.get_rw().push_back(standard_dns2_address);
+
+    services.insert(wlan_name, std::move(data),
+                    std::move(Connman::TechData<Connman::Technology::WLAN>()));
 }
 
 void cut_setup()
@@ -73,13 +141,17 @@ void cut_setup()
 
     os_write_buffer.clear();
 
-    network_prefs_init(default_ethernet_mac, default_wlan_mac,
-                       default_path_to_config, default_config_file);
+    network_prefs_init(default_path_to_config, default_config_file);
+
+    setup_default_connman_service_list();
 }
 
 void cut_teardown()
 {
     network_prefs_deinit();
+
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     os_write_buffer.clear();
     os_write_buffer.shrink_to_fit();
@@ -110,12 +182,13 @@ static void move_os_write_buffer_to_file(struct os_mapped_file_data &mapped_file
 
 static const struct os_mapped_file_data *
 expect_create_default_network_preferences(struct os_mapped_file_data &file_with_written_default_contents,
-                                          std::vector<char> &written_default_contents)
+                                          std::vector<char> &written_default_contents,
+                                          int expected_number_of_assignments)
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Creating default network preferences file");
     mock_os->expect_os_file_new(expected_os_write_fd, default_config_file);
-    for(int i = 0; i < 3 + 2 * 4; ++i)
+    for(int i = 0; i < 2 * 3 + expected_number_of_assignments * 4; ++i)
         mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir_callback(default_path_to_config,
@@ -158,7 +231,7 @@ static void do_migration(const char *const old_ethernet_config_name,
     if(existing_new_config == nullptr)
     {
         mock_os->expect_os_map_file_to_memory(-1, false, default_config_file);
-        expect_create_default_network_preferences(network_ini, written_default_contents);
+        expect_create_default_network_preferences(network_ini, written_default_contents, 4);
     }
     else
     {
@@ -222,8 +295,7 @@ static void do_migration(const char *const old_ethernet_config_name,
 
     cut_assert_true(os_write_buffer.empty());
 
-    network_prefs_migrate_old_network_configuration_files(default_path_to_connman,
-                                                          default_ethernet_mac);
+    network_prefs_migrate_old_network_configuration_files(default_path_to_connman);
 }
 
 /*!\test
@@ -406,7 +478,7 @@ void test_migrate_old_ethernet_configuration_file_with_manual_config()
 
     do_migration("/connman/builtin_09fa01d467e2.config", &old_ethernet_config,
                  "/connman/wlan_device.config",          nullptr,
-                 1, 6);
+                 2, 8);
 
     static const char expected_config_file_format[] =
         "[ethernet]\n"
@@ -416,11 +488,15 @@ void test_migrate_old_ethernet_configuration_file_with_manual_config()
         "IPv4Netmask = 255.255.255.0\n"
         "IPv4Gateway = 192.168.22.10\n"
         "PrimaryDNS = 192.168.22.200\n"
+        "[wifi]\n"
+        "MAC = %s\n"
+        "DHCP = yes\n"
         ;
 
     char new_config_file_buffer[512];
     snprintf(new_config_file_buffer, sizeof(new_config_file_buffer),
-             expected_config_file_format, default_ethernet_mac);
+             expected_config_file_format, default_ethernet_mac,
+             default_wlan_mac);
 
     size_t written_config_file_length = strlen(new_config_file_buffer);
 
@@ -498,8 +574,7 @@ void test_migrate_with_no_configuration_files()
     mock_os->expect_os_map_file_to_memory(nullptr, "/connman/builtin_09fa01d467e2.config");
     mock_os->expect_os_map_file_to_memory(nullptr, "/connman/wlan_device.config");
 
-    network_prefs_migrate_old_network_configuration_files(default_path_to_connman,
-                                                          default_ethernet_mac);
+    network_prefs_migrate_old_network_configuration_files(default_path_to_connman);
 
     cut_assert_true(os_write_buffer.empty());
 }

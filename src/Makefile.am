@@ -27,22 +27,29 @@ dcpd_SOURCES = \
     smartphone_app_send.c smartphone_app_send.h \
     actor_id.h \
     applink.h applink_variables.h \
-    network.h \
+    network.h network_status_bits.h \
     transactions.h dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
-    dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_wlansurvey.h \
+    dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_networkconfig.hh dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_playstream.hh dcpregs_status.h \
-    dcpregs_upnpname.h dcpregs_searchparameters.h \
-    connman.c connman_iter.c connman_scan.c connman.h \
+    dcpregs_upnpname.h dcpregs_upnpname.hh \
+    dcpregs_searchparameters.h dcpregs_appliance.h \
+    connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
+    connman_service.cc connman_service.hh connman_service_list.hh maybe.hh \
+    connman_address.hh \
+    network_device.hh network_device_list.hh \
     stream_id.h \
     coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
     dbus_iface.c dbus_iface.h dbus_iface_deep.h \
-    dbus_handlers.h dbus_handlers_connman_agent.h \
+    dbus_handlers.h dbus_handlers_connman_agent.h connman_agent.h \
     dbus_handlers_connman_manager.h dbus_handlers_connman_manager_glue.h \
+    configuration.cc configuration.hh configuration_base.hh configuration_changed.hh \
+    configuration_settings.hh inifile.h \
+    configuration_dcpd.cc configuration_dcpd.hh configuration_dcpd.h \
     configproxy.h \
     networkprefs.h
 
@@ -76,6 +83,7 @@ noinst_LTLIBRARIES = \
     libcredentials_dbus.la \
     libconfigproxy.la \
     libconfiguration_dbus.la \
+    libservicelist.la \
     libconnman_dbus.la \
     liblogind_dbus.la \
     libdebug_dbus.la
@@ -93,8 +101,9 @@ libregisters_la_SOURCES = \
     dcpregs_common.c dcpregs_common.h \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_protolevel.c dcpregs_protolevel.h \
-    dcpregs_networkconfig.c dcpregs_networkconfig.h \
-    dcpregs_upnpname.c dcpregs_upnpname.h \
+    dcpregs_appliance.cc dcpregs_appliance.h \
+    dcpregs_networkconfig.cc dcpregs_networkconfig.h dcpregs_networkconfig.hh \
+    dcpregs_upnpname.cc dcpregs_upnpname.h dcpregs_upnpname.hh \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
     dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
@@ -103,6 +112,8 @@ libregisters_la_SOURCES = \
     dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
     dbus_handlers_connman_manager_glue.h networkprefs.h \
+    connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
+    network_device.hh network_device_list.hh \
     dbusdl_dbus.h \
     stream_id.h \
     coverart.cc coverart.hh md5.cc md5.hh \
@@ -115,6 +126,14 @@ nodist_libregisters_la_SOURCES = do_update_sh.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 libregisters_la_CXXFLAGS = $(AM_CXXFLAGS)
 
+libservicelist_la_SOURCES = \
+    connman_service_list.cc connman_service_list.hh \
+    connman_service.hh connman_address.hh maybe.hh \
+    network_device_list.cc network_device.hh network_device_list.hh \
+    messages.h
+libservicelist_la_CFLAGS = $(AM_CFLAGS)
+libservicelist_la_CXXFLAGS = $(AM_CXXFLAGS)
+
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
 libinifile_la_CXXFLAGS = $(AM_CXXFLAGS)
@@ -123,7 +142,7 @@ libconfigproxy_la_SOURCES = configproxy.c configproxy.h
 libconfigproxy_la_CFLAGS = $(AM_CFLAGS)
 libconfigproxy_la_CXXFLAGS = $(AM_CXXFLAGS)
 
-libnetworkprefs_la_SOURCES = networkprefs.c networkprefs.h inifile.h
+libnetworkprefs_la_SOURCES = networkprefs.cc networkprefs.h inifile.h
 libnetworkprefs_la_CFLAGS = $(AM_CFLAGS)
 libnetworkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 
@@ -136,13 +155,14 @@ libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.c dbus_handlers.h \
-    dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h \
-    dbus_handlers_connman_manager.c dbus_handlers_connman_manager.h \
+    dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h connman_agent.h \
+    dbus_handlers_connman_manager.cc dbus_handlers_connman_manager.h \
     dbus_handlers_connman_manager_glue.h \
     networkprefs.h \
     connman_dbus.h \
     actor_id.h \
     dcpregs_networkconfig.h \
+    dcpregs_networkconfig.hh \
     dcpregs_upnpname.h \
     dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h \

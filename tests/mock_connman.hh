@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -120,7 +120,7 @@ class MockConnman
         }
     };
 
-    static const SecurityIterData sec_psk_wsp[2];
+    static const SecurityIterData sec_psk_wps[2];
     static const SecurityIterData sec_psk;
     static const SecurityIterData sec_none;
 
@@ -143,18 +143,6 @@ class MockConnman
     void check() const;
 
     using SurveyCallbackInvocation = void (*)(ConnmanSurveyDoneFn, enum ConnmanSiteScanResult);
-
-    void expect_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address);
-    void expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address, struct ConnmanInterfaceData *ret_fallback = nullptr);
-    void expect_get_dhcp_mode(enum ConnmanDHCPMode ret, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src);
-    void expect_get_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size);
-    void expect_get_netmask_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size);
-    void expect_get_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size);
-    void expect_get_primary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
-    void expect_get_secondary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size);
-    void expect_get_wlan_security_type_string(bool ret, const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);
-    void expect_get_wlan_ssid(const uint8_t *ret_bytes, size_t ret_bytes_size, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size);
-    void expect_free_interface_data(struct ConnmanInterfaceData *iface_data);
 
     void set_connman_service_iterator_data(const ServiceIterData &iter_data, size_t number_of_services);
     bool have_iter_data() const { return iter_data_ != nullptr; }

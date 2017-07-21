@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -175,15 +175,12 @@ class MockConnman::Expectation
         const uint8_t *ret_bytes_;
         size_t ret_bytes_size_;
         struct ConnmanInterfaceData *ret_data_;
-        enum ConnmanDHCPMode ret_dhcp_mode_;
         struct ConnmanInterfaceData *ret_fallback_data_;
         struct ConnmanInterfaceData *arg_iface_data_;
         std::string arg_mac_address_;
         std::string arg_wired_mac_address_;
         std::string arg_wireless_mac_address_;
         bool arg_pointer_shall_be_null_;
-        enum ConnmanIPVersion arg_connman_ip_version_;
-        enum ConnmanReadConfigSource arg_connman_cfg_source_;
         size_t arg_dest_size_;
         SurveyCallbackInvocation callback_invocation_;
         enum ConnmanSiteScanResult callback_result_;
@@ -195,12 +192,9 @@ class MockConnman::Expectation
             ret_bytes_(nullptr),
             ret_bytes_size_(123456),
             ret_data_(nullptr),
-            ret_dhcp_mode_(CONNMAN_DHCP_NOT_AVAILABLE),
             ret_fallback_data_(nullptr),
             arg_iface_data_(nullptr),
             arg_pointer_shall_be_null_(false),
-            arg_connman_ip_version_(CONNMAN_IP_VERSION_6),
-            arg_connman_cfg_source_(CONNMAN_READ_CONFIG_SOURCE_CURRENT),
             arg_dest_size_(9876543),
             callback_invocation_(nullptr),
             callback_result_(ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1)),
@@ -239,18 +233,6 @@ class MockConnman::Expectation
         data_.ret_fallback_data_ = ret_fallback;
     }
 
-    explicit Expectation(enum ConnmanDHCPMode ret,
-                         struct ConnmanInterfaceData *iface_data,
-                         enum ConnmanIPVersion ipver,
-                         enum ConnmanReadConfigSource src):
-        d(ConnmanFn::get_dhcp_mode)
-    {
-        data_.ret_dhcp_mode_ = ret;
-        data_.arg_iface_data_ = iface_data;
-        data_.arg_connman_ip_version_ = ipver;
-        data_.arg_connman_cfg_source_ = src;
-    }
-
     explicit Expectation(bool ret, SurveyCallbackInvocation invocation,
                          enum ConnmanSiteScanResult callback_result):
         d(ConnmanFn::start_wlan_site_survey)
@@ -277,44 +259,6 @@ class MockConnman::Expectation
     {
         data_.ret_bool_ = ret;
         data_.service_iterator_ = iter;
-    }
-
-    explicit Expectation(ConnmanFn fn, const char *ret_string,
-                         struct ConnmanInterfaceData *iface_data,
-                         enum ConnmanIPVersion ipver,
-                         enum ConnmanReadConfigSource src,
-                         bool expect_null_pointer, size_t dest_size,
-                         bool ret):
-        d(fn)
-    {
-        if(ret_string != NULL)
-            data_.ret_string_ = ret_string;
-        else
-            data_.ret_string_ = "";
-
-        data_.ret_bool_ = ret;
-        data_.arg_iface_data_ = iface_data;
-        data_.arg_connman_ip_version_ = ipver;
-        data_.arg_connman_cfg_source_ = src;
-        data_.arg_pointer_shall_be_null_ = expect_null_pointer;
-        data_.arg_dest_size_ = dest_size;
-    }
-
-    explicit Expectation(ConnmanFn fn,
-                         const uint8_t *ret_bytes, size_t ret_bytes_size,
-                         struct ConnmanInterfaceData *iface_data,
-                         enum ConnmanIPVersion ipver,
-                         enum ConnmanReadConfigSource src,
-                         bool expect_null_pointer, size_t dest_size):
-        d(fn)
-    {
-        data_.ret_bytes_ = ret_bytes;
-        data_.ret_bytes_size_ = ret_bytes_size;
-        data_.arg_iface_data_ = iface_data;
-        data_.arg_connman_ip_version_ = ipver;
-        data_.arg_connman_cfg_source_ = src;
-        data_.arg_pointer_shall_be_null_ = expect_null_pointer;
-        data_.arg_dest_size_ = dest_size;
     }
 
     explicit Expectation(ConnmanFn fn, const char *ret_string,
@@ -425,75 +369,6 @@ void MockConnman::check() const
     expectations_->check();
 }
 
-void MockConnman::expect_find_interface(struct ConnmanInterfaceData *ret, const char *mac_address)
-{
-    expectations_->add(Expectation(ret, mac_address));
-}
-
-void MockConnman::expect_find_active_primary_interface(struct ConnmanInterfaceData *ret, const char *default_mac_address, const char *wired_mac_address, const char *wireless_mac_address, struct ConnmanInterfaceData *ret_fallback)
-{
-    cut_assert(ret == nullptr || ret_fallback == nullptr);
-    expectations_->add(Expectation(ret, default_mac_address, wired_mac_address, wireless_mac_address, ret_fallback));
-}
-
-void MockConnman::expect_get_dhcp_mode(enum ConnmanDHCPMode ret, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src)
-{
-    expectations_->add(Expectation(ret, iface_data, ipver, src));
-}
-
-void MockConnman::expect_get_address_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size)
-{
-    expectations_->add(Expectation(ConnmanFn::get_address_string,
-                                   ret_string, iface_data, ipver, src,
-                                   expect_null_pointer, dest_size, true));
-}
-
-void MockConnman::expect_get_netmask_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size)
-{
-    expectations_->add(Expectation(ConnmanFn::get_netmask_string,
-                                   ret_string, iface_data, ipver, src,
-                                   expect_null_pointer, dest_size, true));
-}
-
-void MockConnman::expect_get_gateway_string(const char *ret_string, struct ConnmanInterfaceData *iface_data, enum ConnmanIPVersion ipver, enum ConnmanReadConfigSource src, bool expect_null_pointer, size_t dest_size)
-{
-    expectations_->add(Expectation(ConnmanFn::get_gateway_string,
-                                   ret_string, iface_data, ipver, src,
-                                   expect_null_pointer, dest_size, true));
-}
-
-void MockConnman::expect_get_primary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size)
-{
-    expectations_->add(Expectation(ConnmanFn::get_primary_dns_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size,
-                                   true));
-}
-
-void MockConnman::expect_get_secondary_dns_string(const char *ret_string, struct ConnmanInterfaceData *iface_data,  bool expect_null_pointer, size_t dest_size)
-{
-    expectations_->add(Expectation(ConnmanFn::get_secondary_dns_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size,
-                                   true));
-}
-
-void MockConnman::expect_get_wlan_security_type_string(bool ret, const char *ret_string, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
-{
-    expectations_->add(Expectation(ConnmanFn::get_wlan_security_type_string,
-                                   ret_string, iface_data, expect_null_pointer, dest_size, ret));
-}
-
-void MockConnman::expect_get_wlan_ssid(const uint8_t *ret_bytes, size_t ret_bytes_size, struct ConnmanInterfaceData *iface_data, bool expect_null_pointer, size_t dest_size)
-{
-    expectations_->add(Expectation(ConnmanFn::get_wlan_ssid,
-                                   ret_bytes, ret_bytes_size, iface_data,
-                                   expect_null_pointer, dest_size));
-}
-
-void MockConnman::expect_free_interface_data(struct ConnmanInterfaceData *iface_data)
-{
-    expectations_->add(Expectation(iface_data));
-}
-
 void MockConnman::set_connman_service_iterator_data(const MockConnman::ServiceIterData &iter_data,
                                                     size_t number_of_services)
 {
@@ -553,222 +428,15 @@ void MockConnman::expect_connman_start_wlan_site_survey(bool ret, SurveyCallback
 
 MockConnman *mock_connman_singleton = nullptr;
 
-const MockConnman::SecurityIterData MockConnman::sec_psk_wsp[] =
+const MockConnman::SecurityIterData MockConnman::sec_psk_wps[] =
 {
     MockConnman::SecurityIterData("psk"),
-    MockConnman::SecurityIterData("wsp"),
+    MockConnman::SecurityIterData("wps"),
 };
 
 const MockConnman::SecurityIterData MockConnman::sec_none("none");
 
 const MockConnman::SecurityIterData MockConnman::sec_psk("psk");
-
-struct ConnmanInterfaceData *connman_find_interface(const char *mac_address)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::find_interface);
-    cppcut_assert_equal(expect.d.arg_mac_address_, std::string(mac_address));
-
-    return expect.d.ret_data_;
-}
-
-struct ConnmanInterfaceData *
-connman_find_active_primary_interface(const char *default_mac_address,
-                                      const char *wired_mac_address,
-                                      const char *wireless_mac_address,
-                                      struct ConnmanInterfaceData **fallback)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::find_active_primary_interface);
-    cppcut_assert_equal(expect.d.arg_mac_address_, std::string(default_mac_address));
-    cppcut_assert_equal(expect.d.arg_wired_mac_address_, std::string(wired_mac_address));
-    cppcut_assert_equal(expect.d.arg_wireless_mac_address_, std::string(wireless_mac_address));
-
-    if(fallback == NULL)
-        cppcut_assert_null(expect.d.ret_fallback_data_);
-    else
-        *fallback = expect.d.ret_fallback_data_;
-
-    return expect.d.ret_data_;
-}
-
-enum ConnmanDHCPMode connman_get_dhcp_mode(struct ConnmanInterfaceData *iface_data,
-                                           enum ConnmanIPVersion ipver,
-                                           enum ConnmanReadConfigSource src)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_dhcp_mode);
-    cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
-    cppcut_assert_equal(expect.d.arg_connman_ip_version_, ipver);
-    cppcut_assert_equal(expect.d.arg_connman_cfg_source_, src);
-
-    return expect.d.ret_dhcp_mode_;
-}
-
-static void get_ip_parameter_string(const MockConnman::Expectation &expect,
-                                    struct ConnmanInterfaceData *iface_data,
-                                    enum ConnmanIPVersion ipver,
-                                    enum ConnmanReadConfigSource src,
-                                    bool is_config_source_valid,
-                                    char *dest, size_t dest_size)
-{
-    cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
-    cppcut_assert_equal(expect.d.arg_dest_size_, dest_size);
-
-    if(is_config_source_valid)
-    {
-        cppcut_assert_equal(expect.d.arg_connman_ip_version_, ipver);
-        cppcut_assert_equal(expect.d.arg_connman_cfg_source_, src);
-    }
-
-    if(expect.d.arg_pointer_shall_be_null_)
-        cppcut_assert_null(dest);
-    else
-    {
-        cppcut_assert_not_null(dest);
-
-        if(dest_size > 0)
-        {
-            if(expect.d.ret_string_.size() > 0)
-            {
-                strncpy(dest, expect.d.ret_string_.c_str(), dest_size);
-                dest[dest_size - 1] = '\0';
-            }
-            else
-                dest[0] = '\0';
-        }
-    }
-}
-
-static void get_parameter_string(const MockConnman::Expectation &expect,
-                                 struct ConnmanInterfaceData *iface_data,
-                                 enum ConnmanIPVersion ipver,
-                                 enum ConnmanReadConfigSource src,
-                                 char *dest, size_t dest_size)
-{
-    get_ip_parameter_string(expect, iface_data, ipver, src, true, dest, dest_size);
-}
-
-static void get_ip_parameter_string(const MockConnman::Expectation &expect,
-                                    struct ConnmanInterfaceData *iface_data,
-                                    char *dest, size_t dest_size)
-{
-    get_ip_parameter_string(expect, iface_data,
-                            CONNMAN_IP_VERSION_6,
-                            CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                            false, dest, dest_size);
-}
-
-bool connman_get_address_string(struct ConnmanInterfaceData *iface_data,
-                                enum ConnmanIPVersion ipver,
-                                enum ConnmanReadConfigSource src,
-                                char *dest, size_t dest_size)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_address_string);
-    get_parameter_string(expect, iface_data, ipver, src, dest, dest_size);
-
-    return expect.d.ret_bool_;
-}
-
-bool connman_get_netmask_string(struct ConnmanInterfaceData *iface_data,
-                                enum ConnmanIPVersion ipver,
-                                enum ConnmanReadConfigSource src,
-                                char *dest, size_t dest_size)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_netmask_string);
-    get_parameter_string(expect, iface_data, ipver, src, dest, dest_size);
-
-    return expect.d.ret_bool_;
-}
-
-bool connman_get_gateway_string(struct ConnmanInterfaceData *iface_data,
-                                enum ConnmanIPVersion ipver,
-                                enum ConnmanReadConfigSource src,
-                                char *dest, size_t dest_size)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_gateway_string);
-    get_parameter_string(expect, iface_data, ipver, src, dest, dest_size);
-
-    return expect.d.ret_bool_;
-}
-
-bool connman_get_primary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                    char *dest, size_t dest_size)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_primary_dns_string);
-    get_ip_parameter_string(expect, iface_data, dest, dest_size);
-
-    return expect.d.ret_bool_;
-}
-
-bool connman_get_secondary_dns_string(struct ConnmanInterfaceData *iface_data,
-                                      char *dest, size_t dest_size)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_secondary_dns_string);
-    get_ip_parameter_string(expect, iface_data, dest, dest_size);
-
-    return expect.d.ret_bool_;
-}
-
-bool connman_get_wlan_security_type_string(struct ConnmanInterfaceData *iface_data,
-                                           char *dest, size_t dest_size)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_wlan_security_type_string);
-    get_ip_parameter_string(expect, iface_data, dest, dest_size);
-
-    return expect.d.ret_bool_;
-}
-
-size_t connman_get_wlan_ssid(struct ConnmanInterfaceData *iface_data,
-                             uint8_t *dest, size_t dest_size)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::get_wlan_ssid);
-    cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
-    cppcut_assert_equal(expect.d.arg_dest_size_, dest_size);
-
-    if(expect.d.arg_pointer_shall_be_null_)
-    {
-        cppcut_assert_null(dest);
-        return 0;
-    }
-
-    cppcut_assert_not_null(dest);
-
-    if(dest_size == 0)
-        return 0;
-
-    const size_t count = std::min(expect.d.ret_bytes_size_, dest_size);
-
-    if(count > 0)
-        memcpy(dest, expect.d.ret_bytes_, count);
-
-    return count;
-}
-
-void connman_free_interface_data(struct ConnmanInterfaceData *iface_data)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::free_interface_data);
-    cppcut_assert_equal(expect.d.arg_iface_data_, iface_data);
-}
 
 struct ConnmanServiceIterator *connman_service_iterator_get(void)
 {

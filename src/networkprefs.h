@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -34,11 +34,6 @@ enum NetworkPrefsTechnology
     NWPREFSTECH_WLAN,
 };
 
-struct network_prefs_mac_address
-{
-    char address[6 * 3];
-};
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,11 +44,13 @@ network_prefs_get_technology_by_service_name(const char *name);
 enum NetworkPrefsTechnology
 network_prefs_get_technology_by_prefs(const struct network_prefs *prefs);
 
-void network_prefs_init(const char *ethernet_mac_address,
-                        const char *wlan_mac_address,
-                        const char *network_config_path,
+void network_prefs_init(const char *network_config_path,
                         const char *network_config_file);
 void network_prefs_deinit(void);
+
+void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_path,
+                                                  const char *wlan_sysfs_path,
+                                                  bool remove_prefs_for_missing_devices);
 
 struct network_prefs_handle *
 network_prefs_open_ro(const struct network_prefs **ethernet,
@@ -64,13 +61,9 @@ network_prefs_open_rw(struct network_prefs **ethernet,
 void network_prefs_close(struct network_prefs_handle *handle);
 struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handle,
                                               enum NetworkPrefsTechnology tech);
+bool network_prefs_remove_prefs(struct network_prefs_handle *handle,
+                                enum NetworkPrefsTechnology tech);
 int network_prefs_write_to_file(struct network_prefs_handle *handle);
-
-const struct network_prefs_mac_address *
-network_prefs_get_mac_address_by_prefs(const struct network_prefs *prefs);
-
-const struct network_prefs_mac_address *
-network_prefs_get_mac_address_by_tech(enum NetworkPrefsTechnology tech);
 
 size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
                                            char *buffer, size_t buffer_size);
@@ -96,8 +89,7 @@ void network_prefs_put_wlan_config(struct network_prefs *prefs,
                                    const char *passphrase);
 void network_prefs_disable_ipv4(struct network_prefs *prefs);
 
-void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path,
-                                                           const char *ethernet_mac);
+void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path);
 
 #ifdef __cplusplus
 }

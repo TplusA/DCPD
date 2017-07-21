@@ -20,6 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <fstream>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,8 @@
 #include "networkprefs.h"
 #include "inifile.h"
 #include "dbus_iface_deep.h"
+#include "network_device_list.hh"
+#include "connman_service_list.hh"
 #include "messages.h"
 
 static const char service_prefix[] = "/net/connman/service/";
@@ -86,20 +89,14 @@ static size_t generate_service_name(char *const buffer,
     while(0)
 
     if(mac == NULL)
-    {
-        msg_error(0, LOG_ERR, "No MAC configured");
         return 0;
-    }
 
     bool is_wlan;
 
     if(strcmp(buffer + tech_offset, "wifi") == 0)
     {
         if(network_name == NULL && network_ssid == NULL)
-        {
-            msg_error(0, LOG_ERR, "No network name configured");
             return 0;
-        }
 
         if(network_security == NULL)
         {
@@ -211,31 +208,36 @@ static inline const char *get_pref(const struct ini_section *prefs,
 }
 
 static bool add_new_section_with_defaults(struct ini_file *inifile,
-                                          enum NetworkPrefsTechnology tech,
-                                          const char *mac_address)
+                                          Connman::Technology tech,
+                                          const Connman::Address<Connman::AddressType::MAC> &mac_address)
 {
     log_assert(inifile != NULL);
-    log_assert(mac_address != NULL);
 
     struct ini_section *section = NULL;
 
     switch(tech)
     {
-      case NWPREFSTECH_UNKNOWN:
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
         BUG("Attempted to create network configuration section for unknown technology");
         return false;
 
-      case NWPREFSTECH_ETHERNET:
+      case Connman::Technology::ETHERNET:
         section = inifile_new_section(inifile, "ethernet", 8);
         break;
 
-      case NWPREFSTECH_WLAN:
+      case Connman::Technology::WLAN:
         section = inifile_new_section(inifile, "wifi", 4);
         break;
     }
 
+    if(mac_address.empty())
+    {
+        /* just empty section then */
+        return true;
+    }
+
     if(section == NULL ||
-       inifile_section_store_value(section, "MAC", 3, mac_address, 0) == NULL ||
+       inifile_section_store_value(section, "MAC", 3, mac_address.get_string().c_str(), 0) == NULL ||
        inifile_section_store_value(section, "DHCP", 4, "yes", 3) == NULL)
     {
         msg_out_of_memory("network preferences file");
@@ -247,7 +249,8 @@ static bool add_new_section_with_defaults(struct ini_file *inifile,
 
 static void write_default_preferences(const char *filename,
                                       const char *containing_directory,
-                                      const char *ethernet_mac_address)
+                                      const Connman::Address<Connman::AddressType::MAC> &ethernet_mac_address,
+                                      const Connman::Address<Connman::AddressType::MAC> &wlan_mac_address)
 {
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "Creating default network preferences file");
@@ -256,33 +259,16 @@ static void write_default_preferences(const char *filename,
 
     inifile_new(&inifile);
 
-    if(add_new_section_with_defaults(&inifile, NWPREFSTECH_ETHERNET,
-                                     ethernet_mac_address))
+    if(add_new_section_with_defaults(&inifile, Connman::Technology::ETHERNET,
+                                     ethernet_mac_address) &&
+       add_new_section_with_defaults(&inifile, Connman::Technology::WLAN,
+                                     wlan_mac_address))
     {
         if(inifile_write_to_file(&inifile, filename) == 0)
             os_sync_dir(containing_directory);
     }
 
     inifile_free(&inifile);
-}
-
-static const char *check_mac_address(const char *mac_address,
-                                     size_t required_length, bool is_wired)
-{
-    if(mac_address == NULL ||
-       strlen(mac_address) != required_length)
-    {
-        /* locally administered address, invalid in the wild */
-        return is_wired ? "02:00:00:00:00:00" : "03:00:00:00:00:00";
-    }
-    else
-        return mac_address;
-}
-
-static void copy_mac_address(char *dest, size_t dest_size, const char *src)
-{
-    strncpy(dest, src, dest_size);
-    dest[dest_size - 1] = '\0';
 }
 
 struct network_prefs_handle
@@ -298,8 +284,6 @@ struct network_prefs
 
 static struct
 {
-    struct network_prefs_mac_address ethernet_mac;
-    struct network_prefs_mac_address wlan_mac;
     const char *preferences_path;
     const char *preferences_filename;
 
@@ -321,24 +305,10 @@ network_prefs_get_technology_by_prefs(const struct network_prefs *prefs)
     return prefs->technology;
 }
 
-void network_prefs_init(const char *ethernet_mac_address,
-                        const char *wlan_mac_address,
-                        const char *network_config_path,
+void network_prefs_init(const char *network_config_path,
                         const char *network_config_file)
 {
     memset(&networkprefs_data, 0, sizeof(networkprefs_data));
-
-    const char *temp;
-    temp = check_mac_address(ethernet_mac_address,
-                             sizeof(networkprefs_data.ethernet_mac.address) - 1,
-                             true);
-    copy_mac_address(networkprefs_data.ethernet_mac.address,
-                     sizeof(networkprefs_data.ethernet_mac.address), temp);
-    temp = check_mac_address(wlan_mac_address,
-                             sizeof(networkprefs_data.wlan_mac.address) - 1,
-                             false);
-    copy_mac_address(networkprefs_data.wlan_mac.address,
-                     sizeof(networkprefs_data.wlan_mac.address), temp);
 
     networkprefs_data.preferences_path = network_config_path;
     networkprefs_data.preferences_filename = network_config_file;
@@ -354,25 +324,64 @@ void network_prefs_deinit(void)
     g_mutex_clear(&networkprefs_data.lock);
 }
 
-static void patch_mac_address(struct ini_section *section,
-                              const char *mac_address)
+static int find_nic_name(const char *path, unsigned char dtype, void *user_data)
 {
-    if(section != NULL && mac_address[0] != '\0')
-        inifile_section_store_value(section, "MAC", 3, mac_address, 0);
+    if(dtype != DT_DIR)
+        return 0;
+
+    *static_cast<std::string *>(user_data) = path;
+
+    return 1;
 }
 
-static struct network_prefs_handle *open_prefs_file(bool is_writable,
-                                                    struct network_prefs **ethernet,
-                                                    struct network_prefs **wlan)
+static Connman::Address<Connman::AddressType::MAC>
+read_out_mac_address(const char *sysfs_path)
 {
-    g_mutex_lock(&networkprefs_data.lock);
+    if(sysfs_path == nullptr)
+        return Connman::Address<Connman::AddressType::MAC>();
 
-    *ethernet = NULL;
-    *wlan = NULL;
+    std::string p(sysfs_path);
+    p += "/net";
+
+    std::string nic;
+    std::string mac;
+
+    if(os_foreach_in_path(p.c_str(), find_nic_name, &nic) > 0)
+    {
+        p += "/" + nic + "/address";
+
+        std::ifstream f(p);
+
+        while(f.good())
+        {
+            const int ch = f.get();
+
+            if(ch != f.eof() && ch != '\n')
+                mac.push_back(ch);
+            else
+                break;
+        }
+    }
+
+    if(mac.empty())
+        msg_error(0, LOG_NOTICE, "No NIC at %s", sysfs_path);
+
+    return Connman::Address<Connman::AddressType::MAC>(std::move(mac));
+}
+
+static struct network_prefs_handle *
+open_prefs_write_defaults_if_necessary(bool is_writable,
+                                       struct network_prefs *&ethernet,
+                                       struct network_prefs *&wlan,
+                                       bool &written_defaults)
+{
+    ethernet = NULL;
+    wlan = NULL;
+    written_defaults = false;
 
     networkprefs_data.is_writable = is_writable;
 
-    for(int try = 0; try < 2; ++try)
+    for(int try_count = 0; try_count < 2; ++try_count)
     {
         int ret = inifile_parse_from_file(&networkprefs_data.file,
                                           networkprefs_data.preferences_filename);
@@ -384,10 +393,17 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
         }
         else if(ret > 0)
         {
-            if(try == 0)
+            if(try_count == 0)
+            {
+                const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+                const auto &devices(locked_devices.first);
+
                 write_default_preferences(networkprefs_data.preferences_filename,
                                           networkprefs_data.preferences_path,
-                                          networkprefs_data.ethernet_mac.address);
+                                          devices.get_auto_select_mac_address(Connman::Technology::ETHERNET),
+                                          devices.get_auto_select_mac_address(Connman::Technology::WLAN));
+                written_defaults = true;
+            }
             else
             {
                 msg_error(0, LOG_ERR, "Network preferences file not found");
@@ -404,12 +420,115 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
     networkprefs_data.network_wlan_prefs.section =
         inifile_find_section(&networkprefs_data.file, "wifi", 4);
 
-    *ethernet = (networkprefs_data.network_ethernet_prefs.section != NULL)
+    ethernet = (networkprefs_data.network_ethernet_prefs.section != NULL)
         ? &networkprefs_data.network_ethernet_prefs
         : NULL;
-    *wlan = (networkprefs_data.network_wlan_prefs.section != NULL)
+    wlan = (networkprefs_data.network_wlan_prefs.section != NULL)
         ? &networkprefs_data.network_wlan_prefs
         : NULL;
+
+    return &networkprefs_data.handle;
+}
+
+static void patch_mac_address(struct ini_section *section,
+                              const Connman::Address<Connman::AddressType::MAC> &mac_address)
+{
+    if(section != NULL && !mac_address.empty())
+        inifile_section_store_value(section, "MAC", 3,
+                                    mac_address.get_string().c_str(),
+                                    mac_address.get_string().length());
+}
+
+static void patch_prefs(struct network_prefs_handle *handle,
+                        struct network_prefs *prefs,
+                        const Connman::Address<Connman::AddressType::MAC> &mac_address,
+                        bool remove_prefs_for_missing_devices)
+{
+    if(prefs == nullptr)
+        return;
+
+    if((mac_address.empty() && remove_prefs_for_missing_devices) ||
+       inifile_section_lookup_kv_pair(prefs->section, "MAC", 3) == nullptr ||
+       inifile_section_lookup_kv_pair(prefs->section, "DHCP", 4) == nullptr)
+    {
+        network_prefs_remove_prefs(handle, prefs->technology);
+        network_prefs_add_prefs(handle, prefs->technology);
+    }
+    else
+        patch_mac_address(prefs->section, mac_address);
+}
+
+void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_path,
+                                                  const char *wlan_sysfs_path,
+                                                  bool remove_prefs_for_missing_devices)
+{
+    Connman::Address<Connman::AddressType::MAC> ethernet_mac(read_out_mac_address(ethernet_sysfs_path));
+    Connman::Address<Connman::AddressType::MAC> wlan_mac(read_out_mac_address(wlan_sysfs_path));
+
+    if(ethernet_mac.empty())
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "No Ethernet NIC found");
+    else
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "Ethernet MAC %s", ethernet_mac.get_string().c_str());
+
+    if(wlan_mac.empty())
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "No WLAN NIC found");
+    else
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "WLAN MAC %s", wlan_mac.get_string().c_str());
+
+    {
+        const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+        auto &devices(locked_devices.first);
+
+        devices.set_auto_select_mac_address(Connman::Technology::ETHERNET, ethernet_mac);
+        devices.set_auto_select_mac_address(Connman::Technology::WLAN, wlan_mac);
+    }
+
+    /* patch changed MAC addresses into the configuration file */
+    g_mutex_lock(&networkprefs_data.lock);
+
+    struct network_prefs *ethernet_prefs;
+    struct network_prefs *wlan_prefs;
+    bool written_defaults;
+    auto *prefs =
+        open_prefs_write_defaults_if_necessary(true, ethernet_prefs,
+                                               wlan_prefs, written_defaults);
+
+    if(prefs == nullptr)
+    {
+        g_mutex_unlock(&networkprefs_data.lock);
+        return;
+    }
+
+    if(!written_defaults)
+    {
+        /* defaults will be fine, but here we have an existing file with
+         * content that we have to patch now */
+        patch_prefs(prefs, ethernet_prefs, ethernet_mac, remove_prefs_for_missing_devices);
+        patch_prefs(prefs, wlan_prefs, wlan_mac, remove_prefs_for_missing_devices);
+    }
+
+    network_prefs_write_to_file(prefs);
+    network_prefs_close(prefs);
+}
+
+static struct network_prefs_handle *open_prefs_file(bool is_writable,
+                                                    struct network_prefs **ethernet,
+                                                    struct network_prefs **wlan)
+{
+    g_mutex_lock(&networkprefs_data.lock);
+
+    bool dummy;
+    auto *prefs =
+        open_prefs_write_defaults_if_necessary(is_writable, *ethernet, *wlan,
+                                               dummy);
+
+    if(prefs == nullptr)
+    {
+        g_mutex_unlock(&networkprefs_data.lock);
+        return nullptr;
+    }
 
     /*
      * This is kind of a hack that demands some explanation. It can be tracked
@@ -432,24 +551,27 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
      * addresses never change.
      *
      * Now, if a network adapter is replaced by another one (maybe because the
-     * old one has broken or there the new one provides better connectivity),
+     * old one is broken or the new one provides better connectivity),
      * the MAC address changes as well. Our configuration file still only knows
      * about the old address in this case, so we are generating wrong service
      * names and therefore fail to make any connection.
      *
      * Following the system design, it is safe to just always replace the
-     * stored MAC addresses by whatever non-empty address we got from the
-     * launcher script. This is hack, of course. A good fix would allow the
+     * stored MAC addresses by whatever non-empty address we extracted from the
+     * system. This is a hack, of course. A good fix would allow the
      * user to select the exact networking adapter he wants to use. Changing
      * the networking adapter could be supported by allowing the user to copy
      * configuration settings.
      */
-    patch_mac_address(networkprefs_data.network_ethernet_prefs.section,
-                      networkprefs_data.ethernet_mac.address);
-    patch_mac_address(networkprefs_data.network_wlan_prefs.section,
-                      networkprefs_data.wlan_mac.address);
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+    const auto &devices(locked_devices.first);
 
-    return &networkprefs_data.handle;
+    patch_mac_address(networkprefs_data.network_ethernet_prefs.section,
+                      devices.get_auto_select_mac_address(Connman::Technology::ETHERNET));
+    patch_mac_address(networkprefs_data.network_wlan_prefs.section,
+                      devices.get_auto_select_mac_address(Connman::Technology::WLAN));
+
+    return prefs;
 }
 
 struct network_prefs_handle *
@@ -502,7 +624,10 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
     assert_writable_file(handle);
 
     struct network_prefs *prefs = NULL;
-    const char *mac_address = NULL;
+
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+    const auto &devices(locked_devices.first);
+    Connman::Technology connman_tech = Connman::Technology::UNKNOWN_TECHNOLOGY;
 
     switch(tech)
     {
@@ -514,7 +639,7 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
         networkprefs_data.network_ethernet_prefs.section =
             inifile_new_section(&networkprefs_data.file, "ethernet", 8);
         prefs = &networkprefs_data.network_ethernet_prefs;
-        mac_address = networkprefs_data.ethernet_mac.address;
+        connman_tech = Connman::Technology::ETHERNET;
         break;
 
       case NWPREFSTECH_WLAN:
@@ -522,14 +647,15 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
         networkprefs_data.network_wlan_prefs.section =
             inifile_new_section(&networkprefs_data.file, "wifi", 4);
         prefs = &networkprefs_data.network_wlan_prefs;
-        mac_address = networkprefs_data.wlan_mac.address;
+        connman_tech = Connman::Technology::WLAN;
         break;
     }
 
     if(prefs == NULL || prefs->section == NULL)
         return NULL;
 
-    if(add_new_section_with_defaults(&networkprefs_data.file, tech, mac_address))
+    if(add_new_section_with_defaults(&networkprefs_data.file, connman_tech,
+                                     devices.get_auto_select_mac_address(connman_tech)))
         return prefs;
 
     if(prefs->section != NULL)
@@ -539,6 +665,35 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
     }
 
     return NULL;
+}
+
+bool network_prefs_remove_prefs(struct network_prefs_handle *handle,
+                                enum NetworkPrefsTechnology tech)
+{
+    assert_writable_file(handle);
+
+    bool retval = false;
+
+    switch(tech)
+    {
+      case NWPREFSTECH_UNKNOWN:
+        BUG("Attempted to remove preferences for unknown technology %d", tech);
+        break;
+
+      case NWPREFSTECH_ETHERNET:
+        retval = inifile_remove_section(handle->file,
+                                        networkprefs_data.network_ethernet_prefs.section);
+        networkprefs_data.network_ethernet_prefs.section = NULL;
+        break;
+
+      case NWPREFSTECH_WLAN:
+        retval = inifile_remove_section(handle->file,
+                                        networkprefs_data.network_wlan_prefs.section);
+        networkprefs_data.network_wlan_prefs.section = NULL;
+        break;
+    }
+
+    return retval;
 }
 
 int network_prefs_write_to_file(struct network_prefs_handle *handle)
@@ -552,32 +707,6 @@ int network_prefs_write_to_file(struct network_prefs_handle *handle)
     os_sync_dir(networkprefs_data.preferences_path);
 
     return 0;
-}
-
-const struct network_prefs_mac_address *
-network_prefs_get_mac_address_by_prefs(const struct network_prefs *prefs)
-{
-    log_assert(prefs != NULL);
-
-    return network_prefs_get_mac_address_by_tech(prefs->technology);
-}
-
-const struct network_prefs_mac_address *
-network_prefs_get_mac_address_by_tech(enum NetworkPrefsTechnology tech)
-{
-    switch(tech)
-    {
-      case NWPREFSTECH_UNKNOWN:
-        break;
-
-      case NWPREFSTECH_ETHERNET:
-        return &networkprefs_data.ethernet_mac;
-
-      case NWPREFSTECH_WLAN:
-        return &networkprefs_data.wlan_mac;
-    }
-
-    return NULL;
 }
 
 size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
@@ -596,6 +725,10 @@ size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
     static const size_t tech_offset = sizeof(service_prefix) - 1;
 
     const struct ini_section *const section = prefs->section;
+
+    if(section->values_head == NULL)
+        return 0;
+
     const size_t namelen = strlen(section->name);
     const size_t start_offset = tech_offset + namelen;
 
@@ -766,7 +899,7 @@ void network_prefs_disable_ipv4(struct network_prefs *prefs)
 /* taken from versions before f03d914 */
 struct config_filename_template
 {
-    const char *const template;
+    const char *const config_template;
     const size_t size_including_zero_terminator;
     const size_t replacement_start_offset;
 };
@@ -775,14 +908,14 @@ static const char config_filename_template_for_builtin_interfaces[] =
     "builtin_xxxxxxxxxxxx.config";
 
 static char *generate_network_config_file_name(const char *connman_config_path,
-                                               const char *ethernet_mac)
+                                               const Connman::Address<Connman::AddressType::MAC> *const ethernet_mac)
 {
     static const char fixed_name_for_wlan_config[] = "wlan_device.config";
 
-    const bool is_wired = (ethernet_mac != NULL);
+    const bool is_wired = (ethernet_mac != nullptr);
     static const struct config_filename_template cfg_template =
     {
-        .template = config_filename_template_for_builtin_interfaces,
+        .config_template = config_filename_template_for_builtin_interfaces,
         .size_including_zero_terminator = sizeof(config_filename_template_for_builtin_interfaces),
         .replacement_start_offset = 8,
     };
@@ -793,19 +926,19 @@ static char *generate_network_config_file_name(const char *connman_config_path,
                              ? cfg_template.size_including_zero_terminator
                              : sizeof(fixed_name_for_wlan_config));
 
-    char *filename = malloc(total_length);
+    char *filename = static_cast<char *>(malloc(total_length));
 
-    if(filename == NULL)
+    if(filename == nullptr)
     {
         msg_out_of_memory("network configuration filename");
-        return NULL;
+        return nullptr;
     }
 
     memcpy(filename, connman_config_path, prefix_length);
     filename[prefix_length] = '/';
 
     if(is_wired)
-        memcpy(filename + prefix_length + 1, cfg_template.template,
+        memcpy(filename + prefix_length + 1, cfg_template.config_template,
                cfg_template.size_including_zero_terminator);
     else
     {
@@ -818,13 +951,20 @@ static char *generate_network_config_file_name(const char *connman_config_path,
     char *const dest =
         filename + prefix_length + 1 + cfg_template.replacement_start_offset;
 
+    /* Justification for the suppression below: \c nullptr dereference is
+     * actually not possible because \c is_wired is true if and only if
+     * \p ethernet_mac is not \c nullptr, and we can only come to this point if
+     * \c is_wired is true, implying we have a valid pointer here. */
+    const auto mac_string(// cppcheck-suppress nullPointer
+                          ethernet_mac->get_string());
+
     for(size_t i = 0, j = 0; i < 6 * 2; i += 2, j += 3)
     {
         log_assert(dest[i + 0] == 'x');
         log_assert(dest[i + 1] == 'x');
 
-        dest[i + 0] = tolower(ethernet_mac[j + 0]);
-        dest[i + 1] = tolower(ethernet_mac[j + 1]);
+        dest[i + 0] = tolower(mac_string[j + 0]);
+        dest[i + 1] = tolower(mac_string[j + 1]);
     }
 
     return filename;
@@ -892,7 +1032,7 @@ static size_t tokenize_string(const char *key_name, const char *value,
             t->token = NULL;
         else
         {
-            t->token = malloc(t->length + 1);
+            t->token = static_cast<char *>(malloc(t->length + 1));
 
             if(t->token == NULL)
                 msg_out_of_memory("network config token");
@@ -1112,13 +1252,16 @@ static void delete_old_config_files(const char *connman_config_path,
     os_sync_dir(connman_config_path);
 }
 
-void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path,
-                                                           const char *ethernet_mac)
+void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path)
 {
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+    const auto &devices(locked_devices.first);
+    const auto ethernet_mac(devices.get_auto_select_mac_address(Connman::Technology::ETHERNET));
+
     char *old_ethernet_config_filename =
-        (ethernet_mac != NULL)
-        ? generate_network_config_file_name(connman_config_path, ethernet_mac)
-        : NULL;
+        (ethernet_mac.empty()
+         ? nullptr
+         : generate_network_config_file_name(connman_config_path, &ethernet_mac));
     char *old_wlan_config_filename =
         generate_network_config_file_name(connman_config_path, NULL);
 

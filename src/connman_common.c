@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -53,16 +53,12 @@ bool connman_common_set_service_property(const char *object_path,
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
               "Set ConnMan property %s on %s", property_name, object_path);
 
-    GError *error = NULL;
-    tdbus_connman_service_call_set_property_sync(proxy, property_name, value,
-                                                 NULL, &error);
-    const bool ret =
-        dbus_common_handle_dbus_error(&error,
-                                      "Set ConnMan service property") == 0;
+    tdbus_connman_service_call_set_property(proxy, property_name, value,
+                                            NULL, NULL, NULL);
 
     g_object_unref(proxy);
 
-    return ret;
+    return true;
 }
 
 struct ConnectToServiceDoneFn
@@ -124,7 +120,7 @@ static bool prepare_service_connect_request(struct ConnectToServiceData *data,
         fn(object_path, CONNMAN_SERVICE_CONNECT_FAILURE, user_data);
     else
     {
-        static const int wlan_connect_timeout_seconds = 60;
+        static const int wlan_connect_timeout_seconds = 150;
 
         data->proxy =
             dbus_get_connman_service_proxy_for_object_path(object_path,

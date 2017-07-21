@@ -24,6 +24,7 @@
 #include <ctype.h>
 #include <inttypes.h>
 
+#include "connman_agent.h"
 #include "dbus_handlers_connman_agent.h"
 #include "networkprefs.h"
 #include "messages.h"
@@ -59,6 +60,13 @@ static GQuark net_connman_agent_error_quark(void)
     return (GQuark)quark_volatile;
 }
 
+struct AgentData
+{
+    bool is_wps_mode;
+};
+
+static struct AgentData global_agent_data;
+
 enum RequestID
 {
     /*! Any request not understood by the parser is mapped to this ID */
@@ -80,7 +88,7 @@ enum RequestID
     REQUEST_PREVIOUS_PASSPHRASE,
 
     /*! Request use of WPS */
-    REQUEST_WPS,
+    REQUEST_WPS_PIN,
 
     /*! Username for WISPr authentication */
     REQUEST_USERNAME,
@@ -139,6 +147,12 @@ static enum RequestID string_to_request_id(const char *string)
     return REQUEST_UNKNOWN;
 }
 
+static const char *request_id_to_string(const enum RequestID id)
+{
+    const char *result = request_string_ids[id];
+    return result != NULL ? result : "*UNKNOWN*";
+}
+
 static enum RequestRequirement string_to_request_requirement(const char *string)
 {
     static const char *const string_ids[] =
@@ -195,6 +209,17 @@ static void enter_agent_handler(GDBusMethodInvocation *invocation)
               g_dbus_method_invocation_get_method_name(invocation));
 }
 
+bool connman_agent_set_wps_mode(bool is_wps_mode)
+{
+    if(global_agent_data.is_wps_mode == is_wps_mode)
+        return false;
+
+    msg_info("Set %s mode", is_wps_mode ? "WPS" : "normal");
+    global_agent_data.is_wps_mode = is_wps_mode;
+
+    return true;
+}
+
 gboolean dbusmethod_connman_agent_release(tdbusconnmanAgent *object,
                                           GDBusMethodInvocation *invocation,
                                           void *user_data)
@@ -207,6 +232,54 @@ gboolean dbusmethod_connman_agent_release(tdbusconnmanAgent *object,
     return TRUE;
 }
 
+static const char *get_service_basename(const char *full_service_name,
+                                        size_t *tech_length)
+{
+    const char *const before_service = strrchr(full_service_name, '/');
+    const char *const service = before_service + 1;
+    const char *const after_tech = (before_service != NULL) ? strchr(service, '_') : NULL;
+
+    *tech_length = after_tech - service;
+
+    return before_service != NULL && after_tech != NULL && *tech_length > 0
+        ? service
+        : NULL;
+}
+
+static const char *delete_service_configuration(const char *full_service_name)
+{
+    size_t tech_length;
+    const char *const service = get_service_basename(full_service_name,
+                                                     &tech_length);
+
+    if(service == NULL)
+        return "Malformed service name, cannot delete";
+
+    const enum NetworkPrefsTechnology tech =
+        (tech_length == 8 && memcmp(service, "ethernet", tech_length) == 0
+         ? NWPREFSTECH_ETHERNET
+         : (tech_length == 4 && memcmp(service, "wifi", tech_length) == 0
+            ? NWPREFSTECH_WLAN
+            : NWPREFSTECH_UNKNOWN));
+
+    if(tech == NWPREFSTECH_UNKNOWN)
+        return "Technology unknown, cannot delete";
+
+    struct network_prefs *np;
+    struct network_prefs_handle *prefsfile = network_prefs_open_rw(&np, &np);
+
+    if(prefsfile == NULL)
+        return "Failed reading network preferences, cannot delete service";
+
+    const bool succeeded =
+        network_prefs_remove_prefs(prefsfile, tech) &&
+        network_prefs_write_to_file(prefsfile) == 0;
+
+    network_prefs_close(prefsfile);
+
+    return succeeded ? NULL : "Failed removing service from preferences";
+}
+
 gboolean dbusmethod_connman_agent_report_error(tdbusconnmanAgent *object,
                                                GDBusMethodInvocation *invocation,
                                                const gchar *arg_service,
@@ -216,6 +289,16 @@ gboolean dbusmethod_connman_agent_report_error(tdbusconnmanAgent *object,
     enter_agent_handler(invocation);
 
     msg_error(0, LOG_ERR, "Agent error for service %s: %s", arg_service, arg_error);
+
+    if(strcmp(arg_error, "invalid-key") == 0)
+    {
+        const char *error_message = delete_service_configuration(arg_service);
+
+        if(error_message != NULL)
+            msg_error(0, LOG_NOTICE, "Error deleting configuration for %s: %s",
+                      arg_service, error_message);
+    }
+
     tdbus_connman_agent_complete_report_error(object, invocation);
 
     return TRUE;
@@ -369,6 +452,18 @@ error_request:
     return return_string;
 }
 
+static const char *wps_get_passphrase(void)
+{
+    /* maybe in a distant future we'll support preset passphrases for WPS */
+    return NULL;
+}
+
+static const char *wps_get_pin(void)
+{
+    /* empty string means push-button method */
+    return "";
+}
+
 static bool insert_answer(GVariantBuilder *result_builder,
                           struct Request *request, enum RequestID request_id,
                           const struct network_prefs *preferences)
@@ -389,22 +484,42 @@ static bool insert_answer(GVariantBuilder *result_builder,
 
     G_STATIC_ASSERT(G_N_ELEMENTS(prefgetters) == REQUEST_LAST_REQUEST_ID + 1);
 
+    /* must match #RequestID enumeration */
+    static const char *(*const wpsgetters[])(void) =
+    {
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        wps_get_passphrase,
+        NULL,
+        wps_get_pin,
+        NULL,
+        NULL,
+    };
+
+    G_STATIC_ASSERT(G_N_ELEMENTS(wpsgetters) == REQUEST_LAST_REQUEST_ID + 1);
+
     log_assert(request != NULL);
     log_assert(!request->is_answered);
 
-    if(prefgetters[request_id] == NULL)
+    if((preferences != NULL && prefgetters[request_id] == NULL) ||
+       (preferences == NULL && wpsgetters[request_id] == NULL))
     {
-        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                  "ConnMan request %u not supported", request_id);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "ConnMan request %s not supported",
+                  request_id_to_string(request_id));
         return false;
     }
 
-    const char *const value = prefgetters[request_id](preferences);
+    const char *const value = preferences != NULL
+        ? prefgetters[request_id](preferences)
+        : wpsgetters[request_id]();
 
     if(value == NULL)
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                  "Have no answer for ConnMan request %u", request_id);
+                  "Have no answer for ConnMan request %s",
+                  request_id_to_string(request_id));
         return false;
     }
 
@@ -422,7 +537,8 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
                                     const struct network_prefs *preferences)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE,
-              "FIND ALTERNATE answer for unanswered request %u", related_id);
+              "FIND ALTERNATE answer for unanswered request %s",
+              request_id_to_string(related_id));
 
     if(requests[related_id].alternates != 0)
     {
@@ -448,7 +564,8 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
         }
     }
 
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %u", related_id);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %s",
+              request_id_to_string(related_id));
 
     return false;
 }
@@ -457,8 +574,8 @@ static void wipe_out_alternates(struct Request *requests, enum RequestID related
 {
     uint32_t alternates = requests[related_id].alternates;
 
-    msg_vinfo(MESSAGE_LEVEL_TRACE,
-              "WIPE OUT alternates 0x%08x for %u", alternates, related_id);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "WIPE OUT alternates 0x%08x for %s",
+              alternates, request_id_to_string(related_id));
 
     if(alternates == 0)
         return;
@@ -477,7 +594,9 @@ static void wipe_out_alternates(struct Request *requests, enum RequestID related
         log_assert(alternate_id <= REQUEST_LAST_REQUEST_ID);
 
         msg_vinfo(MESSAGE_LEVEL_TRACE,
-                  "Wipe out alternate %u for processed %u", alternate_id, related_id);
+                  "Wipe out alternate %s for processed %s",
+                  request_id_to_string(alternate_id),
+                  request_id_to_string(related_id));
 
         requests[alternate_id].requirement = REQREQ_NOT_REQUESTED;
         wipe_out_alternates(requests, alternate_id);
@@ -491,12 +610,11 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
 {
     *preferences = NULL;
 
-    const char *const before_service = strrchr(full_service_name, '/');
-    const char *const service = before_service + 1;
-    const char *const after_tech = (before_service != NULL) ? strchr(service, '_') : NULL;
-    const size_t tech_length = after_tech - service;
+    size_t tech_length;
+    const char *const service = get_service_basename(full_service_name,
+                                                     &tech_length);
 
-    if(before_service == NULL || after_tech == NULL || tech_length == 0)
+    if(service == NULL)
     {
         *prefsfile = NULL;
         return "Malformed service name";
@@ -552,11 +670,12 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "Got request for service \"%s\"", arg_service);
 
-    struct network_prefs_handle *prefsfile;
-    const struct network_prefs *preferences;
+    struct network_prefs_handle *prefsfile = NULL;
+    const struct network_prefs *preferences = NULL;
 
-    const char *error_message =
-        find_preferences_for_service(&prefsfile, &preferences, arg_service);
+    const char *error_message = global_agent_data.is_wps_mode
+        ? NULL
+        : find_preferences_for_service(&prefsfile, &preferences, arg_service);
 
     if(send_error_if_possible(invocation, error_message))
         return TRUE;
@@ -568,7 +687,10 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     if(send_error_if_possible(invocation, error_message))
     {
         unref_collected_requests(requests);
-        network_prefs_close(prefsfile);
+
+        if(/* cppcheck-suppress knownConditionTrueFalse */ prefsfile != NULL)
+            network_prefs_close(prefsfile);
+
         return TRUE;
     }
 
@@ -595,12 +717,15 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
             {
                 if(request->requirement == REQREQ_MANDATORY)
                 {
-                    msg_error(0, LOG_ERR, "Answer to mandatory request %u not known", i);
+                    msg_error(0, LOG_ERR,
+                              "Answer to mandatory request %s not known",
+                              request_id_to_string(i));
                     error_message = "Answer to mandatory request unknown";
                 }
                 else
                     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                              "Answer to optional request %u not known", i);
+                              "Answer to optional request %s not known",
+                              request_id_to_string(i));
             }
 
             if(error_message == NULL)
@@ -613,7 +738,9 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     GVariant *result = g_variant_builder_end(&result_builder);
 
     unref_collected_requests(requests);
-    network_prefs_close(prefsfile);
+
+    if(prefsfile != NULL)
+        network_prefs_close(prefsfile);
 
     if(send_error_if_possible(invocation, error_message))
         g_variant_unref(result);

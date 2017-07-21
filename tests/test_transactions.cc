@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -23,14 +23,18 @@
 #include <cppcutter.h>
 #include <array>
 #include <algorithm>
+#include <glib.h>
 
 #include "transactions.h"
 #include "registers.h"
 #include "networkprefs.h"
+#include "connman_service_list.hh"
+#include "network_device_list.hh"
+#include "configproxy.h"
+#include "configuration_dcpd.h"
+#include "dcpregs_networkconfig.hh"
 #include "dcpdefs.h"
 
-#include "mock_dcpd_dbus.hh"
-#include "mock_connman.hh"
 #include "mock_messages.hh"
 #include "mock_os.hh"
 
@@ -93,6 +97,12 @@ class read_data_t
 ssize_t (*os_read)(int fd, void *dest, size_t count) = NULL;
 ssize_t (*os_write)(int fd, const void *buf, size_t count) = NULL;
 
+GVariant *configuration_get_key(const char *key)
+{
+    cppcut_assert_equal("appliance:appliance:id", key);
+    return g_variant_new_string("strbo");
+}
+
 namespace dcp_transaction_tests_queue
 {
 
@@ -110,12 +120,18 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
     register_zero_for_unit_tests = NULL;
     transaction_init_allocator();
 }
 
 void cut_teardown()
 {
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
     mock_messages->check();
     mock_messages_singleton = nullptr;
     delete mock_messages;
@@ -173,6 +189,15 @@ void test_deallocation_frees_payload_buffer()
 {
     static const uint8_t payload_data[] = "test payload data";
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
+
+    register_init(NULL);
+
     struct transaction *t =
         transaction_fragments_from_data(payload_data, sizeof(payload_data),
                                         71, TRANSACTION_CHANNEL_SPI);
@@ -180,6 +205,8 @@ void test_deallocation_frees_payload_buffer()
 
     transaction_free(&t);
     cppcut_assert_null(t);
+
+    register_deinit();
 }
 
 /*!
@@ -486,7 +513,6 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
-static MockConnman *mock_connman;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
 
@@ -512,11 +538,6 @@ void cut_setup()
     mock_os->init();
     mock_os_singleton = mock_os;
 
-    mock_connman = new MockConnman();
-    cppcut_assert_not_null(mock_connman);
-    mock_connman->init();
-    mock_connman_singleton = mock_connman;
-
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
     register_zero_for_unit_tests = NULL;
@@ -527,25 +548,24 @@ void cut_setup()
     answer_written_to_fifo = new std::vector<uint8_t>;
 
     transaction_init_allocator();
+
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 }
 
 void cut_teardown()
 {
     mock_messages->check();
     mock_os->check();
-    mock_connman->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
-    mock_connman_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
-    delete mock_connman;
 
     mock_messages = nullptr;
     mock_os = nullptr;
-    mock_connman = nullptr;
 
     delete read_data;
     read_data = nullptr;
@@ -598,8 +618,7 @@ void test_register_read_request_size_1_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
@@ -622,15 +641,7 @@ void test_register_read_request_size_1_transaction()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
-    static auto *dummy_connman_iface_data =
-        reinterpret_cast<struct ConnmanInterfaceData *>(123456);
-
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
-        "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
-    mock_connman->expect_get_dhcp_mode(CONNMAN_DHCP_MANUAL, dummy_connman_iface_data,
-                                       CONNMAN_IP_VERSION_4,
-                                       CONNMAN_READ_CONFIG_SOURCE_CURRENT);
-    mock_connman->expect_free_interface_data(dummy_connman_iface_data);
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 55, 1 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -665,6 +676,31 @@ void test_register_read_request_size_1_transaction()
     network_prefs_deinit();
 }
 
+static void setup_network_config(const char *mac)
+{
+    Connman::Address<Connman::AddressType::MAC> addr(mac);
+    Connman::NetworkDeviceList::get_singleton_for_update().first.set_auto_select_mac_address(
+            Connman::Technology::ETHERNET, addr);
+    Connman::NetworkDeviceList::get_singleton_for_update().first.insert(
+            Connman::Technology::ETHERNET, Connman::Address<Connman::AddressType::MAC>(addr));
+    cppcut_assert_not_null(Connman::NetworkDeviceList::get_singleton_const().first[addr].get());
+
+    Connman::ServiceData data;
+    Connman::IPSettings<Connman::AddressType::IPV4> ipv4_data;
+    ipv4_data.set_address("111.222.255.100");
+    ipv4_data.set_netmask("255.255.255.0");
+    ipv4_data.set_gateway("111.222.255.1");
+    data.device_ = Connman::NetworkDeviceList::get_singleton_const().first[addr];
+    data.is_favorite_ = true;
+    data.is_auto_connect_ = true;
+    data.is_immutable_ = false;
+    data.state_ = Connman::ServiceState::ONLINE;
+    data.ip_settings_v4_ = std::move(ipv4_data);
+    Connman::ServiceList::get_singleton_for_update().first.insert(
+            "/some/service", std::move(data),
+            std::move(Connman::TechData<Connman::Technology::ETHERNET>()));
+}
+
 /*!\test
  * A whole simple register read transaction initiated by the slave device,
  * several bytes of payload.
@@ -678,9 +714,9 @@ void test_register_read_request_size_16_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("12:23:34:45:56:67", "ab:bc:ce:de:ef:f0",
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
+    setup_network_config("11:23:34:45:56:67");
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -702,17 +738,7 @@ void test_register_read_request_size_16_transaction()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
-    static auto *dummy_connman_iface_data =
-        reinterpret_cast<struct ConnmanInterfaceData *>(123456);
-
-    mock_connman->expect_find_active_primary_interface(dummy_connman_iface_data,
-        "12:23:34:45:56:67", "12:23:34:45:56:67", "ab:bc:ce:de:ef:f0");
-    mock_connman->expect_get_address_string("111.222.255.100",
-                                            dummy_connman_iface_data,
-                                            CONNMAN_IP_VERSION_4,
-                                            CONNMAN_READ_CONFIG_SOURCE_CURRENT,
-                                            false, 16);
-    mock_connman->expect_free_interface_data(dummy_connman_iface_data);
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 56, 16 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -760,9 +786,9 @@ void test_register_multi_step_read_request_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("12:34:56:78:9A:BC", NULL,
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
+    setup_network_config("11:34:56:78:9A:BC");
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -784,6 +810,8 @@ void test_register_multi_step_read_request_transaction()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 51, 18 bytes");
+
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -802,8 +830,8 @@ void test_register_multi_step_read_request_transaction()
         /* command header, payload size is 18 bytes */
         DCP_COMMAND_MULTI_READ_REGISTER, 0x33, 0x12, 0x00,
 
-        /* MAC address 12:34:56:78:9A:BC */
-        0x31, 0x32, 0x3a, 0x33, 0x34, 0x3a, 0x35, 0x36,
+        /* MAC address 11:34:56:78:9A:BC */
+        0x31, 0x31, 0x3a, 0x33, 0x34, 0x3a, 0x35, 0x36,
         0x3a, 0x37, 0x38, 0x3a, 0x39, 0x41, 0x3a, 0x42,
         0x43, 0x00
     };
@@ -856,8 +884,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init("00:11:ff:ee:22:dd", "dd:22:ee:ff:11:00",
-                       "/somewhere", "/somewhere/cfg.rc");
+    network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     register_init(NULL);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
@@ -902,6 +929,10 @@ void test_big_data_is_sent_to_slave_in_fragments()
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(head, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    /* this is our \c #big_register defined above */
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 0, 683 bytes");
+
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(head, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -1015,7 +1046,6 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
-static MockDcpdDBus *mock_dcpd_dbus;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
 
@@ -1041,11 +1071,6 @@ void cut_setup()
     mock_os->init();
     mock_os_singleton = mock_os;
 
-    mock_dcpd_dbus = new MockDcpdDBus();
-    cppcut_assert_not_null(mock_dcpd_dbus);
-    mock_dcpd_dbus->init();
-    mock_dcpd_dbus_singleton = mock_dcpd_dbus;
-
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
     register_zero_for_unit_tests = NULL;
@@ -1064,7 +1089,10 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL, NULL, NULL);
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
+    network_prefs_init(NULL, NULL);
     register_init(NULL);
 }
 
@@ -1073,21 +1101,20 @@ void cut_teardown()
     register_deinit();
     network_prefs_deinit();
 
+    Connman::ServiceList::get_singleton_for_update().first.clear();
+    Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
     mock_messages->check();
     mock_os->check();
-    mock_dcpd_dbus->check();
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
-    mock_dcpd_dbus_singleton = nullptr;
 
     delete mock_messages;
     delete mock_os;
-    delete mock_dcpd_dbus;
 
     mock_messages = nullptr;
     mock_os = nullptr;
-    mock_dcpd_dbus = nullptr;
 
     delete read_data;
     read_data = nullptr;
@@ -1180,6 +1207,11 @@ void test_register_write_request_transaction()
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+    mock_messages->expect_msg_info("Could not determine active network technology, trying fallback");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54, 1 bytes");
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -1605,6 +1637,8 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
+
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
@@ -1644,6 +1678,8 @@ void test_register_push_transaction()
 
     cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
     cppcut_assert_not_null(t);
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -1689,6 +1725,7 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
 
         mock_messages->expect_msg_vinfo_if_not_ignored(MESSAGE_LEVEL_TRACE,
                                                        "read 17 handler %p %zu");
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
 
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                             transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
@@ -1989,6 +2026,16 @@ void test_waiting_for_master_ack_interrupted_by_nack_for_other_transaction()
  */
 void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
 {
+    auto keys(static_cast<char **>(g_malloc_n(2, sizeof(char *))));
+    keys[0] = g_strdup("appliance:appliance:id");
+    keys[1] = nullptr;
+    configproxy_init();
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
+                                              "Registered local key \"@dcpd:appliance:appliance:id\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Registered 1 local key for \"dcpd\"");
+    configproxy_register_local_configuration_owner("dcpd", keys);
+
     struct transaction_exception e;
     struct transaction *t_push =
         create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
@@ -2014,6 +2061,8 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
     /* the push transaction is moved to some other place for deferred
      * processing, a new transaction has been allocated for the newly detected
      * slave transaction; now continue processing that one */
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 87, 5 bytes");
+
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd, &e));
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -2055,6 +2104,8 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
 
     transaction_free(&t_push);
     cppcut_assert_null(t_push);
+
+    configproxy_deinit();
 }
 
 };

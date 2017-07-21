@@ -1,3 +1,85 @@
+2017-07-20  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.7 released.
+
+	* Appliances: Replace nonexistent appliance "Cala Plus" by "Cala CDR"
+	  and "Cala SR".
+
+2017-07-14  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.6 released.
+
+	* Appliances: Rename nonexistent appliance "MP 2500 HV" to
+	  not-yet-released appliance "MP 2500 R".
+
+	* UPnP: Device UUID shows up correctly on CalaBerbel.
+
+	* UPnP: Icon list is written to root XML file.
+
+	* Stability: Fixed crash when encountering a NIC with locally
+	  administered MAC address.
+
+2017-06-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.5 released.
+
+	* WLAN: Make WPS operation more stable.
+
+	* WLAN: Enable canceling WPS connection attempt. To cancel, the SPI
+	  slave needs to send "wps-abort" as security string.
+
+	* Networking: Select appliance-specific fallback networking technology
+	  for configuration in case there is no obvious candidate. This
+	  enables WLAN configuration at any time in appliances with no
+	  Ethernet.
+
+	* Networking: Cancel WPS mode when Ethernet cable is plugged in.
+
+2017-06-02  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.4 released.
+
+	* WLAN: Enable WPS push-button method.
+
+	* DCP protocol: Extended network status (register 50) for reporting
+	  state of connection.
+
+	* DCP protocol: Appliance ID set in register 87 has an effect now.
+	  Currently, the ID determines the way the network devices are treated
+	  and which MAC address is used for Airable. This version contains
+	  hard-coded rules, which is a design flaw enforced by project
+	  schedule. This issue is to be addressed in the future. Recognized
+	  appliance IDs are R1000E, MP1000E, MP2000R, MP2500HV, MP3100HV,
+	  CalaPlus, and CalaBerbel.
+
+	* Networking: The network MAC addresses are read out based on
+	  appliance ID. Filtering of ConnMan services by MAC address takes
+	  immediate effect on appliance ID change.
+
+	* TA Control: Fix very rarely occuring communication problem with
+	  smartphone app.
+
+	* Misc: Implement monitoring D-Bus interface for configuration value
+	  changes. This interface was long defined, and has finally been
+	  implemented.
+
+	* Misc: Unknown command line arguments are ignored in daemon mode.
+	  This is supposed to simplify ad-hoc upgrades and make regular
+	  updates more fail-safe.
+
+2017-04-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.3 released.
+
+	* DCP protocol: Support fast forward and fast rewind commands. This
+	  enables fast winding via remote control.
+
+	* DCP protocol: Support stream seek commands. This enables jumping
+	  to arbitrary stream positions via TA Control progress bar.
+
+	* DCP protocol: Avoid sending cover art hash updates on continue from
+	  pause mode and stream seeks.
+
 2017-03-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.0 released.
@@ -10,6 +92,16 @@
 
 	* Audio routing: The player is stopped when the App source is
 	  deselected.
+
+2017-02-30  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.2 released.
+
+	* Stability: Fixed communication with drcpd. Requires drcpd v3.3 for
+	  full effect as there was also a bug on the other side.
+
+	* Misc: Added extra log messages to help hunting down problems with
+	  transferring cover art to the SPI slave.
 
 2017-02-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
 

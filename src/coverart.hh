@@ -93,7 +93,7 @@ class Picture
 
     bool is_available() const { return is_valid_; }
     const GVariantWrapper &get_hash_variant() const { return hash_; }
-
+    const uint8_t *get_hash_bytes() const { return hash_data_; }
     size_t copy_hash(uint8_t *buffer, size_t buffer_size) const;
 
     class const_iterator: public std::iterator<std::random_access_iterator_tag, const uint8_t>
@@ -124,7 +124,9 @@ class Picture
         const_iterator operator++(int) { const_iterator ret(*this); ++pos_; return ret; }
         const_iterator &operator--() { --pos_; return *this; }
         const_iterator operator--(int) { const_iterator ret(*this); --pos_; return ret; }
-        difference_type operator-(const const_iterator &other) { return pos_ - other.pos_; }
+        difference_type operator-(const const_iterator &other) const { return pos_ - other.pos_; }
+        const_iterator operator+(ssize_t dist) const { const_iterator ret(*this); ret.pos_ += dist; return ret; }
+        const_iterator operator-(ssize_t dist) const { const_iterator ret(*this); ret.pos_ -= dist; return ret; }
     };
 
     const_iterator begin() const { return const_iterator(picture_data_, picture_length_); }

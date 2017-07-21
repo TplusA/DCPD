@@ -1,0 +1,1 @@
+../strbo_common/src/configuration_settings.hh
