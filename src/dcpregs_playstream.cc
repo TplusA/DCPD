@@ -683,7 +683,7 @@ static struct
 }
 play_stream_data;
 
-static const char app_audio_source_id[] = "App";
+static const char app_audio_source_id[] = "strbo.plainurl";
 
 void dcpregs_playstream_init(void)
 {
