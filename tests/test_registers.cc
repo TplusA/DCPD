@@ -6133,6 +6133,8 @@ void cut_teardown()
     mock_dbus_iface = nullptr;
 }
 
+static constexpr const char *const audio_source_id = "strbo.plainurl";
+
 static void set_start_title(const uint8_t *title, size_t length,
                             bool switching_to_app_mode,
                             bool immediate_audio_source_selection)
@@ -6140,7 +6142,7 @@ static void set_start_title(const uint8_t *title, size_t length,
     if(switching_to_app_mode)
     {
         mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-        mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, "App");
+        mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, audio_source_id);
     }
 
     const auto *const reg = register_lookup(78);
@@ -6161,7 +6163,7 @@ static void set_start_title(const std::string title,
     if(switching_to_app_mode)
     {
         mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-        mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, "App");
+        mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, audio_source_id);
     }
 
     const auto *const reg = register_lookup(78);
