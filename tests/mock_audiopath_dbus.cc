@@ -78,8 +78,6 @@ static std::ostream &operator<<(std::ostream &os, const AudiopathFn id)
 class MockAudiopathDBus::Expectation
 {
   public:
-    using ManagerRequestSourceResult = std::tuple<std::string, bool, GError *>;
-
     struct Data
     {
         const AudiopathFn function_id_;
@@ -90,6 +88,7 @@ class MockAudiopathDBus::Expectation
         std::string arg_source_id_;
         std::string out_player_id_;
         bool out_switched_;
+        ManagerRequestSourceWaiting manager_request_source_waiting_fn_;
 
         explicit Data(AudiopathFn fn):
             function_id_(fn),
@@ -127,6 +126,19 @@ class MockAudiopathDBus::Expectation
         data_.out_player_id_ = out_player_id;
         data_.out_switched_ = out_switched;
         data_.arg_object_ = static_cast<void *>(object);
+    }
+
+    explicit Expectation(AudiopathFn fn, bool retval, tdbusaupathManager *object,
+                         const char *out_player_id, bool out_switched,
+                         const ManagerRequestSourceWaiting &wait_for_result_fn):
+        d(fn)
+    {
+        data_.ret_bool_ = retval;
+        data_.expecting_async_callback_fn_ = true;
+        data_.out_player_id_ = out_player_id;
+        data_.out_switched_ = out_switched;
+        data_.arg_object_ = static_cast<void *>(object);
+        data_.manager_request_source_waiting_fn_ = wait_for_result_fn;;
     }
 
     explicit Expectation(AudiopathFn fn, bool retval, tdbusaupathPlayer *object):
@@ -183,6 +195,13 @@ void MockAudiopathDBus::expect_tdbus_aupath_manager_call_request_source(tdbusaup
                                    !shall_fail, object, out_player_id, out_switched));
 }
 
+void MockAudiopathDBus::expect_tdbus_aupath_manager_call_request_source(tdbusaupathManager *object, const gchar *arg_source_id, const gchar *out_player_id, const gboolean out_switched, const ManagerRequestSourceWaiting &wait_for_result_fn)
+{
+    expectations_->add(Expectation(AudiopathFn::manager_request_source,
+                                   true, object, out_player_id, out_switched,
+                                   wait_for_result_fn));
+}
+
 void MockAudiopathDBus::expect_tdbus_aupath_player_call_activate_sync(gboolean retval, tdbusaupathPlayer *object)
 {
     expectations_->add(Expectation(AudiopathFn::player_activate,
@@ -228,16 +247,52 @@ void tdbus_aupath_manager_call_request_source(tdbusaupathManager *proxy, const g
             ? nullptr
             : g_error_new(G_IO_ERROR, G_IO_ERROR_FAILED,
                           "Mock manager request source failure");
-        MockAudiopathDBus::Expectation::ManagerRequestSourceResult result(expect.d.out_player_id_,
-                                                                          expect.d.out_switched_,
-                                                                          error);
-        auto *res = reinterpret_cast<GAsyncResult *>(&result);
+        MockAudiopathDBus::ManagerRequestSourceResult result(expect.d.out_player_id_,
+                                                             expect.d.out_switched_,
+                                                             error);
 
-        callback(reinterpret_cast<GObject *>(proxy), res, user_data);
+        if(cancellable != nullptr)
+            g_object_ref(G_OBJECT(cancellable));
+
+        if(expect.d.manager_request_source_waiting_fn_ != nullptr)
+            expect.d.manager_request_source_waiting_fn_(proxy, arg_source_id, cancellable,
+                                                        callback, user_data,
+                                                        std::move(result));
+        else
+            MockAudiopathDBus::aupath_manager_request_source_result(proxy, cancellable,
+                                                                    callback, user_data,
+                                                                    std::move(result));
+    }
+}
+
+void MockAudiopathDBus::aupath_manager_request_source_result(tdbusaupathManager *proxy,
+                                                             GCancellable *cancellable,
+                                                             GAsyncReadyCallback callback,
+                                                             void *user_data,
+                                                             ManagerRequestSourceResult &&result)
+{
+    if(cancellable != nullptr && g_cancellable_is_cancelled(cancellable))
+    {
+        GError *&error = std::get<2>(result);
 
         if(error != nullptr)
             g_error_free(error);
+
+        error = g_error_new(G_IO_ERROR, G_IO_ERROR_CANCELLED,
+                            "Mock request audio source canceled");
     }
+
+    callback(reinterpret_cast<GObject *>(proxy),
+             reinterpret_cast<GAsyncResult *>(&result), user_data);
+
+    GError *error = std::get<2>(result);
+
+    if(error != nullptr)
+        g_error_free(error);
+
+    if(cancellable != nullptr)
+        g_object_unref(G_OBJECT(cancellable));
+
 }
 
 gboolean tdbus_aupath_manager_call_request_source_finish(tdbusaupathManager *proxy,
@@ -252,7 +307,7 @@ gboolean tdbus_aupath_manager_call_request_source_finish(tdbusaupathManager *pro
     cppcut_assert_not_null(res);
 
     const auto &result =
-        *reinterpret_cast<const MockAudiopathDBus::Expectation::ManagerRequestSourceResult *>(res);
+        *reinterpret_cast<const MockAudiopathDBus::ManagerRequestSourceResult *>(res);
 
     if(std::get<2>(result) == nullptr)
     {

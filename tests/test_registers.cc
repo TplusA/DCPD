@@ -37,6 +37,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
+#include "dcpregs_audiosources.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_mediaservices.h"
@@ -8818,5 +8819,453 @@ void test_playback_stream_seek_boundaries()
 }
 
 };
+
+namespace audiosources_registers
+{
+static MockMessages *mock_messages;
+static MockAudiopathDBus *mock_audiopath_dbus;
+static MockDBusIface *mock_dbus_iface;
+
+static RegisterChangedData *register_changed_data;
+
+static tdbusaupathManager *const dbus_audiopath_manager_iface_dummy =
+    reinterpret_cast<tdbusaupathManager *>(0x1cf831e0);
+
+static void register_changed_callback(uint8_t reg_number)
+{
+    register_changed_data->append(reg_number);
+}
+
+void cut_setup()
+{
+    register_changed_data = new RegisterChangedData;
+
+    mock_messages = new MockMessages;
+    cppcut_assert_not_null(mock_messages);
+    mock_messages->init();
+    mock_messages_singleton = mock_messages;
+
+    mock_audiopath_dbus = new MockAudiopathDBus();
+    cppcut_assert_not_null(mock_audiopath_dbus);
+    mock_audiopath_dbus->init();
+    mock_audiopath_dbus_singleton = mock_audiopath_dbus;
+
+    mock_dbus_iface = new MockDBusIface;
+    cppcut_assert_not_null(mock_dbus_iface);
+    mock_dbus_iface->init();
+    mock_dbus_iface_singleton = mock_dbus_iface;
+
+    mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
+
+    register_changed_data->init();
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"networkconfig\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"filetransfer\"");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "Allocated shutdown guard \"upnpname\"");
+
+    network_prefs_init(NULL, NULL);
+    register_init(register_changed_callback);
+
+    dcpregs_audiosources_set_unit_test_mode();
+}
+
+void cut_teardown()
+{
+    register_deinit();
+    network_prefs_deinit();
+
+    register_changed_data->check();
+
+    delete register_changed_data;
+    register_changed_data = nullptr;
+
+    mock_messages->check();
+    mock_audiopath_dbus->check();
+    mock_dbus_iface->check();
+
+    mock_messages_singleton = nullptr;
+    mock_audiopath_dbus_singleton = nullptr;
+    mock_dbus_iface_singleton = nullptr;
+
+    delete mock_messages;
+    delete mock_audiopath_dbus;
+    delete mock_dbus_iface;
+
+    mock_messages = nullptr;
+    mock_audiopath_dbus = nullptr;
+    mock_dbus_iface = nullptr;
+}
+
+static void make_source_available(const char *source_id, std::string &&source_name,
+                                  std::string &&player_id, std::string &&path)
+{
+    dcpregs_audiosources_source_available(source_id);
+}
+
+/*!\test
+ * We assume nothing on initialization and do not query the current audio path.
+ */
+void test_current_audio_source_is_empty_after_initialization()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+}
+
+/*!\test
+ * Selection of audio source is not reported back immediately.
+ */
+void test_selection_of_known_alive_source_reports_selection_asynchronously()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.usb";
+    make_source_available(asrc, "USB devices", "usb_player", "/some/dbus/path");
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true, false);
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    /* source is still empty because successful switch is reported
+     * asynchronously */
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+}
+
+/*!\test
+ * Selection of audio source followed by asynchronous notification.
+ */
+void test_selection_of_known_alive_source_with_async_notification()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.usb";
+    make_source_available(asrc, "USB devices", "usb_player", "/some/dbus/path");
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true, false);
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    /* this function should be called from a D-Bus handler that monitors audio
+     * path changes */
+    dcpregs_audiosources_selected_source(asrc);
+    register_changed_data->check(81);
+
+    /* now the register contains our selected audio source ID */
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
+}
+
+/*!\test
+ * Selection of audio source may be deferred to much later until the audio path
+ * is actually usable.
+ */
+void test_selection_of_known_alive_source_is_done_when_possible()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.usb";
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    /* source is still empty because (1) the audio path (thus the audio source)
+     * is not usable yet, and (2) a successful switch of audio path is reported
+     * asynchronously */
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+
+    /* path is available now (reported via D-Bus) after both, player and
+     * source, have started and registered their parts */
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true, false);
+
+    make_source_available(asrc, "All my USB devices", "usb_player", "/some/dbus/path");
+
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+
+    /* audio path has been changed as reported by calling the following
+     * function (called from D-Bus handler) */
+    dcpregs_audiosources_selected_source(asrc);
+    register_changed_data->check(81);
+
+    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
+}
+
+/*!\test
+ * Changes of audio source notified by the audio path manager are always
+ * forwarded to SPI slave.
+ */
+void test_unrequested_change_of_known_audio_path_is_propagated_to_spi_slave()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "roon";
+
+    /* this function should be called from a D-Bus handler that monitors audio
+     * path changes */
+    dcpregs_audiosources_selected_source(asrc);
+    register_changed_data->check(81);
+
+    /* the register now contains some audio source ID */
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
+}
+
+/*!\test
+ * Test future compatibility with new audio sources. Don't crash, behave
+ * nicely.
+ */
+void test_unrequested_change_of_unknown_audio_path_is_propagated_to_spi_slave()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "new_streaming_service";
+
+    /* this function should be called from a D-Bus handler that monitors audio
+     * path changes */
+    dcpregs_audiosources_selected_source(asrc);
+    register_changed_data->check(81);
+
+    /* the register now contains some audio source ID */
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
+}
+
+/*!\test
+ * Unusable sources can be selected. They just won't do anything useful.
+ */
+void test_selection_of_known_unusable_source()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.upnpcm";
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    dcpregs_audiosources_selected_source(asrc);
+    register_changed_data->check(81);
+
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
+}
+
+using RequestSourceResultBundle =
+    std::tuple<tdbusaupathManager *, GCancellable *,
+               GAsyncReadyCallback, void *,
+               MockAudiopathDBus::ManagerRequestSourceResult>;
+
+static void receive_async_result(tdbusaupathManager *proxy,
+                                 const gchar *source_id, GCancellable *cancellable,
+                                 GAsyncReadyCallback callback, void *user_data,
+                                 MockAudiopathDBus::ManagerRequestSourceResult &&result,
+                                 RequestSourceResultBundle &bundle)
+{
+    bundle = std::move(RequestSourceResultBundle(proxy, cancellable,
+                                                 callback, user_data,
+                                                 std::move(result)));
+}
+
+/*!\test
+ * Switch request to a source while switching to the same source is ignored.
+ * This is for impatient slaves and/or slow audio sources.
+ */
+void test_quickly_selecting_audio_source_twice_switches_once()
+{
+    static const char asrc[] = "strbo.usb";
+    make_source_available(asrc, "USB devices", "usb_player", "/some/dbus/path");
+
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    RequestSourceResultBundle result;
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true,
+            std::bind(receive_async_result,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4,
+                      std::placeholders::_5, std::placeholders::_6,
+                      std::ref(result)));
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    cppcut_assert_not_null(std::get<0>(result));
+    mock_dbus_iface->check();
+    mock_audiopath_dbus->check();
+
+    /* the request for audio source has not finished yet, but here comes yet
+     * another request for the same thing; nothing happens */
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    /* and a few more */
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    /* finally received the answer for the first request */
+    MockAudiopathDBus::aupath_manager_request_source_result(std::get<0>(result),
+                                                            std::get<1>(result),
+                                                            std::get<2>(result),
+                                                            std::get<3>(result),
+                                                            std::move(std::get<4>(result)));
+}
+
+/*!\test
+ * Switch request to a source while switching to another source cancels the
+ * first request. This is for impatient users and/or slow or unresponsive audio
+ * sources.
+ */
+void test_quickly_selecting_different_audio_source_during_switch_cancels_first_switch()
+{
+    static const char asrc_upnp[] = "strbo.upnpcm";
+    static const char asrc_usb[]  = "strbo.usb";
+
+    make_source_available(asrc_upnp, "UPnP servers", "upnp_player", "/dbus/upnp");
+    make_source_available(asrc_usb,  "USB devices",  "usb_player",  "/dbus/usb");
+
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    /* request UPnP audio source */
+    RequestSourceResultBundle upnp_result;
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc_upnp, "upnp_player", true,
+            std::bind(receive_async_result,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4,
+                      std::placeholders::_5, std::placeholders::_6,
+                      std::ref(upnp_result)));
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_upnp),
+                                              sizeof(asrc_upnp)));
+
+    cppcut_assert_not_null(std::get<0>(upnp_result));
+    mock_dbus_iface->check();
+    mock_audiopath_dbus->check();
+
+    /* request USB audio source while selection of UPnP audio source has not
+     * finished yet */
+    RequestSourceResultBundle usb_result;
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc_usb, "usb_player", true,
+            std::bind(receive_async_result,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4,
+                      std::placeholders::_5, std::placeholders::_6,
+                      std::ref(usb_result)));
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_usb),
+                                              sizeof(asrc_usb)));
+
+    cppcut_assert_not_null(std::get<0>(usb_result));
+    mock_dbus_iface->check();
+    mock_audiopath_dbus->check();
+
+    /* finally received the answer for the first request */
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Canceled audio source request");
+
+    MockAudiopathDBus::aupath_manager_request_source_result(std::get<0>(upnp_result),
+                                                            std::get<1>(upnp_result),
+                                                            std::get<2>(upnp_result),
+                                                            std::get<3>(upnp_result),
+                                                            std::move(std::get<4>(upnp_result)));
+
+    /* ...and for the second request */
+    MockAudiopathDBus::aupath_manager_request_source_result(std::get<0>(usb_result),
+                                                            std::get<1>(usb_result),
+                                                            std::get<2>(usb_result),
+                                                            std::get<3>(usb_result),
+                                                            std::move(std::get<4>(usb_result)));
+
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+
+    /* a bit later, the notification about audio path change */
+    dcpregs_audiosources_selected_source(asrc_usb);
+    register_changed_data->check(81);
+
+    cppcut_assert_equal(ssize_t(sizeof(asrc_usb)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc_usb, sizeof(asrc_usb), buffer, sizeof(asrc_usb));
+}
+
+/*!\test
+ * Dead sources cannot be selected.
+ */
+void test_selection_of_known_dead_source_yields_error()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "roon";
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+                                              "Audio source \"roon\" is dead");
+    cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+}
+
+/*!\test
+ * Unknown sources cannot be selected.
+ */
+void test_selection_of_unknown_source_yields_error()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "doesnotexist";
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
+                                              "Audio source \"doesnotexist\" not known");
+    cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    uint8_t buffer[32] = {0xc7};
+    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+}
+
+}
 
 /*!@}*/
