@@ -36,6 +36,7 @@ void dcpregs_audiosources_init(void);
 void dcpregs_audiosources_deinit(void);
 
 ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length);
+int dcpregs_write_80_get_known_audio_sources(const uint8_t *data, size_t length);
 
 ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length);
 int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length);

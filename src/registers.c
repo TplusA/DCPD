@@ -412,6 +412,13 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_79_start_play_stream_url,
     },
     {
+        /* Read out list of audio sources */
+        REGISTER(80, REGISTER_MK_VERSION(1, 0, 4)),
+        .max_data_size = 1024,
+        .read_handler = dcpregs_read_80_get_known_audio_sources,
+        .write_handler = dcpregs_write_80_get_known_audio_sources,
+    },
+    {
         /* Switch audio source to given ID */
         REGISTER(81, REGISTER_MK_VERSION(1, 0, 4)),
         .max_data_size = 32,

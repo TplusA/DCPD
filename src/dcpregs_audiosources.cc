@@ -900,6 +900,18 @@ void dcpregs_audiosources_deinit(void)
                              AudioSourceState::UNAVAILABLE, AudioSourceState::DEAD});
 }
 
+ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 80 handler %p %zu", response, length);
+    return -1;
+}
+
+int dcpregs_write_80_get_known_audio_sources(const uint8_t *data, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 80 handler %p %zu", data, length);
+    return -1;
+}
+
 ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 81 handler %p %zu", response, length);
