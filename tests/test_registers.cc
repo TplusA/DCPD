@@ -588,12 +588,18 @@ static const std::array<uint8_t, 1> existing_registers_v1_0_3 =
    73,
 };
 
-static const std::array<RegisterSetPerVersion, 4> all_registers
+static const std::array<uint8_t, 1> existing_registers_v1_0_4 =
+{
+   81,
+};
+
+static const std::array<RegisterSetPerVersion, 5> all_registers
 {
     RegisterSetPerVersion(1, 0, 0, existing_registers_v1_0_0),
     RegisterSetPerVersion(1, 0, 1, existing_registers_v1_0_1),
     RegisterSetPerVersion(1, 0, 2, existing_registers_v1_0_2),
     RegisterSetPerVersion(1, 0, 3, existing_registers_v1_0_3),
+    RegisterSetPerVersion(1, 0, 4, existing_registers_v1_0_4),
 };
 
 void cut_setup()

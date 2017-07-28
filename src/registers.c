@@ -37,6 +37,7 @@
 #include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_tcptunnel.h"
+#include "dcpregs_audiosources.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_mediaservices.h"
 #include "dcpregs_searchparameters.h"
@@ -411,6 +412,13 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_79_start_play_stream_url,
     },
     {
+        /* Switch audio source to given ID */
+        REGISTER(81, REGISTER_MK_VERSION(1, 0, 4)),
+        .max_data_size = 32,
+        .read_handler = dcpregs_read_81_current_audio_source,
+        .write_handler = dcpregs_write_81_current_audio_source,
+    },
+    {
         /* Set appliance ID */
         REGISTER(87, REGISTER_MK_VERSION(1, 0, 1)),
         .max_data_size = 32,
@@ -555,7 +563,7 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
     registers_private_data.configured_protocol_level.code =
-        REGISTER_MK_VERSION(1, 0, 3);
+        REGISTER_MK_VERSION(1, 0, 4);
 
     struct register_configuration_t *config = registers_get_nonconst_data();
 
@@ -566,6 +574,7 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
     dcpregs_networkconfig_init();
     dcpregs_wlansurvey_init();
     dcpregs_filetransfer_init();
+    dcpregs_audiosources_init();
     dcpregs_playstream_init();
     dcpregs_upnpname_init();
 }
@@ -576,6 +585,7 @@ void register_deinit(void)
     dcpregs_wlansurvey_deinit();
     dcpregs_filetransfer_deinit();
     dcpregs_playstream_deinit();
+    dcpregs_audiosources_deinit();
     dcpregs_upnpname_deinit();
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 }
@@ -614,7 +624,7 @@ size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel
     {
 #define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
 
-        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 3)),
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 4)),
 
 #undef MK_RANGE
     };
