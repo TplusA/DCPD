@@ -233,10 +233,47 @@ void tdbus_aupath_manager_call_request_source(tdbusaupathManager *proxy, const g
                                                                           error);
         auto *res = reinterpret_cast<GAsyncResult *>(&result);
 
-        callback(G_OBJECT(proxy), res, user_data);
+        callback(reinterpret_cast<GObject *>(proxy), res, user_data);
 
-        g_error_free(error);
+        if(error != nullptr)
+            g_error_free(error);
     }
+}
+
+gboolean tdbus_aupath_manager_call_request_source_finish(tdbusaupathManager *proxy,
+                                                         gchar **out_player_id,
+                                                         gboolean *out_switched,
+                                                         GAsyncResult *res,
+                                                         GError **error)
+{
+    cppcut_assert_not_null(proxy);
+    cppcut_assert_not_null(out_player_id);
+    cppcut_assert_not_null(out_switched);
+    cppcut_assert_not_null(res);
+
+    const auto &result =
+        *reinterpret_cast<const MockAudiopathDBus::Expectation::ManagerRequestSourceResult *>(res);
+
+    if(std::get<2>(result) == nullptr)
+    {
+        *out_player_id = g_strdup(std::get<0>(result).c_str());
+        *out_switched = std::get<1>(result);
+    }
+    else
+    {
+        *out_player_id = nullptr;
+        *out_switched = FALSE;
+    }
+
+    if(error != nullptr)
+    {
+        if(std::get<2>(result) != nullptr)
+            *error = g_error_copy(std::get<2>(result));
+        else
+            *error = nullptr;
+    }
+
+    return TRUE;
 }
 
 static char extract_id(tdbusaupathPlayer *proxy)
