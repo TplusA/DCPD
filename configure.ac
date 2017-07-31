@@ -71,7 +71,7 @@ AC_CHECK_COVERAGE
 PKG_CHECK_MODULES([DCPD_DEPENDENCIES], [gmodule-2.0 gio-2.0 gio-unix-2.0 gthread-2.0])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h limits.h stddef.h stdint.h stdlib.h string.h sys/socket.h syslog.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h inttypes.h limits.h netinet/in.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h syslog.h unistd.h])
 
 m4_ifdef([AC_CHECK_CUTTER],
 [
@@ -91,15 +91,22 @@ AC_LANG_POP([C++])
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
 AC_C_INLINE
+AC_TYPE_INT16_T
+AC_TYPE_INT64_T
 AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 AC_TYPE_UINT16_T
+AC_TYPE_UINT32_T
+AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 AC_CHECK_TYPES([ptrdiff_t])
 
 # Checks for library functions.
+AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
+AC_FUNC_MALLOC
+AC_FUNC_MMAP
 AC_FUNC_REALLOC
-AC_CHECK_FUNCS([getpagesize memchr memmove memset mkfifo strerror strtoul])
+AC_CHECK_FUNCS([clock_gettime getpagesize memchr memmove memset mkdir mkfifo munmap realpath rmdir strchr strdup strerror strrchr strtoul strtoull])
 AC_SEARCH_LIBS([socket], [socket], [],
                [AC_CHECK_LIB([socket], [socket],
                              [LIBS="-lsocket -lnsl $LIBS"],
