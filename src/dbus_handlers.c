@@ -295,6 +295,9 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
         g_variant_get(parameters, "(&sybb&s)",
                       &service_id, &actor_id, &is_login, &has_failed, &info);
 
+        if(!has_failed)
+            dcpregs_audiosources_set_login_state(service_id, is_login);
+
         if(actor_id != ACTOR_ID_SMARTPHONE_APP && !has_failed)
         {
             if(is_login)

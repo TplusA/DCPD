@@ -118,6 +118,7 @@ static struct credentials_iface_data
     bool connect_to_session_bus;
     tdbuscredentialsRead *cred_read_iface;
     tdbuscredentialsWrite *cred_write_iface;
+    void (*read_iface_available_notification)(void);
 }
 credentials_iface_data;
 
@@ -263,7 +264,8 @@ static void created_cred_read_proxy(GObject *source_object, GAsyncResult *res,
     data->cred_read_iface =
         tdbus_credentials_read_proxy_new_finish(res, &error);
 
-    (void)dbus_common_handle_dbus_error(&error, "Create Airable credread proxy");
+    if(dbus_common_handle_dbus_error(&error, "Create Airable credread proxy") == 0)
+        data->read_iface_available_notification();
 }
 
 static void created_cred_write_proxy(GObject *source_object, GAsyncResult *res,
@@ -441,7 +443,8 @@ static struct dbus_process_data process_data;
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
                struct smartphone_app_connection_data *appconn_data,
                struct DBusSignalManagerData *connman_data,
-               struct ConfigurationManagementData *configuration_data)
+               struct ConfigurationManagementData *configuration_data,
+               void (*credentials_read_iface_available_notification)(void))
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
     g_type_init();
@@ -479,6 +482,8 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     artcache_iface_data.connect_to_session_bus = connect_to_session_bus;
     audiopath_iface_data.connect_to_session_bus = connect_to_session_bus;
     credentials_iface_data.connect_to_session_bus = connect_to_session_bus;
+    credentials_iface_data.read_iface_available_notification =
+        credentials_read_iface_available_notification;
 
     static const char bus_name[] = "de.tahifi.Dcpd";
 

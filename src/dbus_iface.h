@@ -32,7 +32,8 @@ struct ConfigurationManagementData;
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
                struct smartphone_app_connection_data *appconn_data,
                struct DBusSignalManagerData *connman_manager_data,
-               struct ConfigurationManagementData *configuration_data);
+               struct ConfigurationManagementData *configuration_data,
+               void (*credentials_read_iface_available_notification)(void));
 void dbus_shutdown(void);
 
 void dbus_lock_shutdown_sequence(const char *why);

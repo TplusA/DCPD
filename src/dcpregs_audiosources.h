@@ -44,10 +44,29 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length);
  *
  * This function reads out the list of all audio paths and updates our internal
  * representation of audio source states.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
  */
 void dcpregs_audiosources_fetch_audio_paths(void);
+
+/*!
+ * Retrieve availability of credentials for external media services.
+ *
+ * This function makes a good guess on whether or not an audio source
+ * associated with the external service is usable, unless this information is
+ * known from some somewhere else already.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
+ */
+void dcpregs_audiosources_check_external_service_credentials(void);
+
 /*!
  * Report availibility of an audio source as part of a usable audio path.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
  */
 void dcpregs_audiosources_source_available(const char *source_id);
 
@@ -58,6 +77,21 @@ void dcpregs_audiosources_source_available(const char *source_id);
  *     Called from D-Bus thread, not main context.
  */
 void dcpregs_audiosources_selected_source(const char *source_id);
+
+/*!
+ * Report update of service credentials state for given credentials category.
+ */
+void dcpregs_audiosources_set_have_credentials(const char *cred_category,
+                                               bool have_credentials);
+
+/*!
+ * Report login status change of external media service.
+ *
+ * \attention
+ *     Called from D-Bus thread, not main context.
+ */
+void dcpregs_audiosources_set_login_state(const char *cred_category,
+                                          bool is_logged_in);
 
 /*!
  * Be aware of unit test mode.

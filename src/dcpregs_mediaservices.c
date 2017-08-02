@@ -24,6 +24,7 @@
 #include <errno.h>
 
 #include "dcpregs_mediaservices.h"
+#include "dcpregs_audiosources.h"
 #include "registers_priv.h"
 #include "dynamic_buffer_util.h"
 #include "credentials_dbus.h"
@@ -50,7 +51,8 @@ struct XmlEscapeSequence
     const size_t escape_sequence_length;
 };
 
-static int delete_credentials(const char *service_id, bool logout_on_failure)
+static int delete_credentials(const char *service_id, bool logout_on_failure,
+                              int *delete_ret_ptr)
 {
     GError *error = NULL;
     gchar *dummy = NULL;
@@ -61,6 +63,9 @@ static int delete_credentials(const char *service_id, bool logout_on_failure)
                                                          NULL, &error);
 
     const int delete_ret = dbus_common_handle_dbus_error(&error, "Delete credentials");
+
+    if(delete_ret_ptr != NULL)
+        *delete_ret_ptr = delete_ret;
 
     if(delete_ret < 0)
     {
@@ -73,6 +78,9 @@ static int delete_credentials(const char *service_id, bool logout_on_failure)
             BUG("Expected empty default user");
 
         g_free(dummy);
+
+        if(delete_ret_ptr == NULL && delete_ret == 0)
+            dcpregs_audiosources_set_have_credentials(service_id, false);
     }
 
     if(dbus_get_airable_sec_iface() != NULL)
@@ -94,7 +102,8 @@ static int delete_credentials(const char *service_id, bool logout_on_failure)
 static int set_credentials(const char *service_id,
                            const char *login, const char *password)
 {
-    (void)delete_credentials(service_id, true);
+    int delete_ret = -1;
+    (void)delete_credentials(service_id, true, &delete_ret);
 
     GError *error = NULL;
 
@@ -103,7 +112,14 @@ static int set_credentials(const char *service_id,
                                                       login, password, TRUE,
                                                       NULL, &error);
 
-    return dbus_common_handle_dbus_error(&error, "Set credentials");
+    const int ret = dbus_common_handle_dbus_error(&error, "Set credentials");
+
+    if(ret == 0)
+        dcpregs_audiosources_set_have_credentials(service_id, true);
+    else if(delete_ret == 0)
+        dcpregs_audiosources_set_have_credentials(service_id, false);
+
+    return ret;
 }
 
 int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
@@ -172,7 +188,7 @@ int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
     }
 
     if(login_length == 0)
-        return delete_credentials(string_data, false);
+        return delete_credentials(string_data, false, NULL);
 
     char password_buffer[256];
     size_t safe_password_length = password_length;

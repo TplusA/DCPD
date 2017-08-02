@@ -43,6 +43,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
+#include "dcpregs_audiosources.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_upnpname.h"
@@ -1531,7 +1532,8 @@ int main(int argc, char *argv[])
 
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, connman,
-                  reinterpret_cast<struct ConfigurationManagementData *>(&config_manager)) < 0)
+                  reinterpret_cast<struct ConfigurationManagementData *>(&config_manager),
+                  dcpregs_audiosources_check_external_service_credentials) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
