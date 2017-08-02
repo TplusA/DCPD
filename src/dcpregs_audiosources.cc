@@ -499,12 +499,12 @@ static bool have_credentials(const AudioSource &src)
 
 static AudioSourceData audio_source_data(
 {
-    AudioSource("strbo.usb",      "USB devices",            AudioSource::IS_BROWSABLE),
-    AudioSource("strbo.upnpcm",   "UPnP media servers",     AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
-    AudioSource("strbo.plainurl", "TA Control",             AudioSource::REQUIRES_NETWORK),
-    AudioSource("airable",        "Airable",                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
-    AudioSource("airable.radios", "Airable Internet Radio", AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
-    AudioSource("airable.feeds",  "Airable Podcasts",       AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
+    AudioSource("strbo.usb",      "USB devices",             AudioSource::IS_BROWSABLE),
+    AudioSource("strbo.upnpcm",   "UPnP media servers",      AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
+    AudioSource("strbo.plainurl", "TA Control",              AudioSource::REQUIRES_NETWORK),
+    AudioSource("airable",        "Airable",                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
+    AudioSource("airable.radios", "Airable Internet Radios", AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
+    AudioSource("airable.feeds",  "Airable Podcasts",        AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
     AudioSource("airable.tidal",  "TIDAL",
                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK | AudioSource::CAN_BE_LOCKED,
                 have_credentials),
@@ -514,7 +514,7 @@ static AudioSourceData audio_source_data(
     AudioSource("airable.qobuz",  "Qobuz",
                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK | AudioSource::CAN_BE_LOCKED,
                 have_credentials),
-    AudioSource("roon",           "Roon Ready",             AudioSource::REQUIRES_NETWORK, nullptr, true),
+    AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_NETWORK, nullptr, true),
 });
 
 void dcpregs_audiosources_init(void)
