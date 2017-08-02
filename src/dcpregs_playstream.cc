@@ -26,6 +26,7 @@
 
 #include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
+#include "dcpregs_audiosources.h"
 #include "registers_priv.h"
 #include "coverart.hh"
 #include "streamplayer_dbus.h"
@@ -672,6 +673,8 @@ static void registered_audio_source(GObject *source_object, GAsyncResult *res,
     tdbus_aupath_manager_call_register_source_finish(TDBUS_AUPATH_MANAGER(source_object),
                                                      res, &error);
     dbus_common_handle_dbus_error(&error, "Register audio source");
+
+    dcpregs_audiosources_fetch_audio_paths();
 }
 
 static struct

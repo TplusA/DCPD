@@ -30,6 +30,7 @@
 #include "registers_priv.h"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
+#include "gvariantwrapper.hh"
 #include "messages.h"
 
 enum class AudioSourceState
@@ -120,6 +121,14 @@ class AudioSource
           case AudioSourceState::ZOMBIE:
             break;
         }
+    }
+
+    void set_name(const char *name)
+    {
+        if(name == nullptr || name[0] == '\0' || default_name_ == name)
+            name_override_.clear();
+        else if(name_override_ != name)
+            name_override_ = name;
     }
 };
 
@@ -454,6 +463,27 @@ class AudioSourceData
     {
         src.set_available();
 
+        gchar *source_name = nullptr;
+        gchar *player_id = nullptr;
+        gchar *dbusname = nullptr;
+        gchar *dbuspath = nullptr;
+        GError *error = nullptr;
+
+        tdbus_aupath_manager_call_get_source_info_sync(dbus_audiopath_get_manager_iface(),
+                                                       src.id_.c_str(),
+                                                       &source_name, &player_id,
+                                                       &dbusname, &dbuspath,
+                                                       nullptr, &error);
+        if(dbus_common_handle_dbus_error(&error, "Get audio source information") == 0)
+        {
+            src.set_name(source_name);
+
+            g_free(player_id);
+            g_free(dbusname);
+            g_free(dbuspath);
+            g_free(source_name);
+        }
+
         auto l(selected_.lock());
 
         if(selected_.is_pending(src))
@@ -489,6 +519,32 @@ static AudioSourceData audio_source_data(
 
 void dcpregs_audiosources_init(void)
 {
+}
+
+void dcpregs_audiosources_fetch_audio_paths(void)
+{
+    GVariant *usable_variant = nullptr;
+    GVariant *incomplete_variant = nullptr;
+    GError *error = nullptr;
+
+    tdbus_aupath_manager_call_get_paths_sync(dbus_audiopath_get_manager_iface(),
+                                             &usable_variant, &incomplete_variant,
+                                             nullptr, &error);
+
+    if(dbus_common_handle_dbus_error(&error, "Read out audio paths") < 0)
+        return;
+
+    GVariantWrapper usable(usable_variant, GVariantWrapper::Transfer::JUST_MOVE);
+    GVariantWrapper incomplete(incomplete_variant, GVariantWrapper::Transfer::JUST_MOVE);
+
+    GVariantIter iter;
+    const gchar *source_id;
+    const gchar *player_id;
+
+    g_variant_iter_init(&iter, GVariantWrapper::get(usable));
+
+    while(g_variant_iter_next(&iter, "(&s&s)", &source_id, &player_id))
+        dcpregs_audiosources_source_available(source_id);
 }
 
 void dcpregs_audiosources_deinit(void)

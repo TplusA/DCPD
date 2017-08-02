@@ -541,6 +541,9 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(audiopath_iface_data.audiopath_manager_proxy != NULL);
     log_assert(connman_iface_data.connman_agent_iface != NULL);
 
+    g_signal_connect(audiopath_iface_data.audiopath_manager_proxy, "g-signal",
+                     G_CALLBACK(dbussignal_audiopath_manager), NULL);
+
     g_signal_connect(filetransfer_iface_data.iface, "g-signal",
                      G_CALLBACK(dbussignal_file_transfer), NULL);
 

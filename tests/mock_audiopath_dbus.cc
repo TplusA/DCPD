@@ -29,6 +29,7 @@
 enum class AudiopathFn
 {
     manager_request_source,
+    manager_get_source_info,
     player_activate,
     player_deactivate,
     source_selected,
@@ -51,6 +52,10 @@ static std::ostream &operator<<(std::ostream &os, const AudiopathFn id)
     {
       case AudiopathFn::manager_request_source:
         os << "manager_request_source";
+        break;
+
+      case AudiopathFn::manager_get_source_info:
+        os << "manager_get_source_info";
         break;
 
       case AudiopathFn::player_activate:
@@ -86,7 +91,10 @@ class MockAudiopathDBus::Expectation
         bool expecting_async_callback_fn_;
         void *arg_object_;
         std::string arg_source_id_;
+        std::string out_source_name_;
         std::string out_player_id_;
+        std::string out_dbusname_;
+        std::string out_dbuspath_;
         bool out_switched_;
         ManagerRequestSourceWaiting manager_request_source_waiting_fn_;
 
@@ -139,6 +147,21 @@ class MockAudiopathDBus::Expectation
         data_.out_switched_ = out_switched;
         data_.arg_object_ = static_cast<void *>(object);
         data_.manager_request_source_waiting_fn_ = wait_for_result_fn;;
+    }
+
+    explicit Expectation(AudiopathFn fn, bool retval, tdbusaupathManager *object,
+                         const gchar *arg_source_id, const gchar *out_source_name,
+                         const char *out_player_id, const gchar *out_dbusname,
+                         const gchar *out_dbuspath):
+        d(fn)
+    {
+        data_.ret_bool_ = retval;
+        data_.arg_source_id_ = arg_source_id;
+        data_.out_source_name_ = out_source_name;
+        data_.out_player_id_ = out_player_id;
+        data_.out_dbusname_ = out_dbusname;
+        data_.out_dbuspath_ = out_dbuspath;
+        data_.arg_object_ = static_cast<void *>(object);
     }
 
     explicit Expectation(AudiopathFn fn, bool retval, tdbusaupathPlayer *object):
@@ -200,6 +223,14 @@ void MockAudiopathDBus::expect_tdbus_aupath_manager_call_request_source(tdbusaup
     expectations_->add(Expectation(AudiopathFn::manager_request_source,
                                    true, object, out_player_id, out_switched,
                                    wait_for_result_fn));
+}
+
+void MockAudiopathDBus::expect_tdbus_aupath_manager_call_get_source_info_sync(tdbusaupathManager *object, const gchar *arg_source_id, const gchar *out_source_name, const gchar *out_player_id, const gchar *out_dbusname, const gchar *out_dbuspath)
+{
+    expectations_->add(Expectation(AudiopathFn::manager_get_source_info,
+                                   true, object,
+                                   arg_source_id, out_source_name,
+                                   out_player_id, out_dbusname, out_dbuspath));
 }
 
 void MockAudiopathDBus::expect_tdbus_aupath_player_call_activate_sync(gboolean retval, tdbusaupathPlayer *object)
@@ -329,6 +360,43 @@ gboolean tdbus_aupath_manager_call_request_source_finish(tdbusaupathManager *pro
     }
 
     return TRUE;
+}
+
+gboolean tdbus_aupath_manager_call_get_source_info_sync(tdbusaupathManager *proxy,
+                                                        const gchar *arg_source_id,
+                                                        gchar **out_source_name,
+                                                        gchar **out_player_id,
+                                                        gchar **out_dbusname,
+                                                        gchar **out_dbuspath,
+                                                        GCancellable *cancellable,
+                                                        GError **error)
+{
+    const auto &expect(mock_audiopath_dbus_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, AudiopathFn::manager_get_source_info);
+    cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
+    cppcut_assert_not_null(arg_source_id);
+    cppcut_assert_equal(expect.d.arg_source_id_.c_str(), arg_source_id);
+    cppcut_assert_not_null(out_source_name);
+    cppcut_assert_not_null(out_player_id);
+    cppcut_assert_not_null(out_dbusname);
+    cppcut_assert_not_null(out_dbuspath);
+
+    *out_source_name = g_strdup(expect.d.out_source_name_.c_str());
+    *out_player_id = g_strdup(expect.d.out_player_id_.c_str());
+    *out_dbusname = g_strdup(expect.d.out_dbusname_.c_str());
+    *out_dbuspath = g_strdup(expect.d.out_dbuspath_.c_str());
+
+    if(error != nullptr)
+    {
+        if(expect.d.ret_bool_)
+            *error = nullptr;
+        else
+            *error = g_error_new(G_IO_ERROR, G_IO_ERROR_FAILED,
+                                 "Mock manager get source info failure");
+    }
+
+    return expect.d.ret_bool_;
 }
 
 static char extract_id(tdbusaupathPlayer *proxy)

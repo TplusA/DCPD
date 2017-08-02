@@ -64,6 +64,9 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     guint16 raw_stream_id,
                                     const gchar *title, const gchar *url);
 
+void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
+                                  const gchar *signal_name, GVariant *parameters,
+                                  gpointer user_data);
 gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
                                               GDBusMethodInvocation *invocation,
                                               const char *source_id,

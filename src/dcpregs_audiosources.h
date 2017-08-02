@@ -40,6 +40,13 @@ ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length);
 int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length);
 
 /*!
+ * Retrieve audio paths from audio path manager for first initialization.
+ *
+ * This function reads out the list of all audio paths and updates our internal
+ * representation of audio source states.
+ */
+void dcpregs_audiosources_fetch_audio_paths(void);
+/*!
  * Report availibility of an audio source as part of a usable audio path.
  */
 void dcpregs_audiosources_source_available(const char *source_id);

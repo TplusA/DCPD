@@ -24,6 +24,7 @@
 #include <errno.h>
 
 #include "dbus_handlers.h"
+#include "dcpregs_audiosources.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
@@ -221,6 +222,36 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     tdbus_dcpd_playback_complete_set_stream_info(object, invocation);
 
     return TRUE;
+}
+
+void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
+                                  const gchar *signal_name, GVariant *parameters,
+                                  gpointer user_data)
+{
+    static const char iface_name[] = "de.tahifi.AudioPath.Manager";
+
+    if(strcmp(signal_name, "PathAvailable") == 0)
+    {
+        const gchar *source_id;
+        const gchar *player_id;
+
+        g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
+        dcpregs_audiosources_source_available(source_id);
+    }
+    else if(strcmp(signal_name, "PathActivated") == 0)
+    {
+        const gchar *source_id;
+        const gchar *player_id;
+
+        g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
+        dcpregs_audiosources_selected_source(source_id);
+    }
+    else if(strcmp(signal_name, "PlayerRegistered") == 0)
+    {
+        /* ignore */
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
 }
 
 gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,

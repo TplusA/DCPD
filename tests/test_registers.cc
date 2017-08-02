@@ -8899,9 +8899,19 @@ void cut_teardown()
     mock_dbus_iface = nullptr;
 }
 
-static void make_source_available(const char *source_id, std::string &&source_name,
-                                  std::string &&player_id, std::string &&path)
+static void make_source_available(const char *source_id, const char *source_name,
+                                  const char *player_id,
+                                  const char *dbusname, const char *dbuspath,
+                                  const std::function<void()> &inject_expectations = nullptr)
 {
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_get_source_info_sync(
+            dbus_audiopath_manager_iface_dummy, source_id, source_name,
+            player_id, dbusname, dbuspath);
+
+    if(inject_expectations != nullptr)
+        inject_expectations();
+
     dcpregs_audiosources_source_available(source_id);
 }
 
@@ -8929,11 +8939,14 @@ void test_selection_of_known_alive_source_reports_selection_asynchronously()
                                                 dcpregs_write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
-    make_source_available(asrc, "USB devices", "usb_player", "/some/dbus/path");
+    static const char player[] = "usb_player";
+
+    make_source_available(asrc, "USB devices",
+                          player, "de.tahifi.MyPlayer", "/some/dbus/path");
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
-            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true, false);
+            dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
 
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
 
@@ -8954,11 +8967,14 @@ void test_selection_of_known_alive_source_with_async_notification()
                                                 dcpregs_write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
-    make_source_available(asrc, "USB devices", "usb_player", "/some/dbus/path");
+    static const char player[] = "usb_player";
+
+    make_source_available(asrc, "USB devices",
+                          player, "de.tahifi.MyPlayer", "/some/dbus/path");
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
-            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true, false);
+            dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
 
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
 
@@ -8984,6 +9000,7 @@ void test_selection_of_known_alive_source_is_done_when_possible()
                                                 dcpregs_write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
+    static const char player[] = "usb_player";
 
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
 
@@ -8996,11 +9013,14 @@ void test_selection_of_known_alive_source_is_done_when_possible()
 
     /* path is available now (reported via D-Bus) after both, player and
      * source, have started and registered their parts */
-    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
-            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true, false);
-
-    make_source_available(asrc, "All my USB devices", "usb_player", "/some/dbus/path");
+    make_source_available(asrc, "All my USB devices",
+                          player, "de.tahifi.MyUSBPlayer", "/some/dbus/path",
+                          [] ()
+                          {
+                              mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+                              mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+                                      dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
+                          });
 
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
@@ -9103,7 +9123,10 @@ static void receive_async_result(tdbusaupathManager *proxy,
 void test_quickly_selecting_audio_source_twice_switches_once()
 {
     static const char asrc[] = "strbo.usb";
-    make_source_available(asrc, "USB devices", "usb_player", "/some/dbus/path");
+    static const char player[] = "usb_player";
+
+    make_source_available(asrc, "USB devices",
+                          player, "usb_player", "/some/dbus/path");
 
     auto *reg = lookup_register_expect_handlers(81,
                                                 dcpregs_read_81_current_audio_source,
@@ -9113,7 +9136,7 @@ void test_quickly_selecting_audio_source_twice_switches_once()
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
-            dbus_audiopath_manager_iface_dummy, asrc, "usb_player", true,
+            dbus_audiopath_manager_iface_dummy, asrc, player, true,
             std::bind(receive_async_result,
                       std::placeholders::_1, std::placeholders::_2,
                       std::placeholders::_3, std::placeholders::_4,
@@ -9153,9 +9176,11 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
 {
     static const char asrc_upnp[] = "strbo.upnpcm";
     static const char asrc_usb[]  = "strbo.usb";
+    static const char player_upnp[] = "upnp_player";
+    static const char player_usb[]  = "usb_player";
 
-    make_source_available(asrc_upnp, "UPnP servers", "upnp_player", "/dbus/upnp");
-    make_source_available(asrc_usb,  "USB devices",  "usb_player",  "/dbus/usb");
+    make_source_available(asrc_upnp, "UPnP servers", player_upnp, "de.tahifi.UPnP", "/dbus/upnp");
+    make_source_available(asrc_usb,  "USB devices",  player_usb,  "de.tahifi.USB",  "/dbus/usb");
 
     auto *reg = lookup_register_expect_handlers(81,
                                                 dcpregs_read_81_current_audio_source,
@@ -9166,7 +9191,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
-            dbus_audiopath_manager_iface_dummy, asrc_upnp, "upnp_player", true,
+            dbus_audiopath_manager_iface_dummy, asrc_upnp, player_upnp, true,
             std::bind(receive_async_result,
                       std::placeholders::_1, std::placeholders::_2,
                       std::placeholders::_3, std::placeholders::_4,
@@ -9186,7 +9211,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
-            dbus_audiopath_manager_iface_dummy, asrc_usb, "usb_player", true,
+            dbus_audiopath_manager_iface_dummy, asrc_usb, player_usb, true,
             std::bind(receive_async_result,
                       std::placeholders::_1, std::placeholders::_2,
                       std::placeholders::_3, std::placeholders::_4,
