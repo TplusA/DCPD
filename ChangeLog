@@ -1,3 +1,11 @@
+2017-08-04  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 3.8 released.
+
+	* Networking: DNS configuration is sent to ConnMan in case of manual
+	  IPv4 setup, and empty DNS configuration is sent in case of DHCPv4
+	  mode setup.
+
 2017-07-20  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.7 released.
