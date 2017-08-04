@@ -488,16 +488,20 @@ static bool nameservers_are_different(const Maybe<std::vector<std::string>> &dns
     if(servers.size() > 0)
     {
         if((dns1 != nullptr && servers[0] != dns1) ||
-           (dns1 == nullptr && dhcp_method != Connman::DHCPV4Method::ON && !servers[0].empty()))
+           (dns1 == nullptr && !servers[0].empty()))
             return true;
     }
+    else if(dns1 != nullptr)
+        return true;
 
     if(servers.size() > 1)
     {
         if((dns2 != nullptr && servers[1] != dns2) ||
-           (dns2 == nullptr && dhcp_method != Connman::DHCPV4Method::ON && !servers[1].empty()))
+           (dns2 == nullptr && !servers[1].empty()))
             return true;
     }
+    else if(dns2 != nullptr)
+        return true;
 
     return false;
 }
