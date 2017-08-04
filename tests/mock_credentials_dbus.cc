@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -92,6 +92,8 @@ class MockCredentialsDBus::Expectation
         std::string arg_category_;
         std::string arg_username_;
         std::string arg_password_;
+        std::string out_username_;
+        std::string out_password_;
 
         explicit Data(CredentialsFn fn):
             function_id_(fn),
@@ -141,6 +143,16 @@ class MockCredentialsDBus::Expectation
     {
         data_.ret_credentials_data_ = &credentials;
         data_.ret_string_ = default_user;
+    }
+
+    explicit Expectation(gboolean retval, tdbuscredentialsRead *object,
+                         const char *category, const char *username,
+                         const char *password):
+        Expectation(CredentialsFn::read_get_default_credentials, retval, object)
+    {
+        data_.arg_category_ = category;
+        data_.out_username_ = username;
+        data_.out_password_ = password;
     }
 
     explicit Expectation(gboolean retval, tdbuscredentialsWrite *object,
@@ -197,6 +209,11 @@ void MockCredentialsDBus::expect_tdbus_credentials_read_call_get_known_categorie
 void MockCredentialsDBus::expect_tdbus_credentials_read_call_get_credentials_sync(gboolean retval, tdbuscredentialsRead *object, const ReadGetCredentialsData &credentials, const std::string &default_user)
 {
     expectations_->add(Expectation(retval, object, credentials, default_user));
+}
+
+void MockCredentialsDBus::expect_tdbus_credentials_read_call_get_default_credentials_sync(gboolean retval, tdbuscredentialsRead *object, const gchar *arg_category, const gchar *out_username, const gchar *out_password)
+{
+    expectations_->add(Expectation(retval, object, arg_category, out_username, out_password));
 }
 
 void MockCredentialsDBus::expect_tdbus_credentials_write_call_set_credentials_sync(gboolean retval, tdbuscredentialsWrite *object, const char *category, const char *username, const char *password, gboolean is_default)
@@ -275,8 +292,12 @@ gboolean tdbus_credentials_read_call_get_default_credentials_sync(tdbuscredentia
 
     cppcut_assert_equal(expect.d.function_id_, CredentialsFn::read_get_default_credentials);
     cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
+    cppcut_assert_equal(expect.d.arg_category_.c_str(), arg_category);
+    cppcut_assert_not_null(out_username);
+    cppcut_assert_not_null(out_password);
 
-    cut_fail("%s(): mock not implemented", __func__);
+    *out_username = g_strdup(expect.d.out_username_.c_str());
+    *out_password = g_strdup(expect.d.out_password_.c_str());
 
     if(error != NULL)
         *error = NULL;
