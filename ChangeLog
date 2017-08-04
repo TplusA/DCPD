@@ -1,3 +1,33 @@
+2017-09-11  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.1 released.
+
+	* Summary: This is a merge of versions 3.8 and 4.0. Since v4.0 was a
+	  fork of v3.1, this version includes all the fixes and changes made
+	  for v3.2 through v3.8. Additional changes are listed below.
+
+	* DCP protocol: Register 81 can be used to set and query the current
+	  audio source. To switch the audio source, its zero-terminated name
+	  must be written to 81. On each audio source switch, the new content
+	  of register 81 is pushed to the SPI slave.
+
+	* DCP protocol: Register 81 can be used to summon dead audio sources
+	  such as Roon. In fact, the only source for which this functionality
+	  is currently available *is* Roon.
+
+	* DCP protocol: Register 80 can be used to query the state of all
+	  available audio sources. Queries must be done by writing a query
+	  command to 80, the answer will then be pushed to the SPI slave.
+	  Changes of audio source states are pushed to the slave without prior
+	  query (not completely implemented yet).
+
+	* DCP protocol: Register 37 returns a version number (such as V1.0.0),
+	  not a datetime string (such as 20170804104801).
+
+	* DCP protocol: A protocol version query (register 1) returns the
+	  correct, latest DC protocol version now. Selection and negotiation
+	  of protocol version has been fixed and works correctly now.
+
 2017-08-04  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 3.8 released.
