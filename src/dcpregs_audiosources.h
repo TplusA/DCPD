@@ -20,6 +20,7 @@
 #define DCPREGS_AUDIOSOURCES_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 
 /*!
