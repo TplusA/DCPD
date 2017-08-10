@@ -124,7 +124,7 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 37 handler %p %zu", response, length);
 
     static const char osrelease_filename[] = "/etc/os-release";
-    static const char key[] = "BUILD_ID=";
+    static const char key[] = "VERSION_ID=";
 
     struct os_mapped_file_data f;
     if(os_map_file_to_memory(&f, osrelease_filename) < 0)
@@ -152,11 +152,11 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
             {
                 if(length > 0)
                     msg_error(0, LOG_NOTICE,
-                              "Truncating build ID of length %zu to %zu characters",
+                              "Truncating version ID of length %zu to %zu characters",
                               id_length, length - 1);
                 else
                     msg_error(0, LOG_NOTICE,
-                              "Cannot copy build ID to zero length buffer");
+                              "Cannot copy version ID to zero length buffer");
             }
 
             if(bytes_to_fill > 0)
@@ -179,7 +179,7 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     os_unmap_file(&f);
 
     if(!ok)
-        msg_error(0, LOG_ERR, "No BUILD_ID in %s", osrelease_filename);
+        msg_error(0, LOG_ERR, "No VERSION_ID in %s", osrelease_filename);
 
     return ok ? (ssize_t)length : -1;
 }

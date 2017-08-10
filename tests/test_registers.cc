@@ -8272,15 +8272,15 @@ void test_dcp_register_37_has_no_write_handler()
 
 static void do_test_read_image_version(const os_mapped_file_data &config_file,
                                        size_t dest_buffer_size,
-                                       const char *expected_build_id,
-                                       size_t expected_build_id_size,
+                                       const char *expected_version_id,
+                                       size_t expected_version_id_size,
                                        const char *expected_warning = nullptr)
 {
-    char expected_build_id_memory[dest_buffer_size];
-    memset(expected_build_id_memory, 0, dest_buffer_size);
+    char expected_version_id_memory[dest_buffer_size];
+    memset(expected_version_id_memory, 0, dest_buffer_size);
 
-    if(expected_build_id_size > 1)
-        memcpy(expected_build_id_memory, expected_build_id, expected_build_id_size - 1);
+    if(expected_version_id_size > 1)
+        memcpy(expected_version_id_memory, expected_version_id, expected_version_id_size - 1);
 
     uint8_t redzone_content[10];
     memset(redzone_content, 0xff, sizeof(redzone_content));
@@ -8296,7 +8296,7 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
     if(expected_warning != nullptr)
         mock_messages->expect_msg_error_formatted(0, LOG_NOTICE, expected_warning);
 
-    cppcut_assert_equal(ssize_t(expected_build_id_size),
+    cppcut_assert_equal(ssize_t(expected_version_id_size),
                         reg->read_handler(buffer + sizeof(redzone_content),
                                           sizeof(buffer) - 2 * sizeof(redzone_content)));
 
@@ -8305,7 +8305,7 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
                             buffer + sizeof(redzone_content) + dest_buffer_size,
                             sizeof(redzone_content));
-    cut_assert_equal_memory(expected_build_id_memory, dest_buffer_size,
+    cut_assert_equal_memory(expected_version_id_memory, dest_buffer_size,
                             buffer + sizeof(redzone_content),
                             dest_buffer_size);
 }
@@ -8318,8 +8318,8 @@ void test_read_image_version()
     static char config_file_buffer[] =
         "ID=strbo\n"
         "NAME=StrBo (T+A Streaming Board)\n"
-        "VERSION=1.0.0\n"
-        "VERSION_ID=1.0.0\n"
+        "VERSION=V1.0.0\n"
+        "VERSION_ID=V1.0.0\n"
         "PRETTY_NAME=StrBo (T+A Streaming Board) 1.0.0\n"
         "BUILD_ID=20150708122013\n"
         "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n";
@@ -8331,19 +8331,20 @@ void test_read_image_version()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "20150708122013";
+    static const char expected_version_id[] = "V1.0.0";
 
     do_test_read_image_version(config_file, 20,
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
- * Build ID can be read if it appears in the first line of the config file.
+ * Version ID can be read if it appears in the first line of the config file.
  */
-void test_read_image_version_with_build_id_in_first_line()
+void test_read_image_version_with_version_id_in_first_line()
 {
     static char config_file_buffer[] =
-        "BUILD_ID=20150708122013\n"
+        "VERSION_ID=V1.0.0\n"
+        "VERSION=abc\n"
         "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n";
 
     const struct os_mapped_file_data config_file =
@@ -8353,20 +8354,21 @@ void test_read_image_version_with_build_id_in_first_line()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "20150708122013";
+    static const char expected_version_id[] = "V1.0.0";
 
     do_test_read_image_version(config_file, 20,
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
- * Build ID can be read if it appears in the last line of the config file.
+ * Version ID can be read if it appears in the last line of the config file.
  */
-void test_read_image_version_with_build_id_in_last_line()
+void test_read_image_version_with_version_id_in_last_line()
 {
     static char config_file_buffer[] =
         "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n"
-        "BUILD_ID=20150708122013\n";
+        "VERSION=abc\n"
+        "VERSION_ID=V1.0.0\n";
 
     const struct os_mapped_file_data config_file =
     {
@@ -8375,21 +8377,21 @@ void test_read_image_version_with_build_id_in_last_line()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "20150708122013";
+    static const char expected_version_id[] = "V1.0.0";
 
     do_test_read_image_version(config_file, 20,
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
- * Build ID can be read if it appears in the last line of the config file, even
+ * Version ID can be read if it appears in the last line of the config file, even
  * if not terminated with a newline character.
  */
-void test_read_image_version_with_build_id_in_last_line_without_newline()
+void test_read_image_version_with_version_id_in_last_line_without_newline()
 {
     static char config_file_buffer[] =
         "BUILD_GIT_COMMIT=05f6dcd31134a3d2e9f5d0c8b78a4bab1948a4d5\n"
-        "BUILD_ID=20150708122013";
+        "VERSION_ID=V1.0.0";
 
     const struct os_mapped_file_data config_file =
     {
@@ -8398,18 +8400,18 @@ void test_read_image_version_with_build_id_in_last_line_without_newline()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "20150708122013";
+    static const char expected_version_id[] = "V1.0.0";
 
     do_test_read_image_version(config_file, 20,
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
- * Very short build IDs are returned correctly.
+ * Very short version IDs are returned correctly.
  */
-void test_read_image_version_with_single_character_build_id()
+void test_read_image_version_with_single_character_version_id()
 {
-    static char config_file_buffer[] = "BUILD_ID=X\n";
+    static char config_file_buffer[] = "VERSION_ID=X\n";
 
     const struct os_mapped_file_data config_file =
     {
@@ -8418,18 +8420,18 @@ void test_read_image_version_with_single_character_build_id()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "X";
+    static const char expected_version_id[] = "X";
 
     do_test_read_image_version(config_file, 20,
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
- * The empty build ID is returned correctly.
+ * The empty version ID is returned correctly.
  */
-void test_read_image_version_with_empty_build_id()
+void test_read_image_version_with_empty_version_id()
 {
-    static char config_file_buffer[] = "BUILD_ID=\n";
+    static char config_file_buffer[] = "VERSION_ID=\n";
 
     const struct os_mapped_file_data config_file =
     {
@@ -8438,18 +8440,18 @@ void test_read_image_version_with_empty_build_id()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "";
+    static const char expected_version_id[] = "";
 
     do_test_read_image_version(config_file, 20,
-                               expected_build_id, sizeof(expected_build_id));
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
- * No buffer overflow for long build ID vs small buffer.
+ * No buffer overflow for long version ID vs small buffer.
  */
 void test_read_image_version_with_small_buffer()
 {
-    static char config_file_buffer[] = "BUILD_ID=20150708122013\n";
+    static char config_file_buffer[] = "VERSION_ID=beta-20.82.10524\n";
 
     const struct os_mapped_file_data config_file =
     {
@@ -8458,19 +8460,19 @@ void test_read_image_version_with_small_buffer()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "2015070";
+    static const char expected_version_id[] = "beta-20.8";
 
-    do_test_read_image_version(config_file, sizeof(expected_build_id),
-                               expected_build_id, sizeof(expected_build_id),
-                               "Truncating build ID of length 14 to 7 characters");
+    do_test_read_image_version(config_file, sizeof(expected_version_id),
+                               expected_version_id, sizeof(expected_version_id),
+                               "Truncating version ID of length 16 to 9 characters");
 }
 
 /*!\test
- * No buffer overflow for long build ID vs single byte buffer.
+ * No buffer overflow for long version ID vs single byte buffer.
  */
 void test_read_image_version_with_very_small_buffer()
 {
-    static char config_file_buffer[] = "BUILD_ID=20150708122013\n";
+    static char config_file_buffer[] = "VERSION_ID=20150708122013\n";
 
     const struct os_mapped_file_data config_file =
     {
@@ -8479,19 +8481,19 @@ void test_read_image_version_with_very_small_buffer()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_build_id[] = "";
+    static const char expected_version_id[] = "";
 
-    do_test_read_image_version(config_file, sizeof(expected_build_id),
-                               expected_build_id, sizeof(expected_build_id),
-                               "Truncating build ID of length 14 to 0 characters");
+    do_test_read_image_version(config_file, sizeof(expected_version_id),
+                               expected_version_id, sizeof(expected_version_id),
+                               "Truncating version ID of length 14 to 0 characters");
 }
 
 /*!\test
- * No buffer overflow for long build ID vs no buffer.
+ * No buffer overflow for long version ID vs no buffer.
  */
 void test_read_image_version_with_zero_size_buffer()
 {
-    static char config_file_buffer[] = "BUILD_ID=20150708122013\n";
+    static char config_file_buffer[] = "VERSION_ID=20150708122013\n";
 
     const struct os_mapped_file_data config_file =
     {
@@ -8501,7 +8503,7 @@ void test_read_image_version_with_zero_size_buffer()
     };
 
     do_test_read_image_version(config_file, 0, NULL, 0,
-                               "Cannot copy build ID to zero length buffer");
+                               "Cannot copy version ID to zero length buffer");
 }
 
 /*!\test
