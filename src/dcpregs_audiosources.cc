@@ -26,9 +26,12 @@
 #include <map>
 #include <algorithm>
 #include <mutex>
+#include <sstream>
 
 #include "dcpregs_audiosources.h"
+#include "connman_service_list.hh"
 #include "registers_priv.h"
+#include "register_response_writer.hh"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
 #include "gvariantwrapper.hh"
@@ -43,6 +46,8 @@ enum class AudioSourceState
     LOCKED,
     ALIVE_OR_LOCKED,
     ZOMBIE,
+
+    LAST_STATE = ZOMBIE,
 };
 
 enum class SelectionState
@@ -60,6 +65,16 @@ enum class AudioSourceEnableRequest
     ENABLE,
     DISABLE,
     INVALID,
+};
+
+enum class GetAudioSourcesCommand
+{
+    READ_ALL = 0x00,
+    READ_ONE = 0x01,
+
+    LAST_REQUESTABLE_COMMAND = READ_ONE,
+
+    SOURCES_CHANGED = 0x80,
 };
 
 class AudioSource
@@ -196,6 +211,11 @@ class AudioSource
             name_override_.clear();
         else if(name_override_ != name)
             name_override_ = name;
+    }
+
+    const std::string &get_name() const
+    {
+        return name_override_.empty() ? default_name_ : name_override_;
     }
 };
 
@@ -900,10 +920,103 @@ void dcpregs_audiosources_deinit(void)
                              AudioSourceState::UNAVAILABLE, AudioSourceState::DEAD});
 }
 
+static bool check_network_requirements(const AudioSource &asrc)
+{
+    if(!asrc.check_any_flag(AudioSource::REQUIRES_LAN |
+                            AudioSource::REQUIRES_INTERNET))
+        return true;
+
+    const bool is_lan_sufficient(!asrc.check_any_flag(AudioSource::REQUIRES_INTERNET));
+    const auto locked_list(Connman::ServiceList::get_singleton_const());
+
+    for(const auto &s : locked_list.first)
+    {
+        if(s.second == nullptr)
+            continue;
+
+        const Maybe<Connman::ServiceState> &state(s.second->get_service_data().state_);
+
+        if(!state.is_known())
+            continue;
+
+        switch(state.get())
+        {
+            case Connman::ServiceState::NOT_AVAILABLE:
+            case Connman::ServiceState::UNKNOWN_STATE:
+            case Connman::ServiceState::IDLE:
+            case Connman::ServiceState::FAILURE:
+            case Connman::ServiceState::ASSOCIATION:
+            case Connman::ServiceState::CONFIGURATION:
+            case Connman::ServiceState::DISCONNECT:
+              break;
+
+            case Connman::ServiceState::READY:
+              if(is_lan_sufficient)
+                  return true;
+
+              break;
+
+            case Connman::ServiceState::ONLINE:
+              return true;
+        }
+    }
+
+    return false;
+}
+
+static const uint8_t determine_usable(const AudioSource &asrc)
+{
+    switch(asrc.get_state())
+    {
+      case AudioSourceState::ALIVE:
+      case AudioSourceState::ALIVE_OR_LOCKED:
+        if(check_network_requirements(asrc))
+            return asrc.get_state() == AudioSourceState::ALIVE ? 2 : 1;
+
+        break;
+
+      case AudioSourceState::UNAVAILABLE:
+      case AudioSourceState::DEAD:
+      case AudioSourceState::LOCKED:
+      case AudioSourceState::ZOMBIE:
+        break;
+    }
+
+    return 0;
+}
+
 ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 80 handler %p %zu", response, length);
-    return -1;
+
+    auto lock(audio_source_data.lock());
+    const auto *sel(audio_source_data.get_selected().get());
+
+    RegisterResponseWriter out(response, length);
+
+    out.push_back(uint8_t(GetAudioSourcesCommand::READ_ALL));
+    out.push_back(uint8_t(audio_source_data.NUMBER_OF_DEFAULT_SOURCES));
+
+    audio_source_data.for_each([&out, sel] (const AudioSource &asrc)
+    {
+        out.push_back(asrc.id_);
+        out.push_back(asrc.get_name());
+
+        const uint8_t status_byte =
+            uint8_t(asrc.check_any_flag(AudioSource::IS_BROWSABLE) ? (1 << 6) : 0) |
+            uint8_t(determine_usable(asrc) << 4) |
+            uint8_t(asrc.get_state());
+
+        out.push_back(status_byte);
+    });
+
+    if(out.is_overflown())
+    {
+        msg_error(0, LOG_ERR, "Buffer too small for retrieving audio sources");
+        return -1;
+    }
+
+    return out.get_length();
 }
 
 int dcpregs_write_80_get_known_audio_sources(const uint8_t *data, size_t length)
