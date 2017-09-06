@@ -16,6 +16,9 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef MAYBE_HH
+#define MAYBE_HH
+
 template <typename T>
 class Maybe
 {
@@ -96,3 +99,5 @@ class Maybe
             : if_unknown;
     }
 };
+
+#endif /* !MAYBE_HH */
