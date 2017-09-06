@@ -60,9 +60,10 @@ class AudioSource
     using Flags = uint16_t;
 
     /* OR-able flags */
-    static constexpr Flags IS_BROWSABLE     = 1U << 0;
-    static constexpr Flags REQUIRES_NETWORK = 1U << 1;
-    static constexpr Flags CAN_BE_LOCKED    = 1U << 2;
+    static constexpr Flags IS_BROWSABLE      = 1U << 0;
+    static constexpr Flags REQUIRES_LAN       = 1U << 1;
+    static constexpr Flags REQUIRES_INTERNET = 1U << 2;
+    static constexpr Flags CAN_BE_LOCKED     = 1U << 3;
 
     const std::string id_;
 
@@ -744,21 +745,21 @@ static AudioSourceState is_service_unlocked(const AudioSource &src)
 static AudioSourceData audio_source_data(
 {
     AudioSource("strbo.usb",      "USB devices",             AudioSource::IS_BROWSABLE),
-    AudioSource("strbo.upnpcm",   "UPnP media servers",      AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
-    AudioSource("strbo.plainurl", "TA Control",              AudioSource::REQUIRES_NETWORK),
-    AudioSource("airable",        "Airable",                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
-    AudioSource("airable.radios", "Airable Internet Radios", AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
-    AudioSource("airable.feeds",  "Airable Podcasts",        AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK),
+    AudioSource("strbo.upnpcm",   "UPnP media servers",      AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_LAN),
+    AudioSource("strbo.plainurl", "TA Control",              AudioSource::REQUIRES_LAN),
+    AudioSource("airable",        "Airable",                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
+    AudioSource("airable.radios", "Airable Internet Radios", AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
+    AudioSource("airable.feeds",  "Airable Podcasts",        AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
     AudioSource("airable.tidal",  "TIDAL",
-                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK | AudioSource::CAN_BE_LOCKED,
+                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
                 is_service_unlocked),
     AudioSource("airable.deezer", "Deezer",
-                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK | AudioSource::CAN_BE_LOCKED,
+                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
                 is_service_unlocked),
     AudioSource("airable.qobuz",  "Qobuz",
-                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_NETWORK | AudioSource::CAN_BE_LOCKED,
+                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
                 is_service_unlocked),
-    AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_NETWORK, nullptr, true),
+    AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN, nullptr, true),
 });
 
 void dcpregs_audiosources_init(void)
