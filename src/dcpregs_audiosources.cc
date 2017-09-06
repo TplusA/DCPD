@@ -664,7 +664,6 @@ class AudioSourceData
             break;
 
           case SelectionState::SELECTING:
-
             if(selected_.is_selecting(src))
                 return;
 
