@@ -54,6 +54,14 @@ enum class SelectionState
     SELECTION_REQUEST_DONE,
 };
 
+enum class AudioSourceEnableRequest
+{
+    KEEP_AS_IS,
+    ENABLE,
+    DISABLE,
+    INVALID,
+};
+
 class AudioSource
 {
   public:
@@ -71,6 +79,7 @@ class AudioSource
     const std::string default_name_;
     const Flags flags_;
     const std::function<AudioSourceState(const AudioSource &)> check_unlocked_fn_;
+    const std::function<bool(const AudioSource &, bool)> invoke_audio_source_fn_;
 
     std::string name_override_;
     AudioSourceState state_;
@@ -90,11 +99,13 @@ class AudioSource
     explicit AudioSource(std::string &&id, std::string &&default_name,
                          Flags flags,
                          std::function<AudioSourceState(const AudioSource &)> &&check_unlocked_fn = nullptr,
+                         std::function<bool(const AudioSource &, bool)> &&invoke_audio_source_fn = nullptr,
                          bool is_dead = false):
         id_(std::move(id)),
         default_name_(std::move(default_name)),
         flags_(flags),
         check_unlocked_fn_(check_unlocked_fn),
+        invoke_audio_source_fn_(invoke_audio_source_fn),
         state_(is_dead ? AudioSourceState::DEAD : AudioSourceState::UNAVAILABLE)
     {}
 
@@ -157,6 +168,26 @@ class AudioSource
 
             break;
         }
+    }
+
+    bool try_summon() const
+    {
+        if(state_ != AudioSourceState::DEAD)
+            return true;
+
+        return invoke_audio_source_fn_ != nullptr
+            ? invoke_audio_source_fn_(*this, true)
+            : false;
+    }
+
+    bool try_kill() const
+    {
+        if(state_ == AudioSourceState::DEAD)
+            return true;
+
+        return invoke_audio_source_fn_ != nullptr
+            ? invoke_audio_source_fn_(*this, false)
+            : false;
     }
 
     void set_name(const char *name)
@@ -724,6 +755,21 @@ class AudioSourceData
     }
 };
 
+static bool try_invoke_roon(const AudioSource &src, bool summon)
+{
+    if(!summon)
+    {
+        BUG("Shutting down Roon is not supported yet");
+        return false;
+    }
+
+    tdbus_systemd_manager_call_start_unit(dbus_get_systemd_manager_iface(),
+                                          "taroon.service", "fail",
+                                          nullptr, nullptr, nullptr);
+
+    return true;
+}
+
 static ExternalServiceState global_external_service_state;
 
 static AudioSourceState is_service_unlocked(const AudioSource &src)
@@ -759,7 +805,8 @@ static AudioSourceData audio_source_data(
     AudioSource("airable.qobuz",  "Qobuz",
                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
                 is_service_unlocked),
-    AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN, nullptr, true),
+    AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN,
+                nullptr, try_invoke_roon, true),
 });
 
 void dcpregs_audiosources_init(void)
@@ -874,6 +921,16 @@ ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length)
     return src->id_.length() + 1;
 }
 
+static AudioSourceEnableRequest parse_enable_request(uint8_t request_code)
+{
+    if(request_code == 0)
+        return AudioSourceEnableRequest::DISABLE;
+    else if(request_code == 1)
+        return AudioSourceEnableRequest::ENABLE;
+    else
+        return AudioSourceEnableRequest::INVALID;
+}
+
 int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 81 handler %p %zu", data, length);
@@ -883,13 +940,15 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
     for(i = 0; i < length && data[i] != '\0'; ++i)
         ;
 
-    /* we require a zero-terminated string to allow future extensions to be
-     * appended to the source ID */
     if(i >= length)
         return -1;
 
     if(i == 0)
         return -1;
+
+    const AudioSourceEnableRequest enable_request(i + 1 == length
+                                                  ? AudioSourceEnableRequest::KEEP_AS_IS
+                                                  : parse_enable_request(data[i + 1]));
 
     auto lock(audio_source_data.lock());
 
@@ -900,6 +959,31 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
     {
         msg_error(0, LOG_NOTICE, "Audio source \"%s\" not known",
                   reinterpret_cast<const char *>(data));
+        return -1;
+    }
+
+    switch(enable_request)
+    {
+      case AudioSourceEnableRequest::KEEP_AS_IS:
+        break;
+
+      case AudioSourceEnableRequest::ENABLE:
+        if(src->try_summon())
+            return 0;
+
+        msg_error(0, LOG_ERR, "Failed enabling audio source \"%s\"",
+                  src->id_.c_str());
+        return -1;
+
+      case AudioSourceEnableRequest::DISABLE:
+        if(src->try_kill())
+            return 0;
+
+        msg_error(0, LOG_ERR, "Failed disabling audio source \"%s\"",
+                  src->id_.c_str());
+        return -1;
+
+      case AudioSourceEnableRequest::INVALID:
         return -1;
     }
 
