@@ -8822,7 +8822,7 @@ void test_playback_stream_seek_boundaries()
 
 };
 
-namespace audiosources_registers
+namespace spi_registers_audio_sources
 {
 static MockMessages *mock_messages;
 static MockAudiopathDBus *mock_audiopath_dbus;
