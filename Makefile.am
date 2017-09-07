@@ -42,7 +42,8 @@ EXTRA_DIST += \
     dbus_interfaces/de_tahifi_audiopath.xml \
     dbus_interfaces/de_tahifi_credentials.xml \
     dbus_interfaces/net_connman.xml \
-    dbus_interfaces/org_freedesktop_login1.xml
+    dbus_interfaces/org_freedesktop_login1.xml \
+    dbus_interfaces/org_freedesktop_systemd1.xml
 
 BUILT_SOURCES = versioninfo.h
 

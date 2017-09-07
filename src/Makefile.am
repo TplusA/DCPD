@@ -86,6 +86,7 @@ noinst_LTLIBRARIES = \
     libservicelist.la \
     libconnman_dbus.la \
     liblogind_dbus.la \
+    libsystemd_dbus.la \
     libdebug_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
@@ -181,6 +182,9 @@ libconnman_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 nodist_liblogind_dbus_la_SOURCES = logind_dbus.c logind_dbus.h
 liblogind_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
+nodist_libsystemd_dbus_la_SOURCES = systemd_dbus.c systemd_dbus.h
+libsystemd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 nodist_libdbusdl_dbus_la_SOURCES = dbusdl_dbus.c dbusdl_dbus.h
 libdbusdl_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
@@ -278,6 +282,10 @@ BUILT_SOURCES = \
     org_freedesktop_logind.h \
     org_freedesktop_logind.md \
     logind_dbus.stamp \
+    $(nodist_libsystemd_dbus_la_SOURCES) \
+    org_freedesktop_systemd.h \
+    org_freedesktop_systemd.md \
+    systemd_dbus.stamp \
     $(nodist_libdebug_dbus_la_SOURCES) \
     de_tahifi_debug.h \
     de_tahifi_debug.md \
@@ -385,6 +393,15 @@ logind_dbus.h: logind_dbus.stamp
 logind_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_login1.xml
 	$(GDBUS_CODEGEN) --generate-c-code=logind_dbus --c-namespace tdbus_logind --interface-prefix org.freedesktop.login1. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_logind.md -H org_freedesktop_logind.h -c tdbus_logind -s org.freedesktop.login1. -n "$(PACKAGE_NAME) (shutdown via systemd)"
+	touch $@
+
+org_freedesktop_systemd.h: systemd_dbus.stamp
+org_freedesktop_systemd.md: systemd_dbus.stamp
+systemd_dbus.c: systemd_dbus.stamp
+systemd_dbus.h: systemd_dbus.stamp
+systemd_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_systemd1.xml
+	$(GDBUS_CODEGEN) --generate-c-code=systemd_dbus --c-namespace tdbus_systemd --interface-prefix org.freedesktop.systemd1. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_systemd.md -H org_freedesktop_systemd.h -c tdbus_systemd -s org.freedesktop.systemd1. -n "$(PACKAGE_NAME) (systemd manager)"
 	touch $@
 
 do_update_sh.h: do_update.sh

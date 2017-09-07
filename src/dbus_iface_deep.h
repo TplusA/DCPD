@@ -29,6 +29,7 @@
 #include "configuration_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
+#include "systemd_dbus.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,6 +63,8 @@ tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const 
 tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *path, gint timeout_sec);
 
 tdbuslogindManager *dbus_get_logind_manager_iface(void);
+
+tdbussystemdManager *dbus_get_systemd_manager_iface(void);
 
 #ifdef __cplusplus
 }

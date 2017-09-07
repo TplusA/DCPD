@@ -39,6 +39,7 @@
 #include "configuration_dbus.h"
 #include "connman_dbus.h"
 #include "logind_dbus.h"
+#include "systemd_dbus.h"
 #include "messages.h"
 
 struct dbus_data
@@ -136,6 +137,12 @@ static struct
     tdbuslogindManager *login1_manager_iface;
 }
 login1_iface_data;
+
+static struct
+{
+    tdbussystemdManager *systemd1_manager_iface;
+}
+systemd1_iface_data;
 
 static gpointer process_dbus(gpointer user_data)
 {
@@ -383,7 +390,7 @@ static void name_acquired(GDBusConnection *connection,
 
     if(!is_session_bus)
     {
-        /* Connman and logind are always on system bus */
+        /* Connman, logind, and systemd are always on system bus */
         GError *error = NULL;
 
         if(connman_iface_data.is_enabled)
@@ -402,6 +409,14 @@ static void name_acquired(GDBusConnection *connection,
                                                            NULL, &error);
             (void)dbus_common_handle_dbus_error(&error, "Create ConnMan agent proxy");
         }
+
+        systemd1_iface_data.systemd1_manager_iface =
+            tdbus_systemd_manager_proxy_new_sync(connection,
+                                                 G_DBUS_PROXY_FLAGS_NONE,
+                                                 "org.freedesktop.systemd1",
+                                                 "/org/freedesktop/systemd1",
+                                                 NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error, "Create systemd1 proxy");
 
         login1_iface_data.login1_manager_iface =
             tdbus_logind_manager_proxy_new_sync(connection,
@@ -461,6 +476,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     memset(&credentials_iface_data, 0, sizeof(credentials_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&login1_iface_data, 0, sizeof(login1_iface_data));
+    memset(&systemd1_iface_data, 0, sizeof(systemd1_iface_data));
     memset(&process_data, 0, sizeof(process_data));
 
     connman_iface_data.is_enabled = with_connman;
@@ -632,6 +648,7 @@ void dbus_shutdown(void)
         g_object_unref(connman_iface_data.connman_manager_iface);
 
     g_object_unref(login1_iface_data.login1_manager_iface);
+    g_object_unref(systemd1_iface_data.systemd1_manager_iface);
 
     process_data.loop = NULL;
 }
@@ -856,4 +873,9 @@ tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *
 tdbuslogindManager *dbus_get_logind_manager_iface(void)
 {
     return login1_iface_data.login1_manager_iface;
+}
+
+tdbussystemdManager *dbus_get_systemd_manager_iface(void)
+{
+    return systemd1_iface_data.systemd1_manager_iface;
 }
