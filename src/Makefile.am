@@ -21,7 +21,8 @@ ACLOCAL_AMFLAGS = -I ../m4
 bin_PROGRAMS = dcpd
 
 dcpd_SOURCES = \
-    dcpd.cc os.c os.h registers.h registers_priv.h named_pipe.c named_pipe.h \
+    dcpd.cc os.c os.h named_pipe.c named_pipe.h \
+    registers.h registers_priv.h register_response_writer.hh \
     dcp_over_tcp.c dcp_over_tcp.h \
     smartphone_app.c smartphone_app.h \
     smartphone_app_send.c smartphone_app_send.h \
@@ -98,7 +99,7 @@ libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 libdynamic_buffer_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libregisters_la_SOURCES = \
-    registers.c registers.h registers_priv.h \
+    registers.c registers.h registers_priv.h register_response_writer.hh \
     dcpregs_common.c dcpregs_common.h \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_protolevel.c dcpregs_protolevel.h \
