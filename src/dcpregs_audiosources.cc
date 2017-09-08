@@ -69,7 +69,7 @@ class AudioSource
 
     /* OR-able flags */
     static constexpr Flags IS_BROWSABLE      = 1U << 0;
-    static constexpr Flags REQUIRES_LAN       = 1U << 1;
+    static constexpr Flags REQUIRES_LAN      = 1U << 1;
     static constexpr Flags REQUIRES_INTERNET = 1U << 2;
     static constexpr Flags CAN_BE_LOCKED     = 1U << 3;
 
@@ -223,7 +223,6 @@ struct ExternalServiceStateLoggedInTraits
     {
         return d.is_logged_in_;
     }
-
 };
 
 struct ExternalServiceStateCredentialsTraits
