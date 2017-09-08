@@ -8093,6 +8093,8 @@ void cut_setup()
 
     network_prefs_init(NULL, NULL);
     register_init(register_changed_callback);
+
+    dcpregs_audiosources_set_unit_test_mode();
 }
 
 void cut_teardown()
@@ -8335,6 +8337,8 @@ void test_set_service_credentials()
         "tidal", "login email", "my password", TRUE);
 
     cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
+
+    register_changed_data->check(80);
 }
 
 /*!\test
@@ -8364,6 +8368,8 @@ void test_password_may_be_zero_terminated()
         "deezer", "login", "password", TRUE);
 
     cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
+
+    register_changed_data->check(80);
 }
 
 /*!\test
@@ -9341,6 +9347,78 @@ static void register_changed_callback(uint8_t reg_number)
     register_changed_data->append(reg_number);
 }
 
+class ExpectedSourceData
+{
+  public:
+    const std::string id_;
+    const std::string description_;
+    const bool is_browsable_;
+    const bool is_initially_dead_;
+
+    ExpectedSourceData(const ExpectedSourceData &) = delete;
+    ExpectedSourceData(ExpectedSourceData &&) = default;
+    ExpectedSourceData &operator=(const ExpectedSourceData &) = delete;
+
+    explicit ExpectedSourceData(std::string &&id, std::string &&description,
+                                bool is_browsable,
+                                bool is_initially_dead = false):
+        id_(std::move(id)),
+        description_(std::move(description)),
+        is_browsable_(is_browsable),
+        is_initially_dead_(is_initially_dead)
+    {}
+
+    void serialize_id(std::vector<uint8_t> &out) const
+    {
+        std::copy(id_.begin(), id_.end(), std::back_inserter(out));
+        out.push_back('\0');
+    }
+
+    void serialize_full(std::vector<uint8_t> &out) const
+    {
+        serialize_base(out);
+
+        uint8_t status = 0x80;
+
+        if(is_browsable_)
+            status |= uint8_t(1U << 6);
+
+        if(is_initially_dead_)
+            status |= uint8_t(0x01 << 0);
+
+        out.push_back(status);
+    }
+
+    void serialize_full(std::vector<uint8_t> &out, uint8_t status) const
+    {
+        serialize_base(out);
+        out.push_back(status);
+    }
+
+  private:
+    void serialize_base(std::vector<uint8_t> &out) const
+    {
+        serialize_id(out);
+
+        std::copy(description_.begin(), description_.end(), std::back_inserter(out));
+        out.push_back('\0');
+    }
+};
+
+static const std::array<ExpectedSourceData, 10> predefined_sources
+{
+    ExpectedSourceData("strbo.usb",      "USB devices",             true),
+    ExpectedSourceData("strbo.upnpcm",   "UPnP media servers",      true),
+    ExpectedSourceData("strbo.plainurl", "TA Control",              false),
+    ExpectedSourceData("airable",        "Airable",                 true),
+    ExpectedSourceData("airable.radios", "Airable Internet Radios", true),
+    ExpectedSourceData("airable.feeds",  "Airable Podcasts",        true),
+    ExpectedSourceData("airable.tidal",  "TIDAL",                   true),
+    ExpectedSourceData("airable.deezer", "Deezer",                  true),
+    ExpectedSourceData("airable.qobuz",  "Qobuz",                   true),
+    ExpectedSourceData("roon",           "Roon Ready",              false, true),
+};
+
 void cut_setup()
 {
     register_changed_data = new RegisterChangedData;
@@ -9404,20 +9482,146 @@ void cut_teardown()
     mock_dbus_iface = nullptr;
 }
 
-static void make_source_available(const char *source_id, const char *source_name,
-                                  const char *player_id,
-                                  const char *dbusname, const char *dbuspath,
+static void make_source_available(const char *source_id, const char *player_id,
+                                  const char *source_dbusname, const char *source_dbuspath,
+                                  const char *source_description = nullptr,
                                   const std::function<void()> &inject_expectations = nullptr)
 {
+    const auto found =
+        std::find_if(predefined_sources.begin(), predefined_sources.end(),
+                     [&source_id] (const ExpectedSourceData &src)
+                     {
+                         return src.id_ == source_id;
+                     });
+
+    cut_assert_true(found != predefined_sources.end());
+
+    if(source_description == nullptr)
+        source_description = found->description_.c_str();
+
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_get_source_info_sync(
-            dbus_audiopath_manager_iface_dummy, source_id, source_name,
-            player_id, dbusname, dbuspath);
+            dbus_audiopath_manager_iface_dummy, source_id,
+            source_description, player_id, source_dbusname, source_dbuspath);
 
     if(inject_expectations != nullptr)
         inject_expectations();
 
     dcpregs_audiosources_source_available(source_id);
+
+    register_changed_data->check(80);
+
+    /* see what's in register 80 */
+    std::vector<uint8_t> expected;
+    expected.push_back(0x80);
+    expected.push_back(0x01);
+    found->serialize_id(expected);
+
+    uint8_t buffer[256];
+    std::fill(buffer, buffer + sizeof(buffer), 0xe7);
+
+    cppcut_assert_equal(ssize_t(expected.size()),
+                        register_lookup(80)->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(expected.data(), expected.size(),
+                            buffer, expected.size());
+    cppcut_assert_equal(uint16_t(0xe7), uint16_t(buffer[expected.size()]));
+}
+
+/*!\test
+ * Our predefined audio sources are available, but marked completely
+ * unavailable.
+ */
+void test_read_out_all_audio_sources_after_initialization()
+{
+    auto *reg = lookup_register_expect_handlers(80,
+                                                dcpregs_read_80_get_known_audio_sources,
+                                                dcpregs_write_80_get_known_audio_sources);
+
+    static const uint8_t subcommand = 0x00;
+    cppcut_assert_equal(0, reg->write_handler(&subcommand, sizeof(subcommand)));
+    register_changed_data->check(80);
+
+    std::vector<uint8_t> expected;
+
+    expected.push_back(0x00);  /* subcommand */
+    expected.push_back(predefined_sources.size());
+
+    for(const auto &src : predefined_sources)
+        src.serialize_full(expected);
+
+    uint8_t buffer[512];
+    std::fill(buffer, buffer + sizeof(buffer), 0xe7);
+
+    cppcut_assert_equal(ssize_t(expected.size()), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(expected.data(), expected.size(),
+                            buffer, expected.size());
+    cppcut_assert_equal(uint16_t(0xe7), uint16_t(buffer[expected.size()]));
+}
+
+static void read_out_all_audio_sources_after_making_airable_available(bool is_online)
+{
+    make_source_available("airable",        "p", "de.tahifi.Airable", "dbus/airable");
+    make_source_available("airable.radios", "p", "de.tahifi.Radios",  "dbus/radios");
+    make_source_available("airable.feeds",  "p", "de.tahifi.Feeds",   "dbus/feeds");
+    make_source_available("airable.tidal",  "p", "de.tahifi.Tidal",   "dbus/tidal");
+    make_source_available("airable.deezer", "p", "de.tahifi.Deezer",  "dbus/deezer");
+    make_source_available("airable.qobuz",  "p", "de.tahifi.Qobuz",   "dbus/qobuz");
+
+    auto *reg = lookup_register_expect_handlers(80,
+                                                dcpregs_read_80_get_known_audio_sources,
+                                                dcpregs_write_80_get_known_audio_sources);
+
+    /* read out all audio source information after the audio paths have been
+     * made available */
+    static const uint8_t subcommand = 0x00;
+    cppcut_assert_equal(0, reg->write_handler(&subcommand, sizeof(subcommand)));
+    register_changed_data->check(80);
+
+    std::vector<uint8_t> expected;
+
+    expected.push_back(0x00);  /* subcommand */
+    expected.push_back(predefined_sources.size());
+
+    for(const auto &src : predefined_sources)
+    {
+        if(src.id_.compare(0, 7, "airable") == 0)
+        {
+            uint8_t status = 1 << 6;
+
+            if(src.id_ == "airable" ||
+               src.id_ == "airable.radios" || src.id_ == "airable.feeds")
+            {
+                status |= uint8_t(0x02);
+                status |= uint8_t((is_online ? 0x02 : 0x00) << 4);
+            }
+            else
+            {
+                status |= uint8_t(0x04);
+                status |= uint8_t((is_online ? 0x01 : 0x00) << 4);
+            }
+
+            src.serialize_full(expected, status);
+        }
+        else
+            src.serialize_full(expected);
+    }
+
+    uint8_t buffer[512];
+    std::fill(buffer, buffer + sizeof(buffer), 0xe7);
+
+    cppcut_assert_equal(ssize_t(expected.size()), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(expected.data(), expected.size(),
+                            buffer, expected.size());
+    cppcut_assert_equal(uint16_t(0xe7), uint16_t(buffer[expected.size()]));
+}
+
+/*!\test
+ * We assume that Airable services have registered, but others have not.
+ * Further, we assume we are offline.
+ */
+void test_read_out_all_audio_sources_after_making_some_sources_available_offline()
+{
+    read_out_all_audio_sources_after_making_airable_available(false);
 }
 
 /*!\test
@@ -9446,8 +9650,7 @@ void test_selection_of_known_alive_source_reports_selection_asynchronously()
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
 
-    make_source_available(asrc, "USB devices",
-                          player, "de.tahifi.MyPlayer", "/some/dbus/path");
+    make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path");
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
@@ -9474,8 +9677,7 @@ void test_selection_of_known_alive_source_with_async_notification()
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
 
-    make_source_available(asrc, "USB devices",
-                          player, "de.tahifi.MyPlayer", "/some/dbus/path");
+    make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path");
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
@@ -9518,8 +9720,8 @@ void test_selection_of_known_alive_source_is_done_when_possible()
 
     /* path is available now (reported via D-Bus) after both, player and
      * source, have started and registered their parts */
-    make_source_available(asrc, "All my USB devices",
-                          player, "de.tahifi.MyUSBPlayer", "/some/dbus/path",
+    make_source_available(asrc, player, "de.tahifi.MyUSBSource", "/some/dbus/path",
+                          "All my USB devices",
                           [] ()
                           {
                               mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
@@ -9630,8 +9832,7 @@ void test_quickly_selecting_audio_source_twice_switches_once()
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
 
-    make_source_available(asrc, "USB devices",
-                          player, "usb_player", "/some/dbus/path");
+    make_source_available(asrc, player, "usb_source", "/some/dbus/path");
 
     auto *reg = lookup_register_expect_handlers(81,
                                                 dcpregs_read_81_current_audio_source,
@@ -9684,8 +9885,8 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
     static const char player_upnp[] = "upnp_player";
     static const char player_usb[]  = "usb_player";
 
-    make_source_available(asrc_upnp, "UPnP servers", player_upnp, "de.tahifi.UPnP", "/dbus/upnp");
-    make_source_available(asrc_usb,  "USB devices",  player_usb,  "de.tahifi.USB",  "/dbus/usb");
+    make_source_available(asrc_upnp, player_upnp, "de.tahifi.UPnP", "/dbus/upnp");
+    make_source_available(asrc_usb,  player_usb,  "de.tahifi.USB",  "/dbus/usb");
 
     auto *reg = lookup_register_expect_handlers(81,
                                                 dcpregs_read_81_current_audio_source,

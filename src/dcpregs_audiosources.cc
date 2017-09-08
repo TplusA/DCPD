@@ -24,11 +24,13 @@
 #include <vector>
 #include <array>
 #include <map>
+#include <deque>
 #include <algorithm>
 #include <mutex>
 #include <sstream>
 
 #include "dcpregs_audiosources.h"
+#include "dcpregs_common.h"
 #include "connman_service_list.hh"
 #include "registers_priv.h"
 #include "register_response_writer.hh"
@@ -72,6 +74,7 @@ enum class GetAudioSourcesCommand
     READ_ALL = 0x00,
     READ_ONE = 0x01,
 
+    FIRST_REQUESTABLE_COMMAND = READ_ALL,
     LAST_REQUESTABLE_COMMAND = READ_ONE,
 
     SOURCES_CHANGED = 0x80,
@@ -110,7 +113,7 @@ class AudioSource
         id_(std::move(id)),
         default_name_("UNKNOWN"),
         flags_(0),
-        has_changed_(true),
+        has_changed_(false),
         state_(AudioSourceState::ZOMBIE)
     {}
 
@@ -124,7 +127,7 @@ class AudioSource
         flags_(flags),
         check_unlocked_fn_(check_unlocked_fn),
         invoke_audio_source_fn_(invoke_audio_source_fn),
-        has_changed_(true),
+        has_changed_(false),
         state_(is_dead ? AudioSourceState::DEAD : AudioSourceState::UNAVAILABLE)
     {}
 
@@ -132,7 +135,7 @@ class AudioSource
     {
         name_override_.clear();
         state_ = state;
-        has_changed_ = true;
+        has_changed_ = false;
     }
 
     AudioSourceState get_state() const { return state_; }
@@ -645,6 +648,63 @@ class SelectedSource
     }
 };
 
+class SlavePushCommandQueue
+{
+  public:
+    using Item = std::pair<const GetAudioSourcesCommand, const std::string>;
+
+  private:
+    std::mutex lock_;
+    std::deque<Item> queue_;
+
+  public:
+    SlavePushCommandQueue(const SlavePushCommandQueue &) = delete;
+    SlavePushCommandQueue &operator=(const SlavePushCommandQueue &) = delete;
+
+    explicit SlavePushCommandQueue() {}
+
+    void add(GetAudioSourcesCommand command)
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        push_and_notify(std::move(std::make_pair(command, std::move(std::string()))));
+    }
+
+    void add(GetAudioSourcesCommand command, std::string &&str)
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        push_and_notify(std::move(std::make_pair(command, std::move(str))));
+    }
+
+    Item take()
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+
+        if(queue_.empty())
+        {
+            BUG("No command in register 80 queue");
+            return std::make_pair(GetAudioSourcesCommand::READ_ALL, std::move(std::string()));
+        }
+
+        const auto result = queue_.front();
+        queue_.pop_front();
+
+        return result;
+    }
+
+    void reset()
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        queue_.clear();
+    }
+
+  private:
+    void push_and_notify(Item &&item)
+    {
+        queue_.emplace_back(std::move(item));
+        registers_get_data()->register_changed_notification_fn(80);
+    }
+};
+
 class AudioSourceData
 {
   public:
@@ -832,12 +892,13 @@ class AudioSourceData
         return result;
     }
 
-    static void audio_sources_changed_lock_state_notification()
+    static void audio_sources_changed_lock_state_notification(SlavePushCommandQueue &q)
     {
-        /* Nothing for now. We may want to notify the slave at this point or
-         * something like that. */
+        q.add(GetAudioSourcesCommand::SOURCES_CHANGED);
     }
 };
+
+static SlavePushCommandQueue push_80_command_queue;
 
 static bool try_invoke_roon(const AudioSource &src, bool summon)
 {
@@ -972,7 +1033,7 @@ void dcpregs_audiosources_check_external_service_credentials()
     };
 
     if(changed)
-        audio_source_data.audio_sources_changed_lock_state_notification();
+        audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
 }
 
 void dcpregs_audiosources_deinit(void)
@@ -983,6 +1044,7 @@ void dcpregs_audiosources_deinit(void)
                              AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
                              AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
                              AudioSourceState::UNAVAILABLE, AudioSourceState::DEAD});
+    push_80_command_queue.reset();
 }
 
 static bool check_network_requirements(const AudioSource &asrc)
@@ -1050,44 +1112,157 @@ static const uint8_t determine_usable(const AudioSource &asrc)
     return 0;
 }
 
+static void write_audio_source_info(RegisterResponseWriter &out,
+                                    const AudioSource &asrc,
+                                    const std::string *id_override = nullptr)
+{
+    out.push_back(id_override == nullptr ? asrc.id_ : *id_override);
+    out.push_back(asrc.get_name());
+
+    const uint8_t status_byte =
+        uint8_t((asrc.get_state() == AudioSourceState::UNAVAILABLE ||
+                 asrc.get_state() == AudioSourceState::DEAD) ? (1 << 7) : 0) |
+        uint8_t(asrc.check_any_flag(AudioSource::IS_BROWSABLE) ? (1 << 6) : 0) |
+        uint8_t(determine_usable(asrc) << 4) |
+        uint8_t(asrc.get_state());
+
+    out.push_back(status_byte);
+}
+
 ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 80 handler %p %zu", response, length);
 
     auto lock(audio_source_data.lock());
-    const auto *sel(audio_source_data.get_selected().get());
+    const auto queue_item(push_80_command_queue.take());
+    const GetAudioSourcesCommand &command(queue_item.first);
 
     RegisterResponseWriter out(response, length);
 
-    out.push_back(uint8_t(GetAudioSourcesCommand::READ_ALL));
-    out.push_back(uint8_t(audio_source_data.NUMBER_OF_DEFAULT_SOURCES));
+    out.push_back(uint8_t(command));
 
-    audio_source_data.for_each([&out, sel] (const AudioSource &asrc)
+    switch(command)
     {
-        out.push_back(asrc.id_);
-        out.push_back(asrc.get_name());
+      case GetAudioSourcesCommand::READ_ALL:
+        out.push_back(uint8_t(audio_source_data.NUMBER_OF_DEFAULT_SOURCES));
 
-        const uint8_t status_byte =
-            uint8_t(asrc.check_any_flag(AudioSource::IS_BROWSABLE) ? (1 << 6) : 0) |
-            uint8_t(determine_usable(asrc) << 4) |
-            uint8_t(asrc.get_state());
+        audio_source_data.for_each([&out] (const AudioSource &asrc)
+        {
+            write_audio_source_info(out, asrc);
+        });
 
-        out.push_back(status_byte);
-    });
+        break;
+
+      case GetAudioSourcesCommand::READ_ONE:
+        {
+            const AudioSource *asrc =
+                audio_source_data.lookup_predefined(queue_item.second);
+
+            if(asrc != nullptr)
+                write_audio_source_info(out, *asrc);
+            else
+            {
+                static const AudioSource invalid_audio_source("", "", 0);
+                write_audio_source_info(out, invalid_audio_source, &queue_item.second);
+            }
+        }
+
+        break;
+
+      case GetAudioSourcesCommand::SOURCES_CHANGED:
+        size_t number_of_changes = 0;
+        audio_source_data.for_each([&number_of_changes] (const AudioSource &asrc)
+        {
+            if(asrc.has_changed())
+                ++number_of_changes;
+        });
+
+        if(number_of_changes == 0)
+            return 0;
+
+        if(number_of_changes > UINT8_MAX)
+            number_of_changes = UINT8_MAX;
+
+        out.push_back(uint8_t(number_of_changes));
+
+        audio_source_data.for_each([&out] (AudioSource &asrc)
+        {
+            if(asrc.has_changed())
+            {
+                out.push_back(asrc.id_);
+                asrc.set_processed();
+            }
+        });
+
+        break;
+    }
 
     if(out.is_overflown())
     {
-        msg_error(0, LOG_ERR, "Buffer too small for retrieving audio sources");
+        msg_error(0, LOG_ERR,
+                  "Buffer too small (retrieve audio sources, command 0x%02x)",
+                  uint8_t(command));
         return -1;
     }
 
     return out.get_length();
 }
 
+static int queue_read_one_command(const uint8_t *data, size_t length)
+{
+    const size_t original_length = length;
+
+    length = dcpregs_trim_trailing_zero_padding(data, length);
+
+    if(length == original_length || length == 0)
+    {
+        msg_error(EINVAL, LOG_ERR, "Non-empty audio source ID expected");
+        return -1;
+    }
+
+    push_80_command_queue.add(GetAudioSourcesCommand::READ_ONE,
+                              std::move(std::string(reinterpret_cast<const char *>(data))));
+
+    return 0;
+}
+
 int dcpregs_write_80_get_known_audio_sources(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 80 handler %p %zu", data, length);
-    return -1;
+
+    if(length < 1)
+    {
+        msg_error(EINVAL, LOG_ERR, "Command code expected");
+        return -1;
+    }
+
+    int result = -1;
+
+    if(data[0] >= uint8_t(GetAudioSourcesCommand::FIRST_REQUESTABLE_COMMAND) &&
+       data[0] <= uint8_t(GetAudioSourcesCommand::LAST_REQUESTABLE_COMMAND))
+    {
+        const auto command = GetAudioSourcesCommand(data[0]);
+
+        switch(command)
+        {
+          case GetAudioSourcesCommand::READ_ALL:
+            push_80_command_queue.add(GetAudioSourcesCommand(data[0]));
+            result = 0;
+            break;
+
+          case GetAudioSourcesCommand::READ_ONE:
+            result = queue_read_one_command(data + 1, length - 1);
+            break;
+
+          case GetAudioSourcesCommand::SOURCES_CHANGED:
+            BUG("%s(%d): unreachable", __func__, __LINE__);
+            break;
+        }
+    }
+    else
+        msg_error(EINVAL, LOG_ERR, "Command 0x%02x out of range", data[0]);
+
+    return result;
 }
 
 ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length)
@@ -1205,8 +1380,11 @@ void dcpregs_audiosources_source_available(const char *source_id)
 
     AudioSource *src = audio_source_data.lookup(source_id);
 
-    if(src != nullptr)
-        audio_source_data.audio_source_available_notification(*src);
+    if(src == nullptr)
+        return;
+
+    if(audio_source_data.audio_source_available_notification(*src))
+        push_80_command_queue.add(GetAudioSourcesCommand::SOURCES_CHANGED);
 }
 
 void dcpregs_audiosources_selected_source(const char *source_id)
@@ -1233,7 +1411,7 @@ void dcpregs_audiosources_set_have_credentials(const char *cred_category,
     if(global_external_service_state.set_credentials_state(
             cred_category, Maybe<bool>(have_credentials),
             ExternalServiceState::SetStateServiceUpdateMode::ON_CHANGE))
-        audio_source_data.audio_sources_changed_lock_state_notification();
+        audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
 }
 
 void dcpregs_audiosources_set_login_state(const char *cred_category,
@@ -1246,7 +1424,7 @@ void dcpregs_audiosources_set_login_state(const char *cred_category,
         global_external_service_state.set_credentials_state(
             cred_category, have_credentials_stored(cred_category),
             ExternalServiceState::SetStateServiceUpdateMode::FORCED);
-        audio_source_data.audio_sources_changed_lock_state_notification();
+        audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
     }
 }
 
