@@ -96,6 +96,8 @@ class AudioSource
     const std::function<AudioSourceState(const AudioSource &)> check_unlocked_fn_;
     const std::function<bool(const AudioSource &, bool)> invoke_audio_source_fn_;
 
+    bool has_changed_;
+
     std::string name_override_;
     AudioSourceState state_;
 
@@ -108,6 +110,7 @@ class AudioSource
         id_(std::move(id)),
         default_name_("UNKNOWN"),
         flags_(0),
+        has_changed_(true),
         state_(AudioSourceState::ZOMBIE)
     {}
 
@@ -121,6 +124,7 @@ class AudioSource
         flags_(flags),
         check_unlocked_fn_(check_unlocked_fn),
         invoke_audio_source_fn_(invoke_audio_source_fn),
+        has_changed_(true),
         state_(is_dead ? AudioSourceState::DEAD : AudioSourceState::UNAVAILABLE)
     {}
 
@@ -128,24 +132,30 @@ class AudioSource
     {
         name_override_.clear();
         state_ = state;
+        has_changed_ = true;
     }
 
     AudioSourceState get_state() const { return state_; }
 
+    bool has_changed() const { return has_changed_; }
+    void set_processed() { has_changed_ = false; }
+
     bool check_any_flag(const Flags flags)  const { return (flags_ & flags) != 0; }
     bool check_all_flags(const Flags flags) const { return (flags_ & flags) == flags; }
 
-    void set_available()
+    bool set_available()
     {
+        bool result = false;
+
         switch(state_)
         {
           case AudioSourceState::UNAVAILABLE:
           case AudioSourceState::DEAD:
           case AudioSourceState::ALIVE_OR_LOCKED:
             if(!check_any_flag(CAN_BE_LOCKED))
-                state_ = AudioSourceState::ALIVE;
+                result = set_state(AudioSourceState::ALIVE);
             else
-                state_ = check_unlocked_fn_(*this);
+                result = set_state(check_unlocked_fn_(*this));
 
             break;
 
@@ -156,7 +166,7 @@ class AudioSource
                 auto state = check_unlocked_fn_(*this);
 
                 if(state != AudioSourceState::ALIVE_OR_LOCKED)
-                    state_ = state;
+                    result = set_state(state);
             }
 
             break;
@@ -164,10 +174,14 @@ class AudioSource
           case AudioSourceState::ZOMBIE:
             break;
         }
+
+        return result;
     }
 
-    void update_lock_state()
+    bool update_lock_state()
     {
+        bool result = false;
+
         switch(state_)
         {
           case AudioSourceState::UNAVAILABLE:
@@ -179,10 +193,12 @@ class AudioSource
           case AudioSourceState::LOCKED:
           case AudioSourceState::ALIVE_OR_LOCKED:
             if(check_any_flag(CAN_BE_LOCKED))
-                state_ = check_unlocked_fn_(*this);
+                result = set_state(check_unlocked_fn_(*this));
 
             break;
         }
+
+        return result;
     }
 
     bool try_summon() const
@@ -205,17 +221,45 @@ class AudioSource
             : false;
     }
 
-    void set_name(const char *name)
+    bool set_name(const char *name)
     {
+        bool result = false;
+
         if(name == nullptr || name[0] == '\0' || default_name_ == name)
-            name_override_.clear();
+        {
+            if(!name_override_.empty())
+            {
+                name_override_.clear();
+                result = true;
+            }
+        }
         else if(name_override_ != name)
+        {
             name_override_ = name;
+            result = true;
+        }
+
+        if(result)
+            has_changed_ = true;
+
+        return result;
     }
 
     const std::string &get_name() const
     {
         return name_override_.empty() ? default_name_ : name_override_;
+    }
+
+  private:
+    bool set_state(AudioSourceState state)
+    {
+        if(state == state_)
+            return false;
+
+        state_ = state;
+        has_changed_ = true;
+
+        return true;
     }
 };
 
@@ -754,9 +798,9 @@ class AudioSourceData
             registers_get_data()->register_changed_notification_fn(81);
     }
 
-    void audio_source_available_notification(AudioSource &src)
+    bool audio_source_available_notification(AudioSource &src)
     {
-        src.set_available();
+        bool result = src.set_available();
 
         gchar *source_name = nullptr;
         gchar *player_id = nullptr;
@@ -771,7 +815,8 @@ class AudioSourceData
                                                        nullptr, &error);
         if(dbus_common_handle_dbus_error(&error, "Get audio source information") == 0)
         {
-            src.set_name(source_name);
+            if(src.set_name(source_name))
+                result = true;
 
             g_free(player_id);
             g_free(dbusname);
@@ -783,6 +828,8 @@ class AudioSourceData
 
         if(selected_.is_pending(src))
             request_audio_source(src, true);
+
+        return result;
     }
 
     static void audio_sources_changed_lock_state_notification()
