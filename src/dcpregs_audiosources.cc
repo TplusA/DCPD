@@ -638,16 +638,34 @@ class AudioSourceData
         return std::unique_lock<std::mutex>(lock_);
     }
 
-    AudioSource *lookup_predefined(const char *id)
+  private:
+    template <typename T>
+    AudioSource *lookup_predefined_impl(const T id)
     {
         const auto it(std::find_if(default_sources_.begin(), default_sources_.end(),
-                                   [id] (const AudioSource &src) { return src.id_ == id; }));
+                                   [&id] (const AudioSource &src) { return src.id_ == id; }));
         return it != default_sources_.end() ? it : nullptr;
+    }
+
+  public:
+    AudioSource *lookup_predefined(const char *id)
+    {
+        return lookup_predefined_impl(id);
     }
 
     const AudioSource *lookup_predefined(const char *id) const
     {
-        return const_cast<AudioSourceData *>(this)->lookup_predefined(id);
+        return const_cast<AudioSourceData *>(this)->lookup_predefined_impl(id);
+    }
+
+    AudioSource *lookup_predefined(const std::string &id)
+    {
+        return lookup_predefined_impl(id);
+    }
+
+    const AudioSource *lookup_predefined(const std::string &id) const
+    {
+        return const_cast<AudioSourceData *>(this)->lookup_predefined_impl(id);
     }
 
     AudioSource *lookup_extra(const char *id)
