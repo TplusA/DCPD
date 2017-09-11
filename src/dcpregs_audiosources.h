@@ -65,7 +65,7 @@ void dcpregs_audiosources_fetch_audio_paths(void);
 void dcpregs_audiosources_check_external_service_credentials(void);
 
 /*!
- * Report availibility of an audio source as part of a usable audio path.
+ * Report availability of an audio source as part of a usable audio path.
  *
  * \attention
  *     Called from D-Bus thread, not main context.
