@@ -1641,7 +1641,7 @@ static MockMessages *mock_messages;
 
 static RegisterChangedData *register_changed_data;
 
-static const uint8_t expected_protocol_level[3] = { 1, 0, 0, };
+static const uint8_t expected_default_protocol_level[3] = { 1, 0, 4, };
 
 static void register_changed_callback(uint8_t reg_number)
 {
@@ -1712,8 +1712,62 @@ void test_read_out_protocol_level()
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
                             buffer + sizeof(redzone_content) + 3, sizeof(redzone_content));
 
-    cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+    cut_assert_equal_memory(expected_default_protocol_level,
+                            sizeof(expected_default_protocol_level),
                             buffer + sizeof(redzone_content), 3);
+}
+
+void test_protocol_level_negotiation_does_not_set_protocol_level()
+{
+    static const uint8_t range[] = { 1, 0, 2, 1, 0, 2, };
+
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    cppcut_assert_equal(0, reg->write_handler(range, sizeof(range)));
+    register_changed_data->check(1);
+
+    static const uint8_t expected[3] = { 1, 0, 2, };
+
+    /* read out result of negotiation */
+    uint8_t buffer[3] = {0};
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(expected, sizeof(expected), buffer, sizeof(buffer));
+
+    /* read out configured protocol version, still at default */
+    buffer[0] = 0;
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+
+    cut_assert_equal_memory(expected_default_protocol_level,
+                            sizeof(expected_default_protocol_level),
+                            buffer, sizeof(buffer));
+}
+
+void test_protocol_level_can_be_changed()
+{
+    auto *reg = lookup_register_expect_handlers(1,
+                                                dcpregs_read_1_protocol_level,
+                                                dcpregs_write_1_protocol_level);
+
+    uint8_t buffer[3] = {0};
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(expected_default_protocol_level,
+                            sizeof(expected_default_protocol_level),
+                            buffer, sizeof(buffer));
+
+    static const uint8_t version[3] = { 1, 0, 2, };
+
+    cppcut_assert_equal(0, reg->write_handler(version, sizeof(version)));
+    register_changed_data->check(1);
+
+    buffer[0] = {0};
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(version, sizeof(version), buffer, sizeof(buffer));
+
+    buffer[0] = {0};
+    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(version, sizeof(version), buffer, sizeof(buffer));
 }
 
 void test_negotiate_protocol_level_single_range_with_match()
@@ -1729,11 +1783,42 @@ void test_negotiate_protocol_level_single_range_with_match()
         /* major and minor versions must match */
         { 1, 0, 0, 1, 0, UINT8_MAX, },
 
-        /* a range of three supported protocol levels */
-        { 1, 0, 0, 1, 0, 2, },
+        /* a range of several supported protocol levels */
+        { 1, 0, 0,
+          expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2], },
 
         /* a single, specific protocol level */
-        { 1, 0, 0, 1, 0, 0, },
+        { expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2],
+          expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2], },
+
+        /* another specific protocol level */
+        {  1, 0, 2, 1, 0, 2, }
+    };
+
+    static const uint8_t expected[sizeof(requests) / sizeof(requests[0])][3] =
+    {
+        { expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2], },
+        { expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2], },
+        { expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2], },
+        { expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2], },
+        { expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          expected_default_protocol_level[2], },
+        { 1, 0, 2 },
     };
 
     auto *reg = lookup_register_expect_handlers(1,
@@ -1745,10 +1830,10 @@ void test_negotiate_protocol_level_single_range_with_match()
         cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
         register_changed_data->check(1);
 
-        uint8_t buffer[3];
+        uint8_t buffer[3] = {0};
         cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
 
-        cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+        cut_assert_equal_memory(expected[i], sizeof(expected[0]),
                                 buffer, sizeof(buffer));
     }
 }
@@ -1795,10 +1880,11 @@ void test_negotiate_protocol_level_multiple_ranges_with_match()
         cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(match_in_first_range)));
         register_changed_data->check(1);
 
-        uint8_t buffer[3];
+        uint8_t buffer[3] = {0};
         cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
 
-        cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+        cut_assert_equal_memory(expected_default_protocol_level,
+                                sizeof(expected_default_protocol_level),
                                 buffer, sizeof(buffer));
     }
 }
@@ -1808,7 +1894,10 @@ void test_negotiate_protocol_level_single_range_with_mismatch()
     static const uint8_t requests[][6] =
     {
         /* any too high level */
-        { 1, 0, 1, UINT8_MAX, UINT8_MAX, UINT8_MAX, },
+        { expected_default_protocol_level[0],
+          expected_default_protocol_level[1],
+          uint8_t(expected_default_protocol_level[2] + 1),
+          UINT8_MAX, UINT8_MAX, UINT8_MAX, },
 
         /* any too low level */
         { 0, 0, 0, 0, UINT8_MAX, UINT8_MAX, },
@@ -1832,7 +1921,7 @@ void test_negotiate_protocol_level_single_range_with_mismatch()
         cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
         register_changed_data->check(1);
 
-        uint8_t buffer[3];
+        uint8_t buffer[3] = {0};
         cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
         cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
     }
@@ -1854,33 +1943,83 @@ void test_negotiate_protocol_level_multiple_ranges_with_mismatch()
     cppcut_assert_equal(0, reg->write_handler(mismatch, sizeof(mismatch)));
     register_changed_data->check(1);
 
-    uint8_t buffer[3];
+    uint8_t buffer[3] = {0};
     cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
 }
 
-void test_maximum_level_of_multiple_overlapping_ranges_is_chosen()
+static void choose_maximum_level_of_overlapping_ranges(const uint8_t *const overlapping,
+                                                       size_t overlapping_size,
+                                                       const uint8_t *const expected)
 {
-    static const uint8_t overlapping[4 * 6] =
-    {
-        1, 0, 0, 2, UINT8_MAX, UINT8_MAX,
-        1, 5, 7, 6, UINT8_MAX, UINT8_MAX,
-        1, 0, 0, 3, 4, 5,
-        0, 1, 2, 2, 0, 0,
-    };
-
     auto *reg = lookup_register_expect_handlers(1,
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    cppcut_assert_equal(0, reg->write_handler(overlapping, sizeof(overlapping)));
+    cppcut_assert_equal(0, reg->write_handler(overlapping, overlapping_size));
     register_changed_data->check(1);
 
-    uint8_t buffer[3];
-    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    uint8_t buffer[3] = {0};
+    cppcut_assert_equal(ssize_t(sizeof(buffer)),
+                        reg->read_handler(buffer, sizeof(buffer)));
 
-    cut_assert_equal_memory(expected_protocol_level, sizeof(expected_protocol_level),
+    cut_assert_equal_memory(expected, sizeof(expected_default_protocol_level),
                             buffer, sizeof(buffer));
+}
+
+void test_default_level_is_chosen_from_ranges_if_default_is_maximum()
+{
+    static const uint8_t overlapping[] =
+    {
+        1, 0, 0, 1, 0, 2,
+        1, 5, 7, 6, UINT8_MAX, UINT8_MAX,
+        0, 1, 2, 2, 0, 0,
+    };
+
+    choose_maximum_level_of_overlapping_ranges(overlapping, sizeof(overlapping),
+                                               expected_default_protocol_level);
+}
+
+void test_maximum_supported_level_is_chosen_from_ranges()
+{
+    static const uint8_t overlapping[] =
+    {
+        1, 5, 7, 6, UINT8_MAX, UINT8_MAX,
+        0, 1, 2, 1, 0, 1,
+        1, 0, 0, 1, 0, 3,
+        1, 0, 1, 1, 0, 2,
+    };
+
+    static const uint8_t expected[] = { 1, 0, 3, };
+
+    choose_maximum_level_of_overlapping_ranges(overlapping, sizeof(overlapping),
+                                               expected);
+}
+
+void test_maximum_supported_level_is_chosen_from_embedded_range()
+{
+    static const uint8_t embedded[] = { 1, 0, 1, 1, 0, 3, };
+    static const uint8_t expected[] = { 1, 0, 3, };
+
+    choose_maximum_level_of_overlapping_ranges(embedded, sizeof(embedded),
+                                               expected);
+}
+
+void test_maximum_supported_level_is_chosen_from_overlapping_range()
+{
+    static const uint8_t overlapping[] = { 0, 9, 0, 1, 0, 2, };
+    static const uint8_t expected[] = { 1, 0, 2, };
+
+    choose_maximum_level_of_overlapping_ranges(overlapping, sizeof(overlapping),
+                                               expected);
+}
+
+void test_default_level_is_chosen_from_overlapping_range()
+{
+    static const uint8_t overlapping[] = { 1, 0, 2, 1, UINT8_MAX, UINT8_MAX, };
+
+    choose_maximum_level_of_overlapping_ranges(overlapping, sizeof(overlapping),
+                                               expected_default_protocol_level);
 }
 
 void test_broken_ranges_are_ignored()
@@ -1902,7 +2041,7 @@ void test_broken_ranges_are_ignored()
         cppcut_assert_equal(0, reg->write_handler(broken[i], sizeof(broken[0])));
         register_changed_data->check(1);
 
-        uint8_t buffer[3];
+        uint8_t buffer[3] = {0};
         cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
         cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
     }
@@ -1921,7 +2060,7 @@ void test_negotiation_requires_at_least_one_range()
 
     /* because this register is really important, even broken requests generate
      * an answer */
-    uint8_t buffer[3];
+    uint8_t buffer[3] = {0};
     cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
 }

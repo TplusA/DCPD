@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -50,7 +50,9 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
                                             const size_t number_of_supported_ranges,
                                             struct RegisterProtocolLevel *level)
 {
-    /* FIXME: This code supports only a single range at the moment */
+    level->code = REGISTER_MK_VERSION(0, 0, 0);
+
+    /* FIXME: This code does not work with a multiple supported ranges */
     log_assert(number_of_supported_ranges == 1);
 
     for(size_t i = 0; i < number_of_ranges; ++i)
@@ -67,16 +69,20 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
                                         range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 2]),
         };
 
-        if(supported->code >= from.code && supported->code <= to.code)
-        {
-            *level = *supported;
-            return true;
-        }
+        if(from.code > to.code)
+            continue;
+
+        if(from.code > supported[1].code || to.code < supported[0].code)
+            continue;
+
+        const struct RegisterProtocolLevel overlap_max =
+            (to.code < supported[1].code) ? to : supported[1];
+
+        if(overlap_max.code > level->code)
+            *level = overlap_max;
     }
 
-    level->code = REGISTER_MK_VERSION(0, 0, 0);
-
-    return false;
+    return (level->code != 0);
 }
 
 static size_t copy_protocol_level_to_response(uint8_t *response,
@@ -142,9 +148,14 @@ int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length)
     const size_t number_of_supported_ranges =
         register_get_supported_protocol_levels(&supported_ranges);
 
-    if(fill_in_highest_supported_level(data, length / SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC,
-                                       supported_ranges, number_of_supported_ranges,
-                                       &global_negotiation_data.negotiated_level))
+    if(length == SIZE_OF_PROTOCOL_LEVEL_SPEC)
+    {
+        register_set_protocol_level(data[0], data[1], data[2]);
+        global_negotiation_data.state = NEGOTIATION_NOT_IN_PROGRESS;
+    }
+    else if(fill_in_highest_supported_level(data, length / SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC,
+                                            supported_ranges, number_of_supported_ranges,
+                                            &global_negotiation_data.negotiated_level))
         global_negotiation_data.state = NEGOTIATION_SUCCEEDED;
     else
         global_negotiation_data.state = NEGOTIATION_FAILED;

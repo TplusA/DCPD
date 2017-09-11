@@ -45,6 +45,8 @@
 #include "registers_priv.h"
 #include "configproxy.h"
 
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 4)
+
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
 #define STATUS_REGISTER_READY_CODE_POWER_OFF    ((uint8_t)0x01)
@@ -570,7 +572,7 @@ void register_init(void (*register_changed_callback)(uint8_t reg_number))
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
     registers_private_data.configured_protocol_level.code =
-        REGISTER_MK_VERSION(1, 0, 4);
+        CURRENT_PROTOCOL_VERSION_CODE;
 
     struct register_configuration_t *config = registers_get_nonconst_data();
 
@@ -617,12 +619,7 @@ bool register_set_protocol_level(uint8_t major, uint8_t minor, uint8_t micro)
 
 const struct RegisterProtocolLevel *register_get_protocol_level(void)
 {
-    static const struct RegisterProtocolLevel level =
-    {
-        .code = REGISTER_MK_VERSION(1, 0, 0),
-    };
-
-    return &level;
+    return &registers_private_data.configured_protocol_level;
 }
 
 size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel **level_ranges)
@@ -631,7 +628,7 @@ size_t register_get_supported_protocol_levels(const struct RegisterProtocolLevel
     {
 #define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
 
-        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 4)),
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), CURRENT_PROTOCOL_VERSION_CODE),
 
 #undef MK_RANGE
     };
