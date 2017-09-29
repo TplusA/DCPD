@@ -47,6 +47,8 @@ tdbusFileTransfer *dbus_get_file_transfer_iface(void);
 tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void);
 tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void);
 
+tdbussplayPlayback *dbus_get_roonplayer_playback_iface(void);
+
 tdbusAirable *dbus_get_airable_sec_iface(void);
 
 tdbusartcacheRead *dbus_get_artcache_read_iface(void);

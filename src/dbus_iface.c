@@ -91,6 +91,13 @@ static struct
 }
 streamplayer_iface_data;
 
+static struct
+{
+    bool connect_to_session_bus;
+    tdbussplayPlayback *playback_iface;
+}
+roonplayer_iface_data;
+
 static struct airable_iface_data
 {
     bool connect_to_session_bus;
@@ -331,6 +338,19 @@ static void name_acquired(GDBusConnection *connection,
         (void)dbus_common_handle_dbus_error(&error, "Create Streamplayer URLFIFO proxy");
     }
 
+    if(is_session_bus == roonplayer_iface_data.connect_to_session_bus)
+    {
+        GError *error = NULL;
+
+        roonplayer_iface_data.playback_iface =
+            tdbus_splay_playback_proxy_new_sync(connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                "de.tahifi.Roon",
+                                                "/de/tahifi/Roon",
+                                                NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error, "Create Roon playback proxy");
+    }
+
     if(is_session_bus == airable_iface_data.connect_to_session_bus)
         tdbus_airable_proxy_new(connection, G_DBUS_PROXY_FLAGS_NONE,
                                 "de.tahifi.TuneInBroker",
@@ -470,6 +490,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     memset(&dcpd_iface_data, 0, sizeof(dcpd_iface_data));
     memset(&filetransfer_iface_data, 0, sizeof(filetransfer_iface_data));
     memset(&streamplayer_iface_data, 0, sizeof(streamplayer_iface_data));
+    memset(&roonplayer_iface_data, 0, sizeof(roonplayer_iface_data));
     memset(&airable_iface_data, 0, sizeof(airable_iface_data));
     memset(&artcache_iface_data, 0, sizeof(artcache_iface_data));
     memset(&audiopath_iface_data, 0, sizeof(audiopath_iface_data));
@@ -493,6 +514,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     dcpd_iface_data.config_management_data = configuration_data;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
+    roonplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.appconn_data = appconn_data;
     artcache_iface_data.connect_to_session_bus = connect_to_session_bus;
@@ -557,6 +579,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(filetransfer_iface_data.iface != NULL);
     log_assert(streamplayer_iface_data.playback_iface != NULL);
     log_assert(streamplayer_iface_data.urlfifo_iface != NULL);
+    log_assert(roonplayer_iface_data.playback_iface != NULL);
     log_assert(artcache_iface_data.artcache_read_iface != NULL);
     log_assert(artcache_iface_data.artcache_monitor_iface != NULL);
     log_assert(audiopath_iface_data.audiopath_manager_proxy != NULL);
@@ -569,6 +592,9 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
                      G_CALLBACK(dbussignal_file_transfer), NULL);
 
     g_signal_connect(streamplayer_iface_data.playback_iface, "g-signal",
+                     G_CALLBACK(dbussignal_splay_playback), NULL);
+
+    g_signal_connect(roonplayer_iface_data.playback_iface, "g-signal",
                      G_CALLBACK(dbussignal_splay_playback), NULL);
 
     g_signal_connect(artcache_iface_data.artcache_monitor_iface, "g-signal",
@@ -628,6 +654,7 @@ void dbus_shutdown(void)
     g_object_unref(filetransfer_iface_data.iface);
     g_object_unref(streamplayer_iface_data.playback_iface);
     g_object_unref(streamplayer_iface_data.urlfifo_iface);
+    g_object_unref(roonplayer_iface_data.playback_iface);
 
     if(airable_iface_data.airable_sec_iface != NULL)
         g_object_unref(airable_iface_data.airable_sec_iface);
@@ -758,6 +785,11 @@ tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void)
 tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void)
 {
     return streamplayer_iface_data.urlfifo_iface;
+}
+
+tdbussplayPlayback *dbus_get_roonplayer_playback_iface(void)
+{
+    return roonplayer_iface_data.playback_iface;
 }
 
 tdbusAirable *dbus_get_airable_sec_iface(void)

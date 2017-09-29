@@ -1227,6 +1227,30 @@ static inline void notify_cover_art_changed()
     registers_get_data()->register_changed_notification_fn(210);
 }
 
+/*!
+ * React on start of stream.
+ *
+ * ATTENTION, PLEASE!
+ *
+ * In case you are wondering why this code does not incorporate the currently
+ * selected audio source in any way, but instead relies on a seemingly weired
+ * kind of auto-detection of a mysterious "app mode": This code predates
+ * explicit audio source and audio path management. Before there were audio
+ * paths, there was only a single stream player. Mode switching was done based
+ * on stream IDs and start/stop state changes.
+ *
+ * And this is what's still going on in here. The Roon Ready player generates
+ * stream IDs tagged with the Roon ID, so the logic in here detects non-app IDs
+ * when seeing them. Code that sends commands directly to the stream player are
+ * only sent in app mode, so that there should be no accidental communication
+ * with the regular stream player while Roon is active.
+ *
+ * The mechanisms in here (and in #dcpregs_playstream_stop_notification())
+ * operate orthogonal to and completely independent of audio path selection,
+ * AND OF COURSE THIS IS A PROBLEM. It currently works, but an adaption to make
+ * use of audio source information is required to make this code simpler and
+ * also more stable against possible misdetections of app/no-app modes.
+ */
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
                                            void *stream_key_variant)
 {
