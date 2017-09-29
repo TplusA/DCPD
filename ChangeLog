@@ -1,3 +1,18 @@
+2017-10-12  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.2 released.
+
+	* Roon: React on stream player signals emitted by TARoon. This makes
+	  cover art work for Roon and fixes general breakage of Roon mode.
+
+	* Volume control: Register 64 can be used to configure a volume
+	  control, to set its values, and to read out volume level and mute
+	  state change requests. This register is required for integration of
+	  volume control with Roon.
+
+	  See src/dcpregs_volume.h for protocol specification.
+	  See src/fixpoint.hh for the fix point value format specification.
+
 2017-09-11  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.1 released.
