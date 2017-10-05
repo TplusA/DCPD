@@ -67,7 +67,8 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
         gboolean is_active = g_variant_get_boolean(val);
         g_variant_unref(val);
 
-        const struct dbussignal_shutdown_iface *const iface = user_data;
+        const auto *const iface =
+            static_cast<const struct dbussignal_shutdown_iface *>(user_data);
 
         if(!iface->is_inhibitor_lock_taken())
             msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
@@ -300,10 +301,12 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
 
         if(actor_id != ACTOR_ID_SMARTPHONE_APP && !has_failed)
         {
+            auto *data = static_cast<struct smartphone_app_connection_data *>(user_data);
+
             if(is_login)
-                appconn_send_airable_service_logged_in(user_data, service_id, info);
+                appconn_send_airable_service_logged_in(data, service_id, info);
             else
-                appconn_send_airable_service_logged_out(user_data, service_id, info);
+                appconn_send_airable_service_logged_out(data, service_id, info);
         }
         else
         {

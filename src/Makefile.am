@@ -157,7 +157,7 @@ libapplink_la_CFLAGS = $(AM_CFLAGS)
 libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libdbus_handlers_la_SOURCES = \
-    dbus_handlers.c dbus_handlers.h \
+    dbus_handlers.cc dbus_handlers.h \
     dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h connman_agent.h \
     dbus_handlers_connman_manager.cc dbus_handlers_connman_manager.h \
     dbus_handlers_connman_manager_glue.h \
