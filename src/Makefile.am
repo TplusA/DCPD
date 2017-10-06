@@ -35,7 +35,7 @@ dcpd_SOURCES = \
     dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_networkconfig.hh dcpregs_wlansurvey.h \
     dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_playstream.hh dcpregs_status.h \
-    dcpregs_upnpname.h dcpregs_upnpname.hh dcpregs_audiosources.h \
+    dcpregs_upnpname.h dcpregs_upnpname.hh dcpregs_audiosources.h dcpregs_volume.h \
     dcpregs_searchparameters.h dcpregs_appliance.h \
     connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
@@ -66,6 +66,7 @@ AM_CPPFLAGS += -I$(DBUS_IFACES)
 noinst_LTLIBRARIES = \
     libtransactions.la \
     libdynamic_buffer.la \
+    libdbus_handlers.la \
     libregisters.la \
     libnetworkprefs.la \
     libinifile.la \
@@ -74,11 +75,11 @@ noinst_LTLIBRARIES = \
     libxmodem.la \
     libnetwork_dispatcher.la \
     libshutdown_guard.la \
-    libdbus_handlers.la \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
     libstreamplayer_dbus.la \
     libaudiopath_dbus.la \
+    libmixer_dbus.la \
     libartcache_dbus.la \
     libairable_dbus.la \
     libcredentials_dbus.la \
@@ -114,6 +115,7 @@ libregisters_la_SOURCES = \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \
     dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
+    volume_control.cc volume_control.hh dcpregs_volume.h \
     dbus_handlers_connman_manager_glue.h networkprefs.h \
     connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
     network_device.hh network_device_list.hh \
@@ -196,6 +198,9 @@ libstreamplayer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libaudiopath_dbus_la_SOURCES = audiopath_dbus.c audiopath_dbus.h
 libaudiopath_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libmixer_dbus_la_SOURCES = mixer_dbus.c mixer_dbus.h
+libmixer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 nodist_libartcache_dbus_la_SOURCES = artcache_dbus.c artcache_dbus.h
 libartcache_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
@@ -259,6 +264,10 @@ BUILT_SOURCES = \
     de_tahifi_audiopath.h \
     de_tahifi_audiopath.md \
     audiopath_dbus.stamp \
+    $(nodist_libmixer_dbus_la_SOURCES) \
+    de_tahifi_mixer.h \
+    de_tahifi_mixer.md \
+    mixer_dbus.stamp \
     $(nodist_libartcache_dbus_la_SOURCES) \
     de_tahifi_artcache.h \
     de_tahifi_artcache.md \
@@ -331,6 +340,15 @@ audiopath_dbus.h: audiopath_dbus.stamp
 audiopath_dbus.stamp: $(DBUS_IFACES)/de_tahifi_audiopath.xml
 	$(GDBUS_CODEGEN) --generate-c-code=audiopath_dbus --c-namespace tdbus_aupath --interface-prefix de.tahifi.AudioPath. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_audiopath.md -H de_tahifi_audiopath.h -c tdbus_aupath -s de.tahifi.AudioPath. -n 'Audio Paths'
+	touch $@
+
+de_tahifi_mixer.h: mixer_dbus.stamp
+de_tahifi_mixer.md: mixer_dbus.stamp
+mixer_dbus.c: mixer_dbus.stamp
+mixer_dbus.h: mixer_dbus.stamp
+mixer_dbus.stamp: $(DBUS_IFACES)/de_tahifi_mixer.xml
+	$(GDBUS_CODEGEN) --generate-c-code=mixer_dbus --c-namespace tdbus_mixer --interface-prefix de.tahifi.Mixer. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_mixer.md -H de_tahifi_mixer.h -c tdbus_mixer -s de.tahifi.Mixer. -n 'Volume control'
 	touch $@
 
 de_tahifi_artcache.h: artcache_dbus.stamp

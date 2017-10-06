@@ -24,6 +24,7 @@
 
 #include "dcpd_dbus.h"
 #include "audiopath_dbus.h"
+#include "mixer_dbus.h"
 #include "configuration_dbus.h"
 #include "debug_dbus.h"
 
@@ -75,6 +76,20 @@ gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
                                                 GDBusMethodInvocation *invocation,
                                                 const char *source_id,
                                                 gpointer user_data);
+
+gboolean dbusmethod_mixer_get_controls(tdbusmixerVolume *object,
+                                       GDBusMethodInvocation *invocation,
+                                       gpointer user_data);
+gboolean dbusmethod_mixer_get_master(tdbusmixerVolume *object,
+                                     GDBusMethodInvocation *invocation,
+                                     gpointer user_data);
+gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
+                              GDBusMethodInvocation *invocation,
+                              guint16 id, gdouble volume, gboolean is_muted,
+                              gpointer user_data);
+gboolean dbusmethod_mixer_get(tdbusmixerVolume *object,
+                              GDBusMethodInvocation *invocation,
+                              guint16 id, gpointer user_data);
 
 gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,
                                          GDBusMethodInvocation *invocation,

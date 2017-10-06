@@ -20,6 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <cmath>
 #include <string.h>
 #include <errno.h>
 
@@ -30,6 +31,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
+#include "volume_control.hh"
 #include "smartphone_app_send.h"
 #include "configproxy.h"
 #include "stream_id.h"
@@ -274,6 +276,140 @@ gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
     msg_info("Deselected source \"%s\"", source_id);
     dcpregs_playstream_deselect_source();
     tdbus_aupath_source_complete_deselected(object, invocation);
+    return TRUE;
+}
+
+gboolean dbusmethod_mixer_get_controls(tdbusmixerVolume *object,
+                                       GDBusMethodInvocation *invocation,
+                                       gpointer user_data)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(qssddddddy)"));
+
+    const auto &controls(Mixer::VolumeControls::get_singleton());
+
+    for(const auto &ctrl : *controls.first)
+    {
+        const auto *const props(ctrl->get_properties());
+
+        if(props != nullptr)
+        {
+            const auto &settings(ctrl->get_settings());
+
+            g_variant_builder_add(&builder, "(qssddddddy)",
+                                  ctrl->id_, props->name_.c_str(),
+                                  scale_to_string(props->scale_),
+                                  props->volume_min_, props->volume_max_,
+                                  props->volume_step_,
+                                  props->min_db_, props->max_db_,
+                                  settings.volume_.get(std::numeric_limits<double>::quiet_NaN()),
+                                  settings.is_muted_.pick(1, 0, 2));
+        }
+    }
+
+    tdbus_mixer_volume_complete_get_controls(object, invocation,
+                                             g_variant_builder_end(&builder));
+
+    return TRUE;
+}
+
+gboolean dbusmethod_mixer_get_master(tdbusmixerVolume *object,
+                                     GDBusMethodInvocation *invocation,
+                                     gpointer user_data)
+{
+    const auto &controls(Mixer::VolumeControls::get_singleton());
+    const auto *const master(controls.first->get_master());
+
+    if(master == nullptr)
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+                                              "Have no master volume control");
+
+    else
+    {
+        const auto *const props(master->get_properties());
+
+        if(props == nullptr)
+            g_dbus_method_invocation_return_error(invocation,
+                                                  G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+                                                  "Master volume control not configured");
+        else
+        {
+            const auto &settings(master->get_settings());
+
+            tdbus_mixer_volume_complete_get_master(object, invocation,
+                    master->id_, props->name_.c_str(),
+                    scale_to_string(props->scale_),
+                    props->volume_min_, props->volume_max_,
+                    props->volume_step_,
+                    props->min_db_, props->max_db_,
+                    settings.volume_.get(std::numeric_limits<double>::quiet_NaN()),
+                    settings.is_muted_.pick(1, 0, 2));
+        }
+    }
+
+    return TRUE;
+}
+
+gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
+                              GDBusMethodInvocation *invocation,
+                              guint16 id, gdouble volume, gboolean is_muted,
+                              gpointer user_data)
+{
+    switch(Mixer::VolumeControls::get_singleton().first->request(id, volume, is_muted))
+    {
+      case Mixer::VolumeControls::Result::OK:
+      case Mixer::VolumeControls::Result::IGNORED:
+        tdbus_mixer_volume_complete_set(object, invocation);
+        break;
+
+      case Mixer::VolumeControls::Result::UNKNOWN_ID:
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+                                              "Cannot set unknown control ID %u",
+                                              id);
+        break;
+    }
+
+    return TRUE;
+}
+
+gboolean dbusmethod_mixer_get(tdbusmixerVolume *object,
+                              GDBusMethodInvocation *invocation,
+                              guint16 id, gpointer user_data)
+{
+    const Mixer::VolumeSettings *values;
+
+    switch(Mixer::VolumeControls::get_singleton().first->get_current_values(id, values))
+    {
+      case Mixer::VolumeControls::Result::OK:
+        if(values->volume_.is_known() && values->is_muted_.is_known())
+            tdbus_mixer_volume_complete_get(object, invocation,
+                                            values->volume_.get(std::numeric_limits<double>::quiet_NaN()),
+                                            values->is_muted_.pick(1, 0 ,2));
+        else
+            g_dbus_method_invocation_return_error(invocation,
+                                                  G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+                                                  "Values for control ID %u not known",
+                                                  id);
+
+        break;
+
+      case Mixer::VolumeControls::Result::IGNORED:
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+                                              "Failed getting values for control ID %u",
+                                              id);
+        break;
+
+      case Mixer::VolumeControls::Result::UNKNOWN_ID:
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+                                              "Cannot get values for unknown control ID %u",
+                                              id);
+        break;
+    }
+
     return TRUE;
 }
 

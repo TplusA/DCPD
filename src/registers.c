@@ -38,6 +38,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_tcptunnel.h"
 #include "dcpregs_audiosources.h"
+#include "dcpregs_volume.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_mediaservices.h"
 #include "dcpregs_searchparameters.h"
@@ -364,6 +365,13 @@ static const struct dcp_register_t register_map[] =
         .max_data_size = 16,
         .read_handler = dcpregs_read_63_secondary_dns,
         .write_handler = dcpregs_write_63_secondary_dns,
+    },
+    {
+        /* Volume control */
+        REGISTER(64, REGISTER_MK_VERSION(1, 0, 4)),
+        .max_data_size = 15,
+        .read_handler = dcpregs_read_64_volume_control,
+        .write_handler = dcpregs_write_64_volume_control,
     },
     {
         /* DRC protocol */
