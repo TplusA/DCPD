@@ -39,6 +39,7 @@ LIBS += $(CPPCUTTER_LIBS)
 
 check_LTLIBRARIES = \
     test_dynamic_buffer.la \
+    test_fixpoint.la \
     test_registers.la \
     test_drcpdcomm.la \
     test_transactions.la \
@@ -50,6 +51,12 @@ check_LTLIBRARIES = \
 test_dynamic_buffer_la_SOURCES = test_dynamic_buffer.c
 test_dynamic_buffer_la_LIBADD = $(top_builddir)/src/libdynamic_buffer.la
 test_dynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
+
+test_fixpoint_la_SOURCES = \
+    test_fixpoint.cc \
+    ../src/fixpoint.hh
+test_fixpoint_la_CFLAGS = $(AM_CFLAGS)
+test_fixpoint_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 test_applink_la_SOURCES = \
     test_applink.cc \
