@@ -169,6 +169,212 @@ void test_conversion_to_native_types()
     cppcut_assert_equal(int16_t(-5), neg.to_int16());
 }
 
+void test_serialization_to_buffer_requires_minimum_buffer_size()
+{
+    const auto value = FixPoint(-0.25);
+    const std::array<const uint8_t, 8> expected_empty{0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55};
+    const std::array<const uint8_t, 8> expected_filled{0x55, 0x55, 0x20, 0x04, 0x55, 0x55, 0x55, 0x55};
+
+    std::array<uint8_t, 8> buffer;
+
+    std::fill(buffer.begin(), buffer.end(), 0x55);
+    cut_assert_false(value.to_buffer(buffer.data() + 2, 0));
+    cut_assert_equal_memory(expected_empty.data(), expected_empty.size(),
+                            buffer.data(), buffer.size());
+
+    std::fill(buffer.begin(), buffer.end(), 0x55);
+    cut_assert_false(value.to_buffer(buffer.data() + 2, 1));
+    cut_assert_equal_memory(expected_empty.data(), expected_empty.size(),
+                            buffer.data(), buffer.size());
+
+    std::fill(buffer.begin(), buffer.end(), 0x55);
+    cut_assert_true(value.to_buffer(buffer.data() + 2, 2));
+    cut_assert_equal_memory(expected_filled.data(), expected_filled.size(),
+                            buffer.data(), buffer.size());
+
+    std::fill(buffer.begin(), buffer.end(), 0x55);
+    cut_assert_true(value.to_buffer(buffer.data() + 2, 3));
+    cut_assert_equal_memory(expected_filled.data(), expected_filled.size(),
+                            buffer.data(), buffer.size());
+
+    std::fill(buffer.begin(), buffer.end(), 0x55);
+    cut_assert_true(value.to_buffer(buffer.data() + 2, 4));
+    cut_assert_equal_memory(expected_filled.data(), expected_filled.size(),
+                            buffer.data(), buffer.size());
+}
+
+static void expect_serialization_result(const std::array<const uint8_t, 2> &expected,
+                                        const FixPoint &value)
+{
+    std::array<uint8_t, 2> buffer;
+    cut_assert_true(value.to_buffer(buffer.data(), buffer.size()));
+    cut_assert_equal_memory(expected.data(), expected.size(), buffer.data(), buffer.size());
+}
+
+void test_serialize_zero_to_buffer()
+{
+    const auto value = FixPoint(int16_t(0));
+    expect_serialization_result({0x00, 0x00}, value);
+}
+
+void test_serialize_one_to_buffer()
+{
+    const auto value = FixPoint(int16_t(1));
+    expect_serialization_result({0x00, 0x10}, value);
+}
+
+void test_serialize_42_to_buffer()
+{
+    const auto value = FixPoint(int16_t(42));
+    expect_serialization_result({0x02, 0xa0}, value);
+}
+
+void test_serialize_intmax_to_buffer()
+{
+    const auto value = FixPoint(FixPoint::MAX_AS_INT16);
+    expect_serialization_result({0x1f, 0xf0}, value);
+}
+
+void test_serialize_minus_one_to_buffer()
+{
+    const auto value = FixPoint(int16_t(-1));
+    expect_serialization_result({0x20, 0x10}, value);
+}
+
+void test_serialize_minus_123_to_buffer()
+{
+    const auto value = FixPoint(int16_t(-123));
+    expect_serialization_result({0x27, 0xb0}, value);
+}
+
+void test_serialize_intmin_to_buffer()
+{
+    const auto value = FixPoint(FixPoint::MIN_AS_INT16);
+    expect_serialization_result({0x3f, 0xf0}, value);
+}
+
+void test_serialize_500_125_to_buffer()
+{
+    const auto value = FixPoint(500.125);
+    expect_serialization_result({0x1f, 0x42}, value);
+}
+
+void test_serialize_dblmax_to_buffer()
+{
+    const auto value = FixPoint(FixPoint::MAX_AS_DOUBLE);
+    expect_serialization_result({0x1f, 0xff}, value);
+}
+
+void test_serialize_minus_88_875_to_buffer()
+{
+    const auto value = FixPoint(-88.875);
+    expect_serialization_result({0x25, 0x8e}, value);
+}
+
+void test_serialize_dblmin_to_buffer()
+{
+    const auto value = FixPoint(FixPoint::MIN_AS_DOUBLE);
+    expect_serialization_result({0x3f, 0xff}, value);
+}
+
+void test_serialize_nan_to_buffer()
+{
+    const auto value = FixPoint(std::numeric_limits<double>::quiet_NaN());
+    cut_assert_true(value.is_nan());
+    expect_serialization_result({0x20, 0x00}, value);
+}
+
+void test_deserialization_from_buffer_requires_minimum_buffer_size()
+{
+    const std::array<const uint8_t, 4> input{0x17, 0xfc, 0x00, 0x00};
+
+    auto value = FixPoint(input.data(), 0);
+    cut_assert_true(value.is_nan());
+
+    value = FixPoint(input.data(), 1);
+    cut_assert_true(value.is_nan());
+
+    value = FixPoint(input.data(), 2);
+    cut_assert_false(value.is_nan());
+    expect_equal_doubles(383.75, value.to_double());
+
+    value = FixPoint(input.data(), 3);
+    cut_assert_false(value.is_nan());
+    expect_equal_doubles(383.75, value.to_double());
+
+    value = FixPoint(input.data(), 4);
+    cut_assert_false(value.is_nan());
+    expect_equal_doubles(383.75, value.to_double());
+}
+
+static void expect_deserialization_result(double expected,
+                                          const std::array<const uint8_t, 2> &data)
+{
+    const auto value = FixPoint(data.data(), data.size());
+    expect_equal_doubles(expected, value.to_double());
+}
+
+void test_deserialize_zero_from_buffer()
+{
+    expect_deserialization_result(0.0, {0x00, 0x00});
+}
+
+void test_deserialize_0_5_from_buffer()
+{
+    expect_deserialization_result(0.5, {0x00, 0x08});
+}
+
+void test_deserialize_1_5_from_buffer()
+{
+    expect_deserialization_result(1.5, {0x00, 0x18});
+}
+
+void test_deserialize_491_8125_from_buffer()
+{
+    expect_deserialization_result(491.8125, {0x1e, 0xbd});
+}
+
+void test_deserialize_minus_0_5_from_buffer()
+{
+    expect_deserialization_result(-0.5, {0x20, 0x08});
+}
+
+void test_deserialize_minus_1_5_from_buffer()
+{
+    expect_deserialization_result(-1.5, {0x20, 0x18});
+}
+
+void test_deserialize_minus_367_3125_from_buffer()
+{
+    expect_deserialization_result(-367.3125, {0x36, 0xf5});
+}
+
+void test_deserialize_nan_from_buffer()
+{
+    expect_deserialization_result(std::numeric_limits<double>::quiet_NaN(), {0x20, 0x00});
+}
+
+void test_deserialize_dblmax_from_buffer()
+{
+    expect_deserialization_result(FixPoint::MAX_AS_DOUBLE, {0x1f, 0xff});
+}
+
+void test_deserialize_dblmin_from_buffer()
+{
+    expect_deserialization_result(FixPoint::MIN_AS_DOUBLE, {0x3f, 0xff});
+}
+
+void test_deserialization_considers_14_bits_only()
+{
+    expect_deserialization_result( 0.0,  {0x80, 0x00});
+    expect_deserialization_result( 0.0,  {0x40, 0x00});
+    expect_deserialization_result( 0.0,  {0xc0, 0x00});
+    expect_deserialization_result(-1.0,  {0xa0, 0x10});
+    expect_deserialization_result( 5.5,  {0x40, 0x58});
+    expect_deserialization_result(-8.25, {0xe0, 0x84});
+    expect_deserialization_result(-0.75, {0xe0, 0x0c});
+}
+
 void test_rounding_during_conversion_to_native_types()
 {
     static const std::array<const std::tuple<const double, const int, const double>, 24> expectations

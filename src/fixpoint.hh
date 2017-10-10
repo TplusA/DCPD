@@ -31,17 +31,19 @@
  * The format uses 10 bits for the pre-decimal point position, composed of an
  * explicit sign bit as most significant bit, and 9 bits for an unsigned value
  * representing the magnitude. Thus, value range is -511...511, and there are
- * two representations of 0 (+0 and -0). This property is required for
- * representing numbers such as -0.25.
+ * two representations of 0 for the pre-decimal position (+0 and -0). This
+ * property is required for representing numbers such as -0.25.
  *
  * There are 4 bits for the decimal place. These bits store an unsigned integer
  * which is to be interpreted as nominator x in the expression x/16. Thus, real
  * numbers can be represented with a precision of 0.0625.
  *
- * There is no representation for NaN nor infinity. The #FixPoint class is
- * aware of NaN and handles such values, but the 14-bit format does not provide
- * means to encode such values. NaNs are handled because there is a constructor
- * that accepts double values, so it should be capable of handling NaN.
+ * The representation for NaN is -0, i.e., pre-decimal and decimal magnitudes
+ * are 0, and the sign bit is set. Such a number makes no sense, so we are
+ * using it to represent NaN.
+ *
+ * There is no representation for infinity. The #FixPoint class is not aware of
+ * the infinities and does not handles such values.
  *
  * Conversion functions defined by this class take care of correct rounding and
  * avoiding oscillation when converting values back and forth between fix point
@@ -112,10 +114,25 @@ class FixPoint
             }
         }
 
-        is_nan_ = true;
-        pre_decimal_ = 0;
-        decimal_ = 0;
-        round_towards_zero_ = false;
+        mk_nan();
+    }
+
+    explicit FixPoint(const uint8_t *const data, size_t length) throw()
+    {
+        if(length >= 2)
+        {
+            pre_decimal_ = (uint16_t(data[0] & 0x3f) << 4) | ((data[1] >> 4) & 0x0f);
+            decimal_ = data[1] & 0x0f;
+
+            if(pre_decimal_ != SIGN_BIT_MASK || decimal_ > 0)
+            {
+                is_nan_ = false;
+                round_towards_zero_ = false;
+                return;
+            }
+        }
+
+        mk_nan();
     }
 
     bool is_nan() const throw() { return is_nan_; }
@@ -141,9 +158,36 @@ class FixPoint
             : INT16_MIN;
     }
 
+    bool to_buffer(uint8_t *buffer, size_t length) const throw()
+    {
+        if(length < 2)
+            return false;
+
+        if(!is_nan_)
+        {
+            buffer[0] = (pre_decimal_ >> 4) & 0x3f;
+            buffer[1] = (pre_decimal_ << 4) | decimal_;
+        }
+        else
+        {
+            buffer[0] = SIGN_BIT_MASK >> 4;
+            buffer[1] = 0;
+        }
+
+        return true;
+    }
+
     friend std::ostream &operator<<(std::ostream &os, const FixPoint &fp);
 
   private:
+    void mk_nan()
+    {
+        is_nan_ = true;
+        pre_decimal_ = 0;
+        decimal_ = 0;
+        round_towards_zero_ = false;
+    }
+
     static inline uint16_t encode_pre_decimal(const int16_t input,
                                               bool is_negative)
     {
