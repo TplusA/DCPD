@@ -72,6 +72,11 @@ class Maybe
     const T &get() const { return value_; }
     T &get_rw() { return value_; }
 
+    const T &get(const T &if_unknown) const
+    {
+        return is_value_known_ ? value_ : if_unknown;
+    }
+
     bool operator==(const T &other) const { return is_value_known_ ? value_ == other : false; }
     bool operator!=(const T &other) const { return is_value_known_ ? value_ != other : false; }
 
