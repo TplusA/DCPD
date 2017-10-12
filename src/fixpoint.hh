@@ -30,8 +30,8 @@
  *
  * The format uses 10 bits for the pre-decimal point position, composed of an
  * explicit sign bit as most significant bit, and 9 bits for an unsigned value
- * representing the magnitude. Thus, value range is -511...511, and there are
- * two representations of 0 for the pre-decimal position (+0 and -0). This
+ * representing the magnitude. Thus, the value range is -511...511, and there
+ * are two representations for 0 in the pre-decimal position (+0 and -0). This
  * property is required for representing numbers such as -0.25.
  *
  * There are 4 bits for the decimal place. These bits store an unsigned integer
@@ -43,7 +43,7 @@
  * using it to represent NaN.
  *
  * There is no representation for infinity. The #FixPoint class is not aware of
- * the infinities and does not handles such values.
+ * the infinities and does not handle such values.
  *
  * Conversion functions defined by this class take care of correct rounding and
  * avoiding oscillation when converting values back and forth between fix point
