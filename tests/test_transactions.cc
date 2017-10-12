@@ -1213,8 +1213,12 @@ void test_register_write_request_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54, 1 bytes");
 
+    cut_assert_false(transaction_is_input_required(t));
+
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_false(transaction_is_input_required(t));
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -1346,6 +1350,8 @@ void test_small_master_transaction()
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
+    cut_assert_true(transaction_is_input_required(t));
+
     /* check emitted DCP data */
     static const uint8_t expected_headers[] =
     {
@@ -1372,6 +1378,8 @@ void test_small_master_transaction()
                             sizeof(xml_data) - 1U);
 
     send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
+
+    cut_assert_false(transaction_is_input_required(t));
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -1407,6 +1415,8 @@ void test_master_transaction_retry_on_nack()
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
+    cut_assert_true(transaction_is_input_required(t));
+
     /* data for first try */
     static const uint8_t expected_headers_first[] =
     {
@@ -1439,6 +1449,8 @@ void test_master_transaction_retry_on_nack()
 
     send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, t);
 
+    cut_assert_false(transaction_is_input_required(t));
+
     /* second try */
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
@@ -1446,6 +1458,8 @@ void test_master_transaction_retry_on_nack()
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
 
     /* data for second try */
     static const uint8_t expected_headers_second[] =
@@ -1473,6 +1487,8 @@ void test_master_transaction_retry_on_nack()
                             sizeof(xml_data) - 1U);
 
     send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 1, t);
+
+    cut_assert_false(transaction_is_input_required(t));
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -1685,12 +1701,16 @@ void test_register_push_transaction()
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
 
+    cut_assert_false(transaction_is_input_required(t));
+
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
 
     static const uint8_t expected_answer[] =
     {
@@ -1707,6 +1727,8 @@ void test_register_push_transaction()
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
     send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
+
+    cut_assert_false(transaction_is_input_required(t));
 
     transaction_free(&t);
     cppcut_assert_null(t);
