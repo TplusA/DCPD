@@ -32,6 +32,12 @@
 #include "configproxy.h"
 #include "messages.h"
 
+/*!
+ * Predefined appliances.
+ *
+ * \attention
+ *     This enumeration must be kept in sync with #map_appliance_id().
+ */
 enum class Appliance
 {
     R1000E,
@@ -39,6 +45,7 @@ enum class Appliance
     MP2000R,
     MP2500R,
     MP3100HV,
+    MP8,
     CALA_CDR,
     CALA_SR,
     CALA_BERBEL,
@@ -93,6 +100,14 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
         set_device_id_by_mac(Connman::Technology::ETHERNET);
         break;
 
+      case Appliance::MP8:
+        dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+        network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
+                                                     "/sys/bus/usb/devices/1-1.4:1.0",
+                                                     is_reconfiguration);
+        set_device_id_by_mac(Connman::Technology::ETHERNET);
+        break;
+
       case Appliance::CALA_BERBEL:
         dcpregs_networkconfig_set_primary_technology(Connman::Technology::WLAN);
         network_prefs_update_primary_network_devices(nullptr,
@@ -110,6 +125,13 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
     }
 }
 
+/*!
+ * Map appliance string ID to appliance enumeration value.
+ *
+ * \attention
+ *     The array defined inside this function must be kept in sync with the
+ *     #Appliance enumeration.
+ */
 static Appliance map_appliance_id(const char *name)
 {
     static const std::array<std::pair<const std::string, const Appliance>,
@@ -120,6 +142,7 @@ static Appliance map_appliance_id(const char *name)
         std::move(std::make_pair("MP2000R",    Appliance::MP2000R)),
         std::move(std::make_pair("MP2500R",    Appliance::MP2500R)),
         std::move(std::make_pair("MP3100HV",   Appliance::MP3100HV)),
+        std::move(std::make_pair("MP8",        Appliance::MP8)),
         std::move(std::make_pair("CalaCDR",    Appliance::CALA_CDR)),
         std::move(std::make_pair("CalaSR",     Appliance::CALA_SR)),
         std::move(std::make_pair("CalaBerbel", Appliance::CALA_BERBEL)),
