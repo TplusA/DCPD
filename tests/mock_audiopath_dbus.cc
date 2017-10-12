@@ -323,7 +323,6 @@ void MockAudiopathDBus::aupath_manager_request_source_result(tdbusaupathManager 
 
     if(cancellable != nullptr)
         g_object_unref(G_OBJECT(cancellable));
-
 }
 
 gboolean tdbus_aupath_manager_call_request_source_finish(tdbusaupathManager *proxy,
