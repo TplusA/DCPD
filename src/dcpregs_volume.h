@@ -42,26 +42,24 @@ extern "C" {
  *
  * - Set volume level and mute state (0x00). This command expects 16 bits of
  *   data structured as follows:
- *
- *   Bits    Meaning
- *   15      Mute on or off (1 = mute).
- *   14      Reserved, must be zero.
- *   13...0  Fix point value for the volume level.
+ *       Bits    | Meaning
+ *       -------:|--------------------------------------
+ *       15      | Mute on or off (1 = mute).
+ *       14      | Reserved, must be zero.
+ *       13...0  | Fix point value for the volume level.
  *
  * - Configure volume control properties (0x01). This command expects the
  *   following parameters:
- *
- *   Offset  Type       Meaning
- *   0       byte       Scale (0 = steps, 1 = dB).
- *   1       fix point  Minimum value on scale.
- *   3       fix point  Maximum value on scale.
- *   5       fix point  Minimum step width on scale (for use by Roon client).
- *   7       fix point  Dynamic range minimum value, always in dB.
- *                      Pass NaN if not used or applicable.
- *   9       fix point  Dynamic range maximum value, always in dB.
- *                      Pass NaN if not used or applicable.
- *   11      fix point  Initial volume level.
- *   13      boolean    Initial mute state.
+ *       Offset  | Type       | Meaning
+ *       -------:|------------|-----------------------------------------
+ *       0       | byte       | Scale (0 = steps, 1 = dB).
+ *       1       | fix point  | Minimum value on scale.
+ *       3       | fix point  | Maximum value on scale.
+ *       5       | fix point  | Minimum step width on scale (for use by Roon client).
+ *       7       | fix point  | Dynamic range minimum value, always in dB. Pass NaN if not used or applicable.
+ *       9       | fix point  | Dynamic range maximum value, always in dB. Pass NaN if not used or applicable.
+ *       11      | fix point  | Initial volume level.
+ *       13      | boolean    | Initial mute state.
  *
  * - Clear volume control properties (0x02). This command does not expect any
  *   parameters.
