@@ -1,5 +1,11 @@
 2017-10-12  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
+	* Version 4.3 released.
+
+	* Appliances: Recognize appliance "MP8".
+
+2017-10-12  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
 	* Version 4.2 released.
 
 	* Roon: React on stream player signals emitted by TARoon. This makes
