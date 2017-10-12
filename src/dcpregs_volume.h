@@ -35,12 +35,13 @@ extern "C" {
 /*!
  * Configure volume control properties or set volume level.
  *
- * We use the 14-bit fix point representation defined in fixpoint.hh for data
- * exchange.
+ * This register expects a subcommand code (one byte) followed directly by
+ * parameters specific to the subcommand. Note that for exchange of real
+ * values, we use the 14-bit fix point representation defined in fixpoint.hh.
  *
  * Subcommands:
  *
- * - Set volume level and mute state (0x00). This command expects 16 bits of
+ * - Set volume level and mute state (0x00). This subcommand expects 16 bits of
  *   data structured as follows:
  *       Bits    | Meaning
  *       -------:|--------------------------------------
@@ -48,7 +49,7 @@ extern "C" {
  *       14      | Reserved, must be zero.
  *       13...0  | Fix point value for the volume level.
  *
- * - Configure volume control properties (0x01). This command expects the
+ * - Configure volume control properties (0x01). This subcommand expects the
  *   following parameters:
  *       Offset  | Type       | Meaning
  *       -------:|------------|-----------------------------------------
@@ -58,11 +59,11 @@ extern "C" {
  *       5       | fix point  | Minimum step width on scale (for use by Roon client).
  *       7       | fix point  | Dynamic range minimum value, always in dB. Pass NaN if not used or applicable.
  *       9       | fix point  | Dynamic range maximum value, always in dB. Pass NaN if not used or applicable.
- *       11      | fix point  | Initial volume level.
- *       13      | boolean    | Initial mute state.
+ *       11      | fix point  | Initial volume level. Pass NaN if unknown.
+ *       13      | byte       | Initial mute state (0 = not muted, 1 = muted, 2 = unknown).
  *
- * - Clear volume control properties (0x02). This command does not expect any
- *   parameters.
+ * - Clear volume control properties (0x02). This subcommand does not expect
+ *   any parameters.
  */
 int dcpregs_write_64_volume_control(const uint8_t *data, size_t length);
 
