@@ -456,7 +456,8 @@ static enum read_to_buffer_result read_to_buffer(uint8_t *dest, size_t count,
 
         if(len == 0)
         {
-            msg_info("End of data while reading DCP packet from fd %d", fd);
+            msg_info("End of data while reading DCP packet for %s from fd %d, "
+                     "missing %zu bytes", what, fd, count);
             break;
         }
 
