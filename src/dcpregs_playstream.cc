@@ -76,7 +76,7 @@ enum class SendStreamUpdate
 struct SimplifiedStreamInfo
 {
     char meta_data[256 + 1];
-    char url[512 + 1];
+    char url[2048 + 1];
 };
 
 enum class PendingAppRequest

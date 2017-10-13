@@ -405,7 +405,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* URL of currently playing stream, if any. */
         REGISTER(76, REGISTER_MK_VERSION(1, 0, 0)),
-        .max_data_size = 1024,
+        .max_data_size = 2048,
         .read_handler = dcpregs_read_76_current_stream_url,
     },
     {
@@ -417,7 +417,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* Play stream found under this URL */
         REGISTER(79, REGISTER_MK_VERSION(1, 0, 0)),
-        .max_data_size = 1024,
+        .max_data_size = 2048,
         .read_handler = dcpregs_read_79_start_play_stream_url,
         .write_handler = dcpregs_write_79_start_play_stream_url,
     },
@@ -547,7 +547,7 @@ static const struct dcp_register_t register_map[] =
     {
         /* Continue playing, next stream found under this URL */
         REGISTER(239, REGISTER_MK_VERSION(1, 0, 0)),
-        .max_data_size = 1024,
+        .max_data_size = 2048,
         .read_handler = dcpregs_read_239_next_stream_url,
         .write_handler = dcpregs_write_239_next_stream_url,
     },
