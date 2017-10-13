@@ -1549,6 +1549,15 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
             static_cast<uint8_t>(expected_data_size >> 8)
         };
 
+        if(*head == NULL && (xml_size % DCP_PACKET_MAX_PAYLOAD_SIZE) == 0)
+        {
+            /* this particular last packet must be empty */
+            cppcut_assert_equal(size_t(DCPSYNC_HEADER_SIZE + DCP_HEADER_SIZE),
+                                answer_written_to_fifo->size());
+            cppcut_assert_equal(size_t(0), bytes_left);
+            cppcut_assert_equal(size_t(0), expected_data_size);
+        }
+
         cppcut_assert_equal(sizeof(expected_headers) + expected_data_size,
                             answer_written_to_fifo->size());
 
@@ -1601,6 +1610,40 @@ void test_big_master_transaction()
     static const size_t xfer_size = sizeof(xml_data) - 1;
 
     cppcut_assert_not_equal(size_t(0), xfer_size % DCP_PACKET_MAX_PAYLOAD_SIZE);
+
+    struct transaction *head =
+        transaction_fragments_from_data(xml_data, xfer_size, 71,
+                                        TRANSACTION_CHANNEL_SPI);
+    do_big_master_transaction(xml_data, xfer_size, &head, 3);
+
+    cppcut_assert_null(head);
+}
+
+/*!\test
+ * Big chunk sent in fragments with a last fragment of size 256 is followed by
+ * a terminating empty fragment of size 0.
+ */
+void test_big_master_transaction_with_size_of_multiple_of_256()
+{
+    static const uint8_t xml_data[] =
+        "<view name=\"play\">\n"
+        "    <text id=\"scrid\">109</text>\n"
+        "    <text id=\"artist\">U2</text>\n"
+        "    <text id=\"track\">One</text>\n"
+        "    <text id=\"album\">Achtung baby</text>\n"
+        "    <text id=\"mimtype\">FLAC</text>\n"
+        "    <text id=\"drm\">no</text>\n"
+        "    <text id=\"bitrate\">1056</text>\n"
+        "    <icon id=\"wicon\">infra</icon>\n"
+        "    <value id=\"timep\" min=\"0\" max=\"65535\">43</value>\n"
+        "    <value id=\"timet\" min=\"0\" max=\"65535\">327</value>\n"
+        "    <value id=\"timec\" min=\"0\" max=\"99999\">65400</value>\n"
+        "    <value id=\"buflvl\" min=\"0\" max=\"100\">70</value>\n"
+        "</view>\n";
+
+    static const size_t xfer_size = sizeof(xml_data) - 1;
+
+    cppcut_assert_equal(size_t(0), xfer_size % DCP_PACKET_MAX_PAYLOAD_SIZE);
 
     struct transaction *head =
         transaction_fragments_from_data(xml_data, xfer_size, 71,

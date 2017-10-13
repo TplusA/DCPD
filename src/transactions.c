@@ -1466,6 +1466,8 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
 
     if(i < length && head != NULL)
         transaction_free(&head);
+    else if((length % DCP_PACKET_MAX_PAYLOAD_SIZE) == 0)
+        mk_push_transaction(&head, reg, false, channel);
 
     return head;
 }
