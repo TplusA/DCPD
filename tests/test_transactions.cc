@@ -1500,50 +1500,26 @@ void test_master_transaction_retry_on_nack()
     cppcut_assert_null(t);
 }
 
-/*!\test
- * A big, fragmented write transaction initiated by the master device.
- */
-void test_big_master_transaction()
+static void do_big_master_transaction(const uint8_t *const xml_data,
+                                      const size_t xml_size,
+                                      struct transaction **head,
+                                      const unsigned int expected_number_of_transactions)
 {
-    static const uint8_t xml_data[] =
-        "<view name=\"play\">\n"
-        "    <text id=\"albart\">yes</text>\n"
-        "    <text id=\"scrid\">109</text>\n"
-        "    <text id=\"artist\">U2</text>\n"
-        "    <text id=\"track\">One</text>\n"
-        "    <text id=\"album\">Achtung baby</text>\n"
-        "    <text id=\"mimtype\">Wma</text>\n"
-        "    <text id=\"drm\">no</text>\n"
-        "    <text id=\"livstrm\">no</text>\n"
-        "    <text id=\"bitrate\">64</text>\n"
-        "    <icon id=\"wicon\">infra</icon>\n"
-        "    <value id=\"timep\" min=\"0\" max=\"65535\">43</value>\n"
-        "    <value id=\"timet\" min=\"0\" max=\"65535\">327</value>\n"
-        "    <value id=\"timec\" min=\"0\" max=\"99999\">65400</value>\n"
-        "    <value id=\"date\" min=\"0\" max=\"99999999\">20040907</value>\n"
-        "    <value id=\"buflvl\" min=\"0\" max=\"100\">70</value>\n"
-        "    <value id=\"wilvl\" min=\"0\" max=\"100\">100</value>\n"
-        "</view>\n";
-
-    struct transaction *head =
-        transaction_fragments_from_data(xml_data, sizeof(xml_data) - 1U, 71,
-                                        TRANSACTION_CHANNEL_SPI);
     cppcut_assert_not_null(head);
+    cppcut_assert_not_null(*head);
 
-    const size_t max_data_size = transaction_get_max_data_size(head);
-    const unsigned int expected_number_of_transactions =
-        (sizeof(xml_data) - 1U) / max_data_size + 1U;
+    const size_t max_data_size = transaction_get_max_data_size(*head);
     cppcut_assert_operator(1U, <, expected_number_of_transactions);
 
     const uint8_t *xml_data_ptr = xml_data;
-    size_t bytes_left = sizeof(xml_data) - 1U;
+    size_t bytes_left = xml_size;
     unsigned int number_of_transactions = 0;
     uint16_t expected_serial = DCPSYNC_MASTER_SERIAL_MIN;
 
     do
     {
         /* take next transaction of fragmented DRCP packet */
-        struct transaction *t = transaction_queue_remove(&head);
+        struct transaction *t = transaction_queue_remove(head);
         cppcut_assert_not_null(t);
 
         mock_os->expect_os_write_from_buffer_callback(read_answer);
@@ -1592,10 +1568,46 @@ void test_big_master_transaction()
         ++number_of_transactions;
         ++expected_serial;
     }
-    while(head != NULL && number_of_transactions < expected_number_of_transactions);
+    while(*head != NULL && number_of_transactions < expected_number_of_transactions);
+
+    cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
+}
+
+/*!\test
+ * A big, fragmented write transaction initiated by the master device.
+ */
+void test_big_master_transaction()
+{
+    static const uint8_t xml_data[] =
+        "<view name=\"play\">\n"
+        "    <text id=\"albart\">yes</text>\n"
+        "    <text id=\"scrid\">109</text>\n"
+        "    <text id=\"artist\">U2</text>\n"
+        "    <text id=\"track\">One</text>\n"
+        "    <text id=\"album\">Achtung baby</text>\n"
+        "    <text id=\"mimtype\">Wma</text>\n"
+        "    <text id=\"drm\">no</text>\n"
+        "    <text id=\"livstrm\">no</text>\n"
+        "    <text id=\"bitrate\">64</text>\n"
+        "    <icon id=\"wicon\">infra</icon>\n"
+        "    <value id=\"timep\" min=\"0\" max=\"65535\">43</value>\n"
+        "    <value id=\"timet\" min=\"0\" max=\"65535\">327</value>\n"
+        "    <value id=\"timec\" min=\"0\" max=\"99999\">65400</value>\n"
+        "    <value id=\"date\" min=\"0\" max=\"99999999\">20040907</value>\n"
+        "    <value id=\"buflvl\" min=\"0\" max=\"100\">70</value>\n"
+        "    <value id=\"wilvl\" min=\"0\" max=\"100\">100</value>\n"
+        "</view>\n";
+
+    static const size_t xfer_size = sizeof(xml_data) - 1;
+
+    cppcut_assert_not_equal(size_t(0), xfer_size % DCP_PACKET_MAX_PAYLOAD_SIZE);
+
+    struct transaction *head =
+        transaction_fragments_from_data(xml_data, xfer_size, 71,
+                                        TRANSACTION_CHANNEL_SPI);
+    do_big_master_transaction(xml_data, xfer_size, &head, 3);
 
     cppcut_assert_null(head);
-    cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
 }
 
 static size_t big_write_calls_count;
