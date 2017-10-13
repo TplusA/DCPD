@@ -83,6 +83,12 @@ class read_data_t
         set(data, N, 0, N);
     }
 
+    template <size_t N>
+    void set(const std::array<uint8_t, N> &data)
+    {
+        set(data.data(), N, 0, N);
+    }
+
     void set(const uint8_t *data, size_t data_size, int err = 0)
     {
         set(data, data_size, err, data_size);
@@ -1590,6 +1596,289 @@ void test_big_master_transaction()
 
     cppcut_assert_null(head);
     cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
+}
+
+static size_t big_write_calls_count;
+static size_t big_write_calls_expected;
+static std::vector<uint8_t> big_write_data;
+
+/*
+ * Dummy implementation.
+ */
+static int big_write_handler(const uint8_t *data, size_t length)
+{
+    ++big_write_calls_count;
+    cppcut_assert_operator(big_write_calls_expected, >=, big_write_calls_count);
+    std::copy(data, data + length, std::back_inserter(big_write_data));
+    return 0;
+}
+
+/*!\test
+ * A big, fragmented write transaction initiated by the slave.
+ *
+ * The fragments are collected and reassembled into a big chunk before
+ * forwarding the packet to whom it concerns.
+ */
+void test_big_slave_transaction()
+{
+    static const struct dcp_register_t big_write =
+    {
+        .address = 0,
+        .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
+        .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
+        .flags = 0,
+        .max_data_size = 1024,
+        .read_handler = nullptr,
+        .read_handler_dynamic = nullptr,
+        .write_handler = big_write_handler,
+    };
+
+    big_write_calls_expected = 0;
+    big_write_calls_count = 0;
+    register_zero_for_unit_tests = &big_write;
+
+    std::vector<uint8_t> expected_data;
+
+    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
+                                              TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(t);
+
+    std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_header { 'c', UINT8_MAX, 0x31, 0xc5, };
+    std::array<uint8_t, DCP_HEADER_SIZE + DCP_PACKET_MAX_PAYLOAD_SIZE> reg_0_fragment;
+    std::fill(reg_0_fragment.begin(), reg_0_fragment.end(), 0x55);
+
+    /* first fragment */
+    dcpsync_header[4] = 0x01;
+    dcpsync_header[5] = DCP_HEADER_SIZE;
+    reg_0_fragment[0] = DCP_COMMAND_MULTI_WRITE_REGISTER;
+    reg_0_fragment[1] = 0;
+    reg_0_fragment[2] = 0x00;
+    reg_0_fragment[3] = 0x01;
+    reg_0_fragment[4] = 0xc1;
+    reg_0_fragment.back() = 0xc2;
+
+    read_data->set(dcpsync_header);
+    read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
+    read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE,
+                   reg_0_fragment.size() - DCP_HEADER_SIZE);
+    std::copy(reg_0_fragment.data() + DCP_HEADER_SIZE,
+              reg_0_fragment.data() + reg_0_fragment.size(),
+              std::back_inserter(expected_data));
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "RegIO W: 0, 256 bytes (incomplete)");
+
+    struct transaction_exception e;
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
+    mock_messages->check();
+
+    /* second fragment */
+    reg_0_fragment[4] = 0xd1;
+    reg_0_fragment.back() = 0xd2;
+    ++dcpsync_header[3];
+
+    read_data->set(dcpsync_header);
+    read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
+
+    read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE,
+                   reg_0_fragment.size() - DCP_HEADER_SIZE);
+    std::copy(reg_0_fragment.data() + DCP_HEADER_SIZE,
+              reg_0_fragment.data() + reg_0_fragment.size(),
+              std::back_inserter(expected_data));
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "RegIO W: 0, 512 bytes (continued)");
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
+    mock_messages->check();
+
+    /* third and last fragment, much smaller */
+    reg_0_fragment[2] = 0x06;
+    reg_0_fragment[3] = 0x00;
+    reg_0_fragment[4] = 0xe1;
+    reg_0_fragment[9] = 0xe2;
+    ++dcpsync_header[3];
+    dcpsync_header[4] = 0x00;
+    dcpsync_header[5] = DCP_HEADER_SIZE + reg_0_fragment[2];;
+
+    read_data->set(dcpsync_header);
+    read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
+
+    read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE, reg_0_fragment[2]);
+    std::copy(reg_0_fragment.data() + DCP_HEADER_SIZE,
+              reg_0_fragment.data() + DCP_HEADER_SIZE + reg_0_fragment[2],
+              std::back_inserter(expected_data));
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_false(transaction_is_input_required(t));
+    mock_messages->check();
+
+    /* and we are done */
+    big_write_calls_expected = 1;
+    big_write_calls_count = 0;
+    big_write_data.clear();
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "RegIO W: 0, 518 bytes (complete)");
+
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_false(transaction_is_input_required(t));
+    cppcut_assert_equal(big_write_calls_expected, big_write_calls_count);
+    cut_assert_equal_memory(expected_data.data(), expected_data.size(),
+                            big_write_data.data(), big_write_data.size());
+
+    big_write_data.clear();
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
+}
+
+/*!\test
+ * Big chunk received in fragments with a last fragment of size 256 is followed
+ * by a terminating empty fragment of size 0.
+ */
+void test_big_slave_transaction_with_size_of_multiple_of_256()
+{
+    static const struct dcp_register_t big_write =
+    {
+        .address = 0,
+        .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
+        .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
+        .flags = 0,
+        .max_data_size = 1024,
+        .read_handler = nullptr,
+        .read_handler_dynamic = nullptr,
+        .write_handler = big_write_handler,
+    };
+
+    big_write_calls_expected = 0;
+    big_write_calls_count = 0;
+    register_zero_for_unit_tests = &big_write;
+
+    std::vector<uint8_t> expected_data;
+
+    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
+                                              TRANSACTION_CHANNEL_SPI, false);
+    cppcut_assert_not_null(t);
+
+    std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_header { 'c', UINT8_MAX, 0x31, 0xc5, };
+    std::array<uint8_t, DCP_HEADER_SIZE + DCP_PACKET_MAX_PAYLOAD_SIZE> reg_0_fragment;
+    std::fill(reg_0_fragment.begin(), reg_0_fragment.end(), 0x55);
+
+    /* first fragment */
+    dcpsync_header[4] = 0x01;
+    dcpsync_header[5] = DCP_HEADER_SIZE;
+    reg_0_fragment[0] = DCP_COMMAND_MULTI_WRITE_REGISTER;
+    reg_0_fragment[1] = 0;
+    reg_0_fragment[2] = 0x00;
+    reg_0_fragment[3] = 0x01;
+    reg_0_fragment[4] = 0xc1;
+    reg_0_fragment.back() = 0xc2;
+
+    read_data->set(dcpsync_header);
+    read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
+    read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE,
+                   reg_0_fragment.size() - DCP_HEADER_SIZE);
+    std::copy(reg_0_fragment.data() + DCP_HEADER_SIZE,
+              reg_0_fragment.data() + reg_0_fragment.size(),
+              std::back_inserter(expected_data));
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "RegIO W: 0, 256 bytes (incomplete)");
+
+    struct transaction_exception e;
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
+    mock_messages->check();
+
+    /* second fragment */
+    reg_0_fragment[4] = 0xd1;
+    reg_0_fragment.back() = 0xd2;
+    ++dcpsync_header[3];
+
+    read_data->set(dcpsync_header);
+    read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
+
+    read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE,
+                   reg_0_fragment.size() - DCP_HEADER_SIZE);
+    std::copy(reg_0_fragment.data() + DCP_HEADER_SIZE,
+              reg_0_fragment.data() + reg_0_fragment.size(),
+              std::back_inserter(expected_data));
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "RegIO W: 0, 512 bytes (continued)");
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_true(transaction_is_input_required(t));
+    mock_messages->check();
+
+    /* third and last fragment, empty */
+    reg_0_fragment[2] = 0x00;
+    reg_0_fragment[3] = 0x00;
+    reg_0_fragment[4] = 0xe1;
+    reg_0_fragment[9] = 0xe2;
+    ++dcpsync_header[3];
+    dcpsync_header[4] = 0x00;
+    dcpsync_header[5] = DCP_HEADER_SIZE + reg_0_fragment[2];;
+
+    read_data->set(dcpsync_header);
+    read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
+
+    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_false(transaction_is_input_required(t));
+    mock_messages->check();
+
+    /* and we are done */
+    big_write_calls_expected = 1;
+    big_write_calls_count = 0;
+    big_write_data.clear();
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                              "RegIO W: 0, 512 bytes (complete)");
+
+    cppcut_assert_equal(TRANSACTION_FINISHED,
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+
+    cut_assert_false(transaction_is_input_required(t));
+    cppcut_assert_equal(big_write_calls_expected, big_write_calls_count);
+    cut_assert_equal_memory(expected_data.data(), expected_data.size(),
+                            big_write_data.data(), big_write_data.size());
+
+    big_write_data.clear();
+
+    transaction_free(&t);
+    cppcut_assert_null(t);
 }
 
 /*!\test

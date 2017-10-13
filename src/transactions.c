@@ -42,6 +42,9 @@ enum transaction_state
     TRANSACTION_STATE_PUSH_TO_SLAVE__INIT,  /*!< Prepare answer buffer */
     TRANSACTION_STATE_MASTER_PREPARE__INIT, /*!< Filling command buffer */
     TRANSACTION_STATE_SLAVE_READ_DATA,      /*!< Read data from slave */
+    TRANSACTION_STATE_SLAVE_PREPARE_APPEND, /*!< Read next fragment */
+    TRANSACTION_STATE_SLAVE_READ_APPEND,    /*!< Read more data from slave (big
+                                             *   chunk in multiple packets) */
     TRANSACTION_STATE_SLAVE_PREPARE_ANSWER, /*!< Fill answer buffer */
     TRANSACTION_STATE_SLAVE_PROCESS_WRITE,  /*!< Process data written by slave */
     TRANSACTION_STATE_SEND_TO_SLAVE,        /*!< Send (any) data to slave */
@@ -64,6 +67,14 @@ enum read_to_buffer_result
     READ_OK,
     READ_INCOMPLETE,
     READ_IO_ERROR,
+};
+
+enum LogWrite
+{
+    LOG_WRITE_SINGLE,
+    LOG_WRITE_INCOMPLETE,
+    LOG_WRITE_CONTINUED,
+    LOG_WRITE_COMPLETED,
 };
 
 struct dcpsync_header
@@ -107,6 +118,38 @@ global_data;
 
 #define MAX_NUMBER_OF_TRANSACTIONS \
     (sizeof(global_data.tpool) / sizeof(global_data.tpool[0]))
+
+static inline void log_register_write(const struct transaction *t,
+                                      enum LogWrite what)
+{
+    if(t->reg->address == 121 && !msg_is_verbose(MESSAGE_LEVEL_DEBUG))
+        return;
+
+    const char *suffix = "";
+
+    switch(what)
+    {
+      case LOG_WRITE_SINGLE:
+        break;
+
+      case LOG_WRITE_INCOMPLETE:
+        suffix = " (incomplete)";
+        break;
+
+      case LOG_WRITE_CONTINUED:
+        suffix = " (continued)";
+        break;
+
+      case LOG_WRITE_COMPLETED:
+        suffix = " (complete)";
+        break;
+    }
+
+    msg_vinfo(MESSAGE_LEVEL_DIAG, "RegIO W: %d, %zu bytes%s",
+              t->reg->address,
+              t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos,
+              suffix);
+}
 
 static uint16_t mk_serial(void)
 {
@@ -645,13 +688,13 @@ error_invalid_header:
     return false;
 }
 
-static bool fill_payload_buffer(struct transaction *t, const int fd)
+static bool fill_payload_buffer(struct transaction *t, const int fd,
+                                bool append)
 {
-    uint16_t size =
+    const uint16_t size =
         dcp_read_header_data(t->request_header + DCP_HEADER_DATA_OFFSET);
 
     log_assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
-    log_assert(dynamic_buffer_is_empty(&t->payload));
 
     if(size == 0)
         return true;
@@ -671,22 +714,29 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
         }
     }
 
-    if(!dynamic_buffer_is_allocated(&t->payload) &&
-       !dynamic_buffer_resize(&t->payload, size))
+    const size_t offset = append ? t->payload.pos : 0;
+
+    if(append)
     {
-        goto error_exit;
+        log_assert(!dynamic_buffer_is_empty(&t->payload));
+
+        if(!dynamic_buffer_ensure_space(&t->payload, offset + size))
+           goto error_exit;
+    }
+    else
+    {
+        log_assert(dynamic_buffer_is_empty(&t->payload));
+
+        if(!dynamic_buffer_is_allocated(&t->payload) &&
+           !dynamic_buffer_resize(&t->payload, size))
+        {
+            goto error_exit;
+        }
     }
 
-    if(t->payload.size < size)
-    {
-        msg_error(EINVAL, LOG_ERR,
-                  "DCP payload too large for register %u, "
-                  "expecting no more than %zu bytes of data",
-                  t->reg->address, t->payload.size);
-        goto error_exit;
-    }
+    log_assert(t->payload.size >= offset + size);
 
-    switch(read_to_buffer(t->payload.data, size, fd, "payload"))
+    switch(read_to_buffer(t->payload.data + offset, size, fd, "payload"))
     {
       case READ_OK:
         break;
@@ -696,7 +746,7 @@ static bool fill_payload_buffer(struct transaction *t, const int fd)
         return false;
     }
 
-    t->payload.pos = size;
+    t->payload.pos += size;
 
     if(t->dcpsync.is_enabled)
     {
@@ -876,6 +926,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         break;
 
       case TRANSACTION_STATE_SLAVE_PREPARE__INIT:
+      case TRANSACTION_STATE_SLAVE_PREPARE_APPEND:
         {
             bool failed = false;
 
@@ -920,6 +971,18 @@ enum transaction_process_status transaction_process(struct transaction *t,
                 return TRANSACTION_EXCEPTION;
             }
 
+            if(!failed && t->state == TRANSACTION_STATE_SLAVE_PREPARE_APPEND)
+            {
+                t->state =
+                    (t->command == DCP_COMMAND_MULTI_WRITE_REGISTER &&
+                     t->request_header[DCP_HEADER_DATA_OFFSET + 0] == 0 &&
+                     t->request_header[DCP_HEADER_DATA_OFFSET + 1] == 0)
+                    ? TRANSACTION_STATE_SLAVE_PROCESS_WRITE
+                    : TRANSACTION_STATE_SLAVE_READ_APPEND;
+
+                return TRANSACTION_IN_PROGRESS;
+            }
+
             if(failed)
                 break;
             else
@@ -937,10 +1000,15 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
         if(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER)
         {
-            if(!fill_payload_buffer(t, from_slave_fd))
+            if(!fill_payload_buffer(t, from_slave_fd, false))
                 break;
 
-            t->state = TRANSACTION_STATE_SLAVE_PROCESS_WRITE;
+            t->state = t->payload.pos < DCP_PACKET_MAX_PAYLOAD_SIZE
+                ? TRANSACTION_STATE_SLAVE_PROCESS_WRITE
+                : TRANSACTION_STATE_SLAVE_PREPARE_APPEND;
+
+            if(t->state == TRANSACTION_STATE_SLAVE_PREPARE_APPEND)
+                log_register_write(t, LOG_WRITE_INCOMPLETE);
 
             return TRANSACTION_IN_PROGRESS;
         }
@@ -951,6 +1019,25 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
             return TRANSACTION_PUSH_BACK;
         }
+
+      case TRANSACTION_STATE_SLAVE_READ_APPEND:
+        log_assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
+        log_assert(t->payload.pos > 0);
+
+        const size_t previous_pos = t->payload.pos;
+
+        if(!fill_payload_buffer(t, from_slave_fd, true))
+            break;
+
+        t->state =
+            (t->payload.pos - previous_pos) < DCP_PACKET_MAX_PAYLOAD_SIZE
+            ? TRANSACTION_STATE_SLAVE_PROCESS_WRITE
+            : TRANSACTION_STATE_SLAVE_PREPARE_APPEND;
+
+        if(t->state == TRANSACTION_STATE_SLAVE_PREPARE_APPEND)
+            log_register_write(t, LOG_WRITE_CONTINUED);
+
+        return TRANSACTION_IN_PROGRESS;
 
       case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
         if(!allocate_payload_buffer(t))
@@ -996,10 +1083,9 @@ enum transaction_process_status transaction_process(struct transaction *t,
             break;
         }
 
-        if(t->reg->address != 121 || msg_is_verbose(MESSAGE_LEVEL_DEBUG))
-            msg_vinfo(MESSAGE_LEVEL_DIAG, "RegIO W: %d, %zu bytes",
-                      t->reg->address,
-                      t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos);
+        log_register_write(t, (t->payload.pos < DCP_PACKET_MAX_PAYLOAD_SIZE
+                               ? LOG_WRITE_SINGLE
+                               : LOG_WRITE_COMPLETED));
 
         return TRANSACTION_FINISHED;
 
@@ -1173,6 +1259,8 @@ transaction_process_out_of_order_ack(struct transaction *t,
       case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
       case TRANSACTION_STATE_MASTER_PREPARE__INIT:
       case TRANSACTION_STATE_SLAVE_READ_DATA:
+      case TRANSACTION_STATE_SLAVE_PREPARE_APPEND:
+      case TRANSACTION_STATE_SLAVE_READ_APPEND:
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
       case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
       case TRANSACTION_STATE_SEND_TO_SLAVE:
@@ -1218,6 +1306,8 @@ transaction_process_out_of_order_nack(struct transaction *t,
       case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
       case TRANSACTION_STATE_MASTER_PREPARE__INIT:
       case TRANSACTION_STATE_SLAVE_READ_DATA:
+      case TRANSACTION_STATE_SLAVE_PREPARE_APPEND:
+      case TRANSACTION_STATE_SLAVE_READ_APPEND:
       case TRANSACTION_STATE_SLAVE_PREPARE_ANSWER:
       case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
       case TRANSACTION_STATE_SEND_TO_SLAVE:
@@ -1248,6 +1338,8 @@ bool transaction_is_input_required(const struct transaction *t)
     {
       case TRANSACTION_STATE_SLAVE_PREPARE__INIT:
       case TRANSACTION_STATE_SLAVE_READ_DATA:
+      case TRANSACTION_STATE_SLAVE_PREPARE_APPEND:
+      case TRANSACTION_STATE_SLAVE_READ_APPEND:
       case TRANSACTION_STATE_DCPSYNC_WAIT_FOR_ACK:
         return true;
 
