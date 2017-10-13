@@ -1,3 +1,25 @@
+2017-10-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.4 released.
+
+	* DCP protocol: The SPI slave can send long messages using multiple
+	  DCP packets now. Long messages are reassembled while DCP packets are
+	  received, and forwarded to their destination after the last packet
+	  has been received. The last packet in a row is identified by its
+	  payload size being smaller than 256 bytes.
+
+	* DCP protocol: Long messages are sent to the SPI slave in fragments
+	  just the way they have in previous versions, but an empty packet is
+	  sent following the last packet in case the last packet size is 256.
+
+	* DCP protocol: Sizes of register 75, 79, and 239 are 2048 characters
+	  instead of 1024.
+
+	* Audio sources: Sending an empty string ID to register 81 explicitly
+	  enters the inactive state. This means that any stream is stopped and
+	  the audio path is shut down. UI-wise, there will be no more screen
+	  updates in inactive state.
+
 2017-10-12  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.3 released.
