@@ -1308,7 +1308,20 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
         return -1;
 
     if(i == 0)
-        return -1;
+    {
+        /*
+         * There is no explicit audio source that represents
+         * inactive/idle/silent state. Instead, the current audio path is
+         * deactivated and the player is forced down so that the inactive state
+         * corresponds to the state the system is in after a fresh boot, i.e.,
+         * without any active audio path. This way, no special case is
+         * introduced for inactive state.
+         */
+        msg_info("Inactive state requested");
+        tdbus_aupath_manager_call_release_path(dbus_audiopath_get_manager_iface(),
+                                               TRUE, nullptr, nullptr, nullptr);
+        return 0;
+    }
 
     const AudioSourceEnableRequest enable_request(i + 1 == length
                                                   ? AudioSourceEnableRequest::KEEP_AS_IS
