@@ -32,6 +32,7 @@
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.h"
 #include "dcpregs_appliance.h"
+#include "dcpregs_internationalization.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_wlansurvey.h"
 #include "dcpregs_upnpname.h"
@@ -297,6 +298,13 @@ static const struct dcp_register_t register_map[] =
         REGISTER(45, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 1,
         .write_handler = dcpregs_write_45_xmodem_command,
+    },
+    {
+        /* Language and country settings. */
+        REGISTER(47, REGISTER_MK_VERSION(1, 0, 4)),
+        .max_data_size = 12,
+        .read_handler = dcpregs_read_47_language_settings,
+        .write_handler = dcpregs_write_47_language_settings,
     },
     {
         /* Network status */
