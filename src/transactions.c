@@ -733,6 +733,17 @@ static bool fill_payload_buffer(struct transaction *t, const int fd,
         {
             goto error_exit;
         }
+
+        if(t->payload.size < offset + size)
+        {
+            msg_error(0, LOG_ERR,
+                      "Expecting at most %zu bytes payload for register %u, "
+                      "received %zu bytes",
+                      t->payload.size, t->reg->address, offset + size);
+
+            if(!dynamic_buffer_resize(&t->payload, offset + size))
+                goto error_exit;
+        }
     }
 
     log_assert(t->payload.size >= offset + size);
