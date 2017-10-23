@@ -65,7 +65,7 @@ struct RegistersPrivateData
 
 static struct RegistersPrivateData registers_private_data;
 
-static const char max_bitrate_key[] = "@drcpd::maximum_stream_bit_rate";
+static const char max_bitrate_key[] = "@drcpd::drcpd:maximum_stream_bit_rate";
 
 static bool update_status_register(uint8_t status, uint8_t code)
 {

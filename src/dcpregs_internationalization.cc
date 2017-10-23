@@ -26,10 +26,10 @@
 #include "configproxy.h"
 #include "messages.h"
 
-static const char system_language_code_key[]     = "@drcpd::language_code";
-static const char system_language_variant_key[]  = "@drcpd::country_code";
-static const char airable_language_code_key[]    = "@airable::language_code";
-static const char airable_language_variant_key[] = "@airable::country_code";
+static const char system_language_code_key[]     = "@drcpd::i18n:language_code";
+static const char system_language_variant_key[]  = "@drcpd::i18n:country_code";
+static const char airable_language_code_key[]    = "@airable::i18n:language_code";
+static const char airable_language_variant_key[] = "@airable::i18n:country_code";
 
 ssize_t dcpregs_read_47_language_settings(uint8_t *response, size_t length)
 {
