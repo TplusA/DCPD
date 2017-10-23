@@ -122,4 +122,5 @@ void dcpregs_filetransfer_prepare_for_shutdown(void);
 #endif
 
 /*!@}*/
+
 #endif /* !DCPREGS_FILETRANSFER_H */
