@@ -163,7 +163,7 @@ int dcpregs_write_47_language_settings(const uint8_t *data, size_t length)
     try
     {
         const std::string system_language_code(parse_alpha2_code(tokens[0], true, false));
-        const std::string system_language_variation(parse_alpha2_code(tokens[1], false, true));
+        const std::string system_language_variation(parse_alpha2_code(tokens[1], true, true));
         std::string airable_language_code(parse_alpha2_code(tokens[2], false, false));
         const std::string airable_country_code(parse_alpha2_code(tokens[3], true, true));
 

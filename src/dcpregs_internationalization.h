@@ -42,15 +42,14 @@ ssize_t dcpregs_read_47_language_settings(uint8_t *response, size_t length);
  * mandatory. Capitalization is fixed up internally the way is required for the
  * various internationalization sites.
  *
- * The first string is an non-empty alpha-2 language code as specified by ISO
+ * The first string is a non-empty alpha-2 language code as specified by ISO
  * 639-1 for the spoken language to be used by the system. The language code
  * must not be empty and must consist of exactly two letters, but other than
  * that the code is more or less used as is.
  *
- * The second string is an alpha-2 country code as specified by ISO 3166-1.
- * This country code specifies a region-specific variation of the spoken
- * language. The code is more or less used as is. If left empty, then some
- * variation (if any) is automatically chosen by the system.
+ * The second string is a non-empty alpha-2 country code as specified by ISO
+ * 3166-1 for the territory. This country code specifies a region-specific
+ * variation of the spoken language. The code is more or less used as is.
  *
  * The third string is a language code for Airable. At the time of this
  * writing, the following language codes are supported by Airable: "de", "en",
