@@ -222,7 +222,7 @@ static void notify_config_changed(const char *origin,
     if(!vec.empty())
     {
         vec.push_back(nullptr);
-        configproxy_notify_configuration_changed(origin, vec.data());
+        configproxy_notify_configuration_changed(origin, vec.data(), nullptr);
     }
 }
 

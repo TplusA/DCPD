@@ -43,7 +43,8 @@ bool configproxy_register_configuration_owner(const char *id,
 bool configproxy_register_local_configuration_owner(const char *id, char **keys);
 
 void configproxy_notify_configuration_changed(const char *origin,
-                                              const char **changed_keys);
+                                              const char *const *const changed_keys,
+                                              struct ConfigProxyVariant *const *const changed_values);
 
 typedef bool (*PatchUint32Fn)(uint32_t *value);
 

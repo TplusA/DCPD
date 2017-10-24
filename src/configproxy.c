@@ -249,16 +249,27 @@ static bool set(const char *origin, const struct ConfigurationOwner *owner,
     if(!owner->is_remote)
         return configuration_set_key(origin, key, value);
 
+    g_variant_ref(value);
+
     GError *error = NULL;
     tdbus_configuration_write_call_set_value_sync(owner->write_iface,
                                                   origin, key, value,
                                                   NULL, &error);
 
     if(dbus_common_handle_dbus_error(&error, "Set configuration value") != 0)
+    {
+        g_variant_unref(value);
         return false;
+    }
 
     const char *changed_keys[2] = { key, NULL, };
-    configproxy_notify_configuration_changed(origin, changed_keys);
+    struct ConfigProxyVariant *const changed_values[2] =
+    {
+        (struct ConfigProxyVariant *)value, NULL,
+    };
+
+    configproxy_notify_configuration_changed(origin, changed_keys,
+                                             changed_values);
 
     return true;
 }
@@ -466,24 +477,30 @@ error_exit:
     return false;
 }
 
-void configproxy_notify_configuration_changed(const char *origin, const char **changed_keys)
+void configproxy_notify_configuration_changed(const char *origin,
+                                              const char *const *const changed_keys,
+                                              struct ConfigProxyVariant *const *const changed_values)
 {
-    if(dbus_get_configuration_monitor_iface() == NULL)
-        return;
-
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+    GVariant *const *values_iter = (GVariant *const *)changed_values;
 
-    for(const char **iter = changed_keys; *iter != NULL; ++iter)
+    for(const char *const *keys_iter = changed_keys; *keys_iter != NULL; ++keys_iter)
     {
-        GVariant *v = configuration_get_key(*iter);
-        g_variant_builder_add(&builder, "{sv}", *iter, v);
+        GVariant *const v = (values_iter == NULL)
+            ? configuration_get_key(*keys_iter)
+            : *values_iter++;
+
+        g_variant_builder_add(&builder, "{sv}", *keys_iter, v);
         g_variant_unref(v);
     }
 
-    tdbus_configuration_monitor_emit_updated(dbus_get_configuration_monitor_iface(),
-                                             origin,
-                                             g_variant_builder_end(&builder));
+    if(dbus_get_configuration_monitor_iface() != NULL)
+        tdbus_configuration_monitor_emit_updated(dbus_get_configuration_monitor_iface(),
+                                                 origin,
+                                                 g_variant_builder_end(&builder));
+    else
+        g_variant_builder_clear(&builder);
 }
 
 bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value)
