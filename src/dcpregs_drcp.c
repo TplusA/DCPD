@@ -308,6 +308,11 @@ static const struct drc_command_t drc_commands[] =
         .dbus_signal.playback = tdbus_dcpd_playback_emit_start,
     },
     {
+        .code = DRCP_PLAYBACK_TRY_RESUME,
+        .iface_id = DBUSIFACE_PLAYBACK,
+        .dbus_signal.playback = tdbus_dcpd_playback_emit_resume,
+    },
+    {
         .code = DRCP_BROWSE_PLAY_VIEW_TOGGLE,
         .iface_id = DBUSIFACE_VIEWS,
         .dbus_signal.views = handle_toggle_views_browse_play,

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -32,6 +32,7 @@ enum class DBusFn
     playback_emit_pause,
     playback_emit_next,
     playback_emit_previous,
+    playback_emit_resume,
     playback_emit_set_speed,
     playback_emit_seek,
     playback_emit_repeat_mode_toggle,
@@ -81,6 +82,10 @@ static std::ostream &operator<<(std::ostream &os, const DBusFn id)
 
       case DBusFn::playback_emit_previous:
         os << "playback_emit_previous";
+        break;
+
+      case DBusFn::playback_emit_resume:
+        os << "playback_emit_resume";
         break;
 
       case DBusFn::playback_emit_set_speed:
@@ -322,6 +327,11 @@ void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_previous(tdbusdcpdPlayback *o
     expectations_->add(Expectation(DBusFn::playback_emit_previous, object));
 }
 
+void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_resume(tdbusdcpdPlayback *object)
+{
+    expectations_->add(Expectation(DBusFn::playback_emit_resume, object));
+}
+
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_set_speed(tdbusdcpdPlayback *object, gdouble arg_speed)
 {
     expectations_->add(Expectation(DBusFn::playback_emit_set_speed, object, arg_speed));
@@ -440,6 +450,14 @@ void tdbus_dcpd_playback_emit_previous(tdbusdcpdPlayback *object)
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_previous);
+    cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
+}
+
+void tdbus_dcpd_playback_emit_resume(tdbusdcpdPlayback *object)
+{
+    const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_resume);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 

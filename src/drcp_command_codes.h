@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -95,6 +95,7 @@
 #define DRCP_PLAYBACK_STOP                      0xb2
 #define DRCP_PLAYBACK_START                     0xb3
 #define DRCP_PLAYBACK_SELECTED_FILE_ONESHOT     0xb4
+#define DRCP_PLAYBACK_TRY_RESUME                0xb5
 #define DRCP_BROWSE_PLAY_VIEW_TOGGLE            0xba
 #define DRCP_BROWSE_PLAY_VIEW_SET               0xbb
 #define DRCP_REPEAT_MODE_TOGGLE                 0xc0
