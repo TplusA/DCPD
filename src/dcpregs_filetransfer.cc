@@ -1486,6 +1486,10 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
           case LIST_ERROR_INVALID_ID:
           case LIST_ERROR_INVALID_URI:
           case LIST_ERROR_PERMISSION_DENIED:
+          case LIST_ERROR_INVALID_STREAM_URL:
+          case LIST_ERROR_INVALID_STRBO_URL:
+          case LIST_ERROR_NOT_FOUND:
+          case LIST_ERROR_EMPTY:
             filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_FILE_NOT_FOUND;
             break;
 
@@ -1495,6 +1499,12 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
 
           case LIST_ERROR_PHYSICAL_MEDIA_IO:
             filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_USB_MEDIA_ERROR;
+            break;
+
+          case LIST_ERROR_OUT_OF_RANGE:
+          case LIST_ERROR_OVERFLOWN:
+          case LIST_ERROR_UNDERFLOWN:
+            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_DECRYPTION_ERROR;
             break;
 
           case LIST_ERROR_BUSY_500:
