@@ -28,7 +28,7 @@
 #include "named_pipe.h"
 #include "dcp_over_tcp.h"
 #include "smartphone_app.h"
-#include "network_dispatcher.h"
+#include "network_dispatcher.hh"
 #include "messages.h"
 #include "messages_glib.h"
 #include "transactions.h"
@@ -424,61 +424,25 @@ static unsigned int wait_for_events(struct state *state,
                                     const int register_changed_fd,
                                     bool do_block)
 {
-    /*
-     * Local define for array layout below.
-     */
-#define FIRST_NWDISPATCH_INDEX  8U
+    const auto &nwdispatcher(Network::Dispatcher::get_singleton());
 
     /*
-     * File descriptor breakdown:
-     * - 1 fd for the incoming named pipe from dcpspi
-     * - 1 fd for the incoming named pipe from drcpd
-     * - 1 fd for the incoming internal pipe from ourselves used for
-     *   communicating register changes from the DCP register code
-     * - 2 fds for the DCP over TCP control interface, not registered with the
-     *   network dispatcher
-     * - the remaining #NWDISPATCH_MAX_CONNECTIONS fds are for server and
-     *   client connections to the TCP tunnel (registers 119, 120, 121), all
-     *   registered with the network dispatcher
+     * Local constant for array layout below.
      */
-    struct pollfd fds[FIRST_NWDISPATCH_INDEX + NWDISPATCH_MAX_CONNECTIONS] =
-    {
-        {
-            .fd = dcpspi_fifo_in_fd,
-            .events = POLLIN,
-        },
-        {
-            .fd = drcp_fifo_in_fd,
-            .events = POLLIN,
-        },
-        {
-            .fd = dcp_server_socket_fd,
-            .events = POLLIN,
-        },
-        {
-            .fd = dcp_peer_socket_fd,
-            .events = POLLIN,
-        },
-        {
-            .fd = app_server_socket_fd,
-            .events = POLLIN,
-        },
-        {
-            .fd = app_peer_socket_fd,
-            .events = POLLIN,
-        },
-        {
-            .fd = primitive_queue_fd,
-            .events = POLLIN,
-        },
-        {
-            .fd = register_changed_fd,
-            .events = POLLIN,
-        },
-    };
+    static constexpr size_t FIRST_NWDISPATCH_INDEX = 8;
 
-    (void)nwdispatch_scatter_fds(&fds[FIRST_NWDISPATCH_INDEX],
-                                 NWDISPATCH_MAX_CONNECTIONS, POLLIN);
+    struct pollfd fds[FIRST_NWDISPATCH_INDEX + nwdispatcher.get_number_of_fds()];
+
+    fds[0] = { .fd = dcpspi_fifo_in_fd,    .events = POLLIN, };
+    fds[1] = { .fd = drcp_fifo_in_fd,      .events = POLLIN, };
+    fds[2] = { .fd = dcp_server_socket_fd, .events = POLLIN, };
+    fds[3] = { .fd = dcp_peer_socket_fd,   .events = POLLIN, };
+    fds[4] = { .fd = app_server_socket_fd, .events = POLLIN, };
+    fds[5] = { .fd = app_peer_socket_fd,   .events = POLLIN, };
+    fds[6] = { .fd = primitive_queue_fd,   .events = POLLIN, };
+    fds[7] = { .fd = register_changed_fd,  .events = POLLIN, };
+
+    nwdispatcher.scatter_fds(&fds[FIRST_NWDISPATCH_INDEX], POLLIN);
 
     int ret = os_poll(fds, sizeof(fds) / sizeof(fds[0]), do_block ? -1 : 0);
 
@@ -493,8 +457,7 @@ static unsigned int wait_for_events(struct state *state,
         return WAITEVENT_POLL_ERROR;
     }
 
-    (void)nwdispatch_handle_events(&fds[FIRST_NWDISPATCH_INDEX],
-                                   NWDISPATCH_MAX_CONNECTIONS);
+    nwdispatcher.process(&fds[FIRST_NWDISPATCH_INDEX]);
 
     unsigned int return_value = 0;
 
@@ -508,8 +471,6 @@ static unsigned int wait_for_events(struct state *state,
     return_value |= handle_register_events(register_changed_fd,    fds[7].revents);
 
     return return_value;
-
-#undef FIRST_NWDISPATCH_INDEX
 }
 
 static bool try_preallocate_buffer(struct dynamic_buffer *buffer,

@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -146,7 +146,7 @@ test_networkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 test_network_dispatcher_la_SOURCES = \
     test_network_dispatcher.cc \
-    ../src/network_dispatcher.h \
+    ../src/network_dispatcher.hh \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh

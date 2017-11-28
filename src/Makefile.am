@@ -110,7 +110,7 @@ libregisters_la_SOURCES = \
     dcpregs_upnpname.cc dcpregs_upnpname.h dcpregs_upnpname.hh \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
     dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
+    dcpregs_tcptunnel.cc dcpregs_tcptunnel.h \
     dcpregs_audiosources.cc dcpregs_audiosources.h \
     dcpregs_playstream.cc dcpregs_playstream.h dcpregs_playstream.hh \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \
@@ -237,7 +237,7 @@ libxmodem_la_CFLAGS = $(AM_CFLAGS)
 libxmodem_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libnetwork_dispatcher_la_SOURCES = \
-    network_dispatcher.c network_dispatcher.h \
+    network_dispatcher.cc network_dispatcher.hh \
     network.c network.h \
     messages.h
 libnetwork_dispatcher_la_CFLAGS = $(AM_CFLAGS)
