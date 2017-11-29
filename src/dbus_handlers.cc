@@ -427,15 +427,16 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
         const gchar *info;
         uint8_t actor_id;
         gboolean is_login;
-        gboolean has_failed;
+        guchar raw_error_code;
 
-        g_variant_get(parameters, "(&sybb&s)",
-                      &service_id, &actor_id, &is_login, &has_failed, &info);
+        g_variant_get(parameters, "(&syby&s)",
+                      &service_id, &actor_id, &is_login,
+                      &raw_error_code, &info);
 
-        if(!has_failed)
+        if(raw_error_code == 0)
             dcpregs_audiosources_set_login_state(service_id, is_login);
 
-        if(actor_id != ACTOR_ID_SMARTPHONE_APP && !has_failed)
+        if(actor_id != ACTOR_ID_SMARTPHONE_APP && raw_error_code == 0)
         {
             auto *data = static_cast<struct smartphone_app_connection_data *>(user_data);
 
