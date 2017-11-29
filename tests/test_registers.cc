@@ -8474,6 +8474,10 @@ void test_set_service_credentials()
     mock_credentials_dbus->expect_tdbus_credentials_write_call_set_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "tidal", "login email", "my password", TRUE);
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
+    mock_airable_dbus->expect_tdbus_airable_call_external_service_login_sync(
+        TRUE, dbus_airable_iface_dummy,
+        "tidal", "login email", TRUE, guchar(ACTOR_ID_LOCAL_UI));
 
     cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
 
@@ -8505,6 +8509,10 @@ void test_password_may_be_zero_terminated()
     mock_credentials_dbus->expect_tdbus_credentials_write_call_set_credentials_sync(
         TRUE, dbus_cred_write_iface_dummy,
         "deezer", "login", "password", TRUE);
+    mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
+    mock_airable_dbus->expect_tdbus_airable_call_external_service_login_sync(
+        TRUE, dbus_airable_iface_dummy,
+        "deezer", "login", TRUE, guchar(ACTOR_ID_LOCAL_UI));
 
     cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
 

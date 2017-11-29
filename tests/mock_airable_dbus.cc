@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,9 +25,10 @@
 enum class AirableFn
 {
     external_service_logout_sync,
+    external_service_login_sync,
 
     first_valid_airable_fn_id = external_service_logout_sync,
-    last_valid_airable_fn_id = external_service_logout_sync,
+    last_valid_airable_fn_id = external_service_login_sync,
 };
 
 
@@ -44,6 +45,10 @@ static std::ostream &operator<<(std::ostream &os, const AirableFn id)
     {
       case AirableFn::external_service_logout_sync:
         os << "external_service_logout_sync";
+        break;
+
+      case AirableFn::external_service_login_sync:
+        os << "external_service_login_sync";
         break;
     }
 
@@ -129,6 +134,11 @@ void MockAirableDBus::expect_tdbus_airable_call_external_service_logout_sync(gbo
     expectations_->add(Expectation(AirableFn::external_service_logout_sync, retval, object, arg_service_id, arg_url, arg_is_request, arg_actor_id));
 }
 
+void MockAirableDBus::expect_tdbus_airable_call_external_service_login_sync(gboolean retval, tdbusAirable *object, const gchar *arg_service_id, const gchar *arg_username, gboolean arg_is_request, guchar arg_actor_id)
+{
+    expectations_->add(Expectation(AirableFn::external_service_login_sync, retval, object, arg_service_id, arg_username, arg_is_request, arg_actor_id));
+}
+
 
 MockAirableDBus *mock_airable_dbus_singleton = nullptr;
 
@@ -149,3 +159,19 @@ gboolean tdbus_airable_call_external_service_logout_sync(tdbusAirable *proxy, co
     return expect.d.ret_bool_;
 }
 
+gboolean tdbus_airable_call_external_service_login_sync(tdbusAirable *proxy, const gchar *arg_service_id, const gchar *arg_username, gboolean arg_is_request, guchar arg_actor_id, GCancellable *cancellable, GError **error)
+{
+    const auto &expect(mock_airable_dbus_singleton->expectations_->get_next_expectation(__func__));
+
+    cppcut_assert_equal(expect.d.function_id_, AirableFn::external_service_login_sync);
+    cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
+    cppcut_assert_equal(expect.d.arg_service_id_.c_str(), arg_service_id);
+    cppcut_assert_equal(expect.d.arg_url_.c_str(), arg_username);
+    cppcut_assert_equal(gboolean(expect.d.arg_is_request_), arg_is_request);
+    cppcut_assert_equal(int(expect.d.arg_actor_id_), int(arg_actor_id));
+
+    if(error != NULL)
+        *error = NULL;
+
+    return expect.d.ret_bool_;
+}

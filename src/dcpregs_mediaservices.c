@@ -119,6 +119,10 @@ static int set_credentials(const char *service_id,
     else if(delete_ret == 0)
         dcpregs_audiosources_set_have_credentials(service_id, false);
 
+    tdbus_airable_call_external_service_login_sync(dbus_get_airable_sec_iface(),
+                                                   service_id, login, true,
+                                                   ACTOR_ID_LOCAL_UI, NULL, NULL);
+
     return ret;
 }
 

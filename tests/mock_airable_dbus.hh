@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -39,6 +39,7 @@ class MockAirableDBus
     void check() const;
 
     void expect_tdbus_airable_call_external_service_logout_sync(gboolean retval, tdbusAirable *object, const gchar *arg_service_id, const gchar *arg_url, gboolean arg_is_request, guchar arg_actor_id);
+    void expect_tdbus_airable_call_external_service_login_sync(gboolean retval, tdbusAirable *object, const gchar *arg_service_id, const gchar *arg_username, gboolean arg_is_request, guchar arg_actor_id);
 };
 
 extern MockAirableDBus *mock_airable_dbus_singleton;
