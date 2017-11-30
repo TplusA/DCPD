@@ -1,3 +1,12 @@
+2017-11-30  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.6 released.
+
+	* Airable: Ask Airable list broker to log into external service after
+	  new credentials have been sent. This change makes use of new/changed
+	  D-Bus APIs and requires listbrokers v3.3 and drcpd v4.5 to work
+	  correctly.
+
 2017-11-23  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.5 released.
