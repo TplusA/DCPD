@@ -615,7 +615,9 @@ static void terminate_active_transaction(struct state *state,
         break;
 
       case TRANSACTION_CHANNEL_INET:
-        dot_close_peer(dot);
+        if(!network_have_data(dot->peer_fd))
+            dot_close_peer(dot);
+
         break;
     }
 
