@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -145,6 +145,10 @@ bool network_have_data(int peer_fd)
 
 void network_close(int *fd)
 {
+    /* flush send buffer */
+    static const int flag = 1;
+    setsockopt(*fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+
     os_file_close(*fd);
     *fd = -1;
 }
