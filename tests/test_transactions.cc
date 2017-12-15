@@ -1000,7 +1000,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
             transaction_free(&t);
         }
         else
-            send_dcpsync_ack(master_serial, t, TRANSACTION_PUSH_BACK);
+            send_dcpsync_ack(master_serial, t, TRANSACTION_IN_PROGRESS);
 
         bytes_left -= expected_data_size;
         ++master_serial;

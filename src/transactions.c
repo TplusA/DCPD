@@ -1155,7 +1155,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         transaction_refresh_as_master(t);
         t->state = TRANSACTION_STATE_SEND_TO_SLAVE;
 
-        return TRANSACTION_PUSH_BACK;
+        return TRANSACTION_IN_PROGRESS;
 
       case TRANSACTION_STATE_SEND_TO_SLAVE_FAILED:
         t->state = TRANSACTION_STATE_ERROR;
