@@ -1,3 +1,13 @@
+2017-12-18  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.7 released.
+
+	* DCP protocol: Fixed DCP packet rearrangement bug. All fragments of
+	  fragmented transfers are sent one after the other, no more
+	  rearrangements for fair packet scheduling and slave prioritization.
+
+	* Misc: Fixed minor DCP over TCP issues.
+
 2017-11-30  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.6 released.
