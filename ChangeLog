@@ -1,3 +1,11 @@
+2017-12-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.8 released.
+
+	* Networking: Fix handling of unwanted wireless networks.
+
+	* Networking: Fix handling of disappearing wireless networks.
+
 2017-12-18  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.7 released.
