@@ -1020,7 +1020,7 @@ static void update_service_list(Connman::ServiceList &known_services,
         const Connman::ServiceBase *service(known_services[name]);
 
         if(service == nullptr)
-            return;
+            continue;
 
         if(service->is_ours() && service->is_active())
         {
