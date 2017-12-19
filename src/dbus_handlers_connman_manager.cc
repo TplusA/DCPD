@@ -1072,7 +1072,7 @@ static void update_service_list(Connman::ServiceList &known_services,
         }
 
         known_services.erase(name);
-    };
+    }
 }
 
 static void update_service_list(GVariant *all_services,
