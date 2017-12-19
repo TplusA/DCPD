@@ -1457,8 +1457,12 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 
     disconnect_nonmatching_active_services_on_our_interface(
             known_services,
-            our_ethernet != known_services.end() ? our_ethernet->first : "",
-            our_wlan != known_services.end() ? our_wlan->first : "");
+            our_ethernet != known_services.end()
+            ? our_ethernet->first
+            : configured_ethernet_service_name,
+            our_wlan != known_services.end()
+            ? our_wlan->first
+            : configured_wlan_service_name);
 
     /* either all services have been disconnected above and the function has
      * returned already, or we end up here because there are exactly one or two
