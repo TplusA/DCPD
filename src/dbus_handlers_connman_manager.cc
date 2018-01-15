@@ -936,6 +936,45 @@ static bool parse_ethernet_data(const char *prop, GVariant *value,
     return false;
 }
 
+static void process_wlan_security_info(GVariant *security_info,
+                                       Maybe<std::string> &security,
+                                       Maybe<Connman::WPSCapability> &wps)
+{
+
+    const size_t n = g_variant_n_children(security_info);
+
+    if(n == 0)
+        security = "";
+    else
+    {
+        GVariant *str = g_variant_get_child_value(security_info, 0);
+        security = g_variant_get_string(str, NULL);
+        g_variant_unref(str);
+    }
+
+    wps = Connman::WPSCapability::NONE;
+
+    if(n <= 1)
+        return;
+
+    for(size_t i = 0; i < n; ++i)
+    {
+        GVariant *str = g_variant_get_child_value(security_info, i);
+        const char *const cap = g_variant_get_string(str, NULL);
+
+        if(strcmp(cap, "wps") == 0)
+            wps = Connman::WPSCapability::POSSIBLE;
+        else if(strcmp(cap, "wps_advertising") == 0)
+        {
+            wps = Connman::WPSCapability::ACTIVE;
+            g_variant_unref(str);
+            break;
+        }
+
+        g_variant_unref(str);
+    }
+}
+
 static bool parse_wlan_data(const char *prop, GVariant *value,
                             Connman::Service<Connman::Technology::WLAN>::TechDataType &data)
 {
@@ -943,26 +982,7 @@ static bool parse_wlan_data(const char *prop, GVariant *value,
         data.network_name_ = g_variant_get_string(value, NULL);
     else if(strcmp(prop, "Security") == 0)
     {
-        if(g_variant_n_children(value) > 0)
-        {
-            GVariant *str = g_variant_get_child_value(value, 0);
-            data.security_ = g_variant_get_string(str, NULL);
-            g_variant_unref(str);
-
-            if(g_variant_n_children(value) == 1)
-                data.is_wps_available_ = false;
-            else
-            {
-                str = g_variant_get_child_value(value, 1);
-                data.is_wps_available_ = strcmp(g_variant_get_string(str, NULL), "wps") == 0;
-                g_variant_unref(str);
-            }
-        }
-        else
-        {
-            data.security_ = "";
-            data.is_wps_available_ = false;
-        }
+        process_wlan_security_info(value, data.security_, data.wps_capability_);
     }
     else if(strcmp(prop, "Strength") == 0)
         data.strength_ = g_variant_get_byte(value);
@@ -1778,8 +1798,19 @@ static bool start_wps(DBusSignalManagerData &data,
         }
 
         /* want WPS */
-        if(tech_data.is_wps_available_ == true)
+        if(!tech_data.wps_capability_.is_known())
+            continue;
+
+        switch(tech_data.wps_capability_.get())
+        {
+          case Connman::WPSCapability::NONE:
+          case Connman::WPSCapability::POSSIBLE:
+            break;
+
+          case Connman::WPSCapability::ACTIVE:
             wps_candidates.push_back(it.first);
+            break;
+        }
     }
 
     if(wps_candidates.empty())
