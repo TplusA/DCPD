@@ -35,7 +35,7 @@ struct wifi_scan_data
     tdbusconnmanTechnology *proxy;
     int remaining_tries;
 
-    ConnmanSurveyDoneFn callbacks[2];
+    ConnmanSurveyDoneFn callbacks[5];
     size_t number_of_callbacks;
 };
 
