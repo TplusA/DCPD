@@ -50,7 +50,7 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void),
  * \see
  *     #DBusSignalManagerData::schedule_connect_to_wlan()
  */
-void dbussignal_connman_manager_connect_our_wlan(struct DBusSignalManagerData *data);
+bool dbussignal_connman_manager_connect_our_wlan(struct DBusSignalManagerData *data);
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled);

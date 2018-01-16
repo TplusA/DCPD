@@ -134,6 +134,13 @@ struct ServiceData
     }
 };
 
+enum class WPSCapability
+{
+    NONE,
+    POSSIBLE,
+    ACTIVE,
+};
+
 template <Technology TECH>
 struct TechData;
 
@@ -157,7 +164,7 @@ struct TechData<Technology::WLAN>
     Maybe<std::string> network_ssid_;
     Maybe<std::string> passphrase_;
     Maybe<std::string> security_;
-    Maybe<bool> is_wps_available_;
+    Maybe<WPSCapability> wps_capability_;
     Maybe<uint8_t> strength_;
 
     TechData(const TechData &) = default;
@@ -172,7 +179,7 @@ struct TechData<Technology::WLAN>
                 network_ssid_ == other.network_ssid_ &&
                 passphrase_ == other.passphrase_ &&
                 security_ == other.security_ &&
-                is_wps_available_ == other.is_wps_available_ &&
+                wps_capability_ == other.wps_capability_ &&
                 strength_ == other.strength_);
     }
 

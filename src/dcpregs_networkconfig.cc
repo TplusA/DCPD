@@ -1424,8 +1424,6 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
                              determine_active_network_technology(services, true),
                              &fallback_service_data);
 
-    bool need_check_connection_status = false;
-
     if(service == nullptr)
         service = fallback_service_data;
     else
@@ -1443,23 +1441,16 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
             response[0] = map_dhcp_method(settings.get_dhcp_method());
             response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
         }
-        else
-            need_check_connection_status = true;
     }
-    else
-        need_check_connection_status = true;
 
-    if(need_check_connection_status)
-    {
-        bool is_wps;
-        bool is_connecting = dbussignal_connman_manager_is_connecting(&is_wps);
+    bool is_wps;
+    bool is_connecting = dbussignal_connman_manager_is_connecting(&is_wps);
 
-        if(is_connecting)
-            response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;
+    if(is_connecting)
+        response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;
 
-        if(is_wps)
-            response[2] |= NETWORK_STATUS_CONNECTION_IS_WPS_MODE;
-    }
+    if(is_wps)
+        response[2] |= NETWORK_STATUS_CONNECTION_IS_WPS_MODE;
 
     switch(service->get_technology())
     {
