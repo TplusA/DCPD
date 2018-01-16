@@ -214,7 +214,7 @@ bool connman_agent_set_wps_mode(bool is_wps_mode)
     if(global_agent_data.is_wps_mode == is_wps_mode)
         return false;
 
-    msg_info("Set %s mode", is_wps_mode ? "WPS" : "normal");
+    msg_info("Set agent %s mode", is_wps_mode ? "WPS" : "normal");
     global_agent_data.is_wps_mode = is_wps_mode;
 
     return true;
