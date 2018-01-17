@@ -1,3 +1,12 @@
+2018-01-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.9 released.
+
+	* Networking: Fix WPS connection (requires patched ConnMan v1.33 or
+	  ConnMan later than v1.35).
+
+	* DCP protocol: Fix network status updates (register 50).
+
 2017-12-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.8 released.
