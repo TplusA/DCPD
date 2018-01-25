@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -467,7 +467,8 @@ void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
     {
         if(appconn->peer_fd >= 0)
         {
-            msg_info("Smartphone disconnected");
+            msg_info("Smartphone direct connection disconnected (fd %d)",
+                     appconn->peer_fd);
             appconn_close_peer(appconn);
         }
     }

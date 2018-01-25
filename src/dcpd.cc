@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -333,14 +333,16 @@ static unsigned int handle_app_peer_events(int fd, short revents)
             result |= WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET;
         else
         {
-            msg_error(EPIPE, LOG_INFO, "Smartphone app peer connection closed");
+            msg_error(EPIPE, LOG_INFO,
+                      "Smartphone app peer connection closed (fd %d)", fd);
             result |= WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED;
         }
     }
 
     if(revents & (POLLHUP | POLLERR))
     {
-        msg_error(EPIPE, LOG_INFO, "Smartphone app peer connection died, need to close");
+        msg_error(EPIPE, LOG_INFO,
+                  "Smartphone app peer connection died on fd %d, need to close", fd);
         result |= WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED;
     }
 
