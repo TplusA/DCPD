@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -609,42 +609,44 @@ static void try_start_stream(struct PlayAppStreamData *const data,
 
     unchecked_set_meta_data_and_url(stream_id, meta_data, url, any_stream_data);
 
-    if(!is_playing &&
-       !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
-                                             NULL, &error))
+    if(!is_playing && data->device_playmode == DevicePlaymode::SELECTED_IDLE)
     {
-        msg_error(0, LOG_NOTICE, "Failed starting stream");
-        dbus_common_handle_dbus_error(&error, "Start stream");
 
-        reset_to_idle_mode(data);
-
-        if(!tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
-                                                0, NULL, NULL, NULL,
-                                                NULL, &error))
+        if(tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
+                                                 NULL, &error))
+            data->device_playmode = DevicePlaymode::WAIT_FOR_START_NOTIFICATION;
+        else
         {
-            msg_error(0, LOG_NOTICE, "Failed clearing stream player FIFO");
-            dbus_common_handle_dbus_error(&error, "Clear URLFIFO");
+            msg_error(0, LOG_NOTICE, "Failed starting stream");
+            dbus_common_handle_dbus_error(&error, "Start stream");
+
+            reset_to_idle_mode(data);
+
+            if(!tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
+                                                    0, NULL, NULL, NULL,
+                                                    NULL, &error))
+            {
+                msg_error(0, LOG_NOTICE, "Failed clearing stream player FIFO");
+                dbus_common_handle_dbus_error(&error, "Clear URLFIFO");
+            }
+
+            return;
         }
+    }
+
+    if(is_restart)
+    {
+        data->current_stream_id = stream_id;
+        data->next_stream_id = 0;
+
+        tdbus_dcpd_views_emit_open(dbus_get_views_iface(), "Play");
     }
     else
     {
-        if(is_restart)
-        {
-            if(!is_playing)
-                data->device_playmode = DevicePlaymode::WAIT_FOR_START_NOTIFICATION;
-
-            data->current_stream_id = stream_id;
-            data->next_stream_id = 0;
-
-            tdbus_dcpd_views_emit_open(dbus_get_views_iface(), "Play");
-        }
-        else
-        {
-            log_assert(data->device_playmode == DevicePlaymode::WAIT_FOR_START_NOTIFICATION ||
-                       data->device_playmode == DevicePlaymode::SELECTED_IDLE ||
-                       data->device_playmode == DevicePlaymode::APP_IS_PLAYING);
-            data->next_stream_id = stream_id;
-        }
+        log_assert(data->device_playmode == DevicePlaymode::WAIT_FOR_START_NOTIFICATION ||
+                   data->device_playmode == DevicePlaymode::SELECTED_IDLE ||
+                   data->device_playmode == DevicePlaymode::APP_IS_PLAYING);
+        data->next_stream_id = stream_id;
     }
 }
 

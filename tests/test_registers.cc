@@ -6787,6 +6787,7 @@ enum class SetTitleAndURLFlowAssumptions
     IDLE__IN_NON_APP_MODE__KEEP_MODE,
     IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
     IDLE__IN_APP_MODE__KEEP_MODE,
+    PENDING__IN_APP_MODE__KEEP_MODE,
     PLAYING__IN_NON_APP_MODE__KEEP_MODE,
     PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE,
     PLAYING__IN_APP_MODE__KEEP_MODE,
@@ -6817,6 +6818,7 @@ static void set_start_title(const uint8_t *title, size_t length,
 
       case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
       case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PENDING__IN_APP_MODE__KEEP_MODE:
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
         break;
@@ -6886,6 +6888,7 @@ static void set_start_playing_expectations(const std::string expected_artist,
 {
     bool assume_already_playing = false;
     bool expecting_start_playing_command = false;
+    bool expecting_play_view_activation = false;
 
     switch(flow_assumptions)
     {
@@ -6894,7 +6897,19 @@ static void set_start_playing_expectations(const std::string expected_artist,
 
       case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
       case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
-        expecting_start_playing_command = true;
+      case SetTitleAndURLFlowAssumptions::PENDING__IN_APP_MODE__KEEP_MODE:
+        switch(system_assumptions)
+        {
+          case SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE:
+          case SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION:
+            expecting_start_playing_command = true;
+            break;
+
+          case SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS:
+          case SetTitleAndURLSystemAssumptions::NO_RESPONSE:
+            break;
+        }
+
         break;
 
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
@@ -6922,21 +6937,26 @@ static void set_start_playing_expectations(const std::string expected_artist,
             stream_id.get().get_raw_id(), url.c_str(), hash,
             0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
 
-        if(expecting_start_playing_command)
-        {
-            mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(
-                dbus_streamplayer_playback_iface_dummy);
-            mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(
-                TRUE, dbus_streamplayer_playback_iface_dummy);
-        }
-
-        mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-        mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Play");
+        expecting_play_view_activation = true;
 
         break;
 
       case SetTitleAndURLSystemAssumptions::NO_RESPONSE:
         break;
+    }
+
+    if(expecting_start_playing_command)
+    {
+        mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(
+            dbus_streamplayer_playback_iface_dummy);
+        mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(
+            TRUE, dbus_streamplayer_playback_iface_dummy);
+    }
+
+    if(expecting_play_view_activation)
+    {
+        mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+        mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Play");
     }
 }
 
@@ -7034,6 +7054,7 @@ static void set_next_url(const std::string title, const std::string url,
     switch(flow_assumptions)
     {
       case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PENDING__IN_APP_MODE__KEEP_MODE:
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
         {
             MD5::Context ctx;
@@ -7092,6 +7113,7 @@ static void set_next_title_and_url(const std::string title, const std::string ur
     switch(flow_assumptions)
     {
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PENDING__IN_APP_MODE__KEEP_MODE:
       case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
         assume_is_app_mode = true;
         break;
@@ -7546,7 +7568,7 @@ void test_start_stream_then_quickly_start_another_stream()
     set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
                             stream_id_first,
                             SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
-                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION,
                             &skey_first);
     register_changed_data->check();
 
@@ -7554,7 +7576,7 @@ void test_start_stream_then_quickly_start_another_stream()
     GVariantWrapper skey_second;
     set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
                             stream_id_second,
-                            SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                            SetTitleAndURLFlowAssumptions::PENDING__IN_APP_MODE__KEEP_MODE,
                             SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS,
                             &skey_second);
     register_changed_data->check();
