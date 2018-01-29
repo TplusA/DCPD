@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -6782,49 +6782,77 @@ void cut_teardown()
     mock_dbus_iface = nullptr;
 }
 
+enum class SetTitleAndURLFlowAssumptions
+{
+    IDLE__IN_NON_APP_MODE__KEEP_MODE,
+    IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+    IDLE__IN_APP_MODE__KEEP_MODE,
+    PLAYING__IN_NON_APP_MODE__KEEP_MODE,
+    PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE,
+    PLAYING__IN_APP_MODE__KEEP_MODE,
+};
+
+enum class SetTitleAndURLSystemAssumptions
+{
+    IMMEDIATE_RESPONSE,
+    IMMEDIATE_AUDIO_SOURCE_SELECTION,
+    IMMEDIATE_NOW_PLAYING_STATUS,
+    NO_RESPONSE,
+};
+
 static constexpr const char *const audio_source_id = "strbo.plainurl";
 
 static void set_start_title(const uint8_t *title, size_t length,
-                            bool switching_to_app_mode,
-                            bool immediate_audio_source_selection)
+                            SetTitleAndURLFlowAssumptions flow_assumptions,
+                            SetTitleAndURLSystemAssumptions system_assumptions)
 {
-    if(switching_to_app_mode)
+    switch(flow_assumptions)
     {
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
+        /* request audio source in order to switch to app mode */
         mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
         mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, audio_source_id);
+        break;
+
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
+        break;
     }
 
     const auto *const reg = register_lookup(78);
 
     cppcut_assert_equal(0, reg->write_handler(title, length));
 
-    if(switching_to_app_mode && immediate_audio_source_selection)
+    mock_dbus_iface->check();
+    mock_audiopath_dbus->check();
+    mock_messages->check();
+
+    switch(system_assumptions)
     {
+      case SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE:
+      case SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION:
+        /* audio source selection immediately acknowledged */
         mock_messages->expect_msg_info("Enter app mode");
         dcpregs_playstream_select_source();
+        break;
+
+      case SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS:
+      case SetTitleAndURLSystemAssumptions::NO_RESPONSE:
+        break;
     }
+
+    mock_messages->check();
 }
 
 static void set_start_title(const std::string title,
-                            bool switching_to_app_mode,
-                            bool immediate_audio_source_selection)
+                            SetTitleAndURLFlowAssumptions flow_assumptions,
+                            SetTitleAndURLSystemAssumptions system_assumptions)
 {
-    if(switching_to_app_mode)
-    {
-        mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
-        mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(dbus_audiopath_manager_iface_dummy, audio_source_id);
-    }
-
-    const auto *const reg = register_lookup(78);
-
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(title.c_str()),
-                                              title.length()));
-
-    if(switching_to_app_mode && immediate_audio_source_selection)
-    {
-        mock_messages->expect_msg_info("Enter app mode");
-        dcpregs_playstream_select_source();
-    }
+    set_start_title(reinterpret_cast<const uint8_t *>(title.c_str()),
+                    title.length(), flow_assumptions, system_assumptions);
 }
 
 static void set_next_title(const std::string title, bool is_in_app_mode)
@@ -6853,31 +6881,63 @@ static void set_start_playing_expectations(const std::string expected_artist,
                                            const std::string url,
                                            const OurStream stream_id,
                                            const MD5::Hash &hash,
-                                           bool assume_already_playing)
+                                           SetTitleAndURLFlowAssumptions flow_assumptions,
+                                           SetTitleAndURLSystemAssumptions system_assumptions)
 {
-    mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
-        dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-        expected_artist.c_str(), expected_album.c_str(),
-        expected_title.c_str(), expected_alttrack.c_str(),
-        url.c_str());
-    mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(
-        dbus_streamplayer_urlfifo_iface_dummy);
-    mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
-        TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-        stream_id.get().get_raw_id(), url.c_str(), hash,
-        0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
+    bool assume_already_playing = false;
+    bool expecting_start_playing_command = false;
 
-    if(!assume_already_playing)
+    switch(flow_assumptions)
     {
-        mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(
-            dbus_streamplayer_playback_iface_dummy);
-        mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(
-            TRUE, dbus_streamplayer_playback_iface_dummy);
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
+        break;
+
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+        expecting_start_playing_command = true;
+        break;
+
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
+        assume_already_playing = true;
+        break;
     }
 
-    mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Play");
+    switch(system_assumptions)
+    {
+      case SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE:
+      case SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION:
+      case SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS:
+        mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+        mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
+            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
+            expected_artist.c_str(), expected_album.c_str(),
+            expected_title.c_str(), expected_alttrack.c_str(),
+            url.c_str());
+        mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(
+            dbus_streamplayer_urlfifo_iface_dummy);
+        mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
+            TRUE, dbus_streamplayer_urlfifo_iface_dummy,
+            stream_id.get().get_raw_id(), url.c_str(), hash,
+            0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
+
+        if(expecting_start_playing_command)
+        {
+            mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(
+                dbus_streamplayer_playback_iface_dummy);
+            mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(
+                TRUE, dbus_streamplayer_playback_iface_dummy);
+        }
+
+        mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
+        mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Play");
+
+        break;
+
+      case SetTitleAndURLSystemAssumptions::NO_RESPONSE:
+        break;
+    }
 }
 
 static void set_start_url(const std::string expected_artist,
@@ -6886,7 +6946,8 @@ static void set_start_url(const std::string expected_artist,
                           const std::string expected_alttrack,
                           const std::string url,
                           const OurStream stream_id,
-                          bool assume_already_playing, bool assume_is_app_mode,
+                          SetTitleAndURLFlowAssumptions flow_assumptions,
+                          SetTitleAndURLSystemAssumptions system_assumptions,
                           GVariantWrapper *expected_stream_key)
 {
     MD5::Context ctx;
@@ -6900,16 +6961,20 @@ static void set_start_url(const std::string expected_artist,
 
     const auto *const reg = register_lookup(79);
 
-    if(assume_is_app_mode)
-        set_start_playing_expectations(expected_artist, expected_album,
-                                       expected_title, expected_alttrack,
-                                       url, stream_id, hash,
-                                       assume_already_playing);
+    set_start_playing_expectations(expected_artist, expected_album,
+                                   expected_title, expected_alttrack,
+                                   url, stream_id, hash,
+                                   flow_assumptions, system_assumptions);
 
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(url.c_str()), url.length()));
 
     uint8_t buffer[8];
     cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+
+    mock_dbus_iface->check();
+    mock_dcpd_dbus->check();
+    mock_streamplayer_dbus->check();
+    mock_messages->check();
 }
 
 static void set_start_meta_data_and_url(const std::string meta_data,
@@ -6918,14 +6983,14 @@ static void set_start_meta_data_and_url(const std::string meta_data,
                                         const std::string expected_album,
                                         const std::string expected_title,
                                         const OurStream stream_id,
-                                        bool assume_already_playing,
-                                        GVariantWrapper *expected_stream_key,
-                                        bool immediate_audio_source_selection = true)
+                                        SetTitleAndURLFlowAssumptions flow_assumptions,
+                                        SetTitleAndURLSystemAssumptions system_assumptions,
+                                        GVariantWrapper *expected_stream_key)
 {
-    set_start_title(meta_data, true, immediate_audio_source_selection);
+    set_start_title(meta_data, flow_assumptions, system_assumptions);
     set_start_url(expected_artist, expected_album, expected_title, meta_data,
-                  url, stream_id, assume_already_playing,
-                  immediate_audio_source_selection, expected_stream_key);
+                  url, stream_id, flow_assumptions, system_assumptions,
+                  expected_stream_key);
 }
 
 static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_data_length,
@@ -6934,129 +6999,83 @@ static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_da
                                         const std::string expected_album,
                                         const std::string expected_title,
                                         const OurStream stream_id,
-                                        bool assume_already_playing,
-                                        GVariantWrapper *expected_stream_key,
-                                        bool immediate_audio_source_selection = true)
+                                        SetTitleAndURLFlowAssumptions flow_assumptions,
+                                        SetTitleAndURLSystemAssumptions system_assumptions,
+                                        GVariantWrapper *expected_stream_key)
 {
-    set_start_title(meta_data, meta_data_length, true, immediate_audio_source_selection);
+    set_start_title(meta_data, meta_data_length,
+                    flow_assumptions, system_assumptions);
     set_start_url(expected_artist, expected_album, expected_title,
                   std::string(reinterpret_cast<const char *>(meta_data),
                               meta_data_length),
-                  url, stream_id, assume_already_playing,
-                  immediate_audio_source_selection, expected_stream_key);
-}
-
-enum class SetTitleAndURLDataAssumptions
-{
-    IDLE__IN_NON_APP_MODE__KEEP_MODE,
-    IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
-    IDLE__IN_APP_MODE__KEEP_MODE,
-    PLAYING__IN_NON_APP_MODE__KEEP_MODE,
-    PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE,
-    PLAYING__IN_APP_MODE__KEEP_MODE,
-};
-
-void decode(const SetTitleAndURLDataAssumptions assumptions,
-            bool &assume_already_playing, bool &assume_is_app_mode,
-            bool &expecting_switch_to_app_mode)
-{
-    assume_already_playing = false;
-    assume_is_app_mode = false;
-    expecting_switch_to_app_mode = false;
-
-    switch(assumptions)
-    {
-      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
-        break;
-
-      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
-        expecting_switch_to_app_mode = true;
-        break;
-
-      case SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
-        assume_is_app_mode = true;
-        break;
-
-      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
-        assume_already_playing = true;
-        break;
-
-      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
-        assume_already_playing = true;
-        expecting_switch_to_app_mode = true;
-        break;
-
-      case SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
-        assume_already_playing = true;
-        assume_is_app_mode = true;
-        break;
-    }
+                  url, stream_id, flow_assumptions, system_assumptions,
+                  expected_stream_key);
 }
 
 static void set_start_title_and_url(const std::string title, const std::string url,
                                     const OurStream stream_id,
-                                    SetTitleAndURLDataAssumptions assumptions,
-                                    GVariantWrapper *expected_stream_key,
-                                    bool immediate_audio_source_selection = true)
+                                    SetTitleAndURLFlowAssumptions flow_assumptions,
+                                    SetTitleAndURLSystemAssumptions system_assumptions,
+                                    GVariantWrapper *expected_stream_key)
 {
-    bool assume_already_playing, assume_is_app_mode, expecting_switch_to_app_mode;
-
-    decode(assumptions, assume_already_playing, assume_is_app_mode,
-           expecting_switch_to_app_mode);
-
-    set_start_title(title, expecting_switch_to_app_mode, immediate_audio_source_selection);
-    set_start_url("", "", title, title, url,
-                  stream_id, assume_already_playing,
-                  assume_is_app_mode || (expecting_switch_to_app_mode && immediate_audio_source_selection),
-                  expected_stream_key);
+    set_start_title(title, flow_assumptions, system_assumptions);
+    set_start_url("", "", title, title, url, stream_id,
+                  flow_assumptions, system_assumptions, expected_stream_key);
 }
 
 static void set_next_url(const std::string title, const std::string url,
                          const OurStream stream_id,
-                         SetTitleAndURLDataAssumptions assumptions,
+                         SetTitleAndURLFlowAssumptions flow_assumptions,
+                         SetTitleAndURLSystemAssumptions system_assumptions,
                          GVariantWrapper *expected_stream_key)
 {
     const auto *const reg = register_lookup(239);
 
-    bool assume_already_playing, assume_is_app_mode, expecting_switch_to_app_mode;
-
-    decode(assumptions, assume_already_playing, assume_is_app_mode,
-           expecting_switch_to_app_mode);
-
-    if(assume_is_app_mode)
+    switch(flow_assumptions)
     {
-        MD5::Context ctx;
-        MD5::init(ctx);
-        MD5::update(ctx, reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
-        MD5::Hash hash;
-        MD5::finish(ctx, hash);
-
-        if(expected_stream_key != nullptr)
-            *expected_stream_key = std::move(hash_to_variant(hash));
-
-        mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-        mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
-            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-            "", "", title.c_str(), title.c_str(), url.c_str());
-        mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
-        mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
-            TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-            stream_id.get().get_raw_id(), url.c_str(), hash,
-            0, "ms", 0, "ms", 0, FALSE, assume_already_playing);
-
-        if(!assume_already_playing)
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
         {
-            mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
-            mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+            MD5::Context ctx;
+            MD5::init(ctx);
+            MD5::update(ctx, reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
+            MD5::Hash hash;
+            MD5::finish(ctx, hash);
+
+            if(expected_stream_key != nullptr)
+                *expected_stream_key = std::move(hash_to_variant(hash));
+
+            mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+            mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
+                dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
+                "", "", title.c_str(), title.c_str(), url.c_str());
+            mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
+            mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
+                TRUE, dbus_streamplayer_urlfifo_iface_dummy,
+                stream_id.get().get_raw_id(), url.c_str(), hash,
+                0, "ms", 0, "ms", 0, FALSE,
+                flow_assumptions == SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE);
+
+            if(flow_assumptions != SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE)
+            {
+                mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
+                mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+            }
         }
-    }
-    else
-    {
+
+        break;
+
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
         mock_messages->expect_msg_error(0, LOG_CRIT,
                                         "BUG: App sets next URL while not in app mode");
 
         if(expected_stream_key != nullptr)
             expected_stream_key->release();
+
+        break;
     }
 
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(url.c_str()), url.length()));
@@ -7064,27 +7083,29 @@ static void set_next_url(const std::string title, const std::string url,
 
 static void set_next_title_and_url(const std::string title, const std::string url,
                                    const OurStream stream_id,
-                                   SetTitleAndURLDataAssumptions assumptions,
+                                   SetTitleAndURLFlowAssumptions flow_assumptions,
+                                   SetTitleAndURLSystemAssumptions system_assumptions,
                                    GVariantWrapper *expected_stream_key)
 {
     bool assume_is_app_mode = false;
 
-    switch(assumptions)
+    switch(flow_assumptions)
     {
-      case SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
-      case SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
         assume_is_app_mode = true;
         break;
 
-      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
-      case SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
-      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
-      case SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
         break;
     }
 
     set_next_title(title, assume_is_app_mode);
-    set_next_url(title, url, stream_id, assumptions, expected_stream_key);
+    set_next_url(title, url, stream_id,
+                 flow_assumptions, system_assumptions, expected_stream_key);
 }
 
 static void expect_current_title(const std::string &expected_title)
@@ -7256,7 +7277,8 @@ void test_start_stream()
 {
     set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
                             OurStream::make(),
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             nullptr);
 
     expect_current_title_and_url("", "");
@@ -7273,8 +7295,9 @@ void test_start_stream_with_slow_audio_source_selection()
     const auto stream_id(OurStream::make());
 
     set_start_title_and_url(title, url, stream_id,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
-                            nullptr, false);
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::NO_RESPONSE,
+                            nullptr);
 
     expect_current_title_and_url("", "");
 
@@ -7286,7 +7309,9 @@ void test_start_stream_with_slow_audio_source_selection()
 
     mock_messages->expect_msg_info("Enter app mode");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Processing pending start request");
-    set_start_playing_expectations("", "", title, title, url, stream_id, hash, false);
+    set_start_playing_expectations("", "", title, title, url, stream_id, hash,
+                                   SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                                   SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION);
 
     dcpregs_playstream_select_source();
 }
@@ -7299,7 +7324,8 @@ void test_start_stream_and_deselect_audio_source()
 {
     set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
                             OurStream::make(),
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             nullptr);
 
     expect_current_title_and_url("", "");
@@ -7321,7 +7347,9 @@ void test_start_stream_and_deselect_audio_source()
  */
 void test_enter_app_mode_and_immediately_deselect_audio_source()
 {
-    set_start_title("Test stream", true, true);
+    set_start_title("Test stream",
+                    SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                    SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE);
 
     mock_messages->expect_msg_info("Leave app mode");
     dcpregs_playstream_deselect_source();
@@ -7335,7 +7363,10 @@ void test_start_stream_with_meta_data()
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7350,7 +7381,10 @@ void test_start_stream_with_unterminated_meta_data()
     set_start_meta_data_and_url(evil, sizeof(evil),
                                 "http://app-provided.url.org/stream.aac",
                                 "", "", "Title",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7363,7 +7397,10 @@ void test_start_stream_with_partial_meta_data()
     set_start_meta_data_and_url("The title\x1d""By some artist on that album",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist on that album", "", "The title",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7376,7 +7413,10 @@ void test_start_stream_with_too_many_meta_data()
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat I like",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7389,7 +7429,10 @@ void test_start_stream_with_way_too_many_meta_data()
     set_start_meta_data_and_url("The title\x1d""By some artist\x1dOn that album\x1dThat\x1dI\x1dlike",
                                 "http://app-provided.url.org/stream.aac",
                                 "By some artist", "On that album", "The title",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7402,7 +7445,10 @@ void test_start_stream_with_title_name()
     set_start_meta_data_and_url("The Title\x1d\x1d",
                                 "http://app-provided.url.org/stream.aac",
                                 "", "", "The Title",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7415,7 +7461,10 @@ void test_start_stream_with_artist_name()
     set_start_meta_data_and_url("\x1dThe Artist\x1d",
                                 "http://app-provided.url.org/stream.aac",
                                 "The Artist", "", "",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7428,7 +7477,10 @@ void test_start_stream_with_album_name()
     set_start_meta_data_and_url("\x1d\x1dThe Album",
                                 "http://app-provided.url.org/stream.aac",
                                 "", "The Album", "",
-                                OurStream::make(), false, nullptr);
+                                OurStream::make(),
+                                SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                                SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                                nullptr);
 
     expect_current_title_and_url("", "");
 }
@@ -7447,7 +7499,8 @@ void test_start_stream_then_start_another_stream()
     GVariantWrapper skey_first;
     set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey_first);
     register_changed_data->check();
 
@@ -7465,7 +7518,8 @@ void test_start_stream_then_start_another_stream()
     GVariantWrapper skey_second;
     set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
                             stream_id_second,
-                            SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                            SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS,
                             &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
@@ -7491,7 +7545,8 @@ void test_start_stream_then_quickly_start_another_stream()
     GVariantWrapper skey_first;
     set_start_title_and_url("First", "http://app-provided.url.org/first.flac",
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey_first);
     register_changed_data->check();
 
@@ -7499,7 +7554,8 @@ void test_start_stream_then_quickly_start_another_stream()
     GVariantWrapper skey_second;
     set_start_title_and_url("Second", "http://app-provided.url.org/second.flac",
                             stream_id_second,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS,
                             &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -7543,7 +7599,8 @@ void test_app_can_start_stream_while_other_source_is_playing()
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
                             stream_id,
-                            SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey);
     register_changed_data->check();
 
@@ -7571,7 +7628,8 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
                             stream_id,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey);
     register_changed_data->check();
 
@@ -7615,7 +7673,8 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
                             stream_id,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey);
     register_changed_data->check();
 
@@ -7653,7 +7712,8 @@ static void start_stop_single_stream(bool with_notifications)
     GVariantWrapper skey;
     set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
                             stream_id,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey);
     register_changed_data->check();
     mock_messages->check();
@@ -7821,7 +7881,8 @@ void test_start_stream_and_queue_next()
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -7840,7 +7901,8 @@ void test_start_stream_and_queue_next()
     GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
                            stream_id_second,
-                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            &skey_second);
 
     mock_messages->expect_msg_info_formatted("Next app stream 258");
@@ -7882,7 +7944,8 @@ void test_play_multiple_tracks_in_a_row()
     GVariantWrapper skey;
     set_start_title_and_url(title_and_url[0].first, title_and_url[0].second,
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -7904,7 +7967,8 @@ void test_play_multiple_tracks_in_a_row()
         /* queue next track */
         const auto stream_id(++next_stream_id);
         set_next_title_and_url(pair.first, pair.second, stream_id,
-                               SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                               SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                               SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                                &skey);
         register_changed_data->check();
 
@@ -7947,7 +8011,8 @@ void test_start_stream_and_quickly_queue_next()
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -7956,7 +8021,8 @@ void test_start_stream_and_quickly_queue_next()
     GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
                            stream_id_second,
-                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            &skey_second);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -7994,7 +8060,8 @@ void test_queue_next_after_stop_notification_is_not_ignored()
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -8019,7 +8086,8 @@ void test_queue_next_after_stop_notification_is_not_ignored()
     const auto stream_id_second(++next_stream_id);
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
                            stream_id_second,
-                           SetTitleAndURLDataAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            nullptr);
     expect_current_title_and_url("", "");
 }
@@ -8031,7 +8099,8 @@ void test_queue_next_with_prior_start_is_ignored()
 {
     set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
                            OurStream::make(),
-                           SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            nullptr);
     expect_current_title_and_url("", "");
 }
@@ -8044,7 +8113,8 @@ void test_queue_next_with_prior_start_by_us_is_ignored()
 {
     set_next_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
                            OurStream::make(),
-                           SetTitleAndURLDataAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            nullptr);
     expect_current_title_and_url("", "");
 }
@@ -8061,7 +8131,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     GVariantWrapper skey_first;
     set_start_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3",
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -8078,7 +8149,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     const auto stream_id_second(++next_stream_id);
     set_next_title_and_url("Stream 2", "http://app-provided.url.org/2.mp3",
                            stream_id_second,
-                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            nullptr);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
@@ -8086,7 +8158,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     const auto stream_id_third(++next_stream_id);
     set_next_title_and_url("Stream 3", "http://app-provided.url.org/3.mp3",
                            stream_id_third,
-                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            nullptr);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
@@ -8095,7 +8168,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     GVariantWrapper skey_fourth;
     set_next_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3",
                            stream_id_fourth,
-                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            &skey_fourth);
     register_changed_data->check();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
@@ -8120,7 +8194,8 @@ void test_pause_and_continue()
     GVariantWrapper skey_first;
     set_start_title_and_url("First FLAC", "http://app-provided.url.org/first.flac",
                             stream_id_first,
-                            SetTitleAndURLDataAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                             &skey_first);
     register_changed_data->check();
     expect_current_title_and_url("", "");
@@ -8139,7 +8214,8 @@ void test_pause_and_continue()
     GVariantWrapper skey_second;
     set_next_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac",
                            stream_id_second,
-                           SetTitleAndURLDataAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE,
+                           SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
                            &skey_second);
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
