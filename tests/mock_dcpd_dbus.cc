@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,7 +25,7 @@
 
 #include "mock_dcpd_dbus.hh"
 
-enum class DBusFn
+enum class DcpdDBusFn
 {
     playback_emit_start,
     playback_emit_stop,
@@ -53,10 +53,10 @@ enum class DBusFn
     last_valid_dbus_fn_id = list_item_emit_remove_from_list,
 };
 
-static std::ostream &operator<<(std::ostream &os, const DBusFn id)
+static std::ostream &operator<<(std::ostream &os, const DcpdDBusFn id)
 {
-    if(id < DBusFn::first_valid_dbus_fn_id ||
-       id > DBusFn::last_valid_dbus_fn_id)
+    if(id < DcpdDBusFn::first_valid_dbus_fn_id ||
+       id > DcpdDBusFn::last_valid_dbus_fn_id)
     {
         os << "INVALID";
         return os;
@@ -64,87 +64,87 @@ static std::ostream &operator<<(std::ostream &os, const DBusFn id)
 
     switch(id)
     {
-      case DBusFn::playback_emit_start:
+      case DcpdDBusFn::playback_emit_start:
         os << "playback_emit_start";
         break;
 
-      case DBusFn::playback_emit_stop:
+      case DcpdDBusFn::playback_emit_stop:
         os << "playback_emit_stop";
         break;
 
-      case DBusFn::playback_emit_pause:
+      case DcpdDBusFn::playback_emit_pause:
         os << "playback_emit_pause";
         break;
 
-      case DBusFn::playback_emit_next:
+      case DcpdDBusFn::playback_emit_next:
         os << "playback_emit_next";
         break;
 
-      case DBusFn::playback_emit_previous:
+      case DcpdDBusFn::playback_emit_previous:
         os << "playback_emit_previous";
         break;
 
-      case DBusFn::playback_emit_resume:
+      case DcpdDBusFn::playback_emit_resume:
         os << "playback_emit_resume";
         break;
 
-      case DBusFn::playback_emit_set_speed:
+      case DcpdDBusFn::playback_emit_set_speed:
         os << "playback_emit_set_speed";
         break;
 
-      case DBusFn::playback_emit_seek:
+      case DcpdDBusFn::playback_emit_seek:
         os << "playback_emit_seek";
         break;
 
-      case DBusFn::playback_emit_repeat_mode_toggle:
+      case DcpdDBusFn::playback_emit_repeat_mode_toggle:
         os << "playback_emit_repeat_mode_toggle";
         break;
 
-      case DBusFn::playback_emit_shuffle_mode_toggle:
+      case DcpdDBusFn::playback_emit_shuffle_mode_toggle:
         os << "playback_emit_shuffle_mode_toggle";
         break;
 
-      case DBusFn::playback_emit_stream_info:
+      case DcpdDBusFn::playback_emit_stream_info:
         os << "playback_emit_stream_info";
         break;
 
-      case DBusFn::playback_call_set_stream_info:
+      case DcpdDBusFn::playback_call_set_stream_info:
         os << "playback_call_set_stream_info";
         break;
 
-      case DBusFn::views_emit_open:
+      case DcpdDBusFn::views_emit_open:
         os << "views_emit_open";
         break;
 
-      case DBusFn::views_emit_toggle:
+      case DcpdDBusFn::views_emit_toggle:
         os << "views_emit_toggle";
         break;
 
-      case DBusFn::views_emit_search_parameters:
+      case DcpdDBusFn::views_emit_search_parameters:
         os << "views_emit_search_parameters";
         break;
 
-      case DBusFn::list_navigation_emit_level_up:
+      case DcpdDBusFn::list_navigation_emit_level_up:
         os << "list_navigation_emit_level_up";
         break;
 
-      case DBusFn::list_navigation_emit_level_down:
+      case DcpdDBusFn::list_navigation_emit_level_down:
         os << "list_navigation_emit_level_down";
         break;
 
-      case DBusFn::list_navigation_emit_move_lines:
+      case DcpdDBusFn::list_navigation_emit_move_lines:
         os << "list_navigation_emit_move_lines";
         break;
 
-      case DBusFn::list_navigation_emit_move_pages:
+      case DcpdDBusFn::list_navigation_emit_move_pages:
         os << "list_navigation_emit_move_pages";
         break;
 
-      case DBusFn::list_item_emit_add_to_list:
+      case DcpdDBusFn::list_item_emit_add_to_list:
         os << "list_item_emit_add_to_list";
         break;
 
-      case DBusFn::list_item_emit_remove_from_list:
+      case DcpdDBusFn::list_item_emit_remove_from_list:
         os << "list_item_emit_remove_from_list";
         break;
     }
@@ -159,7 +159,7 @@ class MockDcpdDBus::Expectation
   public:
     struct Data
     {
-        const DBusFn function_id_;
+        const DcpdDBusFn function_id_;
 
         void *dbus_object_;
         gdouble arg_factor_;
@@ -174,7 +174,7 @@ class MockDcpdDBus::Expectation
         const char **key_value_table_;
         gboolean ret_bool_;
 
-        explicit Data(DBusFn fn):
+        explicit Data(DcpdDBusFn fn):
             function_id_(fn),
             dbus_object_(nullptr),
             arg_factor_(23.42),
@@ -196,7 +196,7 @@ class MockDcpdDBus::Expectation
     Expectation(const Expectation &) = delete;
     Expectation &operator=(const Expectation &) = delete;
 
-    explicit Expectation(DBusFn id, tdbusdcpdPlayback *dbus_object,
+    explicit Expectation(DcpdDBusFn id, tdbusdcpdPlayback *dbus_object,
                          gdouble fast_wind_factor = 0.0):
         d(id)
     {
@@ -204,9 +204,9 @@ class MockDcpdDBus::Expectation
         data_.arg_factor_ = fast_wind_factor;
     }
 
-    explicit Expectation(DBusFn id, tdbusdcpdPlayback *dbus_object,
+    explicit Expectation(DcpdDBusFn id, tdbusdcpdPlayback *dbus_object,
                          gint64 position, const gchar *position_units):
-        d(DBusFn::playback_emit_seek)
+        d(DcpdDBusFn::playback_emit_seek)
     {
         data_.dbus_object_ = static_cast<void *>(dbus_object);
         data_.arg_position_ = position;
@@ -217,7 +217,7 @@ class MockDcpdDBus::Expectation
                          guint16 stream_id, const char *artist,
                          const char *album, const char *title,
                          const char *alttrack, const char *url):
-        d(DBusFn::playback_emit_stream_info)
+        d(DcpdDBusFn::playback_emit_stream_info)
     {
         data_.dbus_object_ = static_cast<void *>(dbus_object);
         data_.arg_index_ = stream_id;
@@ -231,7 +231,7 @@ class MockDcpdDBus::Expectation
     explicit Expectation(gboolean ret, tdbusdcpdPlayback *dbus_object,
                          guint16 stream_id, const char *title,
                          const char *url):
-        d(DBusFn::playback_call_set_stream_info)
+        d(DcpdDBusFn::playback_call_set_stream_info)
     {
         data_.dbus_object_ = static_cast<void *>(dbus_object);
         data_.ret_bool_ = ret;
@@ -240,7 +240,7 @@ class MockDcpdDBus::Expectation
         data_.arg_name_b_ = url;
     }
 
-    explicit Expectation(DBusFn id, tdbusdcpdViews *dbus_object,
+    explicit Expectation(DcpdDBusFn id, tdbusdcpdViews *dbus_object,
                          const char *name_a, const char *name_b = ""):
         d(id)
     {
@@ -249,7 +249,7 @@ class MockDcpdDBus::Expectation
         data_.arg_name_b_ = name_b;
     }
 
-    explicit Expectation(DBusFn id, tdbusdcpdViews *dbus_object,
+    explicit Expectation(DcpdDBusFn id, tdbusdcpdViews *dbus_object,
                          const char *context, const char **key_value_table):
         d(id)
     {
@@ -258,7 +258,7 @@ class MockDcpdDBus::Expectation
         data_.key_value_table_ = key_value_table;
     }
 
-    explicit Expectation(DBusFn id, tdbusdcpdListNavigation *dbus_object,
+    explicit Expectation(DcpdDBusFn id, tdbusdcpdListNavigation *dbus_object,
                          gint count = 0):
         d(id)
     {
@@ -266,7 +266,7 @@ class MockDcpdDBus::Expectation
         data_.arg_count_ = count;
     }
 
-    explicit Expectation(DBusFn id, tdbusdcpdListItem *dbus_object,
+    explicit Expectation(DcpdDBusFn id, tdbusdcpdListItem *dbus_object,
                          const char *category, guint16 idx):
         d(id)
     {
@@ -304,52 +304,52 @@ void MockDcpdDBus::check() const
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_start(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_start, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_start, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_stop(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_stop, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_stop, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_pause(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_pause, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_pause, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_next(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_next, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_next, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_previous(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_previous, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_previous, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_resume(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_resume, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_resume, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_set_speed(tdbusdcpdPlayback *object, gdouble arg_speed)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_set_speed, object, arg_speed));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_set_speed, object, arg_speed));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_seek(tdbusdcpdPlayback *object, gint64 arg_position, const gchar *arg_position_units)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_seek, object, arg_position, arg_position_units));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_seek, object, arg_position, arg_position_units));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_repeat_mode_toggle(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_repeat_mode_toggle, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_repeat_mode_toggle, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_shuffle_mode_toggle(tdbusdcpdPlayback *object)
 {
-    expectations_->add(Expectation(DBusFn::playback_emit_shuffle_mode_toggle, object));
+    expectations_->add(Expectation(DcpdDBusFn::playback_emit_shuffle_mode_toggle, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg_stream_id, const gchar *arg_artist, const gchar *arg_album, const gchar *arg_title, const gchar *arg_alttrack, const gchar *arg_url)
@@ -365,49 +365,49 @@ void MockDcpdDBus::expect_tdbus_dcpd_playback_call_set_stream_info(gboolean ret,
 
 void MockDcpdDBus::expect_tdbus_dcpd_views_emit_open(tdbusdcpdViews *object, const gchar *arg_view_name)
 {
-    expectations_->add(Expectation(DBusFn::views_emit_open, object, arg_view_name));
+    expectations_->add(Expectation(DcpdDBusFn::views_emit_open, object, arg_view_name));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_views_emit_toggle(tdbusdcpdViews *object, const gchar *arg_view_name_back, const gchar *arg_view_name_forth)
 {
-    expectations_->add(Expectation(DBusFn::views_emit_toggle, object, arg_view_name_back, arg_view_name_forth));
+    expectations_->add(Expectation(DcpdDBusFn::views_emit_toggle, object, arg_view_name_back, arg_view_name_forth));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_views_emit_search_parameters(tdbusdcpdViews *object, const gchar *arg_context, const char **key_value_table)
 {
-    expectations_->add(Expectation(DBusFn::views_emit_search_parameters, object, arg_context, key_value_table));
+    expectations_->add(Expectation(DcpdDBusFn::views_emit_search_parameters, object, arg_context, key_value_table));
 }
 
 
 void MockDcpdDBus::expect_tdbus_dcpd_list_navigation_emit_level_up(tdbusdcpdListNavigation *object)
 {
-    expectations_->add(Expectation(DBusFn::list_navigation_emit_level_up, object));
+    expectations_->add(Expectation(DcpdDBusFn::list_navigation_emit_level_up, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_list_navigation_emit_level_down(tdbusdcpdListNavigation *object)
 {
-    expectations_->add(Expectation(DBusFn::list_navigation_emit_level_down, object));
+    expectations_->add(Expectation(DcpdDBusFn::list_navigation_emit_level_down, object));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_list_navigation_emit_move_lines(tdbusdcpdListNavigation *object, gint arg_count)
 {
-    expectations_->add(Expectation(DBusFn::list_navigation_emit_move_lines, object, arg_count));
+    expectations_->add(Expectation(DcpdDBusFn::list_navigation_emit_move_lines, object, arg_count));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_list_navigation_emit_move_pages(tdbusdcpdListNavigation *object, gint arg_count)
 {
-    expectations_->add(Expectation(DBusFn::list_navigation_emit_move_pages, object, arg_count));
+    expectations_->add(Expectation(DcpdDBusFn::list_navigation_emit_move_pages, object, arg_count));
 }
 
 
 void MockDcpdDBus::expect_tdbus_dcpd_list_item_emit_add_to_list(tdbusdcpdListItem *object, const gchar *arg_category, guint16 arg_index)
 {
-    expectations_->add(Expectation(DBusFn::list_item_emit_add_to_list, object, arg_category, arg_index));
+    expectations_->add(Expectation(DcpdDBusFn::list_item_emit_add_to_list, object, arg_category, arg_index));
 }
 
 void MockDcpdDBus::expect_tdbus_dcpd_list_item_emit_remove_from_list(tdbusdcpdListItem *object, const gchar *arg_category, guint16 arg_index)
 {
-    expectations_->add(Expectation(DBusFn::list_item_emit_remove_from_list, object, arg_category, arg_index));
+    expectations_->add(Expectation(DcpdDBusFn::list_item_emit_remove_from_list, object, arg_category, arg_index));
 }
 
 
@@ -417,7 +417,7 @@ void tdbus_dcpd_playback_emit_start(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_start);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_start);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -425,7 +425,7 @@ void tdbus_dcpd_playback_emit_stop(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_stop);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_stop);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -433,7 +433,7 @@ void tdbus_dcpd_playback_emit_pause(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_pause);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_pause);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -441,7 +441,7 @@ void tdbus_dcpd_playback_emit_next(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_next);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_next);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -449,7 +449,7 @@ void tdbus_dcpd_playback_emit_previous(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_previous);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_previous);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -457,7 +457,7 @@ void tdbus_dcpd_playback_emit_resume(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_resume);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_resume);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -465,7 +465,7 @@ void tdbus_dcpd_playback_emit_set_speed(tdbusdcpdPlayback *object, gdouble arg_s
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_set_speed);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_set_speed);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cut_assert(expect.d.arg_factor_ <= arg_speed_factor &&
                expect.d.arg_factor_ >= arg_speed_factor);
@@ -476,7 +476,7 @@ void tdbus_dcpd_playback_emit_seek(tdbusdcpdPlayback *object, gint64 arg_positio
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_seek);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_seek);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_position_, arg_position);
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_position_units));
@@ -486,7 +486,7 @@ void tdbus_dcpd_playback_emit_repeat_mode_toggle(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_repeat_mode_toggle);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_repeat_mode_toggle);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -494,7 +494,7 @@ void tdbus_dcpd_playback_emit_shuffle_mode_toggle(tdbusdcpdPlayback *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_shuffle_mode_toggle);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_shuffle_mode_toggle);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -502,7 +502,7 @@ void tdbus_dcpd_playback_emit_stream_info(tdbusdcpdPlayback *object, guint16 arg
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_emit_stream_info);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_emit_stream_info);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_index_, arg_stream_id);
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_artist));
@@ -516,7 +516,7 @@ gboolean tdbus_dcpd_playback_call_set_stream_info_sync(tdbusdcpdPlayback *proxy,
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::playback_call_set_stream_info);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::playback_call_set_stream_info);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(proxy));
     cppcut_assert_equal(expect.d.arg_index_, arg_stream_id);
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_title));
@@ -532,7 +532,7 @@ void tdbus_dcpd_views_emit_open(tdbusdcpdViews *object, const gchar *arg_view_na
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::views_emit_open);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::views_emit_open);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_view_name));
 }
@@ -541,7 +541,7 @@ void tdbus_dcpd_views_emit_toggle(tdbusdcpdViews *object, const gchar *arg_view_
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::views_emit_toggle);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::views_emit_toggle);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_view_name_back));
     cppcut_assert_equal(expect.d.arg_name_b_, std::string(arg_view_name_forth));
@@ -551,7 +551,7 @@ void tdbus_dcpd_views_emit_search_parameters(tdbusdcpdViews *object, const gchar
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::views_emit_search_parameters);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::views_emit_search_parameters);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_context));
     cppcut_assert_not_null(arg_query);
@@ -590,7 +590,7 @@ void tdbus_dcpd_list_navigation_emit_level_up(tdbusdcpdListNavigation *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::list_navigation_emit_level_up);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::list_navigation_emit_level_up);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -598,7 +598,7 @@ void tdbus_dcpd_list_navigation_emit_level_down(tdbusdcpdListNavigation *object)
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::list_navigation_emit_level_down);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::list_navigation_emit_level_down);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
 }
 
@@ -606,7 +606,7 @@ void tdbus_dcpd_list_navigation_emit_move_lines(tdbusdcpdListNavigation *object,
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::list_navigation_emit_move_lines);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::list_navigation_emit_move_lines);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_count_, arg_count);
 }
@@ -615,7 +615,7 @@ void tdbus_dcpd_list_navigation_emit_move_pages(tdbusdcpdListNavigation *object,
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::list_navigation_emit_move_pages);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::list_navigation_emit_move_pages);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_count_, arg_count);
 }
@@ -625,7 +625,7 @@ void tdbus_dcpd_list_item_emit_add_to_list(tdbusdcpdListItem *object, const gcha
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::list_item_emit_add_to_list);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::list_item_emit_add_to_list);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_category));
     cppcut_assert_equal(expect.d.arg_index_, arg_index);
@@ -635,7 +635,7 @@ void tdbus_dcpd_list_item_emit_remove_from_list(tdbusdcpdListItem *object, const
 {
     const auto &expect(mock_dcpd_dbus_singleton->expectations_->get_next_expectation(__func__));
 
-    cppcut_assert_equal(expect.d.function_id_, DBusFn::list_item_emit_remove_from_list);
+    cppcut_assert_equal(expect.d.function_id_, DcpdDBusFn::list_item_emit_remove_from_list);
     cppcut_assert_equal(expect.d.dbus_object_, static_cast<void *>(object));
     cppcut_assert_equal(expect.d.arg_name_a_, std::string(arg_category));
     cppcut_assert_equal(expect.d.arg_index_, arg_index);
