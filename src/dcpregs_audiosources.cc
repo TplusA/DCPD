@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1114,10 +1114,13 @@ static const uint8_t determine_usable(const AudioSource &asrc)
 
 static void write_audio_source_info(RegisterResponseWriter &out,
                                     const AudioSource &asrc,
+                                    bool with_human_readable_name,
                                     const std::string *id_override = nullptr)
 {
     out.push_back(id_override == nullptr ? asrc.id_ : *id_override);
-    out.push_back(asrc.get_name());
+
+    if(with_human_readable_name)
+        out.push_back(asrc.get_name());
 
     const uint8_t status_byte =
         uint8_t((asrc.get_state() == AudioSourceState::UNAVAILABLE ||
@@ -1148,7 +1151,7 @@ ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length
 
         audio_source_data.for_each([&out] (const AudioSource &asrc)
         {
-            write_audio_source_info(out, asrc);
+            write_audio_source_info(out, asrc, true);
         });
 
         break;
@@ -1159,11 +1162,12 @@ ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length
                 audio_source_data.lookup_predefined(queue_item.second);
 
             if(asrc != nullptr)
-                write_audio_source_info(out, *asrc);
+                write_audio_source_info(out, *asrc, true);
             else
             {
                 static const AudioSource invalid_audio_source("", "", 0);
-                write_audio_source_info(out, invalid_audio_source, &queue_item.second);
+                write_audio_source_info(out, invalid_audio_source, true,
+                                        &queue_item.second);
             }
         }
 
@@ -1189,7 +1193,7 @@ ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length
         {
             if(asrc.has_changed())
             {
-                out.push_back(asrc.id_);
+                write_audio_source_info(out, asrc, false);
                 asrc.set_processed();
             }
         });
