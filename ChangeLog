@@ -1,3 +1,19 @@
+2018-02-09  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.10 released.
+
+	* Audio sources: Add status byte in audio source status updates sent
+	  through register 80. This is an incompatible change with respect to
+	  v4.1, but this feature has never been used before anyway, so it's
+	  OK.
+
+	* Playback: In plainurl mode, a start signal has been sent to the
+	  streamplayer twice in case the first stream hasn't started playing
+	  when receiving the next stream URL. This fix is more of cosmetic
+	  nature as the streamplayer ignores this second start command anyway.
+
+	* Misc: Improve logs for smartphone connection handling a bit.
+
 2018-01-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.9 released.
