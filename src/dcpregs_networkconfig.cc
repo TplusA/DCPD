@@ -22,6 +22,7 @@
 
 #include <array>
 #include <cstring>
+#include <functional>
 #include <algorithm>
 #include <arpa/inet.h>
 

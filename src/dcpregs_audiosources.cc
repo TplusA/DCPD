@@ -25,6 +25,7 @@
 #include <array>
 #include <map>
 #include <deque>
+#include <functional>
 #include <algorithm>
 #include <mutex>
 #include <sstream>

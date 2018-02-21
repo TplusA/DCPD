@@ -21,6 +21,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <algorithm>
+#include <functional>
 #include <cinttypes>
 #include <chrono>
 
