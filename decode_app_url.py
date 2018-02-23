@@ -78,19 +78,40 @@ def extract_hexdump(input, start_line, max_lines):
 
     return hexdump
 
+def escaped_hexdump(hexdump):
+    escaped = Hexdump(hexdump.offset)
+
+    r = iter(range(0, len(hexdump.data)))
+
+    for i in r:
+        b = hexdump.data[i]
+
+        if b == 0x27:
+            next(r)
+
+            b = hexdump.data[i + 1]
+
+            if b == 0x01:
+                b = 0xff
+
+        escaped.data.append(b)
+
+    return escaped
+
 def error_exit(error_message, exit_code = 1):
     print("ERROR: " + error_message, file = sys.stderr)
     sys.exit(exit_code)
 
 def usage(exit_code = 1):
     print("""Usage:
-{0} [-h] [-l start line] [-b start byte] [input file]
+{0} [-h] [-l start line] [-b start byte] [-u] [input file]
 
 Options:
 -h       This help screen.
 -l line  Which line to begin in searching for a hexdump (default: 1)
 -n num   How many lines to read at most (default: all)
--b byte  At which byte in the hexdump decoding should start (default: 16)""".format(sys.argv[0]))
+-b byte  At which byte in the hexdump decoding should start (default: 16)
+-u       Unescape SPI escape sequences (0x27 handling)""".format(sys.argv[0]))
     sys.exit(exit_code)
 
 def main():
@@ -98,9 +119,10 @@ def main():
     start_byte = 16
     start_line = 1
     max_lines = None
+    unescape = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hb:l:n:")
+        opts, args = getopt.getopt(sys.argv[1:], "hb:l:n:u")
     except getopt.GetoptError as err:
         error_exit(str(err))
 
@@ -109,12 +131,17 @@ def main():
         elif o == "-b": start_byte = int(a)
         elif o == "-l": start_line = int(a)
         elif o == "-n": max_lines = int(a)
+        elif o == "-u": unescape = True
 
     if args:
         input = open(args[0], "r")
 
     try:
         hexdump = extract_hexdump(input, start_line, max_lines)
+
+        if unescape:
+            hexdump = escaped_hexdump(hexdump)
+
         prng = LFSR(44257, 46080)
         decoded = ''.join(list(map(lambda x: chr(x ^ prng.get_byte()), hexdump.data[start_byte:])))
 
