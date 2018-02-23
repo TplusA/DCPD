@@ -84,7 +84,7 @@ def error_exit(error_message, exit_code = 1):
 
 def usage(exit_code = 1):
     print("""Usage:
-{0} [-h] [-l start line] [input file]
+{0} [-h] [-l start line] [-b start byte] [input file]
 
 Options:
 -h       This help screen.
@@ -100,7 +100,7 @@ def main():
     max_lines = None
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "b:l:n:")
+        opts, args = getopt.getopt(sys.argv[1:], "hb:l:n:")
     except getopt.GetoptError as err:
         error_exit(str(err))
 
