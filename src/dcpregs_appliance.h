@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -32,6 +32,7 @@
 extern "C" {
 #endif
 
+int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length);
 ssize_t dcpregs_read_87_appliance_id(uint8_t *response, size_t length);
 int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length);
 
