@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -120,6 +120,7 @@ static struct
 {
     bool connect_to_session_bus;
     tdbusaupathManager *audiopath_manager_proxy;
+    tdbusaupathAppliance *audiopath_appliance_proxy;
 }
 audiopath_iface_data;
 
@@ -402,6 +403,14 @@ static void name_acquired(GDBusConnection *connection,
                                                 "/de/tahifi/TAPSwitch",
                                                 NULL, &error);
         (void)dbus_common_handle_dbus_error(&error, "Create tapswitch manager proxy");
+
+        audiopath_iface_data.audiopath_appliance_proxy =
+            tdbus_aupath_appliance_proxy_new_sync(connection,
+                                                  G_DBUS_PROXY_FLAGS_NONE,
+                                                  "de.tahifi.TAPSwitch",
+                                                  "/de/tahifi/TAPSwitch",
+                                                  NULL, &error);
+        (void)dbus_common_handle_dbus_error(&error, "Create tapswitch appliance proxy");
     }
 
     if(is_session_bus == credentials_iface_data.connect_to_session_bus)
@@ -597,6 +606,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(artcache_iface_data.artcache_read_iface != NULL);
     log_assert(artcache_iface_data.artcache_monitor_iface != NULL);
     log_assert(audiopath_iface_data.audiopath_manager_proxy != NULL);
+    log_assert(audiopath_iface_data.audiopath_appliance_proxy != NULL);
     log_assert(connman_iface_data.connman_agent_iface != NULL);
 
     g_signal_connect(audiopath_iface_data.audiopath_manager_proxy, "g-signal",
@@ -677,6 +687,7 @@ void dbus_shutdown(void)
     g_object_unref(artcache_iface_data.artcache_read_iface);
     g_object_unref(artcache_iface_data.artcache_monitor_iface);
     g_object_unref(audiopath_iface_data.audiopath_manager_proxy);
+    g_object_unref(audiopath_iface_data.audiopath_appliance_proxy);
 
     if(credentials_iface_data.cred_read_iface != NULL)
         g_object_unref(credentials_iface_data.cred_read_iface);
@@ -825,6 +836,11 @@ tdbusartcacheRead *dbus_get_artcache_read_iface(void)
 tdbusaupathManager *dbus_audiopath_get_manager_iface(void)
 {
     return audiopath_iface_data.audiopath_manager_proxy;
+}
+
+tdbusaupathAppliance *dbus_audiopath_get_appliance_iface(void)
+{
+    return audiopath_iface_data.audiopath_appliance_proxy;
 }
 
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void)
