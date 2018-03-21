@@ -1,3 +1,20 @@
+2018-04-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.12 released.
+
+	* DCP protocol: Add appliance status register 18, sent by the
+	  appliance on status updates.
+
+	* Playback: Changes of audio paths are synchronized with the
+	  appliance's audio system state now. The state of the audio system as
+	  sent in via register 18 is forwarded to TAPSwtich so that it can
+	  defer completion of audio path changes.
+
+	  Requires TAPSwitch v1.3 or later.
+
+	* Testing: Add appliance ID "LinuxPC" for testing on PC. Also improve
+	  logging capabilities for DCP-over-TCP.
+
 2018-03-06  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.11 released.
