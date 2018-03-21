@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,8 @@
 #include "network_device_list.hh"
 #include "dcpregs_networkconfig.hh"
 #include "configproxy.h"
+#include "dbus_iface_deep.h"
+#include "audiopath_dbus.h"
 #include "messages.h"
 
 /*!
@@ -244,6 +246,19 @@ int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length)
 
     if(dcpregs_appliance_id_init())
         dcpregs_appliance_id_configure();
+
+    return 0;
+}
+
+int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length)
+{
+    const bool is_valid = ((data[0] & (1U << 7)) != 0);
+    const bool is_audio_path_usable = ((data[1] & 0x01) != 0);
+    const uint8_t audio_state = is_valid ? (is_audio_path_usable ? 1 : 0) : 2;
+
+    tdbus_aupath_appliance_call_set_ready_state(dbus_audiopath_get_appliance_iface(),
+                                                audio_state,
+                                                nullptr, nullptr, nullptr);
 
     return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -47,7 +47,7 @@
 #include "registers_priv.h"
 #include "configproxy.h"
 
-#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 4)
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 5)
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -268,6 +268,12 @@ static const struct dcp_register_t register_map[] =
         REGISTER(17, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 2,
         .read_handler = read_17_device_status,
+    },
+    {
+        /* Appliance status register */
+        REGISTER(18, REGISTER_MK_VERSION(1, 0, 5)),
+        .max_data_size = 2,
+        .write_handler = dcpregs_write_18_appliance_status,
     },
     {
         /* Image version */

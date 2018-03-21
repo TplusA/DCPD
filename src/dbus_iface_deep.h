@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -42,6 +42,7 @@ tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void);
 tdbusdcpdListItem *dbus_get_list_item_iface(void);
 tdbusmixerVolume *dbus_mixer_get_volume_iface(void);
 tdbusaupathManager *dbus_audiopath_get_manager_iface(void);
+tdbusaupathAppliance *dbus_audiopath_get_appliance_iface(void);
 tdbusConfigurationProxy *dbus_get_configuration_proxy_iface(void);
 
 tdbusFileTransfer *dbus_get_file_transfer_iface(void);

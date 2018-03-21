@@ -1097,13 +1097,19 @@ static const std::array<uint8_t, 4> existing_registers_v1_0_4 =
    47, 80, 64, 81,
 };
 
-static const std::array<RegisterSetPerVersion, 5> all_registers
+static const std::array<uint8_t, 1> existing_registers_v1_0_5 =
+{
+   18,
+};
+
+static const std::array<RegisterSetPerVersion, 6> all_registers
 {
     RegisterSetPerVersion(1, 0, 0, existing_registers_v1_0_0),
     RegisterSetPerVersion(1, 0, 1, existing_registers_v1_0_1),
     RegisterSetPerVersion(1, 0, 2, existing_registers_v1_0_2),
     RegisterSetPerVersion(1, 0, 3, existing_registers_v1_0_3),
     RegisterSetPerVersion(1, 0, 4, existing_registers_v1_0_4),
+    RegisterSetPerVersion(1, 0, 5, existing_registers_v1_0_5),
 };
 
 void cut_setup()
@@ -1641,7 +1647,7 @@ static MockMessages *mock_messages;
 
 static RegisterChangedData *register_changed_data;
 
-static const uint8_t expected_default_protocol_level[3] = { 1, 0, 4, };
+static const uint8_t expected_default_protocol_level[3] = { 1, 0, 5, };
 
 static void register_changed_callback(uint8_t reg_number)
 {
