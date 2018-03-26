@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -241,13 +241,14 @@ void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
         g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
         dcpregs_audiosources_source_available(source_id);
     }
-    else if(strcmp(signal_name, "PathActivated") == 0)
+    else if(strcmp(signal_name, "PathActivated") == 0 ||
+            strcmp(signal_name, "PathDeferred") == 0)
     {
         const gchar *source_id;
         const gchar *player_id;
 
         g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
-        dcpregs_audiosources_selected_source(source_id);
+        dcpregs_audiosources_selected_source(source_id, strcmp(signal_name, "PathDeferred") == 0);
     }
     else if(strcmp(signal_name, "PlayerRegistered") == 0)
     {

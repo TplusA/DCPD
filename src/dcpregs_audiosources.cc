@@ -53,6 +53,9 @@ enum class AudioSourceState
     LAST_STATE = ZOMBIE,
 };
 
+/*!
+ * State of audio source requested by us (i.e., the SPI slave).
+ */
 enum class SelectionState
 {
     IDLE,
@@ -453,6 +456,7 @@ class SelectedSource
 
     SelectionState state_;
     const AudioSource *selected_;
+    bool selected_is_half_selected_;
     const AudioSource *pending_;
     GCancellable *cancel_;
 
@@ -465,6 +469,7 @@ class SelectedSource
     explicit SelectedSource():
         state_(SelectionState::IDLE),
         selected_(nullptr),
+        selected_is_half_selected_(false),
         pending_(nullptr),
         cancel_(nullptr),
         is_test_mode_(false)
@@ -475,6 +480,7 @@ class SelectedSource
         std::lock_guard<std::recursive_mutex> l(lock_);
         state_ = SelectionState::IDLE;
         selected_ = nullptr;
+        selected_is_half_selected_ = false;
         pending_ = nullptr;
         is_test_mode_ = false;
         log_assert(cancel_ == nullptr);
@@ -487,9 +493,16 @@ class SelectedSource
         return std::unique_lock<std::recursive_mutex>(lock_);
     }
 
-    const AudioSource *get() const
+    const AudioSource *get_half_or_full() const
     {
         std::lock_guard<std::recursive_mutex> l(lock_);
+        return selected_;
+    }
+
+    const AudioSource *get(bool &is_half_selected) const
+    {
+        std::lock_guard<std::recursive_mutex> l(lock_);
+        is_half_selected = selected_is_half_selected_;
         return selected_;
     }
 
@@ -557,13 +570,14 @@ class SelectedSource
         do_start_pending();
     }
 
-    bool selected_notification(const AudioSource &src)
+    bool selected_notification(const AudioSource &src, bool is_deferred)
     {
         std::lock_guard<std::recursive_mutex> l(lock_);
 
         const bool changed = selected_ != &src;
 
         selected_ = &src;
+        selected_is_half_selected_ = is_deferred;
 
         if(selected_ != pending_)
             return changed;
@@ -827,7 +841,7 @@ class AudioSourceData
             break;
 
           case SelectionState::PENDING:
-            if(selected_.get() == &src)
+            if(selected_.get_half_or_full() == &src)
             {
                 if(try_switch_now)
                     selected_.start_pending();
@@ -844,7 +858,7 @@ class AudioSourceData
             /* fall-through */
 
           case SelectionState::SELECTION_REQUEST_DONE:
-            if(selected_.get() == &src)
+            if(selected_.get_half_or_full() == &src)
                 return;
 
             break;
@@ -853,9 +867,9 @@ class AudioSourceData
         selected_.start_request(src, try_switch_now);
     }
 
-    void selected_audio_source_notification(const AudioSource &src)
+    void selected_audio_source_notification(const AudioSource &src, bool is_deferred)
     {
-        if(selected_.selected_notification(src))
+        if(selected_.selected_notification(src, is_deferred))
             registers_get_data()->register_changed_notification_fn(81);
     }
 
@@ -1276,7 +1290,7 @@ ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length)
 
     auto lock(audio_source_data.lock());
 
-    const AudioSource *src =audio_source_data.get_selected().get();
+    const AudioSource *src =audio_source_data.get_selected().get_half_or_full();
 
     if(src == nullptr)
         return 0;
@@ -1405,22 +1419,37 @@ void dcpregs_audiosources_source_available(const char *source_id)
         push_80_command_queue.add(GetAudioSourcesCommand::SOURCES_CHANGED);
 }
 
-void dcpregs_audiosources_selected_source(const char *source_id)
+void dcpregs_audiosources_selected_source(const char *source_id,
+                                          bool is_deferred)
 {
     auto lock(audio_source_data.lock());
 
     AudioSource *src = audio_source_data.lookup(source_id);
 
-    if(src != nullptr && src == audio_source_data.get_selected().get())
-    {
-        BUG("Audio source \"%s\" selected again", source_id);
-        return;
-    }
-    else if(src == nullptr)
+    if(src == nullptr)
         src = audio_source_data.insert_extra(source_id);
+    else
+    {
+        bool is_half_selected;
+
+        if(src == audio_source_data.get_selected().get(is_half_selected))
+        {
+            if(!is_half_selected)
+            {
+                BUG("Audio source \"%s\" %s again",
+                    source_id, is_deferred ? "deferred" : "selected");
+                return;
+            }
+            else if(is_deferred)
+            {
+                msg_info("Deferred audio source \"%s\" deferred again", source_id);
+                return;
+            }
+        }
+    }
 
     log_assert(src != nullptr);
-    audio_source_data.selected_audio_source_notification(*src);
+    audio_source_data.selected_audio_source_notification(*src, is_deferred);
 }
 
 void dcpregs_audiosources_set_have_credentials(const char *cred_category,
