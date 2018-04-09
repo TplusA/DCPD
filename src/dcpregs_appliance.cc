@@ -51,6 +51,7 @@ enum class Appliance
     CALA_CDR,
     CALA_SR,
     CALA_BERBEL,
+    LINUX_PC,
     FALLBACK,
 
     LAST_APPLIANCE = FALLBACK,
@@ -68,6 +69,13 @@ static void set_device_id_by_mac(const Connman::Technology tech)
 
     configproxy_set_string(nullptr, appliance_device_id_key,
                            devices.get_auto_select_mac_address(tech).get_string().c_str());
+}
+
+static void set_device_id_for_testing()
+{
+    /* ID was generated from 1 MiB of random data */
+    configproxy_set_string(nullptr, appliance_device_id_key,
+                           "4203b53e75db97e29fabd27cf1a6e9f2");
 }
 
 static void set_device_id_none()
@@ -118,6 +126,13 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
         set_device_id_by_mac(Connman::Technology::WLAN);
         break;
 
+      case Appliance::LINUX_PC:
+        dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+        network_prefs_update_primary_network_devices(nullptr, nullptr,
+                                                     is_reconfiguration);
+        set_device_id_for_testing();
+        break;
+
       case Appliance::UNDEFINED:
         dcpregs_networkconfig_set_primary_technology(Connman::Technology::UNKNOWN_TECHNOLOGY);
         network_prefs_update_primary_network_devices(nullptr, nullptr,
@@ -148,6 +163,7 @@ static Appliance map_appliance_id(const char *name)
         std::move(std::make_pair("CalaCDR",    Appliance::CALA_CDR)),
         std::move(std::make_pair("CalaSR",     Appliance::CALA_SR)),
         std::move(std::make_pair("CalaBerbel", Appliance::CALA_BERBEL)),
+        std::move(std::make_pair("LinuxPC",    Appliance::LINUX_PC)),
         std::move(std::make_pair("!unknown!",  Appliance::FALLBACK)),
     };
 
