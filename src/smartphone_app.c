@@ -64,7 +64,8 @@ int appconn_init(struct smartphone_app_connection_data *appconn,
 
 void appconn_handle_incoming(struct smartphone_app_connection_data *appconn)
 {
-    int peer_fd = network_accept_peer_connection(appconn->server_fd, true);
+    int peer_fd = network_accept_peer_connection(appconn->server_fd, true,
+                                                 MESSAGE_LEVEL_NORMAL);
 
     if(peer_fd < 0)
         return;
