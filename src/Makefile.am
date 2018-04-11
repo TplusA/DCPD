@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -227,6 +227,7 @@ libdrcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libtransactions_la_SOURCES = \
     transactions.c transactions.h os.h \
+    hexdump.c hexdump.h \
     dynamic_buffer.h registers.h named_pipe.h dcpdefs.h messages.h
 libtransactions_la_CFLAGS = $(AM_CFLAGS)
 libtransactions_la_CXXFLAGS = $(AM_CXXFLAGS)

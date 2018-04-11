@@ -948,6 +948,7 @@ static void main_loop(struct files *files,
 
         int in_fd = -1;
         int out_fd = -1;
+        enum MessageVerboseLevel dump_sent_data_verbose_level = MESSAGE_LEVEL_TRACE;
 
         switch(transaction_get_channel(state.active_transaction))
         {
@@ -959,11 +960,17 @@ static void main_loop(struct files *files,
           case TRANSACTION_CHANNEL_INET:
             in_fd = dot->peer_fd;
             out_fd = dot->peer_fd;
+            dump_sent_data_verbose_level = MESSAGE_LEVEL_NORMAL;
             break;
         }
 
         struct transaction_exception e;
-        switch(transaction_process(state.active_transaction, in_fd, out_fd, &e))
+        switch(transaction_process(state.active_transaction, in_fd, out_fd,
+                                   msg_is_verbose(dump_sent_data_verbose_level)
+                                   ? (TRANSACTION_DUMP_SENT_DCP_HEADER |
+                                      TRANSACTION_DUMP_SENT_DCP_PAYLOAD |
+                                      TRANSACTION_DUMP_SENT_MERGE_ALL)
+                                   : TRANSACTION_DUMP_SENT_NONE, &e))
         {
           case TRANSACTION_IN_PROGRESS:
             break;

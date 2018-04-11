@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -54,6 +54,17 @@ enum transaction_channel
     TRANSACTION_CHANNEL_SPI,
     TRANSACTION_CHANNEL_INET,
 };
+
+#define TRANSACTION_DUMP_SENT_MASK          (7U << 0)
+#define TRANSACTION_DUMP_SENT_DCPSYNC       (1U << 0)
+#define TRANSACTION_DUMP_SENT_DCP_HEADER    (1U << 1)
+#define TRANSACTION_DUMP_SENT_DCP_PAYLOAD   (1U << 2)
+#define TRANSACTION_DUMP_SENT_NONE          0U
+
+#define TRANSACTION_DUMP_SENT_MERGE_MASK    (3U << 4)
+#define TRANSACTION_DUMP_SENT_MERGE_NONE    (0U << 4)
+#define TRANSACTION_DUMP_SENT_MERGE_DCP     (1U << 4)
+#define TRANSACTION_DUMP_SENT_MERGE_ALL     (2U << 4)
 
 /*!
  * Opaque transaction structure.
@@ -184,6 +195,9 @@ bool transaction_is_pinned(const struct transaction *t);
  *     Where to read data sent by slave from.
  * \param[in] to_slave_fd
  *     Where to write data to be sent to slave to.
+ * \param[in] dump_sent_data_flags
+ *     Whether or not to log DCP data sent to slave, and how.
+ *     See \c TRANSACTION_DUMP_SENT_ flag definitions.
  * \param[out] e
  *     New transaction that was created while processing \p t as a result of a
  *     collision. This new transaction takes priority over \p tc and must be
@@ -209,6 +223,7 @@ bool transaction_is_pinned(const struct transaction *t);
 enum transaction_process_status transaction_process(struct transaction *t,
                                                     int from_slave_fd,
                                                     int to_slave_fd,
+                                                    unsigned int dump_sent_data_flags,
                                                     struct transaction_exception *e);
 
 /*!
