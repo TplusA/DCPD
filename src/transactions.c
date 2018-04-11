@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -33,6 +33,7 @@
 #include "named_pipe.h"
 #include "dcpdefs.h"
 #include "messages.h"
+#include "hexdump.h"
 #include "os.h"
 
 enum transaction_state
@@ -924,9 +925,73 @@ static bool process_nack(struct transaction *t, uint16_t serial, uint8_t ttl)
     return true;
 }
 
+static void log_dcp_data(unsigned int flags, const uint8_t *sync_header,
+                         const struct transaction *t, const size_t fragsize)
+{
+    if((flags & TRANSACTION_DUMP_SENT_MASK) == TRANSACTION_DUMP_SENT_NONE)
+        return;
+
+    if((flags & TRANSACTION_DUMP_SENT_MERGE_MASK) == TRANSACTION_DUMP_SENT_MERGE_NONE)
+    {
+        if(t->dcpsync.is_enabled && (flags & TRANSACTION_DUMP_SENT_DCPSYNC) != 0)
+            hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
+                           sync_header, DCPSYNC_HEADER_SIZE,
+                           "DCPSYNC header");
+
+        if((flags & TRANSACTION_DUMP_SENT_DCP_HEADER) != 0)
+            hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
+                           t->request_header, sizeof(t->request_header),
+                           "DCP header");
+
+        if((flags & TRANSACTION_DUMP_SENT_DCP_PAYLOAD) != 0)
+            hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
+                           t->payload.data + t->current_fragment_offset,
+                           fragsize, "DCP payload");
+    }
+    else
+    {
+        uint8_t merged_buffer[DCPSYNC_HEADER_SIZE + sizeof(t->request_header) + fragsize];
+        size_t merged_size = 0;
+
+        if(t->dcpsync.is_enabled && (flags & TRANSACTION_DUMP_SENT_DCPSYNC) != 0)
+        {
+            if((flags & TRANSACTION_DUMP_SENT_MERGE_MASK) == TRANSACTION_DUMP_SENT_MERGE_ALL)
+            {
+                memcpy(merged_buffer + merged_size, sync_header, DCPSYNC_HEADER_SIZE);
+                merged_size += DCPSYNC_HEADER_SIZE;
+            }
+            else
+            {
+                /* separate dump of DCPSYNC header requested and possible */
+                hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
+                               sync_header, DCPSYNC_HEADER_SIZE,
+                               "DCPSYNC header");
+            }
+        }
+
+        if((flags & TRANSACTION_DUMP_SENT_DCP_HEADER) != 0)
+        {
+            memcpy(merged_buffer + merged_size,
+                   t->request_header, sizeof(t->request_header));
+            merged_size += sizeof(t->request_header);
+        }
+
+        if((flags & TRANSACTION_DUMP_SENT_DCP_PAYLOAD) != 0)
+        {
+            memcpy(merged_buffer + merged_size,
+                   t->payload.data + t->current_fragment_offset, fragsize);
+            merged_size += fragsize;
+        }
+
+        hexdump_to_log(MESSAGE_LEVEL_IMPORTANT, merged_buffer, merged_size,
+                       "Sent to DCP peer");
+    }
+}
+
 enum transaction_process_status transaction_process(struct transaction *t,
                                                     int from_slave_fd,
                                                     int to_slave_fd,
+                                                    unsigned int dump_sent_data_flags,
                                                     struct transaction_exception *e)
 {
     log_assert(t != NULL);
@@ -1124,6 +1189,8 @@ enum transaction_process_status transaction_process(struct transaction *t,
 
             dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET,
                                 fragsize);
+
+            log_dcp_data(dump_sent_data_flags, sync_header, t, fragsize);
 
             if((t->dcpsync.is_enabled &&
                 os_write_from_buffer(sync_header, sizeof(sync_header),

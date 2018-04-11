@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -42,7 +42,8 @@ int dot_init(struct dcp_over_tcp_data *dot)
 
 void dot_handle_incoming(struct dcp_over_tcp_data *dot)
 {
-    int peer_fd = network_accept_peer_connection(dot->server_fd, false);
+    int peer_fd = network_accept_peer_connection(dot->server_fd, false,
+                                                 MESSAGE_LEVEL_DIAG);
 
     if(peer_fd < 0)
         return;
@@ -55,7 +56,8 @@ void dot_handle_incoming(struct dcp_over_tcp_data *dot)
     else
     {
         dot->peer_fd = peer_fd;
-        msg_info("Accepted peer connection, fd %d", dot->peer_fd);
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "Accepted peer connection, fd %d", dot->peer_fd);
     }
 }
 

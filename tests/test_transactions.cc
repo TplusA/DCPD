@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -604,11 +604,11 @@ static void send_dcpsync_ack(uint16_t serial, struct transaction *t,
     if(!process_only_once)
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                             transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                                exception));
+                                                TRANSACTION_DUMP_SENT_NONE, exception));
 
     cppcut_assert_equal(last_status,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            exception));
+                                            TRANSACTION_DUMP_SENT_NONE, exception));
 }
 
 /*!\test
@@ -645,19 +645,22 @@ void test_register_read_request_size_1_transaction()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 55, 1 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     static const uint8_t expected_answer[] =
     {
@@ -742,19 +745,22 @@ void test_register_read_request_size_16_transaction()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 56, 16 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     static const uint8_t expected_answer[] =
     {
@@ -814,19 +820,22 @@ void test_register_multi_step_read_request_transaction()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 51, 18 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     static const uint8_t expected_answer[] =
     {
@@ -934,13 +943,15 @@ void test_big_data_is_sent_to_slave_in_fragments()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     /* this is our \c #big_register defined above */
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 0, 683 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     /* the big transaction has been scattered over multiple transactions, head
      * element has been reused so that it contains the first fragment now */
@@ -959,7 +970,8 @@ void test_big_data_is_sent_to_slave_in_fragments()
         mock_os->expect_os_write_from_buffer_callback(read_answer);
 
         const enum transaction_process_status status =
-            transaction_process(head, expected_from_slave_fd, expected_to_slave_fd, &e);
+            transaction_process(head, expected_from_slave_fd, expected_to_slave_fd,
+                                TRANSACTION_DUMP_SENT_NONE, &e);
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS, status);
 
         const size_t expected_data_size = (bytes_left <= DCP_PACKET_MAX_PAYLOAD_SIZE
@@ -1153,11 +1165,11 @@ static void send_dcpsync_ack(uint16_t serial, struct transaction *t,
     if(!process_only_once)
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                             transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                                exception));
+                                                TRANSACTION_DUMP_SENT_NONE, exception));
 
     cppcut_assert_equal(last_status,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            exception));
+                                            TRANSACTION_DUMP_SENT_NONE, exception));
 }
 
 static void send_dcpsync_nack(uint16_t serial, uint8_t ttl,
@@ -1183,7 +1195,7 @@ static void send_dcpsync_nack(uint16_t serial, uint8_t ttl,
 
     cppcut_assert_equal(expected_status,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            exception));
+                                            TRANSACTION_DUMP_SENT_NONE, exception));
 }
 
 /*!\test
@@ -1212,7 +1224,8 @@ void test_register_write_request_transaction()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
     mock_messages->expect_msg_info("Could not determine active network technology, trying fallback");
@@ -1222,7 +1235,8 @@ void test_register_write_request_transaction()
     cut_assert_false(transaction_is_input_required(t));
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_false(transaction_is_input_required(t));
 
@@ -1258,7 +1272,8 @@ void test_register_simple_write_not_supported()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -1292,7 +1307,8 @@ void test_register_multi_read_not_supported()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -1318,7 +1334,8 @@ void test_junk_bytes_are_ignored()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     transaction_free(&t);
     cppcut_assert_null(t);
@@ -1354,7 +1371,8 @@ void test_small_master_transaction()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
 
@@ -1419,7 +1437,8 @@ void test_master_transaction_retry_on_nack()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
 
@@ -1463,7 +1482,8 @@ void test_master_transaction_retry_on_nack()
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
 
@@ -1530,7 +1550,8 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
 
         struct transaction_exception e;
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                                TRANSACTION_DUMP_SENT_NONE, &e));
 
         /* check emitted DCP data */
         const size_t expected_data_size = std::min(bytes_left, max_data_size);
@@ -1725,7 +1746,8 @@ void test_big_slave_transaction()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
     mock_messages->check();
@@ -1739,7 +1761,8 @@ void test_big_slave_transaction()
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
 
@@ -1753,7 +1776,8 @@ void test_big_slave_transaction()
                                               "RegIO W: 0, 512 bytes (continued)");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
     mock_messages->check();
@@ -1771,7 +1795,8 @@ void test_big_slave_transaction()
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
 
@@ -1781,7 +1806,8 @@ void test_big_slave_transaction()
               std::back_inserter(expected_data));
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_false(transaction_is_input_required(t));
     mock_messages->check();
@@ -1795,7 +1821,8 @@ void test_big_slave_transaction()
                                               "RegIO W: 0, 518 bytes (complete)");
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_false(transaction_is_input_required(t));
     cppcut_assert_equal(big_write_calls_expected, big_write_calls_count);
@@ -1863,7 +1890,8 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
     mock_messages->check();
@@ -1877,7 +1905,8 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
 
@@ -1891,7 +1920,8 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
                                               "RegIO W: 0, 512 bytes (continued)");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
     mock_messages->check();
@@ -1909,7 +1939,8 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_false(transaction_is_input_required(t));
     mock_messages->check();
@@ -1923,7 +1954,8 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
                                               "RegIO W: 0, 512 bytes (complete)");
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_false(transaction_is_input_required(t));
     cppcut_assert_equal(big_write_calls_expected, big_write_calls_count);
@@ -1982,7 +2014,8 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     /* next transaction from slave is processed, indicating that the data from
      * the previously rejected command has indeed been skipped */
@@ -1995,19 +2028,22 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     read_data->set(read_device_status);
 
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     static const uint8_t expected_answer[] =
     {
@@ -2043,7 +2079,8 @@ void test_register_push_transaction()
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_false(transaction_is_input_required(t));
 
@@ -2052,7 +2089,8 @@ void test_register_push_transaction()
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cut_assert_true(transaction_is_input_required(t));
 
@@ -2094,7 +2132,8 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
         mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
 
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                                TRANSACTION_DUMP_SENT_NONE, &e));
     }
     else
     {
@@ -2106,7 +2145,8 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_os->check();
 
@@ -2162,7 +2202,8 @@ void test_register_push_transaction_can_be_rejected()
 
     struct transaction_exception e = {};
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     static const uint8_t expected_answer_second[] =
     {
@@ -2245,7 +2286,8 @@ void test_waiting_for_command_interrupted_by_ack()
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(to_be_acked, expected_from_slave_fd,
-                                            expected_to_slave_fd, &e));
+                                            expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     transaction_free(&to_be_acked);
     cppcut_assert_null(to_be_acked);
@@ -2327,7 +2369,8 @@ void test_waiting_for_master_ack_interrupted_by_ack_for_other_transaction()
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(to_be_acked, expected_from_slave_fd,
-                                            expected_to_slave_fd, &e));
+                                            expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     transaction_free(&to_be_acked);
     cppcut_assert_null(to_be_acked);
@@ -2417,7 +2460,8 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
         "Collision: New packet 0x60c7 while waiting for 0x8001 ACK");
 
     cppcut_assert_equal(TRANSACTION_EXCEPTION,
-                        transaction_process(t_push, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t_push, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     cppcut_assert_equal(TRANSACTION_EXCEPTION_COLLISION, e.exception_code);
     cppcut_assert_not_null(e.d.collision.t);
@@ -2430,16 +2474,19 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 87, 5 bytes");
 
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd, &e));
+                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd,
+                                            TRANSACTION_DUMP_SENT_NONE, &e));
 
     mock_os->check();
 

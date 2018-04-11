@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -72,7 +72,8 @@ int network_create_socket(uint16_t port, int backlog)
     return fd;
 }
 
-int network_accept_peer_connection(int server_fd, bool non_blocking)
+int network_accept_peer_connection(int server_fd, bool non_blocking,
+                                   enum MessageVerboseLevel verbose_level)
 {
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
@@ -101,7 +102,7 @@ int network_accept_peer_connection(int server_fd, bool non_blocking)
         fcntl(peer_fd, F_SETFL, flags | O_NONBLOCK);
     }
 
-    msg_info("Accepted connection from %s", addr_string);
+    msg_vinfo(verbose_level, "Accepted connection from %s", addr_string);
 
     static const char setsockopt_error_message[] =
         "Failed to configure TCP keepalive on socket fd %d (%s = %d)";

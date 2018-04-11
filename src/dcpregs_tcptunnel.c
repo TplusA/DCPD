@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -195,7 +195,8 @@ static int handle_new_peer(int fd, void *user_data)
 
     msg_info("Connection attempt on port %u", tunnel->port);
 
-    int peer_fd = network_accept_peer_connection(tunnel->server_fd, false);
+    int peer_fd = network_accept_peer_connection(tunnel->server_fd, false,
+                                                 MESSAGE_LEVEL_NORMAL);
     if(peer_fd < 0)
         return -1;
 
