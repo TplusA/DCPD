@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,10 +16,10 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef APPLINK_H
-#define APPLINK_H
+#ifndef APPLINK_HH
+#define APPLINK_HH
 
-#include "applink_variables.h"
+#include "applink_variables.hh"
 #include "dynamic_buffer.h"
 
 /*!
@@ -263,4 +263,4 @@ applink_output_command_take_next(struct ApplinkOutputQueue *queue);
 
 /*!@}*/
 
-#endif /* !APPLINK_H */
+#endif /* !APPLINK_HH */

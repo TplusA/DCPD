@@ -27,7 +27,7 @@
 
 #include "named_pipe.h"
 #include "dcp_over_tcp.h"
-#include "smartphone_app.h"
+#include "smartphone_app.hh"
 #include "network_dispatcher.hh"
 #include "messages.h"
 #include "messages_glib.h"

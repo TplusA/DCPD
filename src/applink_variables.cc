@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,7 +24,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "applink_variables.h"
+#include "applink_variables.hh"
 #include "messages.h"
 
 static int compare_variable_name(const void *a, const void *b)
@@ -37,15 +37,16 @@ const struct ApplinkVariable *
 applink_variable_lookup(const struct ApplinkVariableTable *table,
                         const char *variable_name)
 {
-    static struct ApplinkVariable key;
+    static struct ApplinkVariable key(nullptr, 0, 0, 0);
 
     key.name = variable_name;
 
     const struct ApplinkVariable *result =
-        bsearch(&key, table->variables, table->number_of_variables,
-                sizeof(table->variables[0]), compare_variable_name);
+        static_cast<const ApplinkVariable *>(
+            bsearch(&key, table->variables, table->number_of_variables,
+                sizeof(table->variables[0]), compare_variable_name));
 
-    if(result == NULL)
+    if(result == nullptr)
         msg_error(0, LOG_NOTICE,
                   "Unknown applink variable \"%s\"", variable_name);
 
@@ -60,7 +61,7 @@ applink_variable_lookup_with_length(const struct ApplinkVariableTable *table,
     {
         msg_error(ERANGE, LOG_NOTICE,
                   "Unreasonable variable length %zu", length);
-        return NULL;
+        return nullptr;
     }
 
     char buffer[length + 1];

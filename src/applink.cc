@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,7 +25,7 @@
 #include <stdarg.h>
 #include <errno.h>
 
-#include "applink.h"
+#include "applink.hh"
 #include "dynamic_buffer_util.h"
 #include "messages.h"
 
@@ -537,12 +537,7 @@ ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
 static const struct ApplinkVariable sorted_variables[VAR_LAST_SUPPORTED_VARIABLE] =
 {
 #define MK_VARIABLE(NAME, REQ_PARAMS, ANS_PARAMS) \
-    { \
-        .name = #NAME, \
-        .variable_id = VAR_ ## NAME, \
-        .number_of_request_parameters = (REQ_PARAMS), \
-        .number_of_answer_parameters = (ANS_PARAMS), \
-    }
+    ApplinkVariable(#NAME, VAR_ ## NAME, REQ_PARAMS, ANS_PARAMS)
 
     MK_VARIABLE(AIRABLE_AUTH_URL,    2, 1),
     MK_VARIABLE(AIRABLE_PASSWORD,    2, 1),

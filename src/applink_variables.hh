@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef APPLINK_VARIABLES_H
-#define APPLINK_VARIABLES_H
+#ifndef APPLINK_VARIABLES_HH
+#define APPLINK_VARIABLES_HH
 
 #include <stdint.h>
 #include <unistd.h>
@@ -33,6 +33,14 @@ struct ApplinkVariable
     uint16_t variable_id;
     const unsigned int number_of_request_parameters;
     const unsigned int number_of_answer_parameters;
+
+    explicit ApplinkVariable(const char *n, uint16_t id,
+                             unsigned int num_req, unsigned int num_ans):
+        name(n),
+        variable_id(id),
+        number_of_request_parameters(num_req),
+        number_of_answer_parameters(num_ans)
+    {}
 };
 
 struct ApplinkVariableTable
@@ -59,4 +67,4 @@ applink_variable_lookup_with_length(const struct ApplinkVariableTable *table,
 
 /*!@}*/
 
-#endif /* !APPLINK_VARIABLES_H */
+#endif /* !APPLINK_VARIABLES_HH */

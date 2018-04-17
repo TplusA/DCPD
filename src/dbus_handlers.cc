@@ -32,7 +32,7 @@
 #include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
 #include "volume_control.hh"
-#include "smartphone_app_send.h"
+#include "smartphone_app_send.hh"
 #include "configproxy.h"
 #include "stream_id.h"
 #include "actor_id.h"

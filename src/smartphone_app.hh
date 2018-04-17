@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,13 +16,13 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SMARTPHONE_APP_H
-#define SMARTPHONE_APP_H
+#ifndef SMARTPHONE_APP_HH
+#define SMARTPHONE_APP_HH
 
 #include <glib.h>
 
 #include "network.h"
-#include "applink.h"
+#include "applink.hh"
 
 /*!
  * A TCP/IP connection to a smartphone.
@@ -113,4 +113,4 @@ void appconn_close(struct smartphone_app_connection_data *appconn);
 }
 #endif
 
-#endif /* !SMARTPHONE_APP_H */
+#endif /* !SMARTPHONE_APP_HH */

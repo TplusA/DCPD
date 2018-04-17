@@ -23,8 +23,8 @@
 #include <string.h>
 #include <sys/socket.h>
 
-#include "smartphone_app.h"
-#include "applink.h"
+#include "smartphone_app.hh"
+#include "applink.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "actor_id.h"
@@ -111,10 +111,10 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request: %s", command->variable->name);
 
-    enum ApplinkSupportedVariables id = command->variable->variable_id;
+    log_assert(command->variable->variable_id >= VAR_FIRST_SUPPORTED_VARIABLE);
+    log_assert(command->variable->variable_id <= VAR_LAST_SUPPORTED_VARIABLE);
 
-    log_assert(id >= VAR_FIRST_SUPPORTED_VARIABLE);
-    log_assert(id <= VAR_LAST_SUPPORTED_VARIABLE);
+    const auto id = static_cast<ApplinkSupportedVariables>(command->variable->variable_id);
 
     ssize_t len = -1;
     GError *error = NULL;
@@ -255,10 +255,10 @@ static void process_applink_answer(const struct ApplinkCommand *const command)
 {
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "App answer: %s", command->variable->name);
 
-    enum ApplinkSupportedVariables id = command->variable->variable_id;
+    log_assert(command->variable->variable_id >= VAR_FIRST_SUPPORTED_VARIABLE);
+    log_assert(command->variable->variable_id <= VAR_LAST_SUPPORTED_VARIABLE);
 
-    log_assert(id >= VAR_FIRST_SUPPORTED_VARIABLE);
-    log_assert(id <= VAR_LAST_SUPPORTED_VARIABLE);
+    const auto id = static_cast<ApplinkSupportedVariables>(command->variable->variable_id);
 
     switch(id)
     {

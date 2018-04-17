@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -23,7 +23,7 @@
 #include <cppcutter.h>
 #include <algorithm>
 
-#include "applink.h"
+#include "applink.hh"
 
 #include "mock_messages.hh"
 #include "mock_os.hh"

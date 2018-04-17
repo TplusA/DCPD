@@ -24,10 +24,10 @@ dcpd_SOURCES = \
     dcpd.cc os.c os.h named_pipe.c named_pipe.h \
     registers.h registers_priv.h register_response_writer.hh \
     dcp_over_tcp.c dcp_over_tcp.h \
-    smartphone_app.c smartphone_app.h \
-    smartphone_app_send.c smartphone_app_send.h \
+    smartphone_app.cc smartphone_app.hh \
+    smartphone_app_send.cc smartphone_app_send.hh \
     actor_id.h \
-    applink.h applink_variables.h \
+    applink.hh applink_variables.hh \
     network.h network_status_bits.h \
     transactions.h dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
@@ -153,8 +153,8 @@ libnetworkprefs_la_CFLAGS = $(AM_CFLAGS)
 libnetworkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libapplink_la_SOURCES = \
-    applink.c applink.h \
-    applink_variables.c applink_variables.h \
+    applink.cc applink.hh \
+    applink_variables.cc applink_variables.hh \
     dynamic_buffer.h dynamic_buffer_util.h
 libapplink_la_CFLAGS = $(AM_CFLAGS)
 libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,10 +16,10 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SMARTPHONE_APP_SEND_H
-#define SMARTPHONE_APP_SEND_H
+#ifndef SMARTPHONE_APP_SEND_HH
+#define SMARTPHONE_APP_SEND_HH
 
-#include "smartphone_app.h"
+#include "smartphone_app.hh"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,4 +36,4 @@ void appconn_send_airable_service_logged_out(struct smartphone_app_connection_da
 }
 #endif
 
-#endif /* !SMARTPHONE_APP_SEND_H */
+#endif /* !SMARTPHONE_APP_SEND_HH */
