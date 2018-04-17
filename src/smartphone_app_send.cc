@@ -22,39 +22,39 @@
 
 #include "smartphone_app_send.hh"
 
-#define SEND_FN_TEMPLATE(VAR, ...) \
-    do \
-    { \
-        struct ApplinkOutputCommand *const cmd = applink_output_command_alloc_from_pool(); \
-        if(cmd == NULL) \
-            break; \
-        \
-        const ssize_t len = \
-            applink_make_answer_for_name(cmd->buffer, sizeof(cmd->buffer), \
-                                         VAR, __VA_ARGS__); \
-        \
-        if(len <= 0) \
-            break; \
-        \
-        cmd->buffer_used = len; \
-        \
-        g_mutex_lock(&conn->out_queue.lock) ;\
-        applink_output_command_append_to_queue(&conn->out_queue.queue, cmd) ; \
-        conn->out_queue.notification_fn(); \
-        g_mutex_unlock(&conn->out_queue.lock) ;\
-    } \
-    while(0)
+template <typename ... Args>
+static void send_command(struct smartphone_app_connection_data *conn,
+                         const char *variable_name, Args ... args)
+{
+    struct ApplinkOutputCommand *const cmd = applink_output_command_alloc_from_pool();
+    if(cmd == nullptr)
+        return;
+
+    const ssize_t len =
+        applink_make_answer_for_name(cmd->buffer, sizeof(cmd->buffer),
+                                     variable_name, args...);
+
+    if(len <= 0)
+        return;
+
+    cmd->buffer_used = len;
+
+    g_mutex_lock(&conn->out_queue.lock);
+    applink_output_command_append_to_queue(&conn->out_queue.queue, cmd);
+    conn->out_queue.notification_fn();
+    g_mutex_unlock(&conn->out_queue.lock);
+}
 
 void appconn_send_airable_service_logged_in(struct smartphone_app_connection_data *conn,
                                             const char *service_id,
                                             const char *username)
 {
-    SEND_FN_TEMPLATE("SERVICE_LOGGED_IN", service_id, username);
+    send_command(conn, "SERVICE_LOGGED_IN", service_id, username);
 }
 
 void appconn_send_airable_service_logged_out(struct smartphone_app_connection_data *conn,
                                              const char *service_id,
                                              const char *logout_url)
 {
-    SEND_FN_TEMPLATE("SERVICE_LOGGED_OUT", service_id, logout_url);
+    send_command(conn, "SERVICE_LOGGED_OUT", service_id, logout_url);
 }
