@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -78,7 +78,8 @@ void dcpregs_audiosources_source_available(const char *source_id);
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void dcpregs_audiosources_selected_source(const char *source_id);
+void dcpregs_audiosources_selected_source(const char *source_id,
+                                          bool is_deferred);
 
 /*!
  * Report update of service credentials state for given credentials category.

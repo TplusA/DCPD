@@ -9955,7 +9955,7 @@ void test_selection_of_known_alive_source_with_async_notification()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc);
+    dcpregs_audiosources_selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* now the register contains our selected audio source ID */
@@ -10002,7 +10002,7 @@ void test_selection_of_known_alive_source_is_done_when_possible()
 
     /* audio path has been changed as reported by calling the following
      * function (called from D-Bus handler) */
-    dcpregs_audiosources_selected_source(asrc);
+    dcpregs_audiosources_selected_source(asrc, false);
     register_changed_data->check(81);
 
     cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
@@ -10023,7 +10023,7 @@ void test_unrequested_change_of_known_audio_path_is_propagated_to_spi_slave()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc);
+    dcpregs_audiosources_selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* the register now contains some audio source ID */
@@ -10046,7 +10046,7 @@ void test_unrequested_change_of_unknown_audio_path_is_propagated_to_spi_slave()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc);
+    dcpregs_audiosources_selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* the register now contains some audio source ID */
@@ -10067,7 +10067,7 @@ void test_selection_of_known_unusable_source()
     static const char asrc[] = "strbo.upnpcm";
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
 
-    dcpregs_audiosources_selected_source(asrc);
+    dcpregs_audiosources_selected_source(asrc, false);
     register_changed_data->check(81);
 
     uint8_t buffer[32] = {0xc7};
@@ -10220,7 +10220,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
     cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
 
     /* a bit later, the notification about audio path change */
-    dcpregs_audiosources_selected_source(asrc_usb);
+    dcpregs_audiosources_selected_source(asrc_usb, false);
     register_changed_data->check(81);
 
     cppcut_assert_equal(ssize_t(sizeof(asrc_usb)), reg->read_handler(buffer, sizeof(buffer)));
