@@ -72,6 +72,7 @@ noinst_LTLIBRARIES = \
     libapplink.la \
     libdrcpdcomm.la \
     libxmodem.la \
+    libnetwork.la \
     libnetwork_dispatcher.la \
     libshutdown_guard.la \
     libdcpd_dbus.la \
@@ -235,10 +236,15 @@ libxmodem_la_SOURCES = xmodem.c xmodem.h crc16.h os.h
 libxmodem_la_CFLAGS = $(AM_CFLAGS)
 libxmodem_la_CXXFLAGS = $(AM_CXXFLAGS)
 
-libnetwork_dispatcher_la_SOURCES = \
-    network_dispatcher.cc network_dispatcher.hh \
+libnetwork_la_SOURCES = \
     network.c network.h \
     messages.h
+libnetwork_la_CFLAGS = $(AM_CFLAGS)
+libnetwork_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libnetwork_dispatcher_la_SOURCES = \
+    network_dispatcher.cc network_dispatcher.hh \
+    network.h messages.h
 libnetwork_dispatcher_la_CFLAGS = $(AM_CFLAGS)
 libnetwork_dispatcher_la_CXXFLAGS = $(AM_CXXFLAGS)
 

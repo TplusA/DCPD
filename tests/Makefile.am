@@ -61,10 +61,16 @@ test_fixpoint_la_CXXFLAGS = $(AM_CXXFLAGS)
 test_applink_la_SOURCES = \
     test_applink.cc \
     mock_os.hh mock_os.cc \
+    mock_network.hh mock_network.cc \
+    mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_airable_dbus.hh mock_airable_dbus.cc \
+    mock_credentials_dbus.hh mock_credentials_dbus.cc \
     mock_messages.hh mock_messages.cc
-test_applink_la_LIBADD = $(top_builddir)/src/libapplink.la
-test_applink_la_CFLAGS = $(AM_CFLAGS)
-test_applink_la_CXXFLAGS = $(AM_CXXFLAGS)
+test_applink_la_LIBADD = \
+    $(top_builddir)/src/libapplink.la \
+    $(top_builddir)/src/libnetwork_dispatcher.la
+test_applink_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_applink_la_CXXFLAGS = $(AM_CXXFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
 test_registers_la_SOURCES = \
     test_registers.cc \
@@ -148,7 +154,9 @@ test_network_dispatcher_la_SOURCES = \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
-test_network_dispatcher_la_LIBADD = $(top_builddir)/src/libnetwork_dispatcher.la
+test_network_dispatcher_la_LIBADD = \
+    $(top_builddir)/src/libnetwork_dispatcher.la \
+    $(top_builddir)/src/libnetwork.la
 test_network_dispatcher_la_CFLAGS = $(AM_CFLAGS)
 test_network_dispatcher_la_CXXFLAGS = $(AM_CXXFLAGS)
 
