@@ -20,13 +20,14 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <errno.h>
+#include <algorithm>
+#include <sstream>
+#include <cstring>
+#include <cstdio>
+#include <cstdarg>
+#include <cerrno>
 
 #include "applink.hh"
-#include "dynamic_buffer_util.h"
 #include "messages.h"
 
 struct ParserContext
@@ -40,92 +41,78 @@ struct ParserContext
     size_t token_length;
 };
 
-int applink_connection_init(struct ApplinkConnection *conn)
+bool Applink::InputBuffer::append_from_fd(int fd, size_t max_total_size)
 {
-    log_assert(conn != NULL);
+    if(data_.size() == max_total_size)
+    {
+        msg_error(0, LOG_WARNING, "Applink input buffer full");
+        return true;
+    }
 
-    conn->peer_fd = -1;
-    dynamic_buffer_init(&conn->input_buffer);
+    size_t pos = data_.size();
 
-    if(!dynamic_buffer_check_space(&conn->input_buffer))
-        return msg_out_of_memory("Applink input buffer");
+    data_.resize(max_total_size);
 
-    return 0;
+    while(pos < max_total_size)
+    {
+        int ret = os_try_read_to_buffer(data_.data(), max_total_size,
+                                        &pos, fd, true);
+
+        if(ret == 0)
+            break;
+
+        if(ret < 0)
+        {
+            msg_error(errno, LOG_CRIT,
+                      "Failed reading app commands from fd %d", fd);
+            data_.resize(pos);
+            return false;
+        }
+    }
+
+    data_.resize(pos);
+
+    return true;
 }
 
-void applink_connection_associate(struct ApplinkConnection *conn, int peer_fd)
+void Applink::InputBuffer::remove_processed_data()
 {
-    log_assert(conn != NULL);
-    log_assert(peer_fd >= 0);
+    log_assert(scan_pos_ <= data_.size());
 
-    if(conn->peer_fd >= 0)
-        applink_connection_release(conn);
-
-    conn->peer_fd = peer_fd;
-    conn->scan_pos = 0;
-}
-
-void applink_connection_release(struct ApplinkConnection *conn)
-{
-    conn->peer_fd = -1;
-    dynamic_buffer_clear(&conn->input_buffer);
-}
-
-void applink_connection_free(struct ApplinkConnection *conn)
-{
-    dynamic_buffer_free(&conn->input_buffer);
-}
-
-int applink_command_init(struct ApplinkCommand *command)
-{
-    command->is_request = false;
-    command->variable = NULL;
-    dynamic_buffer_init(&command->private_data.parameters_buffer);
-
-    return dynamic_buffer_check_space(&command->private_data.parameters_buffer) ? 0 : -1;
-}
-
-void applink_command_free(struct ApplinkCommand *command)
-{
-    dynamic_buffer_free(&command->private_data.parameters_buffer);
-}
-
-static void remove_processed_data_from_buffer(struct ApplinkConnection *conn)
-{
-    log_assert(conn->scan_pos <= conn->input_buffer.pos);
-
-    if(conn->scan_pos == 0)
+    if(scan_pos_ == 0)
         return;
 
-    conn->input_buffer.pos -= conn->scan_pos;
+    if(data_.size() <= scan_pos_)
+        data_.clear();
+    else
+    {
+        std::move(data_.begin() + scan_pos_, data_.end(), data_.begin());
+        data_.resize(data_.size() - scan_pos_);
+    }
 
-    if(conn->input_buffer.pos > 0)
-        memmove(conn->input_buffer.data, conn->input_buffer.data + conn->scan_pos,
-                conn->input_buffer.pos);
-
-    conn->scan_pos = 0;
+    scan_pos_ = 0;
 }
 
-static int skip_spaces(struct ParserContext *ctx)
+static int skip_spaces(ParserContext &ctx)
 {
-    for(/* nothing */; ctx->pos < ctx->line_length; ++ctx->pos)
+    for(/* nothing */; ctx.pos < ctx.line_length; ++ctx.pos)
     {
-        if(ctx->line[ctx->pos] != ' ')
+        if(ctx.line[ctx.pos] != ' ')
             return 0;
     }
 
-    return ctx->pos < ctx->line_length ? 0 : -1;
+    return ctx.pos < ctx.line_length ? 0 : -1;
 }
 
-static size_t scan_token(struct ParserContext *ctx)
+static size_t scan_token(ParserContext &ctx)
 {
     char previous_character = '\0';
 
-    ctx->token_pos = ctx->pos;
+    ctx.token_pos = ctx.pos;
 
-    for(/* nothing */; ctx->pos < ctx->line_length; ++ctx->pos)
+    for(/* nothing */; ctx.pos < ctx.line_length; ++ctx.pos)
     {
-        const char ch = ctx->line[ctx->pos];
+        const char ch = ctx.line[ctx.pos];
 
         if(ch == ' ' && previous_character != '\\')
             break;
@@ -133,22 +120,22 @@ static size_t scan_token(struct ParserContext *ctx)
         previous_character = ch;
     }
 
-    ctx->token_length = ctx->pos - ctx->token_pos;
+    ctx.token_length = ctx.pos - ctx.token_pos;
 
-    return ctx->token_length;
+    return ctx.token_length;
 }
 
-static inline bool token_equals(const struct ParserContext *ctx,
-                                const char *token)
+static inline bool token_equals(const ParserContext &ctx, const char *token)
 {
-    if(ctx->token_length > 0)
-        return strncmp(token, ctx->line + ctx->token_pos, ctx->token_length) == 0;
+    if(ctx.token_length > 0)
+        return strncmp(token, ctx.line + ctx.token_pos, ctx.token_length) == 0;
     else
         return false;
 }
 
-static size_t count_parameters(struct ParserContext *ctx,
-                               struct ApplinkCommand *command,
+static size_t count_parameters(ParserContext &ctx,
+                               Applink::Command::ParserData &cmd_parser_data,
+                               bool command_is_request,
                                const size_t parameters_pos)
 {
     bool overflow = false;
@@ -156,10 +143,10 @@ static size_t count_parameters(struct ParserContext *ctx,
 
     while(skip_spaces(ctx) == 0 && scan_token(ctx) > 0)
     {
-        if(count < sizeof(command->private_data.offsets) / sizeof(command->private_data.offsets[0]))
+        if(count < cmd_parser_data.offsets_.size())
         {
-            command->private_data.offsets[count] = ctx->token_pos - parameters_pos;
-            command->private_data.lengths[count] = ctx->token_length;
+            cmd_parser_data.offsets_[count] = ctx.token_pos - parameters_pos;
+            cmd_parser_data.lengths_[count] = ctx.token_length;
         }
         else
             overflow = true;
@@ -170,228 +157,212 @@ static size_t count_parameters(struct ParserContext *ctx,
     if(overflow)
     {
         msg_error(ERANGE, LOG_ERR, "Too many parameters in applink %s",
-                  command->is_request ? "request" : "answer");
-        command->private_data.number_of_parameters = 0;
+                  command_is_request ? "request" : "answer");
+        cmd_parser_data.number_of_parameters_ = 0;
     }
     else
-        command->private_data.number_of_parameters = count;
+        cmd_parser_data.number_of_parameters_ = count;
 
     return count;
 }
 
-static enum ApplinkResult parse_parameters(struct ParserContext *ctx,
-                                           struct ApplinkCommand *command,
-                                           const enum ApplinkResult success_code)
+static Applink::ParserResult
+parse_parameters(ParserContext &ctx, Applink::Command &command,
+                 const Applink::ParserResult success_code)
 {
-    if(command->variable == NULL)
-        return APPLINK_RESULT_IO_ERROR;
+    if(command.get_variable() == nullptr)
+        return Applink::ParserResult::IO_ERROR;
 
     (void)skip_spaces(ctx);
-    const size_t parameters_pos = ctx->pos;
+    const size_t parameters_pos = ctx.pos;
 
-    const size_t count = count_parameters(ctx, command, parameters_pos);
+    const size_t count = count_parameters(ctx, command.parser_data_,
+                                          command.is_request(), parameters_pos);
 
-    if(command->is_request &&
-       command->variable->number_of_request_parameters != count)
+    if(command.is_request() &&
+       command.get_variable()->number_of_request_parameters != count)
     {
         msg_error(EINVAL, LOG_ERR,
                   "Expected %u parameters in applink command, but got %zu",
-                  command->variable->number_of_request_parameters, count);
-        return APPLINK_RESULT_IO_ERROR;
+                  command.get_variable()->number_of_request_parameters, count);
+        return Applink::ParserResult::IO_ERROR;
     }
-    else if(!command->is_request &&
-            command->variable->number_of_answer_parameters != count)
+    else if(!command.is_request() &&
+            command.get_variable()->number_of_answer_parameters != count)
     {
         msg_error(EINVAL, LOG_ERR,
                   "Expected %u parameters in applink answer, but got %zu",
-                  command->variable->number_of_answer_parameters, count);
-        return APPLINK_RESULT_IO_ERROR;
+                  command.get_variable()->number_of_answer_parameters, count);
+        return Applink::ParserResult::IO_ERROR;
     }
 
     if(count > 0)
     {
-        log_assert(parameters_pos < ctx->pos);
+        log_assert(parameters_pos < ctx.pos);
 
-        command->private_data.parameters_buffer.pos = ctx->pos - parameters_pos;
-        memcpy(command->private_data.parameters_buffer.data,
-               &ctx->line[parameters_pos],
-               command->private_data.parameters_buffer.pos);
+        command.parser_data_.parameters_buffer_.resize(ctx.pos - parameters_pos);
+        std::copy_n(&ctx.line[parameters_pos],
+                    command.parser_data_.parameters_buffer_.size(),
+                    command.parser_data_.parameters_buffer_.begin());
     }
 
     return success_code;
 }
 
-static enum ApplinkResult parse_request_line(struct ParserContext *ctx,
-                                             struct ApplinkCommand *command)
+static Applink::ParserResult parse_request_line(ParserContext &ctx,
+                                                Applink::Command &command)
 {
-    dynamic_buffer_clear(&command->private_data.parameters_buffer);
+    command.parser_data_.parameters_buffer_.clear();
 
     if(skip_spaces(ctx) < 0)
-        return APPLINK_RESULT_IO_ERROR;
+        return Applink::ParserResult::IO_ERROR;
 
     if(scan_token(ctx) == 0)
-        return APPLINK_RESULT_IO_ERROR;
+        return Applink::ParserResult::IO_ERROR;
 
-    command->variable =
-        applink_lookup(ctx->line + ctx->token_pos, ctx->token_length);
+    command.set_variable(Applink::lookup(ctx.line + ctx.token_pos, ctx.token_length));
 
-    return parse_parameters(ctx, command, APPLINK_RESULT_HAVE_COMMAND);
+    return parse_parameters(ctx, command, Applink::ParserResult::HAVE_COMMAND);
 }
 
-static enum ApplinkResult parse_answer_line(struct ParserContext *ctx,
-                                            struct ApplinkCommand *command)
+static Applink::ParserResult parse_answer_line(ParserContext &ctx,
+                                               Applink::Command &command)
 {
-    dynamic_buffer_clear(&command->private_data.parameters_buffer);
+    command.parser_data_.parameters_buffer_.clear();
 
-    if(ctx->token_length < 2)
-        return APPLINK_RESULT_IO_ERROR;
+    if(ctx.token_length < 2)
+        return Applink::ParserResult::IO_ERROR;
 
-    command->variable =
-        applink_lookup(ctx->line + ctx->token_pos, ctx->token_length - 1);
+    command.set_variable(Applink::lookup(ctx.line + ctx.token_pos, ctx.token_length - 1));
 
-    return parse_parameters(ctx, command, APPLINK_RESULT_HAVE_ANSWER);
+    return parse_parameters(ctx, command, Applink::ParserResult::HAVE_ANSWER);
 }
 
 /*!
  * Parse a single applink command line.
  */
-static enum ApplinkResult parse_line(struct ApplinkConnection *conn,
-                                     struct ApplinkCommand *command,
-                                     const size_t begin_pos)
+std::unique_ptr<Applink::Command>
+Applink::InputBuffer::parse_line(const size_t begin_pos, Applink::ParserResult &result)
 {
-    log_assert(conn->scan_pos >= begin_pos);
-    log_assert(conn->scan_pos < conn->input_buffer.pos);
-    log_assert(conn->input_buffer.data[conn->scan_pos] == '\n');
-
     struct ParserContext ctx =
     {
-        .line = ((const char *)conn->input_buffer.data) + begin_pos,
-        .line_length = conn->scan_pos - begin_pos,
+        .line = get_line_at(begin_pos),
+        .line_length = get_line_length(begin_pos),
     };
 
-    if(skip_spaces(&ctx) < 0)
-        return APPLINK_RESULT_EMPTY;
+    if(skip_spaces(ctx) < 0)
+    {
+        result = Applink::ParserResult::EMPTY;
+        return nullptr;
+    }
 
-    if(scan_token(&ctx) == 0)
-        return APPLINK_RESULT_IO_ERROR;
+    if(scan_token(ctx) == 0)
+    {
+        result = Applink::ParserResult::IO_ERROR;
+        return nullptr;
+    }
 
-    enum ApplinkResult retval;
+    auto command = std::unique_ptr<Applink::Command>(new Applink::Command(token_equals(ctx, "GET")));
 
-    command->is_request = token_equals(&ctx, "GET");
+    if(command == nullptr)
+    {
+        result = Applink::ParserResult::OUT_OF_MEMORY;
+        return nullptr;
+    }
 
-    if(command->is_request)
-        retval = parse_request_line(&ctx, command);
+    if(command->is_request())
+        result = parse_request_line(ctx, *command);
     else if(ctx.token_length > 0 &&
             ctx.token_pos + ctx.token_length - 1 < ctx.line_length &&
             ctx.line[ctx.token_pos + ctx.token_length - 1] == ':')
-        retval = parse_answer_line(&ctx, command);
+        result = parse_answer_line(ctx, *command);
     else
-        return APPLINK_RESULT_IO_ERROR;
+    {
+        result = Applink::ParserResult::IO_ERROR;
+        return nullptr;
+    }
 
-    remove_processed_data_from_buffer(conn);
+    remove_processed_data();
 
-    return retval;
+    return command;
 }
 
-static enum ApplinkResult parse_command_or_answer(struct ApplinkConnection *conn,
-                                                  struct ApplinkCommand *command)
+std::unique_ptr<Applink::Command>
+Applink::InputBuffer::parse_command_or_answer(Applink::ParserResult &result)
 {
     size_t begin_pos = 0;
-    size_t last_scan_pos = conn->scan_pos;
 
-    for(/* nothing */; conn->scan_pos < conn->input_buffer.pos; ++conn->scan_pos)
+    for(begin_scan(); can_scan(); advance_scan())
     {
-        if(conn->input_buffer.data[conn->scan_pos] != '\n')
+        if(get_scan_char() != '\n')
             continue;
 
-        const enum ApplinkResult result = parse_line(conn, command, begin_pos);
+        auto command = parse_line(begin_pos, result);
 
-        last_scan_pos = conn->scan_pos + 1;
+        mark_scan_position();
 
         switch(result)
         {
-          case APPLINK_RESULT_HAVE_COMMAND:
-          case APPLINK_RESULT_HAVE_ANSWER:
-          case APPLINK_RESULT_OUT_OF_MEMORY:
-            return result;
+          case Applink::ParserResult::HAVE_COMMAND:
+          case Applink::ParserResult::HAVE_ANSWER:
+            return command;
 
-          case APPLINK_RESULT_EMPTY:
+          case Applink::ParserResult::OUT_OF_MEMORY:
+            return nullptr;
+
+          case Applink::ParserResult::EMPTY:
             break;
 
-          case APPLINK_RESULT_IO_ERROR:
+          case Applink::ParserResult::IO_ERROR:
             msg_error(EINVAL, LOG_ERR,
                       "Failed parsing applink command (command ignored)");
             break;
 
-          case APPLINK_RESULT_NEED_MORE_DATA:
+          case Applink::ParserResult::NEED_MORE_DATA:
             BUG("Unexpected applink result while parsing command");
             break;
         }
 
-        begin_pos = conn->scan_pos + 1;
+        begin_pos = get_marked_scan_position();
     }
 
-    conn->scan_pos = last_scan_pos;
-    remove_processed_data_from_buffer(conn);
+    go_to_marked_scan_position();
+    remove_processed_data();
 
-    return conn->scan_pos < conn->input_buffer.pos
-        ? APPLINK_RESULT_NEED_MORE_DATA
-        : APPLINK_RESULT_EMPTY;
+    result = can_scan()
+        ? Applink::ParserResult::NEED_MORE_DATA
+        : Applink::ParserResult::EMPTY;
+
+    return nullptr;
 }
 
-enum ApplinkResult applink_get_next_command(struct ApplinkConnection *conn,
-                                            struct ApplinkCommand *command)
+std::unique_ptr<Applink::Command>
+Applink::InputBuffer::get_next_command(int peer_fd, Applink::ParserResult &result)
 {
-    log_assert(conn != NULL);
-    log_assert(conn->peer_fd >= 0);
-    log_assert(command != NULL);
+    log_assert(peer_fd >= 0);
 
-    enum ApplinkResult result;
-
-    if(!dynamic_buffer_fill_from_fd(&conn->input_buffer, conn->peer_fd,
-                                    true, "app commands"))
-        result = APPLINK_RESULT_IO_ERROR;
+    if(append_from_fd(peer_fd, 4096))
+        return parse_command_or_answer(result);
     else
-        result = parse_command_or_answer(conn, command);
-
-    switch(result)
     {
-      case APPLINK_RESULT_HAVE_COMMAND:
-      case APPLINK_RESULT_HAVE_ANSWER:
-        return result;
-
-      case APPLINK_RESULT_EMPTY:
-      case APPLINK_RESULT_NEED_MORE_DATA:
-      case APPLINK_RESULT_IO_ERROR:
-      case APPLINK_RESULT_OUT_OF_MEMORY:
-        break;
+        result = Applink::ParserResult::IO_ERROR;
+        return nullptr;
     }
-
-    command->is_request = false;
-    command->variable = NULL;
-    dynamic_buffer_clear(&command->private_data.parameters_buffer);
-
-    return result;
 }
 
-void applink_command_get_parameter(const struct ApplinkCommand *command,
-                                   size_t n, char *buffer, size_t buffer_size)
+void Applink::Command::get_parameter(size_t n, char *buffer, size_t buffer_size) const
 {
-    log_assert(command != NULL);
-    log_assert(buffer != NULL);
-    log_assert(buffer_size > 0);
-
-    if(n >= command->private_data.number_of_parameters)
+    if(n >= parser_data_.number_of_parameters_)
     {
         BUG("Parameter %zu out of range (have %zu parameters)",
-            n, command->private_data.number_of_parameters);
+            n, parser_data_.number_of_parameters_);
         buffer[0] = '\0';
         return;
     }
 
     const char *const token =
-        &((const char *)command->private_data.parameters_buffer.data)[command->private_data.offsets[n]];
-    const size_t token_length = command->private_data.lengths[n];
+        &((const char *)parser_data_.parameters_buffer_.data())[parser_data_.offsets_[n]];
+    const size_t token_length = parser_data_.lengths_[n];
 
     log_assert(token_length > 0);
 
@@ -419,110 +390,61 @@ static inline bool needs_escaping(const char ch)
     return ch == ' ' || ch == '\\';
 }
 
-static int append_escaped_parameter(char *buffer, ssize_t buffer_size,
-                                    const char *parameter, ssize_t* const pos)
+static void append_escaped_parameter(std::ostringstream &os,
+                                     const char *parameter)
 {
-    if(*pos >= buffer_size)
-        return -1;
+    os << ' ';
 
-    buffer[(*pos)++] = ' ';
-
-    size_t src_offset = 0;
-
-    while(*pos < buffer_size)
+    for(size_t i = 0; /* nothing */; ++i)
     {
-        const char ch = parameter[src_offset++];
+        const char ch = parameter[i];
 
         if(ch == '\0')
-            return 0;
+            break;
 
         if(needs_escaping(ch))
-        {
-            buffer[(*pos)++] = '\\';
+            os << '\\';
 
-            if(*pos >= buffer_size)
-                break;
-        }
-
-        buffer[(*pos)++] = ch;
+        os << ch;
     }
-
-    return -1;
 }
 
-static ssize_t make_answer(char *buffer, size_t buffer_size,
-                           const struct ApplinkVariable *const variable,
-                           va_list ap)
+void Applink::make_answer_for_var(std::ostringstream &os,
+                                  const Applink::Variable &variable,
+                                  std::vector<const char *> &&params)
 {
-    log_assert(buffer != NULL);
-    log_assert(buffer_size > 0);
-
-    ssize_t pos = (ssize_t)snprintf(buffer, buffer_size, "%s:", variable->name);
-
-    if(pos < 0 || (size_t)pos >= buffer_size)
-        return -1;
-
-    for(unsigned int i = 0; i < variable->number_of_answer_parameters; ++i)
+    if(params.size() != variable.number_of_answer_parameters)
     {
-        const char *const string = va_arg(ap, const char *);
-
-        if(string == NULL)
-            continue;
-
-        if(append_escaped_parameter(buffer, (ssize_t)buffer_size,
-                                    string, &pos) < 0)
-            return -1;
+        msg_error(EDOM, LOG_NOTICE,
+                  "Variable %s requires %u answer parameters, but got %zu",
+                  variable.name, variable.number_of_answer_parameters,
+                  params.size());
+        return;
     }
 
-    if((size_t)pos >= buffer_size)
-        return -1;
+    os << variable.name << ':';
 
-    buffer[pos++] = '\n';
+    for(const auto &string : params)
+        if(string != nullptr)
+            append_escaped_parameter(os, string);
 
-    return pos;
+    os << '\n';
 }
 
-ssize_t applink_make_answer_for_name(char *buffer, size_t buffer_size,
-                                     const char *variable_name, ...)
+bool Applink::make_answer_for_name(std::ostringstream &os,
+                                   const char *variable_name,
+                                   std::vector<const char *> &&params)
 {
-    log_assert(variable_name != NULL);
+    log_assert(variable_name != nullptr);
 
-    const struct ApplinkVariable *const variable =
-        applink_lookup(variable_name, 0);
+    const auto *const variable = Applink::lookup(variable_name, 0);
 
-    if(variable == NULL)
-        return -1;
+    if(variable == nullptr)
+        return false;
 
-    va_list ap;
-    va_start(ap, variable_name);
+    make_answer_for_var(os, *variable, std::move(params));
 
-    int retval = make_answer(buffer, buffer_size, variable, ap);
-
-    va_end(ap);
-
-    if(retval < 0)
-        msg_error(ENOMEM, LOG_ERR, "Applink answer buffer too small");
-
-    return retval;
-}
-
-ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
-                                    const struct ApplinkVariable *variable,
-                                    ...)
-{
-    log_assert(variable != NULL);
-
-    va_list ap;
-    va_start(ap, variable);
-
-    int retval = make_answer(buffer, buffer_size, variable, ap);
-
-    va_end(ap);
-
-    if(retval < 0)
-        msg_error(ENOMEM, LOG_ERR, "Applink answer buffer too small");
-
-    return retval;
+    return true;
 }
 
 /*!
@@ -532,12 +454,12 @@ ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
  *     These entries are sorted by name, not by ID.
  *
  * \see
- *     #ApplinkSupportedVariables
+ *     #Applink::Variables
  */
-static const struct ApplinkVariable sorted_variables[VAR_LAST_SUPPORTED_VARIABLE] =
+static const std::array<Applink::Variable, size_t(Applink::Variables::LAST_SUPPORTED_VARIABLE)> sorted_variables
 {
 #define MK_VARIABLE(NAME, REQ_PARAMS, ANS_PARAMS) \
-    ApplinkVariable(#NAME, VAR_ ## NAME, REQ_PARAMS, ANS_PARAMS)
+    Applink::Variable(#NAME, uint16_t(Applink::Variables::NAME), REQ_PARAMS, ANS_PARAMS)
 
     MK_VARIABLE(AIRABLE_AUTH_URL,    2, 1),
     MK_VARIABLE(AIRABLE_PASSWORD,    2, 1),
@@ -549,105 +471,12 @@ static const struct ApplinkVariable sorted_variables[VAR_LAST_SUPPORTED_VARIABLE
 #undef MK_VARIABLE
 };
 
-static const struct ApplinkVariableTable known_variables =
-{
-    .variables = sorted_variables,
-    .number_of_variables = sizeof(sorted_variables) / sizeof(sorted_variables[0]),
-};
+static const Applink::VariableTable known_variables(sorted_variables);
 
-const struct ApplinkVariable *applink_lookup(const char *name, size_t length)
+const Applink::Variable *Applink::lookup(const char *name, size_t length)
 {
     if(length == 0)
-        return applink_variable_lookup(&known_variables, name);
+        return known_variables.lookup(name);
     else
-        return applink_variable_lookup_with_length(&known_variables, name, length);
-}
-
-static struct ApplinkOutputCommand free_list[32];
-static struct ApplinkOutputQueue free_list_queue;
-
-void applink_init(void)
-{
-    size_t i;
-
-    for(i = 1; i < sizeof(free_list) / sizeof(free_list[0]); ++i)
-    {
-        free_list[i - 1].private_data.next = &free_list[i];
-        free_list[i].private_data.prev = &free_list[i - 1];
-    }
-
-    free_list[i - 1].private_data.next = &free_list[0];
-    free_list[0].private_data.prev = &free_list[i - 1];
-
-    free_list_queue.head = &free_list[0];
-}
-
-struct ApplinkOutputCommand *applink_output_command_alloc_from_pool(void)
-{
-    struct ApplinkOutputCommand *const command =
-        applink_output_command_take_next(&free_list_queue);
-
-    if(command == NULL)
-        msg_out_of_memory("output command");
-    else
-    {
-        command->buffer_used = 0;
-        command->private_data.prev = command->private_data.next = command;
-    }
-
-    return command;
-}
-
-void applink_output_command_return_to_pool(struct ApplinkOutputCommand *command)
-{
-    log_assert(command != NULL);
-    log_assert(command >= free_list);
-    log_assert(command < &free_list[sizeof(free_list) / sizeof(free_list[0])]);
-
-    applink_output_command_append_to_queue(&free_list_queue, command);
-}
-
-void applink_output_command_append_to_queue(struct ApplinkOutputQueue *queue,
-                                            struct ApplinkOutputCommand *command)
-{
-    log_assert(queue != NULL);
-    log_assert(command != NULL);
-    log_assert(command->private_data.prev == command);
-    log_assert(command->private_data.next == command);
-
-    if(queue->head == NULL)
-        queue->head = command;
-    else
-    {
-        command->private_data.prev = queue->head->private_data.prev;
-        command->private_data.next = queue->head;
-        queue->head->private_data.prev->private_data.next = command;
-        queue->head->private_data.prev = command;
-    }
-}
-
-struct ApplinkOutputCommand *
-applink_output_command_take_next(struct ApplinkOutputQueue *queue)
-{
-    log_assert(queue != NULL);
-
-    if(queue->head == NULL)
-        return NULL;
-
-    struct ApplinkOutputCommand *const cmd = queue->head;
-
-    if(queue->head->private_data.next != queue->head)
-    {
-        log_assert(queue->head->private_data.prev != queue->head);
-        queue->head = cmd->private_data.next;
-
-        cmd->private_data.prev->private_data.next = queue->head;
-        queue->head->private_data.prev = cmd->private_data.prev;
-    }
-    else
-        queue->head = NULL;
-
-    cmd->private_data.prev = cmd->private_data.next = cmd;
-
-    return cmd;
+        return known_variables.lookup(name, length);
 }

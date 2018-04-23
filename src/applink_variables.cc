@@ -20,31 +20,28 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
 
 #include "applink_variables.hh"
 #include "messages.h"
 
 static int compare_variable_name(const void *a, const void *b)
 {
-    return strcmp(((const struct ApplinkVariable *)a)->name,
-                  ((const struct ApplinkVariable *)b)->name);
+    return strcmp(((const Applink::Variable *)a)->name,
+                  ((const Applink::Variable *)b)->name);
 }
 
-const struct ApplinkVariable *
-applink_variable_lookup(const struct ApplinkVariableTable *table,
-                        const char *variable_name)
+const Applink::Variable *
+Applink::VariableTable::lookup(const char *variable_name) const
 {
-    static struct ApplinkVariable key(nullptr, 0, 0, 0);
+    const Variable key(variable_name, 0, 0, 0);
 
-    key.name = variable_name;
-
-    const struct ApplinkVariable *result =
-        static_cast<const ApplinkVariable *>(
-            bsearch(&key, table->variables, table->number_of_variables,
-                sizeof(table->variables[0]), compare_variable_name));
+    const auto *result =
+        static_cast<const Variable *>(
+            bsearch(&key, variables_, number_of_variables_,
+                sizeof(variables_[0]), compare_variable_name));
 
     if(result == nullptr)
         msg_error(0, LOG_NOTICE,
@@ -53,9 +50,9 @@ applink_variable_lookup(const struct ApplinkVariableTable *table,
     return result;
 }
 
-const struct ApplinkVariable *
-applink_variable_lookup_with_length(const struct ApplinkVariableTable *table,
-                                    const char *variable_name, size_t length)
+const Applink::Variable *
+Applink::VariableTable::lookup(const char *variable_name,
+                               size_t length) const
 {
     if(length == 0 || length > 100)
     {
@@ -69,5 +66,5 @@ applink_variable_lookup_with_length(const struct ApplinkVariableTable *table,
     memcpy(buffer, variable_name, length);
     buffer[length] = '\0';
 
-    return applink_variable_lookup(table, buffer);
+    return lookup(buffer);
 }

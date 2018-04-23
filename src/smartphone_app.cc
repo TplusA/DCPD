@@ -20,73 +20,179 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
+#include <sstream>
+#include <array>
+#include <cstring>
 #include <sys/socket.h>
 
 #include "smartphone_app.hh"
 #include "applink.hh"
+#include "network_dispatcher.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "actor_id.h"
 #include "messages.h"
 
-int appconn_init(struct smartphone_app_connection_data *appconn,
-                 void (*send_notification_fn)(void))
+void Applink::Peer::send_to_queue(std::string &&command)
 {
-    log_assert(appconn != NULL);
-
-    appconn->peer_fd = -1;
-
-    if(applink_connection_init(&appconn->connection) < 0)
-    {
-        appconn->server_fd = -1;
-        return -1;
-    }
-
-    if(applink_command_init(&appconn->command) < 0)
-    {
-        applink_connection_free(&appconn->connection);
-        appconn->server_fd = -1;
-        return -1;
-    }
-
-    g_mutex_init(&appconn->out_queue.lock);
-    appconn->out_queue.queue.head = NULL;
-    appconn->out_queue.notification_fn = send_notification_fn;
-
-    /*
-     * The port number is ASCII "TB" (meaning T + A + 1).
-     */
-    appconn->server_fd = network_create_socket(8466, SOMAXCONN);
-
-    return appconn->server_fd;
+    std::lock_guard<std::mutex> lock(send_queue_.lock_);
+    send_queue_.queue_.emplace_back(command);
+    send_queue_.notify_have_outgoing_fn_();
 }
 
-void appconn_handle_incoming(struct smartphone_app_connection_data *appconn)
+bool Applink::Peer::send_one_from_queue_to_peer()
 {
-    int peer_fd = network_accept_peer_connection(appconn->server_fd, true,
+    std::string command;
+
+    {
+        std::lock_guard<std::mutex> lock(send_queue_.lock_);
+
+        if(send_queue_.queue_.empty())
+            return false;
+
+        command = std::move(send_queue_.queue_.front());
+        send_queue_.queue_.pop_front();
+    }
+
+    if(command.empty())
+        BUG("Ignoring empty applink command in out queue for peer %d", fd_);
+    else if(fd_ >= 0)
+    {
+        if(os_write_from_buffer(command.c_str(), command.size(), fd_) < 0)
+        {
+            msg_error(errno, LOG_ERR, "Sending data to app fd %d failed", fd_);
+            send_queue_.notify_peer_died_fn_(fd_, false);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Applink::AppConnections::add_new_peer(int peer_fd)
+{
+    if(single_peer_ != nullptr)
+    {
+        msg_error(0, LOG_ERR,
+                  "Rejected smartphone connection, only single connection supported");
+        return false;
+    }
+
+    single_peer_.reset(new Applink::Peer(peer_fd, send_queue_filled_notification_fn_,
+                                         [this] (int fd, bool cleanly_closed)
+                                         {
+                                             close_and_forget_peer(fd);
+                                         }));
+
+    if(single_peer_ == nullptr)
+    {
+        msg_out_of_memory("Applink::Peer");
+        return false;
+    }
+
+    return true;
+}
+
+void Applink::AppConnections::close_and_forget_peer(int peer_fd,
+                                                    bool is_registered_with_dispatcher)
+{
+    log_assert(single_peer_ != nullptr);
+    log_assert(single_peer_->has_fd(peer_fd));
+
+    msg_info("Smartphone direct connection disconnected (fd %d)", peer_fd);
+
+    single_peer_ = nullptr;
+
+    if(is_registered_with_dispatcher)
+        Network::Dispatcher::get_singleton().remove_connection(peer_fd);
+    else
+        network_close(&peer_fd);
+}
+
+/*!
+ * Handle incoming connection from the smartphone.
+ */
+bool Applink::AppConnections::handle_new_peer(int server_fd)
+{
+    int peer_fd = network_accept_peer_connection(server_fd, true,
                                                  MESSAGE_LEVEL_NORMAL);
 
     if(peer_fd < 0)
-        return;
+        return false;
 
-    if(appconn->peer_fd >= 0)
+    if(!add_new_peer(peer_fd))
     {
         network_close(&peer_fd);
-        msg_info("Rejected smartphone connection, only single connection supported");
+        return false;
     }
-    else
+
+    if(!Network::Dispatcher::get_singleton().add_connection(peer_fd,
+            std::move(Network::DispatchHandlers(
+                [this] (int peer_fd_arg)
+                {
+                    return single_peer_->handle_incoming_data();
+                },
+                [this] (int peer_fd_arg)
+                {
+                    handle_peer_died(peer_fd_arg);
+                }
+            ))))
     {
-        appconn->peer_fd = peer_fd;
-        applink_connection_associate(&appconn->connection, appconn->peer_fd);
-        msg_info("Accepted smartphone connection, fd %d", appconn->peer_fd);
+        close_and_forget_peer(peer_fd, false);
+        return false;
     }
+
+    msg_info("Accepted smartphone connection, fd %d", peer_fd);
+
+    return true;
+}
+
+void Applink::AppConnections::handle_peer_died(int peer_fd)
+{
+    close_and_forget_peer(peer_fd);
+}
+
+bool Applink::AppConnections::listen(uint16_t port)
+{
+    if(server_fd_ >= 0)
+    {
+        BUG("Applink server already running");
+        return false;
+    }
+
+    const int server_fd = network_create_socket(port, SOMAXCONN);
+
+    if(server_fd < 0)
+    {
+        msg_error(errno, LOG_ERR, "Failed to open applink server port");
+        return false;
+    }
+
+    if(!Network::Dispatcher::get_singleton().add_connection(server_fd,
+            std::move(Network::DispatchHandlers(
+                [this] (int server_fd_arg)
+                {
+                    return handle_new_peer(server_fd_arg);
+                },
+                [this] (int server_fd_arg)
+                {
+                    msg_info("Applink server connection died (fd %d)",
+                             server_fd_arg);
+                }
+            ))))
+    {
+        return false;
+    }
+
+    server_fd_ = server_fd;
+
+    return true;
 }
 
 static bool no_airable(const char *why)
 {
-    if(dbus_get_airable_sec_iface() != NULL &&
-       dbus_get_credentials_read_iface() != NULL)
+    if(dbus_get_airable_sec_iface() != nullptr &&
+       dbus_get_credentials_read_iface() != nullptr)
         return false;
 
     BUG("Cannot %s, have no Airable D-Bus proxy", why);
@@ -94,41 +200,38 @@ static bool no_airable(const char *why)
     return true;
 }
 
-static ssize_t process_applink_command(const struct ApplinkCommand *command,
-                                       char *buffer, size_t buffer_size)
+static bool process_applink_command(const Applink::Command &command,
+                                    std::string &answer_for_command)
 {
-    log_assert(command != NULL);
-    log_assert(buffer != NULL);
-
-    if(!command->is_request)
+    if(!command.is_request())
     {
         msg_info("Not accepting answers from app.");
-        return -1;
+        return false;
     }
 
-    if(buffer_size == 0)
-        return -1;
+    const auto *variable = command.get_variable();
+    log_assert(variable != nullptr);
 
-    msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request: %s", command->variable->name);
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request: %s", variable->name);
 
-    log_assert(command->variable->variable_id >= VAR_FIRST_SUPPORTED_VARIABLE);
-    log_assert(command->variable->variable_id <= VAR_LAST_SUPPORTED_VARIABLE);
+    log_assert(variable->variable_id >= uint16_t(Applink::Variables::FIRST_SUPPORTED_VARIABLE));
+    log_assert(variable->variable_id <= uint16_t(Applink::Variables::LAST_SUPPORTED_VARIABLE));
 
-    const auto id = static_cast<ApplinkSupportedVariables>(command->variable->variable_id);
+    const auto id = Applink::Variables(variable->variable_id);
 
-    ssize_t len = -1;
-    GError *error = NULL;
-    gchar *answer = NULL;
+    GError *error = nullptr;
+    gchar *answer = nullptr;
+    std::ostringstream buffer;
 
     switch(id)
     {
-      case VAR_AIRABLE_AUTH_URL:
+      case Applink::Variables::AIRABLE_AUTH_URL:
         {
-            char locale_buffer[16];
-            char ipaddress_buffer[64];
+            std::array<char, 16> locale_buffer;
+            std::array<char, 64> ipaddress_buffer;
 
-            applink_command_get_parameter(command, 0, locale_buffer, sizeof(locale_buffer));
-            applink_command_get_parameter(command, 1, ipaddress_buffer, sizeof(ipaddress_buffer));
+            command.get_parameter(0, locale_buffer);
+            command.get_parameter(1, ipaddress_buffer);
 
             /* we keep requiring the IP address for backward compatibility, but
              * ignore it */
@@ -139,25 +242,24 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                 break;
 
             tdbus_airable_call_generate_authentication_url_sync(dbus_get_airable_sec_iface(),
-                                                                locale_buffer,
+                                                                locale_buffer.data(),
                                                                 &answer,
-                                                                NULL, &error);
+                                                                nullptr, &error);
             if(dbus_common_handle_dbus_error(&error, "Generate Airable auth URL") < 0)
                 break;
 
-            len = applink_make_answer_for_var(buffer, buffer_size,
-                                              command->variable, answer);
+            Applink::make_answer_for_var(buffer, *variable, { answer });
         }
 
         break;
 
-      case VAR_AIRABLE_PASSWORD:
+      case Applink::Variables::AIRABLE_PASSWORD:
         {
-            char token_buffer[128];
-            char timestamp_buffer[32];
+            std::array<char, 128> token_buffer;
+            std::array<char, 32>  timestamp_buffer;
 
-            applink_command_get_parameter(command, 0, token_buffer, sizeof(token_buffer));
-            applink_command_get_parameter(command, 1, timestamp_buffer, sizeof(timestamp_buffer));
+            command.get_parameter(0, token_buffer);
+            command.get_parameter(1, timestamp_buffer);
 
             if(token_buffer[0] == '\0' || timestamp_buffer[0] == '\0')
                 break;
@@ -166,37 +268,35 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                 break;
 
             tdbus_airable_call_generate_password_sync(dbus_get_airable_sec_iface(),
-                                                      token_buffer,
-                                                      timestamp_buffer,
-                                                      &answer, NULL, &error);
+                                                      token_buffer.data(),
+                                                      timestamp_buffer.data(),
+                                                      &answer, nullptr, &error);
             if(dbus_common_handle_dbus_error(&error, "Generate Airable password") < 0)
                 break;
 
-            len = applink_make_answer_for_var(buffer, buffer_size,
-                                              command->variable, answer);
+            Applink::make_answer_for_var(buffer, *variable, { answer });
         }
 
         break;
 
-      case VAR_AIRABLE_ROOT_URL:
+      case Applink::Variables::AIRABLE_ROOT_URL:
         if(no_airable("get root URL"))
             break;
 
         tdbus_airable_call_get_root_url_sync(dbus_get_airable_sec_iface(),
-                                             &answer, NULL, &error);
+                                             &answer, nullptr, &error);
         if(dbus_common_handle_dbus_error(&error, "Get Airable root URL") < 0)
             break;
 
-        len = applink_make_answer_for_var(buffer, buffer_size,
-                                          command->variable, answer);
+        Applink::make_answer_for_var(buffer, *variable, { answer });
 
         break;
 
-      case VAR_SERVICE_CREDENTIALS:
+      case Applink::Variables::SERVICE_CREDENTIALS:
         {
-            char service_id_buffer[32];
+            std::array<char, 32> service_id_buffer;
 
-            applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
+            command.get_parameter(0, service_id_buffer);
 
             if(service_id_buffer[0] == '\0')
                 break;
@@ -208,8 +308,8 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
 
             tdbus_credentials_read_call_get_default_credentials_sync(
                 dbus_get_credentials_read_iface(),
-                service_id_buffer, &answer, &password,
-                NULL, &error);
+                service_id_buffer.data(), &answer, &password,
+                nullptr, &error);
             if(dbus_common_handle_dbus_error(&error, "Get default credentials") < 0)
                 break;
 
@@ -224,270 +324,160 @@ static ssize_t process_applink_command(const struct ApplinkCommand *command,
                 password[0] = '\0';
             }
 
-            len = applink_make_answer_for_var(buffer, buffer_size,
-                                              command->variable,
-                                              service_id_buffer,
-                                              is_known,
-                                              answer, password);
+            Applink::make_answer_for_var(buffer, *variable,
+                                         { service_id_buffer.data(), is_known, answer, password });
 
             g_free(password);
         }
 
         break;
 
-      case VAR_SERVICE_LOGGED_IN:
-      case VAR_SERVICE_LOGGED_OUT:
-        msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request for \"%s\" ignored", command->variable->name);
+      case Applink::Variables::SERVICE_LOGGED_IN:
+      case Applink::Variables::SERVICE_LOGGED_OUT:
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request for \"%s\" ignored", variable->name);
         break;
     }
 
-    if(answer != NULL)
+    if(answer != nullptr)
         g_free(answer);
 
-    if(len == 0)
-        BUG("Generated zero length applink answer (%s)",
-            command->variable->name);
+    answer_for_command = buffer.str();
 
-    return len;
+    if(answer_for_command.empty())
+        BUG("Generated zero length applink answer (%s)", variable->name);
+
+    return true;
 }
 
-static void process_applink_answer(const struct ApplinkCommand *const command)
+static void process_applink_answer(const Applink::Command &command)
 {
-    msg_vinfo(MESSAGE_LEVEL_DEBUG, "App answer: %s", command->variable->name);
+    const auto *variable = command.get_variable();
+    log_assert(variable != nullptr);
 
-    log_assert(command->variable->variable_id >= VAR_FIRST_SUPPORTED_VARIABLE);
-    log_assert(command->variable->variable_id <= VAR_LAST_SUPPORTED_VARIABLE);
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "App answer: %s", variable->name);
 
-    const auto id = static_cast<ApplinkSupportedVariables>(command->variable->variable_id);
+    log_assert(variable->variable_id >= uint16_t(Applink::Variables::FIRST_SUPPORTED_VARIABLE));
+    log_assert(variable->variable_id <= uint16_t(Applink::Variables::LAST_SUPPORTED_VARIABLE));
+
+    const auto id = Applink::Variables(variable->variable_id);
 
     switch(id)
     {
-      case VAR_AIRABLE_AUTH_URL:
-      case VAR_AIRABLE_PASSWORD:
-      case VAR_AIRABLE_ROOT_URL:
-      case VAR_SERVICE_CREDENTIALS:
+      case Applink::Variables::AIRABLE_AUTH_URL:
+      case Applink::Variables::AIRABLE_PASSWORD:
+      case Applink::Variables::AIRABLE_ROOT_URL:
+      case Applink::Variables::SERVICE_CREDENTIALS:
         msg_info("App answer ignored");
         break;
 
-      case VAR_SERVICE_LOGGED_IN:
+      case Applink::Variables::SERVICE_LOGGED_IN:
         {
-            char service_id_buffer[32];
-            char username_buffer[128];
+            std::array<char, 32>  service_id_buffer;
+            std::array<char, 128> username_buffer;
 
-            applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
-            applink_command_get_parameter(command, 1, username_buffer, sizeof(username_buffer));
+            command.get_parameter(0, service_id_buffer);
+            command.get_parameter(1, username_buffer);
 
             msg_vinfo(MESSAGE_LEVEL_TRACE,
                       "App said it logged into \"%s\" with user \"%s\"",
-                      service_id_buffer, username_buffer);
+                      service_id_buffer.data(), username_buffer.data());
 
             if(no_airable("log into service"))
                 break;
 
             tdbus_airable_call_external_service_login_sync(
-                dbus_get_airable_sec_iface(), service_id_buffer,
-                username_buffer, false, ACTOR_ID_SMARTPHONE_APP, NULL, NULL);
+                dbus_get_airable_sec_iface(), service_id_buffer.data(),
+                username_buffer.data(), false,
+                ACTOR_ID_SMARTPHONE_APP, nullptr, nullptr);
         }
 
         break;
 
-      case VAR_SERVICE_LOGGED_OUT:
+      case Applink::Variables::SERVICE_LOGGED_OUT:
         {
-            char service_id_buffer[32];
-            char url_buffer[1024];
+            std::array<char, 32>   service_id_buffer;
+            std::array<char, 1024> url_buffer;
 
-            applink_command_get_parameter(command, 0, service_id_buffer, sizeof(service_id_buffer));
-            applink_command_get_parameter(command, 1, url_buffer, sizeof(url_buffer));
+            command.get_parameter(0, service_id_buffer);
+            command.get_parameter(1, url_buffer);
 
             msg_vinfo(MESSAGE_LEVEL_TRACE,
                       "App said it logged out from \"%s\" using URL \"%s\"",
-                      service_id_buffer, url_buffer);
+                      service_id_buffer.data(), url_buffer.data());
 
             if(no_airable("log out from service"))
                 break;
 
             tdbus_airable_call_external_service_logout_sync(
-                dbus_get_airable_sec_iface(), service_id_buffer,
-                url_buffer, false, ACTOR_ID_SMARTPHONE_APP, NULL, NULL);
+                dbus_get_airable_sec_iface(), service_id_buffer.data(),
+                url_buffer.data(), false, ACTOR_ID_SMARTPHONE_APP, nullptr, nullptr);
         }
 
         break;
     }
 }
 
-static void process_requests_and_flush_on_overflow(struct ApplinkCommand *command,
-                                                   int out_fd,
-                                                   char *const buffer,
-                                                   const size_t buffer_size,
-                                                   size_t *buffer_pos)
+bool Applink::Peer::handle_incoming_data()
 {
-    while(1)
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Smartphone app over TCP/IP on fd %d", fd_);
+
+    while(true)
     {
-        ssize_t added_bytes =
-            process_applink_command(command, buffer + *buffer_pos,
-                                    buffer_size - *buffer_pos);
+        Applink::ParserResult result = Applink::ParserResult::IO_ERROR;
+        std::unique_ptr<Applink::Command> command =
+            input_buffer_.get_next_command(fd_, result);
 
-        if(added_bytes >= 0)
+        std::string answer;
+
+        switch(result)
         {
-            /* good, answer is in output buffer */
-            *buffer_pos += added_bytes;
-            return;
-        }
+          case Applink::ParserResult::HAVE_COMMAND:
+            log_assert(command != nullptr);
+            process_applink_command(*command, answer);
 
-        /* command wasn't properly processed */
-        if(*buffer_pos > 0)
-        {
-            /* ah, probably a buffer overflow---flush and try again */
-            (void)os_write_from_buffer(buffer, *buffer_pos, out_fd);
-            *buffer_pos = 0;
-        }
-        else
-        {
-            /* overflow of empty buffer, D-Bus error, or something else */
-            BUG("Unexpected failure while processing applink command (%s %s)---skipping command",
-                command->is_request ? "request for" : "answer to",
-                command->variable->name);
-            return;
-        }
-    }
-}
+            if(!answer.empty())
+                send_to_queue(std::move(answer));
 
-static void process_out_command(struct ApplinkOutputCommand *const cmd,
-                                char *const buffer, const size_t buffer_size,
-                                size_t *buffer_pos, int fd)
-{
-    cmd->buffer[cmd->buffer_used] = '\0';
-
-    size_t src_pos = 0;
-    size_t bytes_remaining = cmd->buffer_used;
-
-    while(src_pos < cmd->buffer_used)
-    {
-        const size_t bytes_to_copy =
-            (bytes_remaining <= buffer_size - *buffer_pos)
-            ? bytes_remaining
-            : buffer_size - *buffer_pos;
-
-        memcpy(buffer + *buffer_pos, cmd->buffer + src_pos, bytes_to_copy);
-
-        (*buffer_pos) += bytes_to_copy;
-        src_pos += bytes_to_copy;
-        bytes_remaining -= bytes_to_copy;
-
-        if(bytes_remaining > 0)
-        {
-            /* overflow, flush to network */
-            log_assert(*buffer_pos == buffer_size);
-            (void)os_write_from_buffer(buffer, buffer_size, fd);
-            *buffer_pos = 0;
-        }
-    }
-}
-
-static void process_queue_and_flush_on_overflow(struct smartphone_app_connection_data *appconn,
-                                                char *const buffer,
-                                                const size_t buffer_size,
-                                                size_t *buffer_pos)
-{
-    while(1)
-    {
-        g_mutex_lock(&appconn->out_queue.lock);
-
-        struct ApplinkOutputCommand *const cmd =
-            applink_output_command_take_next(&appconn->out_queue.queue);
-
-        g_mutex_unlock(&appconn->out_queue.lock);
-
-        if(cmd == NULL)
             break;
 
-        if(appconn->connection.peer_fd >= 0)
-            process_out_command(cmd, buffer, buffer_size, buffer_pos,
-                                appconn->connection.peer_fd);
+          case Applink::ParserResult::HAVE_ANSWER:
+            log_assert(command != nullptr);
+            process_applink_answer(*command);
+            break;
 
-        applink_output_command_return_to_pool(cmd);
-    }
-}
+          case Applink::ParserResult::IO_ERROR:
+            send_queue_.notify_peer_died_fn_(fd_, false);
+            return true;
 
-void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
-                             bool can_read_from_peer, bool can_send_from_queue,
-                             bool peer_died)
-{
-    static char output_buffer[4096];
-    size_t output_buffer_pos = 0;
-
-    if(can_read_from_peer)
-    {
-        log_assert(appconn->peer_fd >= 0);
-        msg_vinfo(MESSAGE_LEVEL_DEBUG, "Smartphone app over TCP/IP");
-
-        bool done = false;
-
-        while(!done)
-        {
-            const enum ApplinkResult result =
-                applink_get_next_command(&appconn->connection,
-                                         &appconn->command);
-
-            switch(result)
-            {
-              case APPLINK_RESULT_HAVE_COMMAND:
-                process_requests_and_flush_on_overflow(&appconn->command,
-                                                       appconn->connection.peer_fd,
-                                                       output_buffer, sizeof(output_buffer),
-                                                       &output_buffer_pos);
-                break;
-
-              case APPLINK_RESULT_HAVE_ANSWER:
-                process_applink_answer(&appconn->command);
-                break;
-
-              case APPLINK_RESULT_IO_ERROR:
-                peer_died = true;
-
-                /* fall-through */
-
-              case APPLINK_RESULT_EMPTY:
-              case APPLINK_RESULT_NEED_MORE_DATA:
-              case APPLINK_RESULT_OUT_OF_MEMORY:
-                done = true;
-                break;
-            }
-        }
-    }
-
-    if(!peer_died && can_send_from_queue)
-        process_queue_and_flush_on_overflow(appconn, output_buffer, sizeof(output_buffer),
-                                            &output_buffer_pos);
-
-    if(!peer_died && output_buffer_pos > 0)
-        (void)os_write_from_buffer(output_buffer, output_buffer_pos,
-                                   appconn->connection.peer_fd);
-
-    if(peer_died)
-    {
-        if(appconn->peer_fd >= 0)
-        {
-            msg_info("Smartphone direct connection disconnected (fd %d)",
-                     appconn->peer_fd);
-            appconn_close_peer(appconn);
+          case Applink::ParserResult::EMPTY:
+          case Applink::ParserResult::NEED_MORE_DATA:
+          case Applink::ParserResult::OUT_OF_MEMORY:
+            return true;
         }
     }
 }
 
-void appconn_close_peer(struct smartphone_app_connection_data *appconn)
+void Applink::AppConnections::process_out_queue()
 {
-    log_assert(appconn != NULL);
-
-    applink_connection_release(&appconn->connection);
-    network_close(&appconn->peer_fd);
+    if(single_peer_ != nullptr)
+        while(single_peer_->send_one_from_queue_to_peer())
+            ;
 }
 
-void appconn_close(struct smartphone_app_connection_data *appconn)
+void Applink::AppConnections::send_to_all_peers(std::string &&command)
 {
-    appconn_close_peer(appconn);
-    applink_connection_free(&appconn->connection);
-    applink_command_free(&appconn->command);
-    network_close(&appconn->server_fd);
-    g_mutex_clear(&appconn->out_queue.lock);
+    if(single_peer_ != nullptr)
+        single_peer_->send_to_queue(std::move(command));
+}
+
+void Applink::AppConnections::close()
+{
+    if(server_fd_ >= 0)
+    {
+        Network::Dispatcher::get_singleton().remove_connection(server_fd_);
+        server_fd_ = -1;
+    }
+
+    if(single_peer_ != nullptr)
+        single_peer_->apply_to_fd([this] (int fd) { close_and_forget_peer(fd); });
 }

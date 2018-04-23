@@ -20,41 +20,31 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <sstream>
+#include <vector>
+
 #include "smartphone_app_send.hh"
 
 template <typename ... Args>
-static void send_command(struct smartphone_app_connection_data *conn,
-                         const char *variable_name, Args ... args)
+static void send_command(Applink::AppConnections &conn,
+                         const char *variable_name,
+                         std::vector<const char *> &&params)
 {
-    struct ApplinkOutputCommand *const cmd = applink_output_command_alloc_from_pool();
-    if(cmd == nullptr)
-        return;
-
-    const ssize_t len =
-        applink_make_answer_for_name(cmd->buffer, sizeof(cmd->buffer),
-                                     variable_name, args...);
-
-    if(len <= 0)
-        return;
-
-    cmd->buffer_used = len;
-
-    g_mutex_lock(&conn->out_queue.lock);
-    applink_output_command_append_to_queue(&conn->out_queue.queue, cmd);
-    conn->out_queue.notification_fn();
-    g_mutex_unlock(&conn->out_queue.lock);
+    std::ostringstream os;
+    Applink::make_answer_for_name(os, variable_name, std::move(params));
+    conn.send_to_all_peers(std::move(os.str()));
 }
 
-void appconn_send_airable_service_logged_in(struct smartphone_app_connection_data *conn,
-                                            const char *service_id,
-                                            const char *username)
-{
-    send_command(conn, "SERVICE_LOGGED_IN", service_id, username);
-}
-
-void appconn_send_airable_service_logged_out(struct smartphone_app_connection_data *conn,
+void Applink::send_airable_service_logged_in(Applink::AppConnections &conn,
                                              const char *service_id,
-                                             const char *logout_url)
+                                             const char *username)
 {
-    send_command(conn, "SERVICE_LOGGED_OUT", service_id, logout_url);
+    send_command(conn, "SERVICE_LOGGED_IN", { service_id, username });
+}
+
+void Applink::send_airable_service_logged_out(Applink::AppConnections &conn,
+                                              const char *service_id,
+                                              const char *logout_url)
+{
+    send_command(conn, "SERVICE_LOGGED_OUT", { service_id, logout_url });
 }

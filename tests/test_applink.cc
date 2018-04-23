@@ -23,7 +23,7 @@
 #include <cppcutter.h>
 #include <algorithm>
 
-#include "applink.hh"
+#include "smartphone_app.hh"
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
@@ -48,11 +48,9 @@ struct fill_buffer_data_t
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 
-static struct ApplinkConnection conn;
+static Applink::InputBuffer *in_buf;
 static fill_buffer_data_t *fill_buffer_data;
 static int default_peer_fd = 42;
-
-static struct ApplinkCommand default_command;
 
 void cut_setup()
 {
@@ -70,18 +68,13 @@ void cut_setup()
 
     fill_buffer_data = new fill_buffer_data_t;
 
-    applink_init();
-
-    cppcut_assert_equal(0, applink_connection_init(&conn));
-    applink_connection_associate(&conn, default_peer_fd);
-
-    cppcut_assert_equal(0, applink_command_init(&default_command));
+    in_buf = new Applink::InputBuffer;
+    cppcut_assert_not_null(in_buf);
 }
 
 void cut_teardown()
 {
-    applink_command_free(&default_command);
-    applink_connection_free(&conn);
+    delete in_buf;
 
     mock_messages->check();
     mock_os->check();
@@ -119,30 +112,32 @@ static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
     return fill_buffer_data->return_value_;
 }
 
-static void check_expected_command(const struct ApplinkCommand &command,
+static void check_expected_command(const Applink::Command &command,
                                    const char *expected_variable)
 {
-    cut_assert_true(command.is_request);
-    cppcut_assert_not_null(command.variable);
-    cppcut_assert_equal(expected_variable, command.variable->name);
+    cut_assert_true(command.is_request());
+    const Applink::Variable *variable = command.get_variable();
+    cppcut_assert_not_null(variable);
+    cppcut_assert_equal(expected_variable, variable->name);
 
-    if(command.variable->number_of_request_parameters > 0)
-        cut_assert_false(dynamic_buffer_is_empty(&command.private_data.parameters_buffer));
+    if(variable->number_of_request_parameters > 0)
+        cut_assert_false(command.parser_data_.parameters_buffer_.empty());
     else
-        cut_assert_true(dynamic_buffer_is_empty(&command.private_data.parameters_buffer));
+        cut_assert_true(command.parser_data_.parameters_buffer_.empty());
 }
 
-static void check_expected_answer(const struct ApplinkCommand &command,
+static void check_expected_answer(const Applink::Command &command,
                                   const char *expected_variable)
 {
-    cut_assert_false(command.is_request);
-    cppcut_assert_not_null(command.variable);
-    cppcut_assert_equal(expected_variable, command.variable->name);
+    cut_assert_false(command.is_request());
+    const Applink::Variable *variable = command.get_variable();
+    cppcut_assert_not_null(variable);
+    cppcut_assert_equal(expected_variable, variable->name);
 
-    if(command.variable->number_of_answer_parameters > 0)
-        cut_assert_false(dynamic_buffer_is_empty(&command.private_data.parameters_buffer));
+    if(variable->number_of_answer_parameters > 0)
+        cut_assert_false(command.parser_data_.parameters_buffer_.empty());
     else
-        cut_assert_true(dynamic_buffer_is_empty(&command.private_data.parameters_buffer));
+        cut_assert_true(command.parser_data_.parameters_buffer_.empty());
 }
 
 static void expect_read_but_return_nothing()
@@ -156,11 +151,11 @@ static void expect_read_but_return_nothing()
  */
 void test_lookup_airable_password_variable()
 {
-    const auto *const variable = applink_lookup("AIRABLE_PASSWORD", 0);
+    const auto *const variable = Applink::lookup("AIRABLE_PASSWORD", 0);
 
     cppcut_assert_not_null(variable);
     cppcut_assert_equal("AIRABLE_PASSWORD", variable->name);
-    cppcut_assert_equal(static_cast<uint16_t>(VAR_AIRABLE_PASSWORD),
+    cppcut_assert_equal(static_cast<uint16_t>(Applink::Variables::AIRABLE_PASSWORD),
                         variable->variable_id);
     cppcut_assert_equal(2U, variable->number_of_request_parameters);
     cppcut_assert_equal(1U, variable->number_of_answer_parameters);
@@ -173,12 +168,10 @@ void test_read_nothing()
 {
     expect_read_but_return_nothing();
 
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
-
-    cut_assert_false(default_command.is_request);
-    cppcut_assert_null(default_command.variable);
-    cut_assert_true(dynamic_buffer_is_empty(&default_command.private_data.parameters_buffer));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -189,12 +182,10 @@ void test_read_empty_lines()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("\n   \n \n\n", 0, 0);
 
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
-
-    cut_assert_false(default_command.is_request);
-    cppcut_assert_null(default_command.variable);
-    cut_assert_true(dynamic_buffer_is_empty(&default_command.private_data.parameters_buffer));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -205,22 +196,24 @@ void test_read_single_variable_request()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("GET AIRABLE_PASSWORD test\\ token test\\ password\n", 0, 0);
 
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
 
-    check_expected_command(default_command, "AIRABLE_PASSWORD");
+    check_expected_command(*cmd, "AIRABLE_PASSWORD");
 
     static const char expected_parameters[] = "test\\ token test\\ password";
     cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
-                            default_command.private_data.parameters_buffer.data,
-                            default_command.private_data.parameters_buffer.pos);
+                            cmd->parser_data_.parameters_buffer_.data(),
+                            cmd->parser_data_.parameters_buffer_.size());
 
-    char buffer[512];
-    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
-    cppcut_assert_equal("test token", static_cast<const char *>(buffer));
+    std::array<char, 512> buffer;
+    cmd->get_parameter(0, buffer);
+    cppcut_assert_equal("test token", static_cast<const char *>(buffer.data()));
 
-    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
-    cppcut_assert_equal("test password", static_cast<const char *>(buffer));
+    cmd->get_parameter(1, buffer);
+    cppcut_assert_equal("test password", static_cast<const char *>(buffer.data()));
 }
 
 /*!\test
@@ -231,27 +224,30 @@ void test_read_single_variable_request_after_empty_lines()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("\n\n     \n  GET AIRABLE_PASSWORD some\\ token password\n", 0, 0);
 
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
 
-    check_expected_command(default_command, "AIRABLE_PASSWORD");
+    check_expected_command(*cmd, "AIRABLE_PASSWORD");
 
     static const char expected_parameters[] = "some\\ token password";
     cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
-                            default_command.private_data.parameters_buffer.data,
-                            default_command.private_data.parameters_buffer.pos);
+                            cmd->parser_data_.parameters_buffer_.data(),
+                            cmd->parser_data_.parameters_buffer_.size());
 
-    char buffer[512];
-    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
-    cppcut_assert_equal("some token", static_cast<const char *>(buffer));
+    std::array<char, 512> buffer;
+    cmd->get_parameter(0, buffer);
+    cppcut_assert_equal("some token", static_cast<const char *>(buffer.data()));
 
-    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
-    cppcut_assert_equal("password", static_cast<const char *>(buffer));
+    cmd->get_parameter(1, buffer);
+    cppcut_assert_equal("password", static_cast<const char *>(buffer.data()));
 
     /* done */
     expect_read_but_return_nothing();
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -261,47 +257,54 @@ void test_read_scattered_variable_request()
 {
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("GET A", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
-                        applink_get_next_command(&conn, &default_command));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
+    cppcut_assert_null(cmd.get());
 
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("IRABLE_PASS", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
+    cppcut_assert_null(cmd.get());
 
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("WORD token passwor", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
+    cppcut_assert_null(cmd.get());
 
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("d", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
+    cppcut_assert_null(cmd.get());
 
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("\n", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
 
-    check_expected_command(default_command, "AIRABLE_PASSWORD");
+    check_expected_command(*cmd, "AIRABLE_PASSWORD");
 
     static const char expected_parameters[] = "token password";
     cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
-                            default_command.private_data.parameters_buffer.data,
-                            default_command.private_data.parameters_buffer.pos);
+                            cmd->parser_data_.parameters_buffer_.data(),
+                            cmd->parser_data_.parameters_buffer_.size());
 
-    char buffer[512];
-    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
-    cppcut_assert_equal("token", static_cast<const char *>(buffer));
+    std::array<char, 512> buffer;
+    cmd->get_parameter(0, buffer);
+    cppcut_assert_equal("token", static_cast<const char *>(buffer.data()));
 
-    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
-    cppcut_assert_equal("password", static_cast<const char *>(buffer));
+    cmd->get_parameter(1, buffer);
+    cppcut_assert_equal("password", static_cast<const char *>(buffer.data()));
 
     /* done */
     expect_read_but_return_nothing();
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -311,50 +314,55 @@ void test_read_two_scattered_variable_requests()
 {
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("GET AIRABLE_PASS", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_NEED_MORE_DATA,
-                        applink_get_next_command(&conn, &default_command));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
+    cppcut_assert_null(cmd.get());
 
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("WORD token password\nGET SERVICE_CREDE", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
 
-    check_expected_command(default_command, "AIRABLE_PASSWORD");
+    check_expected_command(*cmd, "AIRABLE_PASSWORD");
 
     static const char expected_parameters_first[] = "token password";
     cut_assert_equal_memory(expected_parameters_first,
                             sizeof(expected_parameters_first) - 1,
-                            default_command.private_data.parameters_buffer.data,
-                            default_command.private_data.parameters_buffer.pos);
+                            cmd->parser_data_.parameters_buffer_.data(),
+                            cmd->parser_data_.parameters_buffer_.size());
 
-    char buffer[512];
-    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
-    cppcut_assert_equal("token", static_cast<const char *>(buffer));
+    std::array<char, 512> buffer;
+    cmd->get_parameter(0, buffer);
+    cppcut_assert_equal("token", static_cast<const char *>(buffer.data()));
 
-    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
-    cppcut_assert_equal("password", static_cast<const char *>(buffer));
+    cmd->get_parameter(1, buffer);
+    cppcut_assert_equal("password", static_cast<const char *>(buffer.data()));
 
     /* more to come */
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("NTIALS qobuz\n", 0, 0);
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
 
-    check_expected_command(default_command, "SERVICE_CREDENTIALS");
+    check_expected_command(*cmd, "SERVICE_CREDENTIALS");
 
     static const char expected_parameters_second[] = "qobuz";
     cut_assert_equal_memory(expected_parameters_second,
                             sizeof(expected_parameters_second) - 1,
-                            default_command.private_data.parameters_buffer.data,
-                            default_command.private_data.parameters_buffer.pos);
+                            cmd->parser_data_.parameters_buffer_.data(),
+                            cmd->parser_data_.parameters_buffer_.size());
 
-    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
-    cppcut_assert_equal("qobuz", static_cast<const char *>(buffer));
+    cmd->get_parameter(0, buffer);
+    cppcut_assert_equal("qobuz", static_cast<const char *>(buffer.data()));
 
     /* done */
     expect_read_but_return_nothing();
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -365,27 +373,30 @@ void test_read_single_variable_request_with_one_character_parameters()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("GET AIRABLE_PASSWORD ab 1\n", 0, 0);
 
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
 
-    check_expected_command(default_command, "AIRABLE_PASSWORD");
+    check_expected_command(*cmd, "AIRABLE_PASSWORD");
 
     static const char expected_parameters[] = "ab 1";
     cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
-                            default_command.private_data.parameters_buffer.data,
-                            default_command.private_data.parameters_buffer.pos);
+                            cmd->parser_data_.parameters_buffer_.data(),
+                            cmd->parser_data_.parameters_buffer_.size());
 
-    char buffer[512];
-    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
-    cppcut_assert_equal("ab", static_cast<const char *>(buffer));
+    std::array<char, 512> buffer;
+    cmd->get_parameter(0, buffer);
+    cppcut_assert_equal("ab", static_cast<const char *>(buffer.data()));
 
-    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
-    cppcut_assert_equal("1", static_cast<const char *>(buffer));
+    cmd->get_parameter(1, buffer);
+    cppcut_assert_equal("1", static_cast<const char *>(buffer.data()));
 
     /* done */
     expect_read_but_return_nothing();
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -399,24 +410,29 @@ void test_read_multiple_variable_request_after_empty_lines()
                           "GET SERVICE_CREDENTIALS tidal\n",
                           0, 0);
 
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
-    check_expected_command(default_command, "AIRABLE_ROOT_URL");
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
+    check_expected_command(*cmd, "AIRABLE_ROOT_URL");
 
     expect_read_but_return_nothing();
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
-    check_expected_command(default_command, "AIRABLE_AUTH_URL");
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
+    check_expected_command(*cmd, "AIRABLE_AUTH_URL");
 
     expect_read_but_return_nothing();
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_COMMAND,
-                        applink_get_next_command(&conn, &default_command));
-    check_expected_command(default_command, "SERVICE_CREDENTIALS");
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
+    cppcut_assert_not_null(cmd.get());
+    check_expected_command(*cmd, "SERVICE_CREDENTIALS");
 
     /* done */
     expect_read_but_return_nothing();
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
+    cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -430,12 +446,10 @@ void test_read_garbage_command()
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Failed parsing applink command (command ignored)");
 
-    cppcut_assert_equal(APPLINK_RESULT_EMPTY,
-                        applink_get_next_command(&conn, &default_command));
-
-    cut_assert_false(default_command.is_request);
-    cppcut_assert_null(default_command.variable);
-    cut_assert_true(dynamic_buffer_is_empty(&default_command.private_data.parameters_buffer));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::EMPTY), int(result));
+    cppcut_assert_null(cmd.get());
 }
 
 /*!\test
@@ -443,20 +457,19 @@ void test_read_garbage_command()
  */
 void test_generate_answer_line_for_named_variable()
 {
-    char buffer[512];
-    ssize_t len = applink_make_answer_for_name(buffer, sizeof(buffer),
-                                               "SERVICE_CREDENTIALS",
-                                               "service",
-                                               "known",
-                                               "here is the login",
-                                               "and here is the password");
+    std::ostringstream os;
+    cut_assert_true(Applink::make_answer_for_name(os, "SERVICE_CREDENTIALS",
+                                                  { "service", "known",
+                                                    "here is the login",
+                                                    "and here is the password" }));
 
-    cppcut_assert_operator(ssize_t(0), <, len);
+    auto result(os.str());
+    cut_assert_false(result.empty());
 
     static const char expected_line[] =
         "SERVICE_CREDENTIALS: service known here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
     cut_assert_equal_memory(expected_line, sizeof(expected_line) - 1,
-                            buffer, len);
+                            result.c_str(), result.size());
 }
 
 /*!\test
@@ -464,23 +477,21 @@ void test_generate_answer_line_for_named_variable()
  */
 void test_generate_answer_line_for_variable()
 {
-    const auto *const variable = applink_lookup("SERVICE_CREDENTIALS", 0);
+    const auto *const variable = Applink::lookup("SERVICE_CREDENTIALS", 0);
     cppcut_assert_not_null(variable);
 
-    char buffer[512];
-    ssize_t len = applink_make_answer_for_var(buffer, sizeof(buffer),
-                                              variable,
-                                              "service",
-                                               "known",
-                                              "here is the login",
-                                              "and here is the password");
+    std::ostringstream os;
+    Applink::make_answer_for_var(os, *variable,
+                                 { "service", "known", "here is the login",
+                                   "and here is the password" });
 
-    cppcut_assert_operator(ssize_t(0), <, len);
+    auto result(os.str());
+    cut_assert_false(result.empty());
 
     static const char expected_line[] =
         "SERVICE_CREDENTIALS: service known here\\ is\\ the\\ login and\\ here\\ is\\ the\\ password\n";
     cut_assert_equal_memory(expected_line, sizeof(expected_line) - 1,
-                            buffer, len);
+                            result.c_str(), result.size());
 }
 
 /*!\test
@@ -491,89 +502,24 @@ void test_single_unrequested_answer_from_app()
     mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
     fill_buffer_data->set("SERVICE_LOGGED_IN: tidal test\\ account\n", 0, 0);
 
-    cppcut_assert_equal(APPLINK_RESULT_HAVE_ANSWER,
-                        applink_get_next_command(&conn, &default_command));
+    Applink::ParserResult result;
+    auto cmd = in_buf->get_next_command(default_peer_fd, result);
+    cppcut_assert_equal(int(Applink::ParserResult::HAVE_ANSWER), int(result));
+    cppcut_assert_not_null(cmd.get());
 
-    check_expected_answer(default_command, "SERVICE_LOGGED_IN");
+    check_expected_answer(*cmd, "SERVICE_LOGGED_IN");
 
     static const char expected_parameters[] = "tidal test\\ account";
     cut_assert_equal_memory(expected_parameters, sizeof(expected_parameters) - 1,
-                            default_command.private_data.parameters_buffer.data,
-                            default_command.private_data.parameters_buffer.pos);
+                            cmd->parser_data_.parameters_buffer_.data(),
+                            cmd->parser_data_.parameters_buffer_.size());
 
-    char buffer[512];
-    applink_command_get_parameter(&default_command, 0, buffer, sizeof(buffer));
-    cppcut_assert_equal("tidal", static_cast<const char *>(buffer));
+    std::array<char, 512> buffer;
+    cmd->get_parameter(0, buffer);
+    cppcut_assert_equal("tidal", static_cast<const char *>(buffer.data()));
 
-    applink_command_get_parameter(&default_command, 1, buffer, sizeof(buffer));
-    cppcut_assert_equal("test account", static_cast<const char *>(buffer));
-}
-
-/*!\test
- * The output command structures are managed in a pool of fixed size.
- */
-void test_total_number_of_output_commands_is_limited()
-{
-    static const size_t reasonable_upper_bound = 50;
-    size_t count;
-
-    /* OOM message */
-    mock_messages->expect_msg_error_formatted(ENOMEM, LOG_EMERG, "output command");
-
-    for(count = 0; count < reasonable_upper_bound; ++count)
-    {
-        if(applink_output_command_alloc_from_pool() == nullptr)
-            break;
-    }
-
-    cppcut_assert_not_equal(size_t(0), count);
-    cppcut_assert_operator(reasonable_upper_bound, >, count);
-}
-
-/*!\test
- * Output command structures can be returned to pool and be reused.
- */
-void test_take_command_from_pool_release_and_take_again()
-{
-    struct ApplinkOutputQueue queue = { NULL };
-    static const size_t reasonable_upper_bound = 50;
-    size_t count;
-
-    /* OOM message */
-    mock_messages->expect_msg_error_formatted(ENOMEM, LOG_EMERG, "output command");
-
-    for(count = 0; count < reasonable_upper_bound; ++count)
-    {
-        auto *cmd = applink_output_command_alloc_from_pool();
-
-        if(cmd != nullptr)
-            applink_output_command_append_to_queue(&queue, cmd);
-        else
-            break;
-    }
-
-    cppcut_assert_not_equal(size_t(0), count);
-    cppcut_assert_operator(reasonable_upper_bound, >, count);
-    cppcut_assert_not_null(queue.head);
-    mock_messages->check();
-
-    for(size_t i = 0; i < count; ++i)
-    {
-        auto *cmd = applink_output_command_take_next(&queue);
-        cppcut_assert_not_null(cmd);
-        applink_output_command_return_to_pool(cmd);
-    }
-
-    cppcut_assert_null(queue.head);
-
-    for(size_t i = 0; i < count; ++i)
-    {
-        auto *cmd = applink_output_command_alloc_from_pool();
-        cppcut_assert_not_null(cmd);
-    }
-
-    mock_messages->expect_msg_error_formatted(ENOMEM, LOG_EMERG, "output command");
-    cppcut_assert_null(applink_output_command_alloc_from_pool());
+    cmd->get_parameter(1, buffer);
+    cppcut_assert_equal("test account", static_cast<const char *>(buffer.data()));
 }
 
 /*!\test
@@ -581,9 +527,26 @@ void test_take_command_from_pool_release_and_take_again()
  */
 void test_take_command_from_empty_queue_returns_null()
 {
-    struct ApplinkOutputQueue queue = { NULL };
-    struct ApplinkOutputCommand *const empty = applink_output_command_take_next(&queue);
-    cppcut_assert_null(empty);
+    Applink::Peer peer(default_peer_fd,
+                       [] () { cut_fail("unexpected call"); },
+                       [] (int, bool) { cut_fail("unexpected call"); });
+    cut_assert_false(peer.send_one_from_queue_to_peer());
+}
+
+/*!\test
+ * Empty command is reported as a bug.
+ */
+void test_sending_empty_command_triggers_bug_message()
+{
+    static size_t notifications;
+    Applink::Peer peer(default_peer_fd,
+                       [] () { ++notifications; },
+                       [] (int, bool) { cut_fail("unexpected call"); });
+    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
+            "BUG: Ignoring empty applink command in out queue for peer 42");
+    peer.send_to_queue(std::string());
+    cppcut_assert_equal(size_t(1), notifications);
+    cut_assert_true(peer.send_one_from_queue_to_peer());
 }
 
 /*!\test
@@ -591,20 +554,15 @@ void test_take_command_from_empty_queue_returns_null()
  */
 void test_put_single_answer_into_output_queue_and_remove()
 {
-    struct ApplinkOutputCommand *const command = applink_output_command_alloc_from_pool();
-    cppcut_assert_not_null(command);
-
-    struct ApplinkOutputQueue queue = { NULL };
-    applink_output_command_append_to_queue(&queue, command);
-
-    cppcut_assert_equal(command, queue.head);
-
-    struct ApplinkOutputCommand *const taken = applink_output_command_take_next(&queue);
-
-    cppcut_assert_equal(command, taken);
-    cppcut_assert_null(queue.head);
-
-    applink_output_command_return_to_pool(command);
+    static size_t notifications;
+    Applink::Peer peer(default_peer_fd,
+                       [] () { ++notifications; },
+                       [] (int, bool) { cut_fail("unexpected call"); });
+    static const std::string command("Testing");
+    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), default_peer_fd);
+    peer.send_to_queue(std::string(command));
+    cppcut_assert_equal(size_t(1), notifications);
+    cut_assert_true(peer.send_one_from_queue_to_peer());
 }
 
 /*!\test
@@ -612,36 +570,25 @@ void test_put_single_answer_into_output_queue_and_remove()
  */
 void test_put_multiple_answers_into_output_queue_and_remove()
 {
-    std::array<struct ApplinkOutputCommand *, 4> commands =
-    {
-        applink_output_command_alloc_from_pool(),
-        applink_output_command_alloc_from_pool(),
-        applink_output_command_alloc_from_pool(),
-        applink_output_command_alloc_from_pool(),
-    };
+    static size_t notifications;
+    Applink::Peer peer(default_peer_fd,
+                       [] () { ++notifications; },
+                       [] (int, bool) { cut_fail("unexpected call"); });
 
-    for(const auto &cmd : commands)
-        cppcut_assert_not_null(cmd);
-
-    struct ApplinkOutputQueue queue = { NULL };
+    std::array<std::string, 4> commands = { "A", "BCD", "foo bar", "x", };
 
     for(auto &cmd : commands)
-    {
-        applink_output_command_append_to_queue(&queue, cmd);
-        cppcut_assert_equal(commands[0], queue.head);
-    }
+        peer.send_to_queue(std::string(cmd));
+
+    cppcut_assert_equal(commands.size(), notifications);
 
     for(const auto &cmd : commands)
     {
-        cppcut_assert_not_null(queue.head);
-        struct ApplinkOutputCommand *const taken = applink_output_command_take_next(&queue);
-        cppcut_assert_equal(cmd, taken);
+        mock_os->expect_os_write_from_buffer(0, cmd.c_str(), cmd.size(), default_peer_fd);
+        cut_assert_true(peer.send_one_from_queue_to_peer());
     }
 
-    cppcut_assert_null(queue.head);
-
-    for(auto &cmd: commands)
-        applink_output_command_return_to_pool(cmd);
+    cut_assert_false(peer.send_one_from_queue_to_peer());
 }
 
 }

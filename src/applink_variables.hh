@@ -19,7 +19,9 @@
 #ifndef APPLINK_VARIABLES_HH
 #define APPLINK_VARIABLES_HH
 
-#include <stdint.h>
+#include <array>
+
+#include <cstdint>
 #include <unistd.h>
 
 /*!
@@ -27,15 +29,18 @@
  */
 /*!@{*/
 
-struct ApplinkVariable
+namespace Applink
 {
-    const char *name;
-    uint16_t variable_id;
+
+struct Variable
+{
+    const char *const name;
+    const uint16_t variable_id;
     const unsigned int number_of_request_parameters;
     const unsigned int number_of_answer_parameters;
 
-    explicit ApplinkVariable(const char *n, uint16_t id,
-                             unsigned int num_req, unsigned int num_ans):
+    explicit Variable(const char *n, uint16_t id,
+                      unsigned int num_req, unsigned int num_ans):
         name(n),
         variable_id(id),
         number_of_request_parameters(num_req),
@@ -43,27 +48,27 @@ struct ApplinkVariable
     {}
 };
 
-struct ApplinkVariableTable
+class VariableTable
 {
-    const struct ApplinkVariable *const variables;
-    const size_t number_of_variables;
+  private:
+    const Variable *const variables_;
+    const size_t number_of_variables_;
+
+  public:
+    VariableTable(const VariableTable &) = delete;
+    VariableTable &operator=(const VariableTable &) = delete;
+
+    template <size_t N>
+    explicit VariableTable(const std::array<Variable, N> &data):
+        variables_(data.data()),
+        number_of_variables_(N)
+    {}
+
+    const Variable *lookup(const char *variable_name) const;
+    const Variable *lookup(const char *variable_name, size_t length) const;
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-const struct ApplinkVariable *
-applink_variable_lookup(const struct ApplinkVariableTable *variables,
-                        const char *variable_name);
-
-const struct ApplinkVariable *
-applink_variable_lookup_with_length(const struct ApplinkVariableTable *table,
-                                    const char *variable_name, size_t length);
-
-#ifdef __cplusplus
 }
-#endif
 
 /*!@}*/
 

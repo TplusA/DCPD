@@ -62,9 +62,7 @@ test_applink_la_SOURCES = \
     test_applink.cc \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc
-test_applink_la_LIBADD = \
-    $(top_builddir)/src/libapplink.la \
-    $(top_builddir)/src/libdynamic_buffer.la
+test_applink_la_LIBADD = $(top_builddir)/src/libapplink.la
 test_applink_la_CFLAGS = $(AM_CFLAGS)
 test_applink_la_CXXFLAGS = $(AM_CXXFLAGS)
 

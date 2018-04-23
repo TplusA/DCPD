@@ -24,8 +24,7 @@ dcpd_SOURCES = \
     dcpd.cc os.c os.h named_pipe.c named_pipe.h \
     registers.h registers_priv.h register_response_writer.hh \
     dcp_over_tcp.c dcp_over_tcp.h \
-    smartphone_app.cc smartphone_app.hh \
-    smartphone_app_send.cc smartphone_app_send.hh \
+    smartphone_app_send.cc smartphone_app_send.hh smartphone_app.hh \
     actor_id.h \
     applink.hh applink_variables.hh \
     network.h network_status_bits.h \
@@ -155,7 +154,7 @@ libnetworkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 libapplink_la_SOURCES = \
     applink.cc applink.hh \
     applink_variables.cc applink_variables.hh \
-    dynamic_buffer.h dynamic_buffer_util.h
+    smartphone_app.cc smartphone_app.hh
 libapplink_la_CFLAGS = $(AM_CFLAGS)
 libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)
 

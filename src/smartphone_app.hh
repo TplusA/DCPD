@@ -19,10 +19,55 @@
 #ifndef SMARTPHONE_APP_HH
 #define SMARTPHONE_APP_HH
 
-#include <glib.h>
+#include <string>
+#include <deque>
+#include <mutex>
+#include <memory>
 
 #include "network.h"
 #include "applink.hh"
+
+namespace Applink
+{
+
+class Peer
+{
+  private:
+    struct SendQueue
+    {
+        std::mutex lock_;
+        std::deque<std::string> queue_;
+        const std::function<void()> &notify_have_outgoing_fn_;
+        std::function<void(int, bool)> notify_peer_died_fn_;
+
+        explicit SendQueue(const std::function<void()> &out_notification,
+                           std::function<void(int, bool)> &&died_notification):
+            notify_have_outgoing_fn_(out_notification),
+            notify_peer_died_fn_(died_notification)
+        {}
+    };
+
+    const int fd_;
+    InputBuffer input_buffer_;
+    SendQueue send_queue_;
+
+  public:
+    Peer(const Peer &) = delete;
+    Peer &operator=(const Peer &) = delete;
+
+    explicit Peer(int fd, const std::function<void()> &out_fn,
+                  std::function<void(int, bool)> &&died_fn):
+        fd_(fd),
+        send_queue_(out_fn, std::move(died_fn))
+    {}
+
+    bool has_fd(int fd) const { return fd == fd_; }
+    bool handle_incoming_data();
+    void send_to_queue(std::string &&command);
+    bool send_one_from_queue_to_peer();
+
+    void apply_to_fd(const std::function<void(int)> &fn) { fn(fd_); }
+};
 
 /*!
  * A TCP/IP connection to a smartphone.
@@ -31,86 +76,45 @@
  * side, and one for the single supported peer. Multiple simultaneous
  * connections are not supported.
  */
-
-struct smartphone_app_connection_data
+class AppConnections
 {
-    int server_fd;
-    int peer_fd;
+  private:
+    int server_fd_;
 
-    struct ApplinkConnection connection;
-    struct ApplinkCommand command;
+    const std::function<void()> send_queue_filled_notification_fn_;
+    std::unique_ptr<Peer> single_peer_;
 
-    struct
-    {
-        GMutex lock;
+  public:
+    AppConnections(const AppConnections &) = delete;
+    AppConnections &operator=(const AppConnections &) = delete;
 
-        struct ApplinkOutputQueue queue;
-        void (*notification_fn)(void);
-    }
-    out_queue;
+    /*!
+     * Initialize connection data.
+     *
+     * \param send_notification_fn
+     *     Function that is called whenever there is a command in the output
+     *     command queue.
+     */
+    explicit AppConnections(std::function<void()> &&send_notification_fn):
+        server_fd_(-1),
+        send_queue_filled_notification_fn_(std::move(send_notification_fn))
+    {}
+
+    bool listen(uint16_t port);
+    void close();
+
+    void process_out_queue();
+    void send_to_all_peers(std::string &&command);
+
+  private:
+    bool add_new_peer(int peer_fd);
+    void close_and_forget_peer(int peer_fd,
+                               bool is_registered_with_dispatcher = true);
+
+    bool handle_new_peer(int server_fd);
+    void handle_peer_died(int peer_fd);
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/*!
- * Initialize connection data and open TCP/IP port for listing.
- *
- * \param appconn
- *     Structure to be initialized.
- *
- * \param send_notification_fn
- *     Function that is called whenever there is a command in the output
- *     command queue.
- */
-int appconn_init(struct smartphone_app_connection_data *appconn,
-                 void (*send_notification_fn)(void));
-
-/*!
- * Handle incoming connection from the smartphone.
- *
- * This function must be called to accept new connections. It associates the
- * connection structure with the network connection. The connection itself is
- * handled in #appconn_handle_outgoing().
- */
-void appconn_handle_incoming(struct smartphone_app_connection_data *appconn);
-
-/*!
- * Handle traffic from and to the smartphone.
- *
- * \param appconn
- *     The connection object associated with a network connection.
- *
- * \param can_read_from_peer
- *     True if the peer is known to have data for us. For each complete command
- *     that can be read from the network connection, an answer is generated and
- *     placed into an output buffer. After having collected all answers, that
- *     buffer is sent as a single network transfer.
- *
- * \param can_send_from_queue
- *     True if there might be commands in the output command queue which should
- *     be processed now.
- *
- * \param peer_died
- *     The peer was determined dead, connection is to be closed cleanly.
- */
-void appconn_handle_outgoing(struct smartphone_app_connection_data *appconn,
-                             bool can_read_from_peer, bool can_send_from_queue,
-                             bool peer_died);
-
-/*!
- * Actively close network connection to the smartphone.
- */
-void appconn_close_peer(struct smartphone_app_connection_data *appconn);
-
-/*!
- * Close all connections, including the listening port.
- */
-void appconn_close(struct smartphone_app_connection_data *appconn);
-
-#ifdef __cplusplus
 }
-#endif
 
 #endif /* !SMARTPHONE_APP_HH */

@@ -24,6 +24,7 @@
 #include <cstring>
 #include <csignal>
 #include <cerrno>
+#include <glib.h>
 
 #include "named_pipe.h"
 #include "dcp_over_tcp.h"
@@ -69,16 +70,11 @@
 #define WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET         (1U << 7)
 #define WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED       (1U << 8)
 
-/* socket events on smartphone app TCP/IP connection */
-#define WAITEVENT_CAN_READ_FROM_SMARTPHONE_SOCKET       (1U << 9)
-#define WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET       (1U << 10)
-#define WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED           (1U << 11)
-
 /* internal events */
-#define WAITEVENT_REGISTER_CHANGED                      (1U << 12)
-#define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 13)
-#define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 14)
-#define WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED    (1U << 15)
+#define WAITEVENT_REGISTER_CHANGED                      (1U << 9)
+#define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 10)
+#define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 11)
+#define WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED    (1U << 12)
 
 enum PrimitiveQueueCommand
 {
@@ -308,52 +304,6 @@ static unsigned int handle_dcp_peer_events(int fd, short revents,
     return result;
 }
 
-static unsigned int handle_app_server_events(int fd, short revents)
-{
-    unsigned int result = 0;
-
-    if(revents & POLLIN)
-        result |= WAITEVENT_CAN_READ_FROM_SMARTPHONE_SOCKET;
-
-    if(revents & ~POLLIN)
-        msg_error(EINVAL, LOG_WARNING,
-                  "Unexpected poll() events on smartphone app server socket fd %d: %04x",
-                  fd, revents);
-
-    return result;
-}
-
-static unsigned int handle_app_peer_events(int fd, short revents)
-{
-    unsigned int result = 0;
-
-    if(revents & POLLIN)
-    {
-        if(network_have_data(fd))
-            result |= WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET;
-        else
-        {
-            msg_error(EPIPE, LOG_INFO,
-                      "Smartphone app peer connection closed (fd %d)", fd);
-            result |= WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED;
-        }
-    }
-
-    if(revents & (POLLHUP | POLLERR))
-    {
-        msg_error(EPIPE, LOG_INFO,
-                  "Smartphone app peer connection died on fd %d, need to close", fd);
-        result |= WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED;
-    }
-
-    if(revents & ~(POLLIN | POLLHUP | POLLERR))
-        msg_error(EINVAL, LOG_WARNING,
-                  "Unexpected poll() events on smartphone app peer socket fd %d: %04x",
-                  fd, revents);
-
-    return result;
-}
-
 static unsigned int handle_primqueue_events(int fd, short revents)
 {
     unsigned int result = 0;
@@ -418,8 +368,6 @@ static unsigned int wait_for_events(struct state *state,
                                     const int dcpspi_fifo_in_fd,
                                     const int dcp_server_socket_fd,
                                     const int dcp_peer_socket_fd,
-                                    const int app_server_socket_fd,
-                                    const int app_peer_socket_fd,
                                     const int primitive_queue_fd,
                                     const int register_changed_fd,
                                     bool do_block)
@@ -429,7 +377,7 @@ static unsigned int wait_for_events(struct state *state,
     /*
      * Local constant for array layout below.
      */
-    static constexpr size_t FIRST_NWDISPATCH_INDEX = 8;
+    static constexpr size_t FIRST_NWDISPATCH_INDEX = 6;
 
     struct pollfd fds[FIRST_NWDISPATCH_INDEX + nwdispatcher.get_number_of_fds()];
 
@@ -437,10 +385,8 @@ static unsigned int wait_for_events(struct state *state,
     fds[1] = { .fd = drcp_fifo_in_fd,      .events = POLLIN, };
     fds[2] = { .fd = dcp_server_socket_fd, .events = POLLIN, };
     fds[3] = { .fd = dcp_peer_socket_fd,   .events = POLLIN, };
-    fds[4] = { .fd = app_server_socket_fd, .events = POLLIN, };
-    fds[5] = { .fd = app_peer_socket_fd,   .events = POLLIN, };
-    fds[6] = { .fd = primitive_queue_fd,   .events = POLLIN, };
-    fds[7] = { .fd = register_changed_fd,  .events = POLLIN, };
+    fds[4] = { .fd = primitive_queue_fd,   .events = POLLIN, };
+    fds[5] = { .fd = register_changed_fd,  .events = POLLIN, };
 
     nwdispatcher.scatter_fds(&fds[FIRST_NWDISPATCH_INDEX], POLLIN);
 
@@ -465,10 +411,8 @@ static unsigned int wait_for_events(struct state *state,
     return_value |= handle_dcp_fifo_out_events(drcp_fifo_in_fd,    fds[1].revents);
     return_value |= handle_dcp_server_events(dcp_server_socket_fd, fds[2].revents);
     return_value |= handle_dcp_peer_events(dcp_peer_socket_fd,     fds[3].revents, state);
-    return_value |= handle_app_server_events(app_server_socket_fd, fds[4].revents);
-    return_value |= handle_app_peer_events(app_peer_socket_fd,     fds[5].revents);
-    return_value |= handle_primqueue_events(primitive_queue_fd,    fds[6].revents);
-    return_value |= handle_register_events(register_changed_fd,    fds[7].revents);
+    return_value |= handle_primqueue_events(primitive_queue_fd,    fds[4].revents);
+    return_value |= handle_register_events(register_changed_fd,    fds[5].revents);
 
     return return_value;
 }
@@ -824,7 +768,7 @@ static void handle_transaction_exception(struct state *const state,
  */
 static void main_loop(struct files *files,
                       struct dcp_over_tcp_data *dot,
-                      struct smartphone_app_connection_data *appconn,
+                      Applink::AppConnections &appconn,
                       struct DBusSignalManagerData *connman,
                       int primitive_queue_fd, int register_changed_fd)
 {
@@ -848,7 +792,6 @@ static void main_loop(struct files *files,
             wait_for_events(&state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             dot->server_fd, dot->peer_fd,
-                            appconn->server_fd, appconn->peer_fd,
                             primitive_queue_fd, register_changed_fd,
                             transaction_is_input_required(state.active_transaction));
 
@@ -894,13 +837,8 @@ static void main_loop(struct files *files,
                             (wait_result & WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET) != 0,
                             (wait_result & WAITEVENT_DCP_CONNECTION_PEER_SOCKET_DIED) != 0);
 
-        if((wait_result & WAITEVENT_CAN_READ_FROM_SMARTPHONE_SOCKET) != 0)
-            appconn_handle_incoming(appconn);
-
-        appconn_handle_outgoing(appconn,
-                                (wait_result & WAITEVENT_CAN_READ_XLINK_FROM_PEER_SOCKET) != 0,
-                                (wait_result & WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS) != 0,
-                                (wait_result & WAITEVENT_SMARTPHONE_PEER_SOCKET_DIED) != 0);
+        if((wait_result & WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS) != 0)
+            appconn.process_out_queue();
 
         try_dequeue_next_transaction(&state);
 
@@ -986,7 +924,7 @@ struct parameters
 
 static bool main_loop_init(const struct parameters *parameters,
                            Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager,
-                           struct smartphone_app_connection_data *appconn,
+                           Applink::AppConnections &appconn,
                            struct DBusSignalManagerData **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
@@ -1022,12 +960,10 @@ static bool main_loop_init(const struct parameters *parameters,
                                                deferred_connman_refresh,
                                                parameters->with_connman);
 
-    applink_init();
-
-    bool ret = true;
-
-    if(appconn_init(appconn, process_smartphone_outgoing_queue) < 0)
-        ret = false;
+    /*
+     * The port number is ASCII "TB" (meaning T + A + 1).
+     */
+    bool ret = appconn.listen(8466);
 
     if(dot_init(dot) < 0)
         ret = false;
@@ -1478,7 +1414,7 @@ int main(int argc, char *argv[])
     /*!
      * Data for smartphone connection.
      */
-    static struct smartphone_app_connection_data appconn;
+    static Applink::AppConnections appconn(process_smartphone_outgoing_queue);
 
     /*!
      * Data for net.connman.Manager D-Bus signal handlers.
@@ -1500,7 +1436,7 @@ int main(int argc, char *argv[])
      */
     static struct dcp_over_tcp_data dot;
 
-    main_loop_init(&parameters, config_manager, &appconn, &connman, &dot, is_upgrading);
+    main_loop_init(&parameters, config_manager, appconn, &connman, &dot, is_upgrading);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, connman,
@@ -1529,13 +1465,13 @@ int main(int argc, char *argv[])
 
     dcpregs_appliance_id_configure();
 
-    main_loop(&files, &dot, &appconn, connman,
+    main_loop(&files, &dot, appconn, connman,
               primitive_queue_fd, register_changed_fd);
 
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutting down");
 
     dot_close(&dot);
-    appconn_close(&appconn);
+    appconn.close();
 
     shutdown(&files);
     dbus_unlock_shutdown_sequence();

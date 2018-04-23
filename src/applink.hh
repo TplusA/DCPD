@@ -19,125 +19,173 @@
 #ifndef APPLINK_HH
 #define APPLINK_HH
 
+#include <array>
+#include <vector>
+#include <memory>
+
 #include "applink_variables.hh"
-#include "dynamic_buffer.h"
+#include "messages.h"
 
 /*!
  * \addtogroup app_link Connection with smartphone app.
  */
 /*!@{*/
 
-enum ApplinkSupportedVariables
+namespace Applink
 {
-    VAR_AIRABLE_ROOT_URL = 1,
-    VAR_AIRABLE_AUTH_URL,
-    VAR_AIRABLE_PASSWORD,
-    VAR_SERVICE_CREDENTIALS,
-    VAR_SERVICE_LOGGED_IN,
-    VAR_SERVICE_LOGGED_OUT,
 
-    VAR_FIRST_SUPPORTED_VARIABLE = VAR_AIRABLE_ROOT_URL,
-    VAR_LAST_SUPPORTED_VARIABLE = VAR_SERVICE_LOGGED_OUT,
+enum class Variables
+{
+    AIRABLE_ROOT_URL = 1,
+    AIRABLE_AUTH_URL,
+    AIRABLE_PASSWORD,
+    SERVICE_CREDENTIALS,
+    SERVICE_LOGGED_IN,
+    SERVICE_LOGGED_OUT,
+
+    FIRST_SUPPORTED_VARIABLE = AIRABLE_ROOT_URL,
+    LAST_SUPPORTED_VARIABLE = SERVICE_LOGGED_OUT,
 };
 
-enum ApplinkResult
+enum class ParserResult
 {
     /*! Parsed nothing, input buffer empty. */
-    APPLINK_RESULT_EMPTY,
+    EMPTY,
 
     /*! Found a command, input buffer may contain more. */
-    APPLINK_RESULT_HAVE_COMMAND,
+    HAVE_COMMAND,
 
     /*! Found an answer, input buffer may contain more. */
-    APPLINK_RESULT_HAVE_ANSWER,
+    HAVE_ANSWER,
 
     /*! Found possible partial command, line incomplete. */
-    APPLINK_RESULT_NEED_MORE_DATA,
+    NEED_MORE_DATA,
 
     /*! I/O error while reading data from network. */
-    APPLINK_RESULT_IO_ERROR,
+    IO_ERROR,
 
     /*! Not enough memory. */
-    APPLINK_RESULT_OUT_OF_MEMORY,
+    OUT_OF_MEMORY,
 };
 
-struct ApplinkConnection
+class Command
 {
-    int peer_fd;
-    struct dynamic_buffer input_buffer;
+  private:
+    bool is_request_;
+    const Variable *variable_;
 
-    size_t scan_pos;
+  public:
+    struct ParserData
+    {
+        std::vector<uint8_t> parameters_buffer_;
+        std::array<size_t, 5> offsets_;
+        std::array<size_t, 5> lengths_;
+        size_t number_of_parameters_;
+
+        ParserData():
+            offsets_{0},
+            lengths_{0},
+            number_of_parameters_(0)
+        {}
+    };
+
+    ParserData parser_data_;
+
+    Command(const Command &) = delete;
+    Command &operator=(const Command &) = delete;
+
+    explicit Command(bool is_req):
+        is_request_(is_req),
+        variable_(nullptr)
+    {}
+
+    const Variable *get_variable() const { return variable_; }
+    const bool is_request() const { return is_request_; }
+
+    void set_variable(const Variable *var)
+    {
+        variable_ = var;
+    }
+
+    /*!
+    * Return the n'th parameter passed with given command.
+    *
+    * \param n
+    *     Which parameter to return.
+    *
+    * \param buffer
+    *     Buffer the parameter shall be copied to as zero-terminated string.
+    */
+    template <size_t N>
+    void get_parameter(size_t n, std::array<char, N> &buffer) const
+    {
+        if(N > 0)
+            get_parameter(n, buffer.data(), N);
+    }
+
+  private:
+    void get_parameter(size_t n, char *buffer, size_t buffer_size) const;
 };
 
-struct ApplinkCommandPrivate_
+class InputBuffer
 {
-    struct dynamic_buffer parameters_buffer;
-    size_t offsets[5];
-    size_t lengths[5];
-    size_t number_of_parameters;
+  private:
+    std::vector<uint8_t> data_;
+    size_t last_scan_pos_;
+    size_t scan_pos_;
+
+  public:
+    InputBuffer(const InputBuffer &) = delete;
+    InputBuffer &operator=(const InputBuffer &) = delete;
+
+    explicit InputBuffer():
+        last_scan_pos_(0),
+        scan_pos_(0)
+    {}
+
+    /*!
+     * Parse next command or answer from connection.
+     *
+     * \param peer_fd
+     *     The connection to parse the next command from.
+     *
+     * \param result
+     *     Any #Applink::ParserResult, #Applink::ParserResult::HAVE_COMMAND on
+     *     success.
+     *
+     * \returns
+     *     On success, an object representing the parsed command is returned.
+     */
+    std::unique_ptr<Command> get_next_command(int peer_fd, ParserResult &result);
+
+  private:
+    void begin_scan() { last_scan_pos_ = scan_pos_; }
+    const bool can_scan() const { return scan_pos_ < data_.size(); }
+    void advance_scan() { ++scan_pos_; }
+    uint8_t get_scan_char() const { return data_[scan_pos_]; }
+    void mark_scan_position() { last_scan_pos_ = scan_pos_ + 1; }
+    size_t get_marked_scan_position() const { return last_scan_pos_; }
+    void go_to_marked_scan_position() { scan_pos_ = last_scan_pos_; }
+
+    const char *get_line_at(size_t pos) const
+    {
+        log_assert(scan_pos_ >= pos);
+        log_assert(scan_pos_ < data_.size());
+        log_assert(data_[scan_pos_] == '\n');
+
+        return reinterpret_cast<const char *>(&data_[pos]);
+    }
+
+    const size_t get_line_length(size_t pos) const
+    {
+        return scan_pos_ - pos;
+    }
+
+    std::unique_ptr<Command> parse_command_or_answer(ParserResult &result);
+    std::unique_ptr<Command> parse_line(const size_t begin_pos, ParserResult &result);
+    bool append_from_fd(int fd, size_t max_total_size);
+    void remove_processed_data();
 };
-
-struct ApplinkCommand
-{
-    bool is_request;
-    const struct ApplinkVariable *variable;
-
-    struct ApplinkCommandPrivate_ private_data;
-};
-
-struct ApplinkOutputCommand;
-
-struct ApplinkOutputCommandPrivate_
-{
-    struct ApplinkOutputCommand *prev;
-    struct ApplinkOutputCommand *next;
-};
-
-struct ApplinkOutputCommand
-{
-    char buffer[1024];
-    size_t buffer_used;
-
-    struct ApplinkOutputCommandPrivate_ private_data;
-};
-
-struct ApplinkOutputQueue
-{
-    struct ApplinkOutputCommand *head;
-};
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void applink_init(void);
-
-/*!
- * Initialize connection structure.
- *
- * The structure is not initially associated with a network connection.
- */
-int applink_connection_init(struct ApplinkConnection *conn);
-
-/*!
- * Associate connection structure with network connection.
- */
-void applink_connection_associate(struct ApplinkConnection *conn, int peer_fd);
-
-/*!
- * Detach connection structure from network connection.
- *
- * The structure may be reused for a later connection. It is not necessary to
- * free the connection structure.
- */
-void applink_connection_release(struct ApplinkConnection *conn);
-
-/*!
- * Free data associated with connection structure.
- *
- * The structure itself is not freed. This is the responsibility of the caller.
- */
-void applink_connection_free(struct ApplinkConnection *conn);
 
 /*!
  * Look up a protocol variable by name.
@@ -150,116 +198,43 @@ void applink_connection_free(struct ApplinkConnection *conn);
  *     not need to be zero-terminated. Pass 0 to have the function determine
  *     the length (in which case \p name \e must be zero-terminated).
  */
-const struct ApplinkVariable *applink_lookup(const char *name, size_t length);
-
-/*!
- * Initialize a command structure for received commands.
- *
- * The structure is not initially associated with a specific commnd. It may be
- * reused for successive commands.
- */
-int applink_command_init(struct ApplinkCommand *command);
-
-/*!
- * Free command structure.
- */
-void applink_command_free(struct ApplinkCommand *command);
-
-/*!
- * Parse next command or answer from connection.
- *
- * \param conn
- *     The connection to parse the next command from, if any.
- *
- * \param command
- *     On success, the parsed command is returned in this structure.
- *
- * \returns
- *     Any #ApplinkResult, #APPLINK_RESULT_HAVE_COMMAND on success.
- */
-enum ApplinkResult applink_get_next_command(struct ApplinkConnection *conn,
-                                            struct ApplinkCommand *command);
-
-/*!
- * Return the n'th parameter passed with given command.
- *
- * \param command
- *     The command whose parameter list shall be parsed.
- *
- * \param n
- *     Which parameter to return.
- *
- * \param buffer
- *     Buffer the parameter shall be copied to as zero-terminated string.
- *
- * \param buffer_size
- *     Size of the return buffer.
- */
-void applink_command_get_parameter(const struct ApplinkCommand *command,
-                                   size_t n, char *buffer, size_t buffer_size);
+const Variable *lookup(const char *name, size_t length);
 
 /*!
  * Generate answer for protocol variable of given name.
  *
+ * \returns
+ *     True on success, false in case the variable is unknown.
+ *
  * \see
- *     #applink_make_answer_for_var()
+ *     #make_answer_for_var()
  */
-ssize_t applink_make_answer_for_name(char *buffer, size_t buffer_size,
-                                     const char *variable_name, ...);
+bool make_answer_for_name(std::ostringstream &os, const char *variable_name,
+                          std::vector<const char *> &&params);
 
 /*!
  * Generate answer for given protocol variable.
  *
- * The parameters for the answer are taken from the variadic function
- * parameters, all of which must be zero-terminated strings or \c NULL. This
- * function expects #ApplinkVariable::number_of_answer_parameters parameters as
- * defined for the \p variable.
- *
- * Parameters which are set to \c NULL are skipped, but be aware that \c NULL
- * does \e not indicate the end of the parameter list.
- *
  * The returned answer is not zero-terminated.
  *
- * \param buffer, buffer_size
- *     Buffer and its size for the generated answer. The buffer is not going to
- *     be zero-terminated.
+ * \param os
+ *     Output buffer for the generated answer.
  *
  * \param variable
  *     Variable for which the answer shall be generated.
  *
- * \returns
- *     The number of bytes written to \p buffer, -1 in case the buffer was too
- *     small for the answer.
+ * \param params
+ *     Parameters for the answer, each either a zero-terminated string or
+ *     \c nullptr. The length of this vector must match
+ *     #Applink::Variable::number_of_answer_parameters specified for the
+ *     variable. Parameters which are set to \c nullptr are skipped, but be
+ *     aware that \c nullptr does \e not indicate the end of the parameter
+ *     list.
  */
-ssize_t applink_make_answer_for_var(char *buffer, size_t buffer_size,
-                                    const struct ApplinkVariable *variable,
-                                    ...);
+void make_answer_for_var(std::ostringstream &os, const Variable &variable,
+                         std::vector<const char *> &&params);
 
-/*!
- * Dynamically allocate output command structure from memory pool.
- */
-struct ApplinkOutputCommand *applink_output_command_alloc_from_pool(void);
-
-/*!
- * Put command structure back into memory pool.
- */
-void applink_output_command_return_to_pool(struct ApplinkOutputCommand *command);
-
-/*!
- * Append output command to end of queue.
- */
-void applink_output_command_append_to_queue(struct ApplinkOutputQueue *queue,
-                                            struct ApplinkOutputCommand *command);
-
-/*!
- * Remove next output command from queue.
- */
-struct ApplinkOutputCommand *
-applink_output_command_take_next(struct ApplinkOutputQueue *queue);
-
-#ifdef __cplusplus
 }
-#endif
 
 /*!@}*/
 

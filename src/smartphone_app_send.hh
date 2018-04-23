@@ -25,12 +25,15 @@
 extern "C" {
 #endif
 
-void appconn_send_airable_service_logged_in(struct smartphone_app_connection_data *conn,
-                                            const char *service_id,
-                                            const char *username);
-void appconn_send_airable_service_logged_out(struct smartphone_app_connection_data *conn,
-                                             const char *service_id,
-                                             const char *logout_url);
+namespace Applink
+{
+
+void send_airable_service_logged_in(AppConnections &conn,
+                                    const char *service_id, const char *username);
+void send_airable_service_logged_out(AppConnections &conn,
+                                     const char *service_id, const char *logout_url);
+
+}
 
 #ifdef __cplusplus
 }

@@ -104,7 +104,7 @@ static struct airable_iface_data
 {
     bool connect_to_session_bus;
     tdbusAirable *airable_sec_iface;
-    struct smartphone_app_connection_data *appconn_data;
+    void *appconn_data;
 }
 airable_iface_data;
 
@@ -498,7 +498,7 @@ static const struct dbussignal_shutdown_iface logind_shutdown_functions =
 static struct dbus_process_data process_data;
 
 int dbus_setup(bool connect_to_session_bus, bool with_connman,
-               struct smartphone_app_connection_data *appconn_data,
+               void *appconn_data,
                struct DBusSignalManagerData *connman_data,
                struct ConfigurationManagementData *configuration_data,
                void (*credentials_read_iface_available_notification)(void))
