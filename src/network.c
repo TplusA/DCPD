@@ -102,7 +102,8 @@ int network_accept_peer_connection(int server_fd, bool non_blocking,
         fcntl(peer_fd, F_SETFL, flags | O_NONBLOCK);
     }
 
-    msg_vinfo(verbose_level, "Accepted connection from %s", addr_string);
+    msg_vinfo(verbose_level, "Accepted connection from %s on fd %d",
+              addr_string, server_fd);
 
     static const char setsockopt_error_message[] =
         "Failed to configure TCP keepalive on socket fd %d (%s = %d)";
