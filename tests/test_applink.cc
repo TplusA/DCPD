@@ -538,9 +538,9 @@ void test_single_unrequested_answer_from_app()
 void test_take_command_from_empty_queue_returns_null()
 {
     Applink::Peer peer(default_peer_fd,
-                       [] () { cut_fail("unexpected call"); },
+                       [] (int) { cut_fail("unexpected call"); },
                        [] (int, bool) { cut_fail("unexpected call"); });
-    cut_assert_false(peer.send_one_from_queue_to_peer());
+    cut_assert_false(peer.send_one_from_queue_to_peer(default_peer_fd));
 }
 
 /*!\test
@@ -550,13 +550,13 @@ void test_sending_empty_command_triggers_bug_message()
 {
     static size_t notifications;
     Applink::Peer peer(default_peer_fd,
-                       [] () { ++notifications; },
+                       [] (int) { ++notifications; },
                        [] (int, bool) { cut_fail("unexpected call"); });
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
             "BUG: Ignoring empty applink command in out queue for peer 42");
-    peer.send_to_queue(std::string());
+    peer.send_to_queue(default_peer_fd, std::string());
     cppcut_assert_equal(size_t(1), notifications);
-    cut_assert_true(peer.send_one_from_queue_to_peer());
+    cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
 }
 
 /*!\test
@@ -566,13 +566,13 @@ void test_put_single_answer_into_output_queue_and_remove()
 {
     static size_t notifications;
     Applink::Peer peer(default_peer_fd,
-                       [] () { ++notifications; },
+                       [] (int) { ++notifications; },
                        [] (int, bool) { cut_fail("unexpected call"); });
     static const std::string command("Testing");
     mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), default_peer_fd);
-    peer.send_to_queue(std::string(command));
+    peer.send_to_queue(default_peer_fd, std::string(command));
     cppcut_assert_equal(size_t(1), notifications);
-    cut_assert_true(peer.send_one_from_queue_to_peer());
+    cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
 }
 
 /*!\test
@@ -582,23 +582,23 @@ void test_put_multiple_answers_into_output_queue_and_remove()
 {
     static size_t notifications;
     Applink::Peer peer(default_peer_fd,
-                       [] () { ++notifications; },
+                       [] (int) { ++notifications; },
                        [] (int, bool) { cut_fail("unexpected call"); });
 
     std::array<std::string, 4> commands = { "A", "BCD", "foo bar", "x", };
 
     for(auto &cmd : commands)
-        peer.send_to_queue(std::string(cmd));
+        peer.send_to_queue(default_peer_fd, std::string(cmd));
 
     cppcut_assert_equal(commands.size(), notifications);
 
     for(const auto &cmd : commands)
     {
         mock_os->expect_os_write_from_buffer(0, cmd.c_str(), cmd.size(), default_peer_fd);
-        cut_assert_true(peer.send_one_from_queue_to_peer());
+        cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
     }
 
-    cut_assert_false(peer.send_one_from_queue_to_peer());
+    cut_assert_false(peer.send_one_from_queue_to_peer(default_peer_fd));
 }
 
 }
@@ -619,9 +619,10 @@ static MockAirableDBus *mock_airable_dbus;
 static MockCredentialsDBus *mock_credentials_dbus;
 static MockOs *mock_os;
 
-static size_t commands_in_queue;
+static std::map<int, size_t> commands_in_queue;
 static Applink::AppConnections *connections;
 static fill_buffer_data_t *fill_buffer_data;
+static fill_buffer_data_t *fill_buffer_data_second;
 static constexpr int default_server_fd = 86;
 
 static Network::Dispatcher &nwdispatcher(Network::Dispatcher::get_singleton());
@@ -661,11 +662,12 @@ void cut_setup()
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
     fill_buffer_data = new fill_buffer_data_t;
+    fill_buffer_data_second = new fill_buffer_data_t;
 
     nwdispatcher.reset();
 
-    commands_in_queue = 0;
-    connections = new Applink::AppConnections([] () { ++commands_in_queue; });
+    commands_in_queue.clear();
+    connections = new Applink::AppConnections([] (int fd) { ++commands_in_queue[fd]; });
     cppcut_assert_not_null(connections);
 
     mock_network->expect_create_socket(default_server_fd, 1234, SOMAXCONN);
@@ -674,7 +676,7 @@ void cut_setup()
 
 void cut_teardown()
 {
-    cppcut_assert_equal(size_t(0), commands_in_queue);
+    cut_assert_true(commands_in_queue.empty());
 
     delete connections;
 
@@ -699,6 +701,7 @@ void cut_teardown()
     delete mock_credentials_dbus;
     delete mock_os;
     delete fill_buffer_data;
+    delete fill_buffer_data_second;
 
     mock_messages = nullptr;
     mock_network = nullptr;
@@ -707,6 +710,7 @@ void cut_teardown()
     mock_credentials_dbus = nullptr;
     mock_os = nullptr;
     fill_buffer_data = nullptr;
+    fill_buffer_data_second = nullptr;
 }
 
 static void fd_events(struct pollfd *fds, size_t fds_max, short revents = 0)
@@ -738,9 +742,10 @@ static void fd_events(struct pollfd *fds, size_t fds_max, int fd, short revents,
 }
 
 template <size_t N>
-static void fd_events(std::array<struct pollfd, N> &fds, int fd, short revents)
+static void fd_events(std::array<struct pollfd, N> &fds, int fd, short revents,
+                      bool clear_the_rest = true)
 {
-    fd_events(fds.data(), N, fd, revents);
+    fd_events(fds.data(), N, fd, revents, clear_the_rest);
 }
 
 static size_t connect_peer(struct pollfd *fds, size_t fds_max,
@@ -775,21 +780,31 @@ static size_t connect_peer(std::array<struct pollfd, N> &fds,
     return connect_peer(fds.data(), fds.size(), server_fd, expected_peer_id);
 }
 
-static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
-                       int fd, bool suppress_error_on_eagain)
+/*!
+ * Local mock implementation of #os_try_read_to_buffer().
+ */
+static int fill_this_or_that_buffer(void *dest, size_t count, size_t *add_bytes_read,
+                                    int fd, bool suppress_error_on_eagain,
+                                    int expected_fd, int take_second)
 {
     uint8_t *dest_ptr = static_cast<uint8_t *>(dest);
 
     cppcut_assert_not_null(add_bytes_read);
+
+    if(expected_fd != INT_MIN)
+        cppcut_assert_equal(expected_fd, fd);
+
     cut_assert_true(suppress_error_on_eagain);
 
-    const size_t n = std::min(count, fill_buffer_data->data_.length());
-    std::copy_n(fill_buffer_data->data_.begin(), n, dest_ptr + *add_bytes_read);
+    fill_buffer_data_t *const fbd = take_second ? fill_buffer_data_second : fill_buffer_data;
+
+    const size_t n = std::min(count, fbd->data_.length());
+    std::copy_n(fbd->data_.begin(), n, dest_ptr + *add_bytes_read);
     *add_bytes_read += n;
 
-    errno = fill_buffer_data->errno_value_;
+    errno = fbd->errno_value_;
 
-    return fill_buffer_data->return_value_;
+    return fbd->return_value_;
 }
 
 static int return_nothing(void *dest, size_t count, size_t *add_bytes_read,
@@ -801,10 +816,21 @@ static int return_nothing(void *dest, size_t count, size_t *add_bytes_read,
     return 0;
 }
 
-static void check_and_reset_queue_size(size_t expected_size)
+static void check_and_reset_queue_size(int fd, size_t expected_size,
+                                       bool ignore_the_rest = false)
 {
-    cppcut_assert_equal(expected_size, commands_in_queue);
-    commands_in_queue = 0;
+    cut_assert(commands_in_queue.find(fd) != commands_in_queue.end());
+    cppcut_assert_equal(expected_size, commands_in_queue[fd]);
+    commands_in_queue.erase(fd);
+
+    if(ignore_the_rest)
+        return;
+
+    for(const auto &count : commands_in_queue)
+    {
+        if(count.first != fd)
+            cppcut_assert_equal(size_t(0), count.second);
+    }
 }
 
 /*!\test
@@ -814,9 +840,9 @@ static void check_and_reset_queue_size(size_t expected_size)
  */
 void test_sending_broadcast_answer_to_no_connection_works()
 {
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
     connections->send_to_all_peers("Test answer to none");
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
 }
 
 /*!\test
@@ -841,16 +867,16 @@ void test_peer_reconnect_after_clean_disconnect()
 
     /* clean disconnect */
     cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds.data(), POLLIN));
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
     fd_events(fds, peer_fd, POLLHUP);
     mock_network->expect_close(peer_fd);
     mock_messages->expect_msg_info_formatted("Smartphone direct connection disconnected (fd 512)");
 
     cppcut_assert_equal(size_t(1), nwdispatcher.process(fds.data()));
 
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
     connections->send_to_all_peers("Into the void");
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
 
     /* connect again */
     connect_peer(fds, default_server_fd, peer_fd + 10);
@@ -870,9 +896,9 @@ void test_peer_reconnect_after_disconnect_on_write_error()
 
     /* try and fail to send something */
     cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds.data(), POLLIN));
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
     connections->send_to_all_peers("Never received by peer");
-    check_and_reset_queue_size(1);
+    check_and_reset_queue_size(peer_fd, 1);
 
     mock_os->expect_os_write_from_buffer_callback(
             [] (const void *src, size_t count, int fd)
@@ -915,7 +941,7 @@ void test_peer_reconnect_after_disconnect_on_read_error()
 
     /* try and fail to read something */
     cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds.data(), POLLIN));
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
                                               "Smartphone app over TCP/IP on fd 753");
@@ -942,7 +968,7 @@ void test_peer_reconnect_after_disconnect_on_read_error()
     fd_events(fds, peer_fd, POLLIN);
     cppcut_assert_equal(size_t(1), nwdispatcher.process(fds.data()));
 
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
 
     /* HUP may be noticed a bit later, but will not be processed (HUP
      * notification function is called directly after the error has been
@@ -969,51 +995,103 @@ void test_sending_broadcast_answer_to_single_peer()
     static const std::string command("Test answer to single");
 
     cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds.data(), POLLIN));
-    check_and_reset_queue_size(0);
+    cut_assert_true(commands_in_queue.empty());
 
     connections->send_to_all_peers(std::string(command));
 
-    check_and_reset_queue_size(1);
+    check_and_reset_queue_size(peer_fd, 1);
 
     mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), peer_fd);
     connections->process_out_queue();
 }
 
 /*!\test
- * Answer a peer request.
+ * Send message to multiple connected peers.
  */
-void test_variable_requested_by_single_peer()
+void test_sending_broadcast_answer_to_multiple_peers()
 {
-    static constexpr int peer_fd = 194;
+    static constexpr int anton = 123;
+    static constexpr int berta = 456;
+    static constexpr int chuck = 789;
 
-    std::array<struct pollfd, 2> fds;
+    std::array<struct pollfd, 4> fds;
 
-    connect_peer(fds, default_server_fd, peer_fd);
+    connect_peer(fds, default_server_fd, anton);
+    connect_peer(fds, default_server_fd, berta);
+    connect_peer(fds, default_server_fd, chuck);
 
-    cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds.data(), POLLIN));
-    check_and_reset_queue_size(0);
+    static const std::string command("Test answer to many");
 
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
-                                              "Smartphone app over TCP/IP on fd 194");
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
-    fill_buffer_data->set("GET SERVICE_CREDENTIALS tidal\n", 0, 0);
+    cppcut_assert_equal(size_t(4), nwdispatcher.scatter_fds(fds.data(), POLLIN));
+    cut_assert_true(commands_in_queue.empty());
+
+    connections->send_to_all_peers(std::string(command));
+
+    check_and_reset_queue_size(anton, 1, true);
+    check_and_reset_queue_size(berta, 1, true);
+    check_and_reset_queue_size(chuck, 1, true);
+
+    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), anton);
+    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), berta);
+    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), chuck);
+    connections->process_out_queue();
+}
+
+static void setup_request_expectations(int peer_fd,
+                                       const std::string &service_id,
+                                       const std::string &expected_login,
+                                       const std::string &expected_password,
+                                       bool take_second_fill_buffer = false)
+{
+    std::ostringstream os;
+    os << "Smartphone app over TCP/IP on fd " << peer_fd;
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, os.str().c_str());
+
+    mock_os->expect_os_try_read_to_buffer_callback(
+            [peer_fd, take_second_fill_buffer]
+            (void *dest, size_t count, size_t *add_bytes_read, int fd,
+             bool suppress_error_on_eagain) -> int
+            {
+                return fill_this_or_that_buffer(dest, count, add_bytes_read, fd,
+                                                suppress_error_on_eagain,
+                                                peer_fd, take_second_fill_buffer);
+            });
+
+    mock_os->expect_os_try_read_to_buffer_callback(return_nothing);
+    (take_second_fill_buffer ? fill_buffer_data_second : fill_buffer_data)->set(("GET SERVICE_CREDENTIALS " + service_id + '\n').c_str(), 0, 0);
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
                                               "App request: SERVICE_CREDENTIALS");
     mock_dbus_iface->expect_dbus_get_airable_sec_iface(dbus_airable_iface_dummy);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_default_credentials_sync(
-            TRUE, dbus_cred_read_iface_dummy, "tidal",
-            "the_tidal_login@unit-testing.org", "passw0rd");
-    mock_os->expect_os_try_read_to_buffer_callback(return_nothing);
+            TRUE, dbus_cred_read_iface_dummy, service_id.c_str(),
+            expected_login.c_str(), expected_password.c_str());
+}
 
-    fd_events(fds, peer_fd, POLLIN);
-    cppcut_assert_equal(size_t(1), nwdispatcher.process(fds.data()));
-    check_and_reset_queue_size(1);
+static void peer_requests_service_credentials(struct pollfd *fds,
+                                              size_t fds_max, const int peer_fd,
+                                              const std::string &service_id,
+                                              const std::string &expected_login,
+                                              const std::string &expected_password)
+{
+    cppcut_assert_not_null(fds);
+    cppcut_assert_operator(size_t(0), <, fds_max);
+    cppcut_assert_operator(0, <=, peer_fd);
+
+    cppcut_assert_equal(fds_max, nwdispatcher.scatter_fds(fds, POLLIN));
+    cut_assert_true(commands_in_queue.empty());
+
+    setup_request_expectations(peer_fd, service_id, expected_login, expected_password);
+
+    fd_events(fds, fds_max, peer_fd, POLLIN);
+    cppcut_assert_equal(size_t(1), nwdispatcher.process(fds));
+    check_and_reset_queue_size(peer_fd, 1);
 
     std::string written;
     mock_os->expect_os_write_from_buffer_callback(
-            [&written] (const void *src, size_t count, int fd) -> int
+            [&peer_fd, &written]
+            (const void *src, size_t count, int fd) -> int
             {
                 cppcut_assert_equal(peer_fd, fd);
                 std::copy_n(static_cast<const char *>(src), count, std::back_inserter(written));
@@ -1022,8 +1100,82 @@ void test_variable_requested_by_single_peer()
 
     connections->process_out_queue();
 
-    static const std::string expected_answer("SERVICE_CREDENTIALS: tidal known the_tidal_login@unit-testing.org passw0rd\n");
+    const std::string expected_answer("SERVICE_CREDENTIALS: " + service_id +
+                                      " known " + expected_login + " " +
+                                      expected_password + '\n');
     cppcut_assert_equal(expected_answer, written);
+}
+
+/*!\test
+ * Answer a peer request to the only connected peer.
+ */
+void test_variable_requested_by_single_connected_peer()
+{
+    static constexpr int peer_fd = 194;
+
+    std::array<struct pollfd, 2> fds;
+    connect_peer(fds, default_server_fd, peer_fd);
+
+    peer_requests_service_credentials(fds.data(), fds.size(), peer_fd,
+                                      "tidal", "the_tidal_login@unit-testing.org", "passw0rd");
+}
+
+/*!\test
+ * Answer a peer request from one out of multiple connected peers.
+ */
+void test_variable_requested_by_one_of_several_peers()
+{
+    static constexpr int peer_fd = 307;
+
+    std::array<struct pollfd, 4> fds;
+    connect_peer(fds, default_server_fd, peer_fd);
+    connect_peer(fds, default_server_fd, peer_fd + 10);
+    connect_peer(fds, default_server_fd, peer_fd + 11);
+
+    peer_requests_service_credentials(fds.data(), fds.size(), peer_fd,
+                                      "qobuz", "quak@frog-eaters.org", "mot");
+}
+
+/*!\test
+ * Answer two concurrent requests from two different peers.
+ */
+void test_variable_requested_by_two_concurrent_peers()
+{
+    static constexpr int anton = 81;
+    static constexpr int berta = 84;
+
+    std::array<struct pollfd, 6> fds;
+    connect_peer(fds, default_server_fd, 80);
+    connect_peer(fds, default_server_fd, anton);
+    connect_peer(fds, default_server_fd, 82);
+    connect_peer(fds, default_server_fd, 83);
+    connect_peer(fds, default_server_fd, berta);
+
+    cppcut_assert_equal(fds.size(), nwdispatcher.scatter_fds(fds.data(), POLLIN));
+    cut_assert_true(commands_in_queue.empty());
+
+    bool take_second_buffer = false;
+    for(const auto &it : fds)
+    {
+        if(it.fd == anton)
+        {
+            setup_request_expectations(anton, "tidal", "antony@anarchy.org", "aaa",
+                                       take_second_buffer);
+            take_second_buffer = true;
+        }
+        else if(it.fd == berta)
+        {
+            setup_request_expectations(berta, "qobuz", "berthilda@blub.com", "bbb",
+                                       take_second_buffer);
+            take_second_buffer = true;
+        }
+    }
+
+    fd_events(fds, anton, POLLIN);
+    fd_events(fds, berta, POLLIN, false);
+    cppcut_assert_equal(size_t(2), nwdispatcher.process(fds.data()));
+    check_and_reset_queue_size(anton, 1, true);
+    check_and_reset_queue_size(berta, 1);
 }
 
 }

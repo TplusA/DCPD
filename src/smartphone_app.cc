@@ -33,14 +33,14 @@
 #include "actor_id.h"
 #include "messages.h"
 
-void Applink::Peer::send_to_queue(std::string &&command)
+void Applink::Peer::send_to_queue(int fd, std::string &&command)
 {
     std::lock_guard<std::mutex> lock(send_queue_.lock_);
     send_queue_.queue_.emplace_back(command);
-    send_queue_.notify_have_outgoing_fn_();
+    send_queue_.notify_have_outgoing_fn_(fd);
 }
 
-bool Applink::Peer::send_one_from_queue_to_peer()
+bool Applink::Peer::send_one_from_queue_to_peer(int fd)
 {
     std::string command;
 
@@ -55,13 +55,13 @@ bool Applink::Peer::send_one_from_queue_to_peer()
     }
 
     if(command.empty())
-        BUG("Ignoring empty applink command in out queue for peer %d", fd_);
-    else if(fd_ >= 0)
+        BUG("Ignoring empty applink command in out queue for peer %d", fd);
+    else if(fd >= 0)
     {
-        if(os_write_from_buffer(command.c_str(), command.size(), fd_) < 0)
+        if(os_write_from_buffer(command.c_str(), command.size(), fd) < 0)
         {
-            msg_error(errno, LOG_ERR, "Sending data to app fd %d failed", fd_);
-            send_queue_.notify_peer_died_fn_(fd_, false);
+            msg_error(errno, LOG_ERR, "Sending data to app fd %d failed", fd);
+            send_queue_.notify_peer_died_fn_(fd, false);
             return false;
         }
     }
@@ -71,20 +71,20 @@ bool Applink::Peer::send_one_from_queue_to_peer()
 
 bool Applink::AppConnections::add_new_peer(int peer_fd)
 {
-    if(single_peer_ != nullptr)
+    if(peers_.find(peer_fd) != peers_.end())
     {
-        msg_error(0, LOG_ERR,
-                  "Rejected smartphone connection, only single connection supported");
+        BUG("Tried to add peer fd %d twice", peer_fd);
         return false;
     }
 
-    single_peer_.reset(new Applink::Peer(peer_fd, send_queue_filled_notification_fn_,
-                                         [this] (int fd, bool cleanly_closed)
-                                         {
-                                             close_and_forget_peer(fd);
-                                         }));
+    peers_.emplace(peer_fd, std::unique_ptr<Applink::Peer>(new Applink::Peer(
+                                peer_fd, send_queue_filled_notification_fn_,
+                                [this] (int fd, bool cleanly_closed)
+                                {
+                                    close_and_forget_peer(fd);
+                                })));
 
-    if(single_peer_ == nullptr)
+    if(peers_.find(peer_fd) == peers_.end())
     {
         msg_out_of_memory("Applink::Peer");
         return false;
@@ -96,12 +96,11 @@ bool Applink::AppConnections::add_new_peer(int peer_fd)
 void Applink::AppConnections::close_and_forget_peer(int peer_fd,
                                                     bool is_registered_with_dispatcher)
 {
-    log_assert(single_peer_ != nullptr);
-    log_assert(single_peer_->has_fd(peer_fd));
+    log_assert(peers_.find(peer_fd) != peers_.end());
 
     msg_info("Smartphone direct connection disconnected (fd %d)", peer_fd);
 
-    single_peer_ = nullptr;
+    peers_.erase(peer_fd);
 
     if(is_registered_with_dispatcher)
         Network::Dispatcher::get_singleton().remove_connection(peer_fd);
@@ -130,7 +129,7 @@ bool Applink::AppConnections::handle_new_peer(int server_fd)
             std::move(Network::DispatchHandlers(
                 [this] (int peer_fd_arg)
                 {
-                    return single_peer_->handle_incoming_data();
+                    return peers_[peer_fd_arg]->handle_incoming_data(peer_fd_arg);
                 },
                 [this] (int peer_fd_arg)
                 {
@@ -417,15 +416,15 @@ static void process_applink_answer(const Applink::Command &command)
     }
 }
 
-bool Applink::Peer::handle_incoming_data()
+bool Applink::Peer::handle_incoming_data(int fd)
 {
-    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Smartphone app over TCP/IP on fd %d", fd_);
+    msg_vinfo(MESSAGE_LEVEL_DEBUG, "Smartphone app over TCP/IP on fd %d", fd);
 
     while(true)
     {
         Applink::ParserResult result = Applink::ParserResult::IO_ERROR;
         std::unique_ptr<Applink::Command> command =
-            input_buffer_.get_next_command(fd_, result);
+            input_buffer_.get_next_command(fd, result);
 
         std::string answer;
 
@@ -436,7 +435,7 @@ bool Applink::Peer::handle_incoming_data()
             process_applink_command(*command, answer);
 
             if(!answer.empty())
-                send_to_queue(std::move(answer));
+                send_to_queue(fd, std::move(answer));
 
             break;
 
@@ -446,7 +445,7 @@ bool Applink::Peer::handle_incoming_data()
             break;
 
           case Applink::ParserResult::IO_ERROR:
-            send_queue_.notify_peer_died_fn_(fd_, false);
+            send_queue_.notify_peer_died_fn_(fd, false);
             return true;
 
           case Applink::ParserResult::EMPTY:
@@ -459,15 +458,28 @@ bool Applink::Peer::handle_incoming_data()
 
 void Applink::AppConnections::process_out_queue()
 {
-    if(single_peer_ != nullptr)
-        while(single_peer_->send_one_from_queue_to_peer())
+    if(peers_.empty())
+        return;
+
+    decltype(peers_)::iterator next;
+
+    for(auto it(peers_.begin()); it != peers_.end(); it = next)
+    {
+        next = it;
+        ++next;
+
+        while(it->second->send_one_from_queue_to_peer(it->first))
             ;
+    }
 }
 
 void Applink::AppConnections::send_to_all_peers(std::string &&command)
 {
-    if(single_peer_ != nullptr)
-        single_peer_->send_to_queue(std::move(command));
+    if(peers_.empty())
+        return;
+
+    for(auto &peer : peers_)
+        peer.second->send_to_queue(peer.first, std::string(command));
 }
 
 void Applink::AppConnections::close()
@@ -478,6 +490,6 @@ void Applink::AppConnections::close()
         server_fd_ = -1;
     }
 
-    if(single_peer_ != nullptr)
-        single_peer_->apply_to_fd([this] (int fd) { close_and_forget_peer(fd); });
+    while(!peers_.empty())
+        close_and_forget_peer(peers_.begin()->first);
 }

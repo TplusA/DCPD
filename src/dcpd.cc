@@ -658,7 +658,7 @@ static void primitive_queue_send(const enum PrimitiveQueueCommand cmd, const cha
                   ret, what);
 }
 
-static void process_smartphone_outgoing_queue(void)
+static void process_smartphone_outgoing_queue(int fd)
 {
     primitive_queue_send(PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
                          "processing smartphone queue");

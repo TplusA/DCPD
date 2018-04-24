@@ -21,6 +21,7 @@
 
 #include <string>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <memory>
 
@@ -37,17 +38,16 @@ class Peer
     {
         std::mutex lock_;
         std::deque<std::string> queue_;
-        const std::function<void()> &notify_have_outgoing_fn_;
+        const std::function<void(int)> &notify_have_outgoing_fn_;
         std::function<void(int, bool)> notify_peer_died_fn_;
 
-        explicit SendQueue(const std::function<void()> &out_notification,
+        explicit SendQueue(const std::function<void(int)> &out_notification,
                            std::function<void(int, bool)> &&died_notification):
             notify_have_outgoing_fn_(out_notification),
             notify_peer_died_fn_(died_notification)
         {}
     };
 
-    const int fd_;
     InputBuffer input_buffer_;
     SendQueue send_queue_;
 
@@ -55,18 +55,14 @@ class Peer
     Peer(const Peer &) = delete;
     Peer &operator=(const Peer &) = delete;
 
-    explicit Peer(int fd, const std::function<void()> &out_fn,
+    explicit Peer(int fd, const std::function<void(int)> &out_fn,
                   std::function<void(int, bool)> &&died_fn):
-        fd_(fd),
         send_queue_(out_fn, std::move(died_fn))
     {}
 
-    bool has_fd(int fd) const { return fd == fd_; }
-    bool handle_incoming_data();
-    void send_to_queue(std::string &&command);
-    bool send_one_from_queue_to_peer();
-
-    void apply_to_fd(const std::function<void(int)> &fn) { fn(fd_); }
+    bool handle_incoming_data(int fd);
+    void send_to_queue(int fd, std::string &&command);
+    bool send_one_from_queue_to_peer(int fd);
 };
 
 /*!
@@ -81,8 +77,8 @@ class AppConnections
   private:
     int server_fd_;
 
-    const std::function<void()> send_queue_filled_notification_fn_;
-    std::unique_ptr<Peer> single_peer_;
+    const std::function<void(int)> send_queue_filled_notification_fn_;
+    std::map<int, std::unique_ptr<Peer>> peers_;
 
   public:
     AppConnections(const AppConnections &) = delete;
@@ -95,7 +91,7 @@ class AppConnections
      *     Function that is called whenever there is a command in the output
      *     command queue.
      */
-    explicit AppConnections(std::function<void()> &&send_notification_fn):
+    explicit AppConnections(std::function<void(int)> &&send_notification_fn):
         server_fd_(-1),
         send_queue_filled_notification_fn_(std::move(send_notification_fn))
     {}
