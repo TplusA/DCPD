@@ -78,6 +78,7 @@ class Dispatcher
 
     size_t get_number_of_fds() const
     {
+        std::lock_guard<std::recursive_mutex> lock(lock_);
         return connections_.size();
     }
 
