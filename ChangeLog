@@ -1,3 +1,17 @@
+2018-05-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.13 released.
+
+	* TA Control: Allow multiple simultaneous connections to Airable
+	  server port (TCP port 8466).
+
+	* TA Control: Relax restriction on number of simultaneous connections
+	  to tunnels managed by SPI slave.
+
+	* Roon: Appliance standby mode can be requested. In fact, now any
+	  process can monitor the appliance's power state, and request standby
+	  state or wake up from standby via D-Bus.
+
 2018-04-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.12 released.
