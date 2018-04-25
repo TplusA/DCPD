@@ -33,6 +33,7 @@
 #include "network_device_list.hh"
 #include "mainloop.hh"
 #include "dbus_common.h"
+#include "gvariantwrapper.hh"
 
 #include <functional>
 #include <algorithm>
@@ -1012,8 +1013,8 @@ static bool configure_ipv4_settings(const Connman::ServiceBase &service,
         return true;
     }
 
-    GVariant *ipv4_config = NULL;
-    GVariant *dns_config = NULL;
+    GVariantWrapper ipv4_config;
+    GVariantWrapper dns_config;
 
     if(different_ipv4_config)
     {
@@ -1030,7 +1031,7 @@ static bool configure_ipv4_settings(const Connman::ServiceBase &service,
             g_variant_builder_add(&builder, "{sv}", "Gateway", g_variant_new_string(want_gateway));
         }
 
-        ipv4_config = g_variant_new_variant(g_variant_builder_end(&builder));
+        ipv4_config = GVariantWrapper(g_variant_new_variant(g_variant_builder_end(&builder)));
     }
 
     if(different_nameservers)
@@ -1044,17 +1045,18 @@ static bool configure_ipv4_settings(const Connman::ServiceBase &service,
         if(want_dns2 != NULL)
             g_variant_builder_add(&builder, "s", want_dns1);
 
-        dns_config = g_variant_new_variant(g_variant_builder_end(&builder));
+        dns_config = GVariantWrapper(g_variant_new_variant(g_variant_builder_end(&builder)));
     }
 
     if(ipv4_config != NULL)
         connman_common_set_service_property(service_name.c_str(),
-                                            "IPv4.Configuration", ipv4_config);
+                                            "IPv4.Configuration",
+                                            GVariantWrapper::move(ipv4_config));
 
     if(dns_config != NULL)
         connman_common_set_service_property(service_name.c_str(),
                                             "Nameservers.Configuration",
-                                            dns_config);
+                                            GVariantWrapper::move(dns_config));
 
     return true;
 }
@@ -1436,9 +1438,9 @@ static void process_wlan_security_info(GVariant *security_info,
         security = "";
     else
     {
-        GVariant *str = g_variant_get_child_value(security_info, 0);
-        security = g_variant_get_string(str, NULL);
-        g_variant_unref(str);
+        GVariantWrapper str(g_variant_get_child_value(security_info, 0),
+                            GVariantWrapper::Transfer::JUST_MOVE);
+        security = g_variant_get_string(GVariantWrapper::get(str), NULL);
     }
 
     wps = Connman::WPSCapability::NONE;
@@ -1448,19 +1450,17 @@ static void process_wlan_security_info(GVariant *security_info,
 
     for(size_t i = 0; i < n; ++i)
     {
-        GVariant *str = g_variant_get_child_value(security_info, i);
-        const char *const cap = g_variant_get_string(str, NULL);
+        GVariantWrapper str(g_variant_get_child_value(security_info, i),
+                            GVariantWrapper::Transfer::JUST_MOVE);
+        const char *const cap = g_variant_get_string(GVariantWrapper::get(str), NULL);
 
         if(strcmp(cap, "wps") == 0)
             wps = Connman::WPSCapability::POSSIBLE;
         else if(strcmp(cap, "wps_advertising") == 0)
         {
             wps = Connman::WPSCapability::ACTIVE;
-            g_variant_unref(str);
             break;
         }
-
-        g_variant_unref(str);
     }
 }
 
@@ -1570,7 +1570,7 @@ static void update_service_list(Connman::ServiceList &known_services,
     }
 }
 
-static void update_service_list(GVariant *all_services,
+static void update_service_list(GVariantWrapper &&all_services,
                                 Connman::ServiceList &known_services,
                                 Connman::NetworkDeviceList &network_devices,
                                 bool force_refresh_all)
@@ -1580,7 +1580,7 @@ static void update_service_list(GVariant *all_services,
 
     /* go through all services */
     GVariantIter iter;
-    g_variant_iter_init(&iter, all_services);
+    g_variant_iter_init(&iter, GVariantWrapper::get(all_services));
 
     const gchar *name;
     GVariantIter *props_iter;
@@ -1679,18 +1679,15 @@ static bool disable_ipv6(Connman::ServiceBase &service,
 
     g_variant_builder_add(&builder, "{sv}", "Method", g_variant_new_string("off"));
 
-    GVariant *ipv6_config =
-        g_variant_new_variant(g_variant_builder_end(&builder));
+    GVariantWrapper ipv6_config(g_variant_new_variant(g_variant_builder_end(&builder)));
 
     if(ipv6_config == NULL)
         return false;
 
-    g_variant_ref_sink(ipv6_config);
     const bool retval =
         connman_common_set_service_property(service_name.c_str(),
-                                            "IPv6.Configuration", ipv6_config);
-    g_variant_unref(ipv6_config);
-
+                                            "IPv6.Configuration",
+                                            GVariantWrapper::move(ipv6_config));
     return retval;
 }
 
@@ -2083,21 +2080,16 @@ static void schedule_wlan_connect_if_necessary(bool is_necessary,
         schedule_wlan_connect__unlocked(wman);
 }
 
-static bool update_all_services(GVariant *all_services,
+static void update_all_services(GVariantWrapper &&all_services,
                                 Connman::ServiceList &services,
                                 Connman::NetworkDeviceList &devices,
                                 bool force_refresh_all,
                                 const char *context)
 {
     if(all_services == nullptr)
-    {
         BUG("Querying services from ConnMan failed (%s)", context);
-        return false;
-    }
-
-    update_service_list(all_services, services, devices, force_refresh_all);
-
-    return true;
+    else
+        update_service_list(std::move(all_services), services, devices, force_refresh_all);
 }
 
 static void process_pending_changes(Connman::WLANManager &wman,
@@ -2128,13 +2120,13 @@ static void process_pending_changes(Connman::WLANManager &wman,
 }
 
 static const std::vector<std::string>
-find_removed(const Connman::ServiceList &known_services, GVariant *all_services)
+find_removed(const Connman::ServiceList &known_services, const GVariantWrapper &all_services)
 {
     std::vector<std::string> result;
     std::map<const std::string, bool> seen;
 
     GVariantIter iter;
-    g_variant_iter_init(&iter, all_services);
+    g_variant_iter_init(&iter, GVariantWrapper::get(all_services));
 
     const gchar *name;
     GVariantIter *props_iter;
@@ -2168,8 +2160,8 @@ static void do_refresh_services(Connman::WLANManager &wman, bool force_refresh_a
     auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
     auto &devices(locked_devices.first);
 
-    GVariant *all_services =
-        connman_common_query_services(dbus_get_connman_manager_iface());
+    GVariantWrapper all_services(connman_common_query_services(dbus_get_connman_manager_iface()),
+                                 GVariantWrapper::Transfer::JUST_MOVE);
 
     bool have_lost_active_ethernet_device = false;
     bool have_lost_active_wlan_device = false;
@@ -2187,9 +2179,8 @@ static void do_refresh_services(Connman::WLANManager &wman, bool force_refresh_a
                             have_lost_active_wlan_device);
     }
 
-    if(update_all_services(all_services, services, devices, force_refresh_all,
-                           context))
-        g_variant_unref(all_services);
+    update_all_services(std::move(all_services), services, devices,
+                        force_refresh_all, context);
 
     LOGGED_LOCK_CONTEXT_HINT;
     locked_devices.second.unlock();
@@ -2373,11 +2364,10 @@ void Connman::about_to_connect_dbus_signals()
     auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
     auto &devices(locked_devices.first);
 
-    GVariant *all_services =
-        connman_common_query_services(dbus_get_connman_manager_iface());
+    GVariantWrapper all_services(connman_common_query_services(dbus_get_connman_manager_iface()),
+                                 GVariantWrapper::Transfer::JUST_MOVE);
 
-    if(update_all_services(all_services, services, devices, true, "startup"))
-        g_variant_unref(all_services);
+    update_all_services(std::move(all_services), services, devices, true, "startup");
 
     LOGGED_LOCK_CONTEXT_HINT;
     locked_devices.second.unlock();
