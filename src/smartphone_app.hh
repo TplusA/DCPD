@@ -75,6 +75,7 @@ class Peer
 class AppConnections
 {
   private:
+    std::mutex lock_;
     int server_fd_;
 
     const std::function<void(int)> send_queue_filled_notification_fn_;

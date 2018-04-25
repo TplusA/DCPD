@@ -69,6 +69,12 @@ bool Applink::Peer::send_one_from_queue_to_peer(int fd)
     return true;
 }
 
+/*!
+ * Add new Applink::Peer object for given file descriptor.
+ *
+ * \note
+ *     Caller must own Applink::AppConnections::lock_.
+ */
 bool Applink::AppConnections::add_new_peer(int peer_fd)
 {
     if(peers_.find(peer_fd) != peers_.end())
@@ -93,6 +99,12 @@ bool Applink::AppConnections::add_new_peer(int peer_fd)
     return true;
 }
 
+/*!
+ * Close connection and remove Applink::Peer object for given file descriptor.
+ *
+ * \note
+ *     Caller must own Applink::AppConnections::lock_.
+ */
 void Applink::AppConnections::close_and_forget_peer(int peer_fd,
                                                     bool is_registered_with_dispatcher)
 {
@@ -110,6 +122,9 @@ void Applink::AppConnections::close_and_forget_peer(int peer_fd,
 
 /*!
  * Handle incoming connection from the smartphone.
+ *
+ * \note
+ *     Caller must own Applink::AppConnections::lock_.
  */
 bool Applink::AppConnections::handle_new_peer(int server_fd)
 {
@@ -129,10 +144,12 @@ bool Applink::AppConnections::handle_new_peer(int server_fd)
             std::move(Network::DispatchHandlers(
                 [this] (int peer_fd_arg)
                 {
+                    std::lock_guard<std::mutex> lock(lock_);
                     return peers_[peer_fd_arg]->handle_incoming_data(peer_fd_arg);
                 },
                 [this] (int peer_fd_arg)
                 {
+                    std::lock_guard<std::mutex> lock(lock_);
                     handle_peer_died(peer_fd_arg);
                 }
             ))))
@@ -153,6 +170,8 @@ void Applink::AppConnections::handle_peer_died(int peer_fd)
 
 bool Applink::AppConnections::listen(uint16_t port)
 {
+    std::lock_guard<std::mutex> lock(lock_);
+
     if(server_fd_ >= 0)
     {
         BUG("Applink server already running");
@@ -171,6 +190,7 @@ bool Applink::AppConnections::listen(uint16_t port)
             std::move(Network::DispatchHandlers(
                 [this] (int server_fd_arg)
                 {
+                    std::lock_guard<std::mutex> lock2(lock_);
                     return handle_new_peer(server_fd_arg);
                 },
                 [this] (int server_fd_arg)
@@ -458,6 +478,8 @@ bool Applink::Peer::handle_incoming_data(int fd)
 
 void Applink::AppConnections::process_out_queue()
 {
+    std::lock_guard<std::mutex> lock(lock_);
+
     if(peers_.empty())
         return;
 
@@ -475,6 +497,8 @@ void Applink::AppConnections::process_out_queue()
 
 void Applink::AppConnections::send_to_all_peers(std::string &&command)
 {
+    std::lock_guard<std::mutex> lock(lock_);
+
     if(peers_.empty())
         return;
 
@@ -484,6 +508,8 @@ void Applink::AppConnections::send_to_all_peers(std::string &&command)
 
 void Applink::AppConnections::close()
 {
+    std::lock_guard<std::mutex> lock(lock_);
+
     if(server_fd_ >= 0)
     {
         Network::Dispatcher::get_singleton().remove_connection(server_fd_);
