@@ -466,7 +466,7 @@ bool Applink::Peer::handle_incoming_data(int fd)
 
           case Applink::ParserResult::IO_ERROR:
             send_queue_.notify_peer_died_fn_(fd, false);
-            return true;
+            return false;
 
           case Applink::ParserResult::EMPTY:
           case Applink::ParserResult::NEED_MORE_DATA:

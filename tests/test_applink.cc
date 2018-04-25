@@ -982,6 +982,50 @@ void test_peer_reconnect_after_disconnect_on_read_error()
 }
 
 /*!\test
+ * A peer may have something to read, but disconnect before its data has been
+ * processed.
+ */
+void test_peer_ready_to_read_and_disconnected()
+{
+    static constexpr int peer_fd = 63;
+
+    std::array<struct pollfd, 2> fds;
+
+    connect_peer(fds, default_server_fd, peer_fd);
+
+    cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds.data(), POLLIN));
+    cut_assert_true(commands_in_queue.empty());
+
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
+                                              "Smartphone app over TCP/IP on fd 63");
+    mock_os->expect_os_try_read_to_buffer_callback(
+            [] (void *dest, size_t count, size_t *add_bytes_read,
+                int fd, bool suppress_error_on_eagain) -> int
+            {
+                cppcut_assert_not_null(dest);
+                cppcut_assert_equal(size_t(4096), count);
+                cppcut_assert_not_null(add_bytes_read);
+                cppcut_assert_equal(size_t(0), *add_bytes_read);
+                cppcut_assert_equal(peer_fd, fd);
+                cut_assert_true(suppress_error_on_eagain);
+
+                errno = ETIMEDOUT;
+
+                return -1;
+            });
+    mock_messages->expect_msg_error_formatted(ETIMEDOUT, LOG_CRIT,
+            "Failed reading app commands from fd 63 (Connection timed out)");
+    mock_messages->expect_msg_info_formatted("Smartphone direct connection disconnected (fd 63)");
+    mock_network->expect_close(peer_fd);
+
+    fd_events(fds, peer_fd, POLLIN | POLLHUP);
+    cppcut_assert_equal(size_t(1), nwdispatcher.process(fds.data()));
+
+    cut_assert_true(commands_in_queue.empty());
+
+}
+
+/*!\test
  * Send message to single connected peer.
  */
 void test_sending_broadcast_answer_to_single_peer()

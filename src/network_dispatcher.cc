@@ -80,15 +80,17 @@ size_t Network::Dispatcher::process(const struct pollfd *fds) const
         if(it == connections_.end())
             continue;
 
+        bool iter_still_valid = true;
+
         if((event.revents & POLLIN) != 0)
         {
             if(it->second.handle_incoming_data != nullptr)
-                it->second.handle_incoming_data(event.fd);
+                iter_still_valid = it->second.handle_incoming_data(event.fd);
 
             ++dispatched;
         }
 
-        if((event.revents & POLLHUP) != 0)
+        if((iter_still_valid && event.revents & POLLHUP) != 0)
         {
             if(it->second.connection_died != nullptr)
                 it->second.connection_died(event.fd);
