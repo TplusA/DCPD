@@ -102,7 +102,7 @@ enum class WPSMode
  * changes are applied when the client writes a 0 to the \c ACTIVE_IP_PROFILE
  * register (DCP register 53).
  */
-static struct
+struct WriteData
 {
     /*!
      * Networking technology at the time the change request was commenced.
@@ -130,8 +130,45 @@ static struct
 
     bool wlan_wpa_passphrase_is_ascii;
     std::array<uint8_t, 64 + 1> wlan_wpa_passphrase;
-}
-nwconfig_write_data;
+
+    WriteData(const WriteData &) = delete;
+    WriteData &operator=(const WriteData &) = delete;
+
+    explicit WriteData():
+        selected_technology(Connman::Technology::UNKNOWN_TECHNOLOGY),
+        requested_changes(0),
+        dhcpv4_mode(false),
+        ipv4_address{0},
+        ipv4_netmask{0},
+        ipv4_gateway{0},
+        ipv4_dns_server1{0},
+        ipv4_dns_server2{0},
+        wlan_security_mode{0},
+        wlan_ssid_length(0),
+        wlan_ssid{0},
+        wlan_wpa_passphrase_is_ascii(false),
+        wlan_wpa_passphrase{0}
+    {}
+
+    void reset(Connman::Technology tech)
+    {
+        selected_technology = tech;
+        requested_changes = 0;
+        dhcpv4_mode = false;
+        ipv4_address[0] = '\0';
+        ipv4_netmask[0] = '\0';
+        ipv4_gateway[0] = '\0';
+        ipv4_dns_server1[0] = '\0';
+        ipv4_dns_server2[0] = '\0';
+        wlan_security_mode[0] = '\0';
+        wlan_ssid_length = 0;
+        wlan_ssid.fill(0);
+        wlan_wpa_passphrase_is_ascii = false;
+        wlan_wpa_passphrase.fill(0);
+    }
+};
+
+WriteData nwconfig_write_data;
 
 /*!
  * Network status register data and other stuff.
@@ -1378,20 +1415,19 @@ int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
     if(data[0] != 0)
         return -1;
 
-    memset(&nwconfig_write_data, 0, sizeof(nwconfig_write_data));
-
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    nwconfig_write_data.selected_technology =
-        determine_active_network_technology(services, false);
+    auto tech = determine_active_network_technology(services, false);
 
-    if(nwconfig_write_data.selected_technology == Connman::Technology::UNKNOWN_TECHNOLOGY)
+    if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY)
     {
         msg_info("Could not determine active network technology, "
                  "trying fallback");
-        nwconfig_write_data.selected_technology = nwstatus_data.fallback_technology;
+        tech = nwstatus_data.fallback_technology;
     }
+
+    nwconfig_write_data.reset(tech);
 
     switch(nwconfig_write_data.selected_technology)
     {
