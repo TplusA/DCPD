@@ -32,7 +32,7 @@
 #include "dcpregs_playstream.h"
 #include "dcpregs_status.h"
 #include "volume_control.hh"
-#include "smartphone_app_send.h"
+#include "smartphone_app_send.hh"
 #include "configproxy.h"
 #include "stream_id.h"
 #include "actor_id.h"
@@ -440,12 +440,13 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
 
         if(actor_id != ACTOR_ID_SMARTPHONE_APP && raw_error_code == 0)
         {
-            auto *data = static_cast<struct smartphone_app_connection_data *>(user_data);
+            auto *data = static_cast<Applink::AppConnections *>(user_data);
+            log_assert(data != nullptr);
 
             if(is_login)
-                appconn_send_airable_service_logged_in(data, service_id, info);
+                Applink::send_airable_service_logged_in(*data, service_id, info);
             else
-                appconn_send_airable_service_logged_out(data, service_id, info);
+                Applink::send_airable_service_logged_out(*data, service_id, info);
         }
         else
         {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,8 +21,10 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <cppcutter.h>
+#include <algorithm>
+#include <array>
 
-#include "network_dispatcher.h"
+#include "network_dispatcher.hh"
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
@@ -51,22 +53,24 @@ static struct
 }
 iface_check_data;
 
-static int handle_incoming_data_callback(int fd, void *user_data)
+static bool handle_incoming_data_callback(int fd)
 {
     ++iface_check_data.handle_incoming_data_called;
-    return 0;
+    return true;
 }
 
-static void connection_died_callback(int fd, void *user_data)
+static void connection_died_callback(int fd)
 {
     ++iface_check_data.connection_died_called;;
 }
 
-static const struct nwdispatch_iface dispatch_fd =
+static const Network::DispatchHandlers dispatch_fd
 {
     .handle_incoming_data = handle_incoming_data_callback,
     .connection_died = connection_died_callback,
 };
+
+static Network::Dispatcher &nwdispatcher(Network::Dispatcher::get_singleton());
 
 void cut_setup()
 {
@@ -84,7 +88,7 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
-    nwdispatch_init();
+    nwdispatcher.reset();
 }
 
 void cut_teardown()
@@ -107,17 +111,48 @@ void cut_teardown()
                         iface_check_data.connection_died_called);
 }
 
+template <size_t N>
+static void expect_fds(const std::array<int, N> &expected_fds,
+                       const struct pollfd *fds)
+{
+    cppcut_assert_not_null(fds);
+
+    if(N == 0)
+        return;
+
+    std::vector<int> unique_expected_fds;
+    std::unique_copy(expected_fds.begin(), expected_fds.end(),
+                     std::back_inserter(unique_expected_fds));
+    cppcut_assert_equal(N, unique_expected_fds.size());
+    std::sort(unique_expected_fds.begin(), unique_expected_fds.end());
+
+    std::array<int, N> have_fds;
+    for(size_t i = 0; i < N; ++i)
+        have_fds[i] = fds[i].fd;
+
+    std::vector<int> unique_fds;
+    std::unique_copy(have_fds.begin(), have_fds.end(),
+                     std::back_inserter(unique_fds));
+    cppcut_assert_equal(N, unique_fds.size());
+    std::sort(unique_fds.begin(), unique_fds.end());
+
+    cut_assert_equal_memory(unique_expected_fds.data(),
+                            unique_expected_fds.size() * sizeof(int),
+                            unique_fds.data(),
+                            unique_fds.size() * sizeof(int));
+}
+
 /*!\test
  * Any file descriptor can be registered only once, second try emits bug
  * message.
  */
 void test_fd_cannot_be_registered_twice()
 {
-    cppcut_assert_equal(0, nwdispatch_register(42, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(42, dispatch_fd));
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to register already registered fd 42");
-    cppcut_assert_equal(-1, nwdispatch_register(42, &dispatch_fd, NULL));
+    cut_assert_false(nwdispatcher.add_connection(42, dispatch_fd));
 }
 
 /*!\test
@@ -126,102 +161,65 @@ void test_fd_cannot_be_registered_twice()
  */
 void test_registered_fds_are_scattered_over_big_enough_array()
 {
-    cppcut_assert_equal(0, nwdispatch_register(5, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(7, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(9, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(5, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(7, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(9, dispatch_fd));
 
     struct pollfd fds[5] = { 0 };
 
-    cppcut_assert_equal(size_t(3), nwdispatch_scatter_fds(&fds[1], 3, POLLIN));
+    cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(&fds[1], POLLIN));
 
     cppcut_assert_equal(0, fds[0].fd);
     cppcut_assert_equal(0, fds[sizeof(fds) / sizeof(fds[0]) - 1].fd);
 
-    cppcut_assert_equal(5, fds[1].fd);
-    cppcut_assert_equal(7, fds[2].fd);
-    cppcut_assert_equal(9, fds[3].fd);
+    expect_fds(std::array<int, 3>{5, 7, 9}, &fds[1]);
 }
 
 /*!\test
  * Registered file descriptors are filled into array for use with \c poll(2),
- * excess elements are filled with -1 fds.
+ * excess elements are left untouched.
  */
-void test_too_big_scatter_array_is_filled_up()
+void test_excess_scatter_elements_are_left_untouched()
 {
-    cppcut_assert_equal(0, nwdispatch_register(15, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(17, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(19, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(15, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(17, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(19, dispatch_fd));
 
     struct pollfd fds[6] = { 0 };
 
-    cppcut_assert_equal(size_t(3), nwdispatch_scatter_fds(&fds[1], 4, POLLIN));
+    cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(&fds[1], POLLIN));
 
     cppcut_assert_equal(0, fds[0].fd);
     cppcut_assert_equal(0, fds[sizeof(fds) / sizeof(fds[0]) - 1].fd);
+    cppcut_assert_equal(0, fds[4].fd);
 
-    cppcut_assert_equal(15, fds[1].fd);
-    cppcut_assert_equal(17, fds[2].fd);
-    cppcut_assert_equal(19, fds[3].fd);
-    cppcut_assert_equal(-1, fds[4].fd);
+    expect_fds(std::array<int, 3>{15, 17, 19}, &fds[1]);
 }
 
 /*!\test
  * If no file descriptors are registered, the array for \c poll(2) is filled
  * with -1 fds.
  */
-void test_scatter_array_is_filled_up_even_if_no_fds_are_registered()
+void test_scatter_array_is_left_untouched_if_no_fds_are_registered()
 {
     struct pollfd fds[5] = { 0 };
 
-    cppcut_assert_equal(size_t(0), nwdispatch_scatter_fds(&fds[1], 3, POLLIN));
+    cppcut_assert_equal(size_t(0), nwdispatcher.scatter_fds(&fds[1], POLLIN));
 
     cppcut_assert_equal(0, fds[0].fd);
+    cppcut_assert_equal(0, fds[1].fd);
+    cppcut_assert_equal(0, fds[2].fd);
+    cppcut_assert_equal(0, fds[3].fd);
     cppcut_assert_equal(0, fds[sizeof(fds) / sizeof(fds[0]) - 1].fd);
-
-    cppcut_assert_equal(-1, fds[1].fd);
-    cppcut_assert_equal(-1, fds[2].fd);
-    cppcut_assert_equal(-1, fds[3].fd);
 }
 
 /*!\test
- * The array for \c poll(2) is filled with a subset of registered file
- * descriptors if the target array is too small, and a warning is emitted.
- */
-void test_first_few_registered_fds_are_scattered_over_too_small_array()
-{
-    cppcut_assert_equal(0, nwdispatch_register(25, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(27, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(29, &dispatch_fd, NULL));
-
-    struct pollfd fds[4] = { 0 };
-
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-        "Cannot pass all connections to poll(2), target array too small");
-    cppcut_assert_equal(size_t(2), nwdispatch_scatter_fds(&fds[1], 2, POLLIN));
-
-    cppcut_assert_equal(0, fds[0].fd);
-    cppcut_assert_equal(0, fds[sizeof(fds) / sizeof(fds[0]) - 1].fd);
-
-    cppcut_assert_equal(25, fds[1].fd);
-    cppcut_assert_equal(27, fds[2].fd);
-}
-
-/*!\test
- * There is a limit of #NWDISPATCH_MAX_CONNECTIONS on the number of
- * dispatchable connections.
+ * There is no practical limit on the number of dispatchable connections.
  */
 void test_number_of_connections_is_limited()
 {
-    cppcut_assert_equal(0, nwdispatch_register(10, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(20, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(30, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(40, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(50, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(60, &dispatch_fd, NULL));
-
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-                                              "Maximum number of connections exceeded");
-    cppcut_assert_equal(-1, nwdispatch_register(70, &dispatch_fd, NULL));
+    for(int i = 1; i < 500; ++i)
+        cut_assert_true(nwdispatcher.add_connection(i * 10, dispatch_fd));
 }
 
 /*!\test
@@ -229,13 +227,13 @@ void test_number_of_connections_is_limited()
  */
 void test_unregister_single_registered_fd()
 {
-    cppcut_assert_equal(0, nwdispatch_register(5, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(5, dispatch_fd));
 
     mock_os->expect_os_file_close(5);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(5));
+    cut_assert_true(nwdispatcher.remove_connection(5));
 
-    struct pollfd dummy;
-    cppcut_assert_equal(size_t(0), nwdispatch_scatter_fds(&dummy, 1, POLLIN));
+    struct pollfd dummy { 0 };
+    cppcut_assert_equal(size_t(0), nwdispatcher.scatter_fds(&dummy, POLLIN));
 }
 
 /*!\test
@@ -244,19 +242,18 @@ void test_unregister_single_registered_fd()
  */
 void test_unregister_first_registered_fd()
 {
-    cppcut_assert_equal(0, nwdispatch_register(100, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(101, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(102, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(100, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(101, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(102, dispatch_fd));
 
     mock_os->expect_os_file_close(100);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(100));
+    cut_assert_true(nwdispatcher.remove_connection(100));
 
-    struct pollfd fds[4];
-    cppcut_assert_equal(size_t(2), nwdispatch_scatter_fds(fds, 4, POLLIN));
+    struct pollfd fds[4] { 0 };
+    cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds, POLLIN));
 
-    cppcut_assert_equal(101, fds[0].fd);
-    cppcut_assert_equal(102, fds[1].fd);
-    cppcut_assert_equal(-1, fds[2].fd);
+    cppcut_assert_equal(0, fds[2].fd);
+    expect_fds(std::array<int, 2>{101, 102}, fds);
 }
 
 /*!\test
@@ -265,19 +262,18 @@ void test_unregister_first_registered_fd()
  */
 void test_unregister_last_registered_fd()
 {
-    cppcut_assert_equal(0, nwdispatch_register(100, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(101, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(102, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(100, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(101, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(102, dispatch_fd));
 
     mock_os->expect_os_file_close(102);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(102));
+    cut_assert_true(nwdispatcher.remove_connection(102));
 
-    struct pollfd fds[4];
-    cppcut_assert_equal(size_t(2), nwdispatch_scatter_fds(fds, 4, POLLIN));
+    struct pollfd fds[4] { 0 };
+    cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds, POLLIN));
 
-    cppcut_assert_equal(100, fds[0].fd);
-    cppcut_assert_equal(101, fds[1].fd);
-    cppcut_assert_equal(-1, fds[2].fd);
+    cppcut_assert_equal(0, fds[2].fd);
+    expect_fds(std::array<int, 2>{100, 101}, fds);
 }
 
 /*!\test
@@ -288,29 +284,21 @@ void test_unregister_last_registered_fd()
  */
 void test_unregister_from_center_of_full_fd_registry()
 {
-    cppcut_assert_equal(0, nwdispatch_register(15, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(25, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(35, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(45, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(55, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(65, &dispatch_fd, NULL));
-
-    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
-                                              "Maximum number of connections exceeded");
-    cppcut_assert_equal(-1, nwdispatch_register(60, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(15, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(25, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(35, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(45, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(55, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(65, dispatch_fd));
 
     mock_os->expect_os_file_close(35);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(35));
+    cut_assert_true(nwdispatcher.remove_connection(35));
 
-    struct pollfd fds[8];
-    cppcut_assert_equal(size_t(5), nwdispatch_scatter_fds(fds, 8, POLLIN));
+    struct pollfd fds[8] { 0 };
+    cppcut_assert_equal(size_t(5), nwdispatcher.scatter_fds(fds, POLLIN));
 
-    cppcut_assert_equal(15, fds[0].fd);
-    cppcut_assert_equal(25, fds[1].fd);
-    cppcut_assert_equal(45, fds[2].fd);
-    cppcut_assert_equal(55, fds[3].fd);
-    cppcut_assert_equal(65, fds[4].fd);
-    cppcut_assert_equal(-1, fds[5].fd);
+    cppcut_assert_equal(0, fds[5].fd);
+    expect_fds(std::array<int, 5>{15, 25, 45, 55, 65}, fds);
 }
 
 /*!\test
@@ -321,7 +309,7 @@ void test_unregister_unregistered_fd_from_empty_registry_returns_error()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to unregister nonexistent fd 1");
-    cppcut_assert_equal(-1, nwdispatch_unregister_and_close(1));
+    cut_assert_false(nwdispatcher.remove_connection(1));
 }
 
 /*!\test
@@ -330,11 +318,11 @@ void test_unregister_unregistered_fd_from_empty_registry_returns_error()
  */
 void test_unregister_unregistered_fd_returns_error()
 {
-    cppcut_assert_equal(0, nwdispatch_register(2, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(2, dispatch_fd));
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to unregister nonexistent fd 1");
-    cppcut_assert_equal(-1, nwdispatch_unregister_and_close(1));
+    cut_assert_false(nwdispatcher.remove_connection(1));
 }
 
 /*!\test
@@ -343,17 +331,17 @@ void test_unregister_unregistered_fd_returns_error()
  */
 void test_registered_callback_is_called_when_data_arrives_for_single_fd()
 {
-    cppcut_assert_equal(0, nwdispatch_register(15, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(15, dispatch_fd));
 
-    struct pollfd fds[NWDISPATCH_MAX_CONNECTIONS] = { 0 };
-    cppcut_assert_equal(size_t(1), nwdispatch_scatter_fds(fds, NWDISPATCH_MAX_CONNECTIONS, POLLIN));
+    struct pollfd fds[5] = { 0 };
+    cppcut_assert_equal(size_t(1), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLIN;
 
     iface_check_data.handle_incoming_data_expected = 1;
 
     cppcut_assert_equal(iface_check_data.handle_incoming_data_expected,
-                        nwdispatch_handle_events(fds, NWDISPATCH_MAX_CONNECTIONS));
+                        nwdispatcher.process(fds));
 }
 
 /*!\test
@@ -362,12 +350,12 @@ void test_registered_callback_is_called_when_data_arrives_for_single_fd()
  */
 void test_registered_callbacks_are_called_when_data_arrives_for_many_fds()
 {
-    cppcut_assert_equal(0, nwdispatch_register(20, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(21, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(22, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(20, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(21, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(22, dispatch_fd));
 
-    struct pollfd fds[NWDISPATCH_MAX_CONNECTIONS] = { 0 };
-    cppcut_assert_equal(size_t(3), nwdispatch_scatter_fds(fds, NWDISPATCH_MAX_CONNECTIONS, POLLIN));
+    struct pollfd fds[5] = { 0 };
+    cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLIN;
     fds[2].revents = POLLIN;
@@ -375,7 +363,7 @@ void test_registered_callbacks_are_called_when_data_arrives_for_many_fds()
     iface_check_data.handle_incoming_data_expected = 2;
 
     cppcut_assert_equal(iface_check_data.handle_incoming_data_expected,
-                        nwdispatch_handle_events(fds, NWDISPATCH_MAX_CONNECTIONS));
+                        nwdispatcher.process(fds));
 }
 
 /*!\test
@@ -384,17 +372,17 @@ void test_registered_callbacks_are_called_when_data_arrives_for_many_fds()
  */
 void test_registered_callback_is_called_when_connection_dies_for_single_fd()
 {
-    cppcut_assert_equal(0, nwdispatch_register(25, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(25, dispatch_fd));
 
-    struct pollfd fds[NWDISPATCH_MAX_CONNECTIONS] = { 0 };
-    cppcut_assert_equal(size_t(1), nwdispatch_scatter_fds(fds, NWDISPATCH_MAX_CONNECTIONS, POLLIN));
+    struct pollfd fds[5] = { 0 };
+    cppcut_assert_equal(size_t(1), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLHUP;
 
     iface_check_data.connection_died_expected = 1;
 
     cppcut_assert_equal(iface_check_data.connection_died_expected,
-                        nwdispatch_handle_events(fds, NWDISPATCH_MAX_CONNECTIONS));
+                        nwdispatcher.process(fds));
 }
 
 /*!\test
@@ -403,12 +391,12 @@ void test_registered_callback_is_called_when_connection_dies_for_single_fd()
  */
 void test_registered_callbacks_are_called_when_connection_dies_for_many_fds()
 {
-    cppcut_assert_equal(0, nwdispatch_register(30, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(31, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(32, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(30, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(31, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(32, dispatch_fd));
 
-    struct pollfd fds[NWDISPATCH_MAX_CONNECTIONS] = { 0 };
-    cppcut_assert_equal(size_t(3), nwdispatch_scatter_fds(fds, NWDISPATCH_MAX_CONNECTIONS, POLLIN));
+    struct pollfd fds[5] = { 0 };
+    cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLHUP;
     fds[2].revents = POLLHUP;
@@ -416,7 +404,7 @@ void test_registered_callbacks_are_called_when_connection_dies_for_many_fds()
     iface_check_data.connection_died_expected = 2;
 
     cppcut_assert_equal(iface_check_data.connection_died_expected,
-                        nwdispatch_handle_events(fds, NWDISPATCH_MAX_CONNECTIONS));
+                        nwdispatcher.process(fds));
 }
 
 /*!\test
@@ -425,27 +413,27 @@ void test_registered_callbacks_are_called_when_connection_dies_for_many_fds()
  */
 void test_registered_callbacks_are_called_after_reg_unreg()
 {
-    cppcut_assert_equal(0, nwdispatch_register(200, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(210, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(220, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(230, &dispatch_fd, NULL));
-    cppcut_assert_equal(0, nwdispatch_register(240, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.add_connection(200, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(210, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(220, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(230, dispatch_fd));
+    cut_assert_true(nwdispatcher.add_connection(240, dispatch_fd));
 
     mock_os->expect_os_file_close(240);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(240));
-    cppcut_assert_equal(0, nwdispatch_register(100, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.remove_connection(240));
+    cut_assert_true(nwdispatcher.add_connection(100, dispatch_fd));
 
     mock_os->expect_os_file_close(210);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(210));
+    cut_assert_true(nwdispatcher.remove_connection(210));
     mock_os->expect_os_file_close(230);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(230));
-    cppcut_assert_equal(0, nwdispatch_register(80, &dispatch_fd, NULL));
+    cut_assert_true(nwdispatcher.remove_connection(230));
+    cut_assert_true(nwdispatcher.add_connection(80, dispatch_fd));
 
     mock_os->expect_os_file_close(200);
-    cppcut_assert_equal(0, nwdispatch_unregister_and_close(200));
+    cut_assert_true(nwdispatcher.remove_connection(200));
 
-    struct pollfd fds[NWDISPATCH_MAX_CONNECTIONS] = { 0 };
-    cppcut_assert_equal(size_t(3), nwdispatch_scatter_fds(fds, NWDISPATCH_MAX_CONNECTIONS, POLLIN));
+    struct pollfd fds[10] = { 0 };
+    cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLIN | POLLHUP;
     fds[1].revents = POLLIN | POLLHUP;
@@ -456,7 +444,7 @@ void test_registered_callbacks_are_called_after_reg_unreg()
 
     cppcut_assert_equal(iface_check_data.handle_incoming_data_expected +
                         iface_check_data.connection_died_expected,
-                        nwdispatch_handle_events(fds, NWDISPATCH_MAX_CONNECTIONS));
+                        nwdispatcher.process(fds));
 }
 
 }

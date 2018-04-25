@@ -24,10 +24,9 @@ dcpd_SOURCES = \
     dcpd.cc os.c os.h named_pipe.c named_pipe.h \
     registers.h registers_priv.h register_response_writer.hh \
     dcp_over_tcp.c dcp_over_tcp.h \
-    smartphone_app.c smartphone_app.h \
-    smartphone_app_send.c smartphone_app_send.h \
+    smartphone_app_send.cc smartphone_app_send.hh smartphone_app.hh \
     actor_id.h \
-    applink.h applink_variables.h \
+    applink.hh applink_variables.hh \
     network.h network_status_bits.h \
     transactions.h dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
@@ -73,6 +72,7 @@ noinst_LTLIBRARIES = \
     libapplink.la \
     libdrcpdcomm.la \
     libxmodem.la \
+    libnetwork.la \
     libnetwork_dispatcher.la \
     libshutdown_guard.la \
     libdcpd_dbus.la \
@@ -110,7 +110,7 @@ libregisters_la_SOURCES = \
     dcpregs_upnpname.cc dcpregs_upnpname.h dcpregs_upnpname.hh \
     dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
     dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.c dcpregs_tcptunnel.h \
+    dcpregs_tcptunnel.cc dcpregs_tcptunnel.h \
     dcpregs_audiosources.cc dcpregs_audiosources.h \
     dcpregs_playstream.cc dcpregs_playstream.h dcpregs_playstream.hh \
     dcpregs_mediaservices.c dcpregs_mediaservices.h \
@@ -153,9 +153,9 @@ libnetworkprefs_la_CFLAGS = $(AM_CFLAGS)
 libnetworkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libapplink_la_SOURCES = \
-    applink.c applink.h \
-    applink_variables.c applink_variables.h \
-    dynamic_buffer.h dynamic_buffer_util.h
+    applink.cc applink.hh \
+    applink_variables.cc applink_variables.hh \
+    smartphone_app.cc smartphone_app.hh
 libapplink_la_CFLAGS = $(AM_CFLAGS)
 libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)
 
@@ -236,10 +236,15 @@ libxmodem_la_SOURCES = xmodem.c xmodem.h crc16.h os.h
 libxmodem_la_CFLAGS = $(AM_CFLAGS)
 libxmodem_la_CXXFLAGS = $(AM_CXXFLAGS)
 
-libnetwork_dispatcher_la_SOURCES = \
-    network_dispatcher.c network_dispatcher.h \
+libnetwork_la_SOURCES = \
     network.c network.h \
     messages.h
+libnetwork_la_CFLAGS = $(AM_CFLAGS)
+libnetwork_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libnetwork_dispatcher_la_SOURCES = \
+    network_dispatcher.cc network_dispatcher.hh \
+    network.h messages.h
 libnetwork_dispatcher_la_CFLAGS = $(AM_CFLAGS)
 libnetwork_dispatcher_la_CXXFLAGS = $(AM_CXXFLAGS)
 
