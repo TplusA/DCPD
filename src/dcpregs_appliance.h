@@ -39,6 +39,10 @@ int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length);
 bool dcpregs_appliance_id_init(void);
 void dcpregs_appliance_id_configure(void);
 
+uint8_t dcpregs_appliance_get_standby_state_for_dbus(void);
+bool dcpregs_appliance_request_standby_state(uint8_t state, uint8_t *current_state,
+                                             bool *is_pending);
+
 #ifdef __cplusplus
 }
 #endif

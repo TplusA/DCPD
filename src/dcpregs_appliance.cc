@@ -31,7 +31,7 @@
 #include "dcpregs_networkconfig.hh"
 #include "configproxy.h"
 #include "dbus_iface_deep.h"
-#include "audiopath_dbus.h"
+#include "maybe.hh"
 #include "messages.h"
 
 /*!
@@ -61,6 +61,10 @@ enum class Appliance
 
 static const char appliance_id_key[]        = "@dcpd:appliance:appliance:id";
 static const char appliance_device_id_key[] = "@dcpd:appliance:appliance:device_id";
+
+static constexpr uint16_t APPLIANCE_STATUS_BIT_AUDIO_PATH_READY = (1U << 0);
+static constexpr uint16_t APPLIANCE_STATUS_BIT_IS_IN_STANDBY    = (1U << 1);
+static constexpr uint16_t APPLIANCE_STATUS_BIT_IS_VALID         = (1U << 15);
 
 static void set_device_id_by_mac(const Connman::Technology tech)
 {
@@ -185,6 +189,9 @@ struct ApplianceData
     bool is_initialized;
     Appliance id;
 
+    std::mutex lock;
+    Maybe<bool> cached_standby_state;
+
     ApplianceData(const ApplianceData &) = delete;
     ApplianceData &operator=(const ApplianceData &) = delete;
 
@@ -198,6 +205,8 @@ static ApplianceData global_appliance_data;
 
 bool dcpregs_appliance_id_init()
 {
+    std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+
     char appliance_id[64];
     auto prev_id = global_appliance_data.id;
 
@@ -266,6 +275,28 @@ int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length)
     return 0;
 }
 
+enum class AppliancePowerState
+{
+    UNKNOWN,
+    STANDBY,
+    UP_AND_RUNNING,
+    MAX_VALUE = UP_AND_RUNNING,
+};
+
+static AppliancePowerState standby_state_flag_to_dbus_value(bool is_valid, bool state)
+{
+    return is_valid
+        ? (state ? AppliancePowerState::STANDBY : AppliancePowerState::UP_AND_RUNNING)
+        : AppliancePowerState::UNKNOWN;
+}
+
+static AppliancePowerState standby_state_flag_to_dbus_value(const Maybe<bool> &state)
+{
+    return state.is_known()
+        ? (state.get() ? AppliancePowerState::STANDBY : AppliancePowerState::UP_AND_RUNNING)
+        : AppliancePowerState::UNKNOWN;
+}
+
 int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length)
 {
     if(length < 2)
@@ -274,13 +305,73 @@ int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length)
         return -1;
     }
 
-    const bool is_valid = ((data[0] & (1U << 7)) != 0);
-    const bool is_audio_path_usable = ((data[1] & 0x01) != 0);
+    const uint16_t status = (data[0] << 8) | data[1];
+
+    const bool is_valid = (status & APPLIANCE_STATUS_BIT_IS_VALID) != 0;
+    const bool is_audio_path_usable = (status & APPLIANCE_STATUS_BIT_AUDIO_PATH_READY) != 0;
+    const bool is_in_standby        = (status & APPLIANCE_STATUS_BIT_IS_IN_STANDBY) != 0;
     const uint8_t audio_state = is_valid ? (is_audio_path_usable ? 1 : 0) : 2;
+    const auto power_state = standby_state_flag_to_dbus_value(is_valid, is_in_standby);
+    AppliancePowerState old_power_state;
+
+    if(is_valid && is_in_standby && is_audio_path_usable)
+        APPLIANCE_BUG("Indicating usable audio path in standby mode (0x%04x)",
+                      status);
+
+    {
+        std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+
+        old_power_state =
+            standby_state_flag_to_dbus_value(global_appliance_data.cached_standby_state);
+
+        if(is_valid)
+            global_appliance_data.cached_standby_state = is_in_standby;
+        else
+            global_appliance_data.cached_standby_state.set_unknown();
+    }
+
+    if(power_state != old_power_state)
+        tdbus_appliance_power_emit_state_changed(dbus_appliance_get_power_iface(),
+                                                 uint8_t(old_power_state),
+                                                 uint8_t(power_state));
 
     tdbus_aupath_appliance_call_set_ready_state(dbus_audiopath_get_appliance_iface(),
                                                 audio_state,
                                                 nullptr, nullptr, nullptr);
 
     return 0;
+}
+
+uint8_t dcpregs_appliance_get_standby_state_for_dbus()
+{
+    std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+    return uint8_t(standby_state_flag_to_dbus_value(global_appliance_data.cached_standby_state));
+}
+
+bool dcpregs_appliance_request_standby_state(uint8_t state, uint8_t *current_state,
+                                             bool *is_pending)
+{
+    *current_state = dcpregs_appliance_get_standby_state_for_dbus();
+    *is_pending = false;
+
+    if(state > uint8_t(AppliancePowerState::MAX_VALUE))
+        return false;
+
+    const auto requested_state = AppliancePowerState(state);
+
+    switch(requested_state)
+    {
+      case AppliancePowerState::UNKNOWN:
+        break;
+
+      case AppliancePowerState::STANDBY:
+      case AppliancePowerState::UP_AND_RUNNING:
+        *is_pending = state != *current_state;
+
+        BUG("%s(): Not implemented yet", __func__);
+
+        return true;
+    }
+
+    return false;
 }

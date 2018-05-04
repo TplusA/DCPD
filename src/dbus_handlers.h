@@ -25,6 +25,7 @@
 #include "dcpd_dbus.h"
 #include "audiopath_dbus.h"
 #include "mixer_dbus.h"
+#include "appliance_dbus.h"
 #include "configuration_dbus.h"
 #include "debug_dbus.h"
 
@@ -90,6 +91,13 @@ gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
 gboolean dbusmethod_mixer_get(tdbusmixerVolume *object,
                               GDBusMethodInvocation *invocation,
                               guint16 id, gpointer user_data);
+
+gboolean dbusmethod_appliance_request_power_state_change(tdbusappliancePower *object,
+                                                         GDBusMethodInvocation *invocation,
+                                                         guchar state, gpointer user_data);
+gboolean dbusmethod_appliance_get_power_state(tdbusappliancePower *object,
+                                              GDBusMethodInvocation *invocation,
+                                              gpointer user_data);
 
 gboolean dbusmethod_configproxy_register(tdbusConfigurationProxy *object,
                                          GDBusMethodInvocation *invocation,
