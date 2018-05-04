@@ -268,6 +268,12 @@ int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length)
 
 int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length)
 {
+    if(length < 2)
+    {
+        msg_error(EINVAL, LOG_INFO, "Input too short for register 18");
+        return -1;
+    }
+
     const bool is_valid = ((data[0] & (1U << 7)) != 0);
     const bool is_audio_path_usable = ((data[1] & 0x01) != 0);
     const uint8_t audio_state = is_valid ? (is_audio_path_usable ? 1 : 0) : 2;
