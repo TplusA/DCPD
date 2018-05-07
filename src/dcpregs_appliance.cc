@@ -32,6 +32,7 @@
 #include "configproxy.h"
 #include "dbus_iface_deep.h"
 #include "maybe.hh"
+#include "registers_priv.h"
 #include "messages.h"
 
 /*!
@@ -192,12 +193,17 @@ struct ApplianceData
     std::mutex lock;
     Maybe<bool> cached_standby_state;
 
+    uint16_t request_control_mask;
+    uint16_t request_control_bits;
+
     ApplianceData(const ApplianceData &) = delete;
     ApplianceData &operator=(const ApplianceData &) = delete;
 
     explicit ApplianceData():
         is_initialized(false),
-        id(Appliance::UNDEFINED)
+        id(Appliance::UNDEFINED),
+        request_control_mask(0),
+        request_control_bits(0)
     {}
 };
 
@@ -342,6 +348,40 @@ int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length)
     return 0;
 }
 
+ssize_t dcpregs_read_19_appliance_control(uint8_t *response, size_t length)
+{
+    static constexpr size_t register_size =
+        sizeof(global_appliance_data.request_control_mask) +
+        sizeof(global_appliance_data.request_control_bits);
+
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 19 handler %p %zu", response, length);
+
+    std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+
+    if(length < register_size)
+        return -1;
+
+    if(global_appliance_data.request_control_mask == 0)
+    {
+        BUG("Have no pending appliance control requests");
+        return -1;
+    }
+
+    if(((global_appliance_data.request_control_mask |
+         global_appliance_data.request_control_bits) & APPLIANCE_STATUS_BIT_IS_VALID) != 0)
+        BUG("Appliance control is-valid flag must be 0");
+
+    response[0] = global_appliance_data.request_control_mask >> 8;
+    response[1] = global_appliance_data.request_control_mask & 0xff;
+    response[2] = global_appliance_data.request_control_bits >> 8;
+    response[3] = global_appliance_data.request_control_bits & 0xff;
+
+    global_appliance_data.request_control_mask = 0;
+    global_appliance_data.request_control_bits = 0;
+
+    return register_size;
+}
+
 uint8_t dcpregs_appliance_get_standby_state_for_dbus()
 {
     std::lock_guard<std::mutex> lock(global_appliance_data.lock);
@@ -368,7 +408,17 @@ bool dcpregs_appliance_request_standby_state(uint8_t state, uint8_t *current_sta
       case AppliancePowerState::UP_AND_RUNNING:
         *is_pending = state != *current_state;
 
-        BUG("%s(): Not implemented yet", __func__);
+        if(!*is_pending)
+            return true;
+
+        std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+        const bool is_notification_needed = global_appliance_data.request_control_mask == 0;
+
+        global_appliance_data.request_control_mask |= APPLIANCE_STATUS_BIT_IS_IN_STANDBY;
+        global_appliance_data.request_control_bits |= APPLIANCE_STATUS_BIT_IS_IN_STANDBY;
+
+        if(is_notification_needed)
+            registers_get_data()->register_changed_notification_fn(19);
 
         return true;
     }

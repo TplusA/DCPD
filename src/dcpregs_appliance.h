@@ -33,6 +33,7 @@ extern "C" {
 #endif
 
 int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length);
+ssize_t dcpregs_read_19_appliance_control(uint8_t *response, size_t length);
 ssize_t dcpregs_read_87_appliance_id(uint8_t *response, size_t length);
 int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length);
 
