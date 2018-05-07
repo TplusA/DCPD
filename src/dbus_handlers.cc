@@ -26,6 +26,7 @@
 
 #include "dbus_handlers.h"
 #include "dcpregs_audiosources.h"
+#include "dcpregs_appliance.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
@@ -412,6 +413,34 @@ gboolean dbusmethod_mixer_get(tdbusmixerVolume *object,
         break;
     }
 
+    return TRUE;
+}
+
+gboolean dbusmethod_appliance_request_power_state_change(tdbusappliancePower *object,
+                                                         GDBusMethodInvocation *invocation,
+                                                         guchar state, gpointer user_data)
+{
+    uint8_t current_state;
+    bool is_request_pending;
+
+    if(dcpregs_appliance_request_standby_state(state, &current_state, &is_request_pending))
+        tdbus_appliance_power_complete_request_state(object, invocation,
+                                                     current_state, is_request_pending);
+    else
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+                                              "Invalid power state %u requested",
+                                              state);
+
+    return TRUE;
+}
+
+gboolean dbusmethod_appliance_get_power_state(tdbusappliancePower *object,
+                                              GDBusMethodInvocation *invocation,
+                                              gpointer user_data)
+{
+    tdbus_appliance_power_complete_get_state(object, invocation,
+                                             dcpregs_appliance_get_standby_state_for_dbus());
     return TRUE;
 }
 

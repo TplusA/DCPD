@@ -804,6 +804,7 @@ EXCLUDE                = \
     @abs_builddir@/src/audiopath_dbus.c \
     @abs_builddir@/src/mixer_dbus.c \
     @abs_builddir@/src/credentials_dbus.c \
+    @abs_builddir@/src/appliance_dbus.c \
     @abs_builddir@/src/connman_dbus.c \
     @abs_builddir@/src/logind_dbus.c \
     @abs_builddir@/src/systemd_dbus.c \

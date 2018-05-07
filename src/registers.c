@@ -276,6 +276,12 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_18_appliance_status,
     },
     {
+        /* Appliance control register */
+        REGISTER(19, REGISTER_MK_VERSION(1, 0, 5)),
+        .max_data_size = 4,
+        .read_handler = dcpregs_read_19_appliance_control,
+    },
+    {
         /* Image version */
         REGISTER(37, REGISTER_MK_VERSION(1, 0, 0)),
         .max_data_size = 20,
