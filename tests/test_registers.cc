@@ -105,14 +105,35 @@ static const struct dcp_register_t *lookup_register_expect_handlers_full(
     uint8_t register_number,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
     bool (*const expected_read_handler_dynamic)(struct dynamic_buffer *buffer),
-    int (*const expected_write_handler)(const uint8_t *, size_t))
+    int (*const expected_write_handler)(const uint8_t *, size_t),
+    uint8_t version_major = 0, uint8_t version_minor = 0, uint8_t version_patch = 0)
 {
+    const auto *protocol_level = version_major > 0 ? register_get_protocol_level() : nullptr;
+
+    if(version_major > 0)
+        cut_assert_true(register_set_protocol_level(version_major, version_minor, version_patch));
+    else
+    {
+        cppcut_assert_equal(uint8_t(0), version_minor);
+        cppcut_assert_equal(uint8_t(0), version_patch);
+    }
+
     const struct dcp_register_t *reg = register_lookup(register_number);
     cppcut_assert_not_null(reg);
 
-    cut_assert(reg->read_handler == expected_read_handler);
-    cut_assert(reg->write_handler == expected_write_handler);
-    cut_assert(reg->read_handler_dynamic == expected_read_handler_dynamic);
+    if(protocol_level != nullptr)
+    {
+        register_unpack_protocol_level(*protocol_level, &version_major,
+                                       &version_minor, &version_patch);
+        cut_assert_true(register_set_protocol_level(version_major, version_minor, version_patch));
+    }
+
+    cppcut_assert_equal(reinterpret_cast<void *>(reg->read_handler),
+                        reinterpret_cast<void *>(expected_read_handler));
+    cppcut_assert_equal(reinterpret_cast<void *>(reg->write_handler),
+                        reinterpret_cast<void *>(expected_write_handler));
+    cppcut_assert_equal(reinterpret_cast<void *>(reg->read_handler_dynamic),
+                        reinterpret_cast<void *>(expected_read_handler_dynamic));
     cut_assert(!(reg->read_handler != nullptr && reg->read_handler_dynamic != nullptr));
 
     return reg;
@@ -121,7 +142,7 @@ static const struct dcp_register_t *lookup_register_expect_handlers_full(
 /*
  * For write-only registers.
  */
-static const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
     uint8_t register_number,
     int (*const expected_write_handler)(const uint8_t *, size_t))
 {
@@ -130,10 +151,21 @@ static const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                nullptr, nullptr,
+                                                expected_write_handler,
+                                                version_major, version_minor, version_patch);
+}
+
 /*
  * For readable registers with static size.
  */
-static const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
     uint8_t register_number,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
     int (*const expected_write_handler)(const uint8_t *, size_t))
@@ -143,10 +175,22 @@ static const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
+    ssize_t (*const expected_read_handler)(uint8_t *, size_t),
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                expected_read_handler, nullptr,
+                                                expected_write_handler,
+                                                version_major, version_minor, version_patch);
+}
+
 /*
  * For readable registers with dynamic size.
  */
-static const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
     uint8_t register_number,
     bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
     int (*const expected_write_handler)(const uint8_t *, size_t))
@@ -154,6 +198,18 @@ static const struct dcp_register_t *lookup_register_expect_handlers(
     return lookup_register_expect_handlers_full(register_number,
                                                 nullptr, expected_read_handler,
                                                 expected_write_handler);
+}
+
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
+    bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                nullptr, expected_read_handler,
+                                                expected_write_handler,
+                                                version_major, version_minor, version_patch);
 }
 
 class RegisterChangedData
