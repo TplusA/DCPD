@@ -253,8 +253,8 @@ static const struct dcp_register_t register_map[] =
 
 #define REGISTER_FOR_VERSION(ADDRESS, MIN_VERSION, MAX_VERSION) \
     .address = (ADDRESS), \
-    .minimum_protocol_version = (MIN_VERSION), \
-    .maximum_protocol_version = (MAX_VERSION)
+    .minimum_protocol_version = { .code = (MIN_VERSION) }, \
+    .maximum_protocol_version = { .code = (MAX_VERSION) }
 
     {
         /* Protocol level negotiation */
