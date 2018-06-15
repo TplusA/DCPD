@@ -47,7 +47,7 @@
 #include "registers_priv.h"
 #include "configproxy.h"
 
-#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 5)
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 6)
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -463,11 +463,18 @@ static const struct dcp_register_t register_map[] =
         .write_handler = dcpregs_write_87_appliance_id,
     },
     {
-        /* Set UPnP friendly name */
-        REGISTER(88, REGISTER_MK_VERSION(1, 0, 1)),
+        /* Set UPnP friendly name (old version) */
+        REGISTER_FOR_VERSION(88, REGISTER_MK_VERSION(1, 0, 1), REGISTER_MK_VERSION(1, 0, 5)),
         .max_data_size = 256,
         .read_handler = dcpregs_read_88_upnp_friendly_name,
-        .write_handler = dcpregs_write_88_upnp_friendly_name,
+        .write_handler = dcpregs_write_88_upnp_friendly_name__v1_0_1,
+    },
+    {
+        /* Set UPnP friendly name (new version) */
+        REGISTER(88, REGISTER_MK_VERSION(1, 0, 6)),
+        .max_data_size = 256,
+        .read_handler = dcpregs_read_88_upnp_friendly_name,
+        .write_handler = dcpregs_write_88_upnp_friendly_name__v1_0_6,
     },
     {
         /* Wireless security setting */

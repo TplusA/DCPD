@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,7 @@
 enum class Key
 {
     FRIENDLY_NAME_OVERRIDE,
+    FRIENDLY_NAME_GIVEN_BY_USER,
     APPLIANCE_ID,
     DEVICE_UUID,
 
@@ -42,6 +43,7 @@ enum class Key
 static const std::array<const std::string, size_t(Key::LAST_KEY) + 1> keys
 {
     "FRIENDLY_NAME_OVERRIDE",
+    "FRIENDLY_NAME_GIVEN_BY_USER",
     "APPLIANCE_ID",
     "UUID",
 };
@@ -384,9 +386,9 @@ ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length)
  * The Flagpole service is not restarted if the name is the same as already
  * configured.
  */
-int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
+int dcpregs_write_88_upnp_friendly_name__v1_0_1(const uint8_t *data, size_t length)
 {
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 88 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 88 handler v1.0.1 %p %zu", data, length);
 
     Values values;
     read_config_file(upnpname_private_data.rcfile, values);
@@ -402,6 +404,52 @@ int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length)
     values[Key::FRIENDLY_NAME_OVERRIDE].clear();
     std::copy(data, data + length,
               std::back_inserter(values[Key::FRIENDLY_NAME_OVERRIDE]));
+
+    const int result =
+        write_config_file(upnpname_private_data.rcfile, path_to_rcfile,
+                          values, upnpname_private_data.shutdown_guard);
+
+    shutdown_guard_unlock(upnpname_private_data.shutdown_guard);
+
+    if(result < 0)
+        return -1;
+
+    if(os_system(true, "/bin/systemctl restart flagpole") != EXIT_SUCCESS)
+        return 0;
+
+    return (result != 0) ? -1 : 0;
+}
+
+/*!
+ * Write UPnP friendly name to configuration file and restart Flagpole.
+ *
+ * The Flagpole service is not restarted if the name is the same as already
+ * configured.
+ */
+int dcpregs_write_88_upnp_friendly_name__v1_0_6(const uint8_t *data, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 88 handler v1.0.6 %p %zu", data, length);
+
+    Values values;
+    read_config_file(upnpname_private_data.rcfile, values);
+
+    const bool is_appliance_default_name = length > 0 && data[length - 1] == '\0';
+
+    if(is_appliance_default_name)
+        --length;
+
+    if(is_stored_name_equal(values, (const char *)data, length))
+    {
+        msg_vinfo(MESSAGE_LEVEL_DEBUG, "UPnP name unchanged");
+        return 0;
+    }
+
+    shutdown_guard_lock(upnpname_private_data.shutdown_guard);
+
+    values[Key::FRIENDLY_NAME_OVERRIDE].clear();
+    std::copy(data, data + length,
+              std::back_inserter(values[Key::FRIENDLY_NAME_OVERRIDE]));
+    values[Key::FRIENDLY_NAME_GIVEN_BY_USER] = is_appliance_default_name ? "no" : "yes";
 
     const int result =
         write_config_file(upnpname_private_data.rcfile, path_to_rcfile,
