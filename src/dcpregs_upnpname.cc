@@ -404,6 +404,7 @@ int dcpregs_write_88_upnp_friendly_name__v1_0_1(const uint8_t *data, size_t leng
     values[Key::FRIENDLY_NAME_OVERRIDE].clear();
     std::copy(data, data + length,
               std::back_inserter(values[Key::FRIENDLY_NAME_OVERRIDE]));
+    values[Key::FRIENDLY_NAME_GIVEN_BY_USER] = "yes";
 
     const int result =
         write_config_file(upnpname_private_data.rcfile, path_to_rcfile,

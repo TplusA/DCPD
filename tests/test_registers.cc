@@ -5300,7 +5300,7 @@ static void write_and_read_name(const char *name,
                                 const char *expected_escaped_name,
                                 const struct dcp_register_t *reg,
                                 bool send_zero_terminator = false,
-                                bool expect_given_by_user_field = false,
+                                bool expect_meaningful_given_by_user_field = false,
                                 size_t sent_name_length = 0,
                                 size_t stored_name_length = 0)
 {
@@ -5317,7 +5317,7 @@ static void write_and_read_name(const char *name,
     if(stored_name_length == 0)
         stored_name_length = strlen(expected_escaped_name);
 
-    if(send_zero_terminator && !expect_given_by_user_field)
+    if(send_zero_terminator && !expect_meaningful_given_by_user_field)
     {
         /* this is for pre-v1.0.6 implementations which will store the trailing
          * binary 0 on file */
@@ -5348,24 +5348,21 @@ static void write_and_read_name(const char *name,
     config_file_buffer.push_back('\'');
     config_file_buffer.push_back('\n');
 
-    if(expect_given_by_user_field)
-    {
-        std::copy(key_fngivenbyu.begin(), key_fngivenbyu.end(),
-                  std::back_inserter(config_file_buffer));
-        config_file_buffer.push_back('=');
-        config_file_buffer.push_back('\'');
+    std::copy(key_fngivenbyu.begin(), key_fngivenbyu.end(),
+                std::back_inserter(config_file_buffer));
+    config_file_buffer.push_back('=');
+    config_file_buffer.push_back('\'');
 
-        static const std::string yes = "yes";
-        static const std::string no  = "no";
+    static const std::string yes = "yes";
+    static const std::string no  = "no";
 
-        if(send_zero_terminator)
-            std::copy(no.begin(),  no.end(),  std::back_inserter(config_file_buffer));
-        else
-            std::copy(yes.begin(), yes.end(), std::back_inserter(config_file_buffer));
+    if(send_zero_terminator && expect_meaningful_given_by_user_field)
+        std::copy(no.begin(),  no.end(),  std::back_inserter(config_file_buffer));
+    else
+        std::copy(yes.begin(), yes.end(), std::back_inserter(config_file_buffer));
 
-        config_file_buffer.push_back('\'');
-        config_file_buffer.push_back('\n');
-    }
+    config_file_buffer.push_back('\'');
+    config_file_buffer.push_back('\n');
 
     cut_assert_equal_memory(config_file_buffer.data(), config_file_buffer.size(),
                             os_write_buffer.data(), os_write_buffer.size());
@@ -5512,6 +5509,7 @@ void test_writing_different_friendly_name_restarts_flagpole_service()
 
     static const char expected_config_file[] =
         "FRIENDLY_NAME_OVERRIDE='TheDevice'\n"
+        "FRIENDLY_NAME_GIVEN_BY_USER='yes'\n"
         ;
 
     cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
@@ -5784,6 +5782,7 @@ void test_set_all_upnp_variables()
 
     static char config_file_content_third[] =
         "FRIENDLY_NAME_OVERRIDE='Unit test device'\n"
+        "FRIENDLY_NAME_GIVEN_BY_USER='yes'\n"
         "APPLIANCE_ID='MY_APPLIANCE'\n"
         "UUID='09AB7C8F0013'\n"
         ;
