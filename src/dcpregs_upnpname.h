@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -36,7 +36,8 @@ void dcpregs_upnpname_deinit(void);
 void dcpregs_upnpname_prepare_for_shutdown(void);
 
 ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length);
-int dcpregs_write_88_upnp_friendly_name(const uint8_t *data, size_t length);
+int dcpregs_write_88_upnp_friendly_name__v1_0_1(const uint8_t *data, size_t length);
+int dcpregs_write_88_upnp_friendly_name__v1_0_6(const uint8_t *data, size_t length);
 
 #ifdef __cplusplus
 }

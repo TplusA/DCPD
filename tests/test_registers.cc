@@ -105,14 +105,35 @@ static const struct dcp_register_t *lookup_register_expect_handlers_full(
     uint8_t register_number,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
     bool (*const expected_read_handler_dynamic)(struct dynamic_buffer *buffer),
-    int (*const expected_write_handler)(const uint8_t *, size_t))
+    int (*const expected_write_handler)(const uint8_t *, size_t),
+    uint8_t version_major = 0, uint8_t version_minor = 0, uint8_t version_patch = 0)
 {
+    const auto *protocol_level = version_major > 0 ? register_get_protocol_level() : nullptr;
+
+    if(version_major > 0)
+        cut_assert_true(register_set_protocol_level(version_major, version_minor, version_patch));
+    else
+    {
+        cppcut_assert_equal(uint8_t(0), version_minor);
+        cppcut_assert_equal(uint8_t(0), version_patch);
+    }
+
     const struct dcp_register_t *reg = register_lookup(register_number);
     cppcut_assert_not_null(reg);
 
-    cut_assert(reg->read_handler == expected_read_handler);
-    cut_assert(reg->write_handler == expected_write_handler);
-    cut_assert(reg->read_handler_dynamic == expected_read_handler_dynamic);
+    if(protocol_level != nullptr)
+    {
+        register_unpack_protocol_level(*protocol_level, &version_major,
+                                       &version_minor, &version_patch);
+        cut_assert_true(register_set_protocol_level(version_major, version_minor, version_patch));
+    }
+
+    cppcut_assert_equal(reinterpret_cast<void *>(reg->read_handler),
+                        reinterpret_cast<void *>(expected_read_handler));
+    cppcut_assert_equal(reinterpret_cast<void *>(reg->write_handler),
+                        reinterpret_cast<void *>(expected_write_handler));
+    cppcut_assert_equal(reinterpret_cast<void *>(reg->read_handler_dynamic),
+                        reinterpret_cast<void *>(expected_read_handler_dynamic));
     cut_assert(!(reg->read_handler != nullptr && reg->read_handler_dynamic != nullptr));
 
     return reg;
@@ -121,7 +142,7 @@ static const struct dcp_register_t *lookup_register_expect_handlers_full(
 /*
  * For write-only registers.
  */
-static const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
     uint8_t register_number,
     int (*const expected_write_handler)(const uint8_t *, size_t))
 {
@@ -130,10 +151,21 @@ static const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                nullptr, nullptr,
+                                                expected_write_handler,
+                                                version_major, version_minor, version_patch);
+}
+
 /*
  * For readable registers with static size.
  */
-static const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
     uint8_t register_number,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
     int (*const expected_write_handler)(const uint8_t *, size_t))
@@ -143,10 +175,22 @@ static const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
+    ssize_t (*const expected_read_handler)(uint8_t *, size_t),
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                expected_read_handler, nullptr,
+                                                expected_write_handler,
+                                                version_major, version_minor, version_patch);
+}
+
 /*
  * For readable registers with dynamic size.
  */
-static const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
     uint8_t register_number,
     bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
     int (*const expected_write_handler)(const uint8_t *, size_t))
@@ -154,6 +198,18 @@ static const struct dcp_register_t *lookup_register_expect_handlers(
     return lookup_register_expect_handlers_full(register_number,
                                                 nullptr, expected_read_handler,
                                                 expected_write_handler);
+}
+
+static inline const struct dcp_register_t *lookup_register_expect_handlers(
+    uint8_t register_number,
+    uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
+    bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
+    int (*const expected_write_handler)(const uint8_t *, size_t))
+{
+    return lookup_register_expect_handlers_full(register_number,
+                                                nullptr, expected_read_handler,
+                                                expected_write_handler,
+                                                version_major, version_minor, version_patch);
 }
 
 class RegisterChangedData
@@ -1102,7 +1158,12 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_5 =
    18, 19,
 };
 
-static const std::array<RegisterSetPerVersion, 6> all_registers
+static const std::array<uint8_t, 1> existing_registers_v1_0_6 =
+{
+   88,
+};
+
+static const std::array<RegisterSetPerVersion, 7> all_registers
 {
     RegisterSetPerVersion(1, 0, 0, existing_registers_v1_0_0),
     RegisterSetPerVersion(1, 0, 1, existing_registers_v1_0_1),
@@ -1110,6 +1171,7 @@ static const std::array<RegisterSetPerVersion, 6> all_registers
     RegisterSetPerVersion(1, 0, 3, existing_registers_v1_0_3),
     RegisterSetPerVersion(1, 0, 4, existing_registers_v1_0_4),
     RegisterSetPerVersion(1, 0, 5, existing_registers_v1_0_5),
+    RegisterSetPerVersion(1, 0, 6, existing_registers_v1_0_6),
 };
 
 void cut_setup()
@@ -1647,7 +1709,7 @@ static MockMessages *mock_messages;
 
 static RegisterChangedData *register_changed_data;
 
-static const uint8_t expected_default_protocol_level[3] = { 1, 0, 5, };
+static const uint8_t expected_default_protocol_level[3] = { 1, 0, 6, };
 
 static void register_changed_callback(uint8_t reg_number)
 {
@@ -5219,7 +5281,7 @@ void test_read_out_default_friendly_name()
 {
     auto *reg = lookup_register_expect_handlers(88,
                                                 dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name);
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
     cppcut_assert_not_null(reg);
 
     mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
@@ -5235,14 +5297,33 @@ void test_read_out_default_friendly_name()
 }
 
 static void write_and_read_name(const char *name,
-                                const char *expected_escaped_name)
+                                const char *expected_escaped_name,
+                                const struct dcp_register_t *reg,
+                                bool send_zero_terminator = false,
+                                bool expect_meaningful_given_by_user_field = false,
+                                size_t sent_name_length = 0,
+                                size_t stored_name_length = 0)
 {
-    auto *reg = lookup_register_expect_handlers(88,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name);
     cppcut_assert_not_null(reg);
 
-    const size_t name_length = strlen(name);
+    if(sent_name_length == 0)
+        sent_name_length = strlen(name);
+
+    size_t unescaped_name_length = sent_name_length;
+
+    if(send_zero_terminator)
+        ++sent_name_length;
+
+    if(stored_name_length == 0)
+        stored_name_length = strlen(expected_escaped_name);
+
+    if(send_zero_terminator && !expect_meaningful_given_by_user_field)
+    {
+        /* this is for pre-v1.0.6 implementations which will store the trailing
+         * binary 0 on file */
+        ++unescaped_name_length;
+        ++stored_name_length;
+    }
 
     mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
     mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
@@ -5251,16 +5332,39 @@ static void write_and_read_name(const char *name,
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)name, name_length));
+    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)name, sent_name_length));
 
-    static const char expected_config_file_format[] = "FRIENDLY_NAME_OVERRIDE='%s'\n";
-    char config_file_buffer[1024];
+    static const std::string key_fnoverride("FRIENDLY_NAME_OVERRIDE");
+    static const std::string key_fngivenbyu("FRIENDLY_NAME_GIVEN_BY_USER");
 
-    const int config_len = snprintf(config_file_buffer, sizeof(config_file_buffer),
-                                    expected_config_file_format,
-                                    expected_escaped_name);
+    std::vector<char> config_file_buffer;
 
-    cut_assert_equal_memory(config_file_buffer, config_len,
+    std::copy(key_fnoverride.begin(), key_fnoverride.end(),
+                std::back_inserter(config_file_buffer));
+    config_file_buffer.push_back('=');
+    config_file_buffer.push_back('\'');
+    std::copy(expected_escaped_name, expected_escaped_name + stored_name_length,
+                std::back_inserter(config_file_buffer));
+    config_file_buffer.push_back('\'');
+    config_file_buffer.push_back('\n');
+
+    std::copy(key_fngivenbyu.begin(), key_fngivenbyu.end(),
+                std::back_inserter(config_file_buffer));
+    config_file_buffer.push_back('=');
+    config_file_buffer.push_back('\'');
+
+    static const std::string yes = "yes";
+    static const std::string no  = "no";
+
+    if(send_zero_terminator && expect_meaningful_given_by_user_field)
+        std::copy(no.begin(),  no.end(),  std::back_inserter(config_file_buffer));
+    else
+        std::copy(yes.begin(), yes.end(), std::back_inserter(config_file_buffer));
+
+    config_file_buffer.push_back('\'');
+    config_file_buffer.push_back('\n');
+
+    cut_assert_equal_memory(config_file_buffer.data(), config_file_buffer.size(),
                             os_write_buffer.data(), os_write_buffer.size());
 
     /* nice, now let's check if the code can read back what it has just
@@ -5268,8 +5372,8 @@ static void write_and_read_name(const char *name,
     const struct os_mapped_file_data config_file =
     {
         .fd = expected_os_map_file_to_memory_fd,
-        .ptr = config_file_buffer,
-        .length = size_t(config_len),
+        .ptr = config_file_buffer.data(),
+        .length = config_file_buffer.size(),
     };
 
     mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
@@ -5278,23 +5382,100 @@ static void write_and_read_name(const char *name,
     uint8_t buffer[1024];
     ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
 
-    cppcut_assert_equal(ssize_t(name_length), bytes);
-    cut_assert_equal_memory(name, name_length, buffer, bytes);
+    cut_assert_equal_memory(name, unescaped_name_length, buffer, bytes);
+}
+
+void test_write_and_read_out_simple_friendly_name__v1_0_1()
+{
+    static const char simple_name[] = "UPnP name in unit test";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+
+    write_and_read_name(simple_name, simple_name, reg);
+}
+
+void test_write_and_read_out_simple_friendly_name_trailing_junk_is_accepted__v1_0_1()
+{
+    static const char simple_name[] = "UPnP name in unit test\x01\x02\x03";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+
+    write_and_read_name(simple_name, simple_name, reg);
+}
+
+void test_write_and_read_out_simple_friendly_name_does_not_interpret_trailing_zero__v1_0_1()
+{
+    static const char simple_name[] = "UPnP name in unit test";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+
+    write_and_read_name(simple_name, simple_name, reg, true);
+}
+
+void test_write_and_read_out_simple_friendly_name_trailing_junk_with_embedded_and_trailing_zero_is_accepted__v1_0_1()
+{
+    static const char simple_name[] = "UPnP name in unit test\0\x01\x02\x03";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+
+    write_and_read_name(simple_name, simple_name, reg, true, false,
+                        sizeof(simple_name) - 1, sizeof(simple_name) - 1);
 }
 
 void test_write_and_read_out_simple_friendly_name()
 {
     static const char simple_name[] = "UPnP name in unit test";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
 
-    write_and_read_name(simple_name, simple_name);
+    write_and_read_name(simple_name, simple_name, reg, false, true);
+}
+
+void test_write_and_read_out_simple_friendly_name_trailing_zero_is_interpreted()
+{
+    static const char simple_name[] = "UPnP name in unit test";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+
+    write_and_read_name(simple_name, simple_name, reg, true, true);
+}
+
+void test_write_and_read_out_simple_friendly_name_trailing_junk_is_accepted()
+{
+    static const char simple_name[] = "UPnP name in unit test\x01\x02\x03";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+
+    write_and_read_name(simple_name, simple_name, reg, false, true);
+}
+
+void test_write_and_read_out_simple_friendly_name_trailing_junk_including_zero_is_accepted()
+{
+    static const char simple_name[] = "UPnP name in unit test\0\x01\x02\x03";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+
+    write_and_read_name(simple_name, simple_name, reg, false, true,
+                        sizeof(simple_name) - 1, sizeof(simple_name) - 1);
 }
 
 void test_write_and_read_out_friendly_name_with_special_characters()
 {
     static const char evil_name[] = "a'b#c<d>e\"f&g%%h*i(j)k\\l/m.n^o''''p";
     static const char escaped[]   = "a'\\''b#c<d>e\"f&g%%h*i(j)k\\l/m.n^o'\\'''\\'''\\'''\\''p";
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
+                                                dcpregs_read_88_upnp_friendly_name,
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
 
-    write_and_read_name(evil_name, escaped);
+    write_and_read_name(evil_name, escaped, reg, false, true);
 }
 
 void test_writing_different_friendly_name_restarts_flagpole_service()
@@ -5319,15 +5500,16 @@ void test_writing_different_friendly_name_restarts_flagpole_service()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    auto *reg = lookup_register_expect_handlers(88,
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
                                                 dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name);
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
 
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TheDevice"), 9));
 
     static const char expected_config_file[] =
         "FRIENDLY_NAME_OVERRIDE='TheDevice'\n"
+        "FRIENDLY_NAME_GIVEN_BY_USER='yes'\n"
         ;
 
     cut_assert_equal_memory(expected_config_file, sizeof(expected_config_file) - 1,
@@ -5336,9 +5518,9 @@ void test_writing_different_friendly_name_restarts_flagpole_service()
 
 void test_writing_same_name_does_not_change_files_nor_flagpole_service()
 {
-    auto *reg = lookup_register_expect_handlers(88,
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
                                                 dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name);
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
 
     static char config_file_content[] = "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n";
@@ -5592,14 +5774,15 @@ void test_set_all_upnp_variables()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    auto *reg = lookup_register_expect_handlers(88,
+    auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
                                                 dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name);
+                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("Unit test device"), 16));
 
     static char config_file_content_third[] =
         "FRIENDLY_NAME_OVERRIDE='Unit test device'\n"
+        "FRIENDLY_NAME_GIVEN_BY_USER='yes'\n"
         "APPLIANCE_ID='MY_APPLIANCE'\n"
         "UUID='09AB7C8F0013'\n"
         ;
