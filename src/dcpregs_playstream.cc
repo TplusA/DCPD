@@ -853,9 +853,14 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
     g_mutex_lock(&play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
+    {
+        GVariantDict empty;
+        g_variant_dict_init(&empty, NULL);
         tdbus_aupath_manager_call_request_source(dbus_audiopath_get_manager_iface(),
                                                  app_audio_source_id,
+                                                 g_variant_dict_end(&empty),
                                                  NULL, NULL, NULL);
+    }
 
     (void)copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
                            sizeof(play_stream_data.app.inbuffer_new_stream.meta_data),

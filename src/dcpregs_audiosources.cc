@@ -458,6 +458,7 @@ class SelectedSource
     const AudioSource *selected_;
     bool selected_is_half_selected_;
     const AudioSource *pending_;
+    GVariantWrapper pending_request_data_;
     GCancellable *cancel_;
 
   public:
@@ -524,7 +525,16 @@ class SelectedSource
         return state_ == SelectionState::SELECTING && &src == pending_;
     }
 
-    void start_request(const AudioSource &src, bool try_switch_now)
+    GVariantWrapper take_pending_request_data()
+    {
+        std::lock_guard<std::recursive_mutex> l(lock_);
+        log_assert(pending_request_data_ != nullptr);
+        auto result(std::move(pending_request_data_));
+        return result;
+    }
+
+    void start_request(const AudioSource &src, GVariantWrapper &&request_data,
+                       bool try_switch_now)
     {
         std::lock_guard<std::recursive_mutex> l(lock_);
 
@@ -553,6 +563,7 @@ class SelectedSource
         }
 
         pending_ = &src;
+        pending_request_data_ = std::move(request_data);
 
         if(try_switch_now)
             do_start_pending();
@@ -606,11 +617,16 @@ class SelectedSource
   private:
     void do_start_pending()
     {
+        log_assert(pending_request_data_ != nullptr);
+
         state_ = SelectionState::SELECTING;
         cancel_ = g_cancellable_new();
         tdbus_aupath_manager_call_request_source(dbus_audiopath_get_manager_iface(),
-                                                 pending_->id_.c_str(), cancel_,
+                                                 pending_->id_.c_str(),
+                                                 GVariantWrapper::get(pending_request_data_),
+                                                 cancel_,
                                                  request_source_done, this);
+        pending_request_data_.release();
     }
 
     static void request_source_done(GObject *source_object,
@@ -830,7 +846,9 @@ class AudioSourceData
             apply(s);
     }
 
-    void request_audio_source(const AudioSource &src, bool try_switch_now)
+    void request_audio_source(const AudioSource &src,
+                              GVariantWrapper &&request_data,
+                              bool try_switch_now)
     {
         auto l(selected_.lock());
 
@@ -864,7 +882,7 @@ class AudioSourceData
             break;
         }
 
-        selected_.start_request(src, try_switch_now);
+        selected_.start_request(src, std::move(request_data), try_switch_now);
     }
 
     void selected_audio_source_notification(const AudioSource &src, bool is_deferred)
@@ -902,7 +920,7 @@ class AudioSourceData
         auto l(selected_.lock());
 
         if(selected_.is_pending(src))
-            request_audio_source(src, true);
+            request_audio_source(src, std::move(selected_.take_pending_request_data()), true);
 
         return result;
     }
@@ -1337,8 +1355,11 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
          * introduced for inactive state.
          */
         msg_info("Inactive state requested");
+        GVariantDict empty;
+        g_variant_dict_init(&empty, nullptr);
         tdbus_aupath_manager_call_release_path(dbus_audiopath_get_manager_iface(),
-                                               TRUE, nullptr, nullptr, nullptr);
+                                               TRUE, g_variant_dict_end(&empty),
+                                               nullptr, nullptr, nullptr);
         return 0;
     }
 
@@ -1383,16 +1404,21 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
         return -1;
     }
 
+
+    GVariantDict dict;
+    g_variant_dict_init(&dict, nullptr);
+    auto request_data(GVariantWrapper(g_variant_dict_end(&dict)));
+
     switch(src->get_state())
     {
       case AudioSourceState::ALIVE:
       case AudioSourceState::LOCKED:
       case AudioSourceState::ALIVE_OR_LOCKED:
-        audio_source_data.request_audio_source(*src, true);
+        audio_source_data.request_audio_source(*src, std::move(request_data), true);
         break;
 
       case AudioSourceState::UNAVAILABLE:
-        audio_source_data.request_audio_source(*src, false);
+        audio_source_data.request_audio_source(*src, std::move(request_data), false);
         break;
 
       case AudioSourceState::DEAD:
