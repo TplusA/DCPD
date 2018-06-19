@@ -739,7 +739,7 @@ class SlavePushCommandQueue
 class AudioSourceData
 {
   public:
-    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 10;
+    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 11;
 
   private:
     std::mutex lock_;
@@ -885,9 +885,10 @@ class AudioSourceData
         selected_.start_request(src, std::move(request_data), try_switch_now);
     }
 
-    void selected_audio_source_notification(const AudioSource &src, bool is_deferred)
+    void selected_audio_source_notification(const AudioSource &src, bool is_deferred,
+                                            bool notify_register_change = true)
     {
-        if(selected_.selected_notification(src, is_deferred))
+        if(selected_.selected_notification(src, is_deferred) && notify_register_change)
             registers_get_data()->register_changed_notification_fn(81);
     }
 
@@ -985,6 +986,7 @@ static AudioSourceData audio_source_data(
                 is_service_unlocked),
     AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN,
                 nullptr, try_invoke_roon, true),
+    AudioSource("",               "Inactive",                0),
 });
 
 void dcpregs_audiosources_init(void)
@@ -996,6 +998,12 @@ void dcpregs_audiosources_init(void)
                 ExternalServiceState::airable_source_id_to_credentials_category(src.id_),
                 src);
     });
+
+    /* preselect placeholder audio source for inactive state */
+    const auto *inactive_src = audio_source_data.lookup_predefined("");
+    if(inactive_src != nullptr)
+        audio_source_data.selected_audio_source_notification(*inactive_src,
+                                                             false, false);
 }
 
 static Maybe<bool> have_credentials_stored(const char *category)
