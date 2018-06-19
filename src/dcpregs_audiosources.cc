@@ -1340,19 +1340,112 @@ static AudioSourceEnableRequest parse_enable_request(uint8_t request_code)
         return AudioSourceEnableRequest::INVALID;
 }
 
+static bool set_request_options(GVariantDict &dict,
+                                const char *options, size_t end_of_options)
+{
+    if(end_of_options == 0)
+        return true;
+
+    size_t i = 0;
+    bool is_escaping = false;
+
+    while(i < end_of_options)
+    {
+        std::string key;
+        std::string value;
+        std::string *dest = &key;
+
+        while(i < end_of_options)
+        {
+            const char ch = options[i++];
+
+            if(is_escaping)
+            {
+                dest->push_back(ch);
+                is_escaping = false;
+                continue;
+            }
+            else if(ch == '\\')
+            {
+                is_escaping = true;
+                continue;
+            }
+
+            if(ch == ',')
+                break;
+
+            if(ch != '=' || dest == &value)
+                dest->push_back(ch);
+            else
+                dest = &value;
+        }
+
+        if(is_escaping)
+            return false;
+
+        if(key.empty())
+        {
+            if(value.empty())
+                continue;
+
+            return false;
+        }
+
+        GVariant *const gvalue = (dest == &key)
+            ? g_variant_new_boolean(TRUE)
+            : g_variant_new_string(value.c_str());
+
+        g_variant_dict_insert_value(&dict, key.c_str(), gvalue);
+    }
+
+    return true;
+}
+
 int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 81 handler %p %zu", data, length);
 
     size_t i;
+    size_t options_offset = SIZE_MAX;
 
     for(i = 0; i < length && data[i] != '\0'; ++i)
-        ;
+    {
+        if(options_offset == SIZE_MAX && data[i] == ':')
+            options_offset = i + 1;
+    }
 
     if(i >= length)
         return -1;
 
-    if(i == 0)
+    const char *audio_source_name = reinterpret_cast<const char *>(data);;
+    size_t audio_source_name_length;
+    std::string audio_source_name_buffer;
+    GVariantDict dict;
+    g_variant_dict_init(&dict, nullptr);
+
+    if(options_offset == SIZE_MAX)
+        audio_source_name_length = i > 0 ? i - 1 : 0;
+    else if(set_request_options(dict, audio_source_name + options_offset, i - options_offset))
+    {
+        audio_source_name_length = options_offset - 1;
+
+        if(audio_source_name_length > 0)
+            audio_source_name_buffer.insert(0, audio_source_name, audio_source_name_length);
+
+        audio_source_name = audio_source_name_buffer.c_str();
+    }
+    else
+        audio_source_name = nullptr;
+
+    auto request_data(GVariantWrapper(g_variant_dict_end(&dict)));
+
+    if(audio_source_name == nullptr)
+    {
+        msg_error(EINVAL, LOG_NOTICE, "Invalid audio source options");
+        return -1;
+    }
+
+    if(audio_source_name_length == 0)
     {
         /*
          * There is no explicit audio source that represents
@@ -1363,10 +1456,8 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
          * introduced for inactive state.
          */
         msg_info("Inactive state requested");
-        GVariantDict empty;
-        g_variant_dict_init(&empty, nullptr);
         tdbus_aupath_manager_call_release_path(dbus_audiopath_get_manager_iface(),
-                                               TRUE, g_variant_dict_end(&empty),
+                                               TRUE, GVariantWrapper::get(request_data),
                                                nullptr, nullptr, nullptr);
         return 0;
     }
@@ -1378,12 +1469,12 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
     auto lock(audio_source_data.lock());
 
     const AudioSource *src =
-        audio_source_data.lookup_predefined(reinterpret_cast<const char *>(data));
+        audio_source_data.lookup_predefined(audio_source_name);
 
     if(src == nullptr)
     {
         msg_error(0, LOG_NOTICE, "Audio source \"%s\" not known",
-                  reinterpret_cast<const char *>(data));
+                  audio_source_name);
         return -1;
     }
 
@@ -1412,11 +1503,6 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
         return -1;
     }
 
-
-    GVariantDict dict;
-    g_variant_dict_init(&dict, nullptr);
-    auto request_data(GVariantWrapper(g_variant_dict_end(&dict)));
-
     switch(src->get_state())
     {
       case AudioSourceState::ALIVE:
@@ -1432,7 +1518,7 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
       case AudioSourceState::DEAD:
       case AudioSourceState::ZOMBIE:
         msg_error(0, LOG_NOTICE, "Audio source \"%s\" is %s",
-                  reinterpret_cast<const char *>(data),
+                  audio_source_name,
                   src->get_state() == AudioSourceState::DEAD ? "dead" : "zombie");
         return -1;
     }

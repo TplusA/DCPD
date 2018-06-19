@@ -157,12 +157,37 @@ class MockAudiopathDBus::Expectation
         data_.manager_request_source_waiting_fn_ = wait_for_result_fn;;
     }
 
+    explicit Expectation(AudiopathFn fn, bool retval, tdbusaupathManager *object,
+                         const char *out_player_id, bool out_switched,
+                         const ManagerRequestSourceWaiting &wait_for_result_fn,
+                         GVariantWrapper &&request_data):
+        d(fn)
+    {
+        data_.ret_bool_ = retval;
+        data_.expecting_async_callback_fn_ = true;
+        data_.out_player_id_ = out_player_id;
+        data_.out_switched_ = out_switched;
+        data_.arg_object_ = static_cast<void *>(object);
+        data_.manager_request_source_waiting_fn_ = wait_for_result_fn;;
+        data_.arg_request_data_ = std::move(request_data);
+    }
+
     explicit Expectation(AudiopathFn fn, tdbusaupathManager *object, bool arg_bool):
         d(fn)
     {
         data_.expecting_async_callback_fn_ = true;
         data_.arg_object_ = static_cast<void *>(object);
         data_.arg_bool_ = arg_bool;
+    }
+
+    explicit Expectation(AudiopathFn fn, tdbusaupathManager *object, bool arg_bool,
+                         GVariantWrapper &&request_data):
+        d(fn)
+    {
+        data_.expecting_async_callback_fn_ = true;
+        data_.arg_object_ = static_cast<void *>(object);
+        data_.arg_bool_ = arg_bool;
+        data_.arg_request_data_ = std::move(request_data);
     }
 
     explicit Expectation(AudiopathFn fn, bool retval, tdbusaupathManager *object,
@@ -260,10 +285,23 @@ void MockAudiopathDBus::expect_tdbus_aupath_manager_call_request_source(tdbusaup
                                    wait_for_result_fn));
 }
 
+void MockAudiopathDBus::expect_tdbus_aupath_manager_call_request_source(tdbusaupathManager *object, const gchar *arg_source_id, const gchar *out_player_id, const gboolean out_switched, const ManagerRequestSourceWaiting &wait_for_result_fn, GVariantWrapper &&request_data)
+{
+    expectations_->add(Expectation(AudiopathFn::manager_request_source,
+                                   true, object, out_player_id, out_switched,
+                                   wait_for_result_fn, std::move(request_data)));
+}
+
 void MockAudiopathDBus::expect_tdbus_aupath_manager_call_release_path(tdbusaupathManager *object, bool deactivate_player)
 {
     expectations_->add(Expectation(AudiopathFn::manager_release_path,
                                    object, deactivate_player));
+}
+
+void MockAudiopathDBus::expect_tdbus_aupath_manager_call_release_path(tdbusaupathManager *object, bool deactivate_player, GVariantWrapper &&request_data)
+{
+    expectations_->add(Expectation(AudiopathFn::manager_release_path,
+                                   object, deactivate_player, std::move(request_data)));
 }
 
 void MockAudiopathDBus::expect_tdbus_aupath_manager_call_get_source_info_sync(tdbusaupathManager *object, const gchar *arg_source_id, const gchar *out_source_name, const gchar *out_player_id, const gchar *out_dbusname, const gchar *out_dbuspath)
