@@ -9855,7 +9855,7 @@ class ExpectedSourceData
     }
 };
 
-static const std::array<ExpectedSourceData, 10> predefined_sources
+static const std::array<ExpectedSourceData, 11> predefined_sources
 {
     ExpectedSourceData("strbo.usb",      "USB devices",             true),
     ExpectedSourceData("strbo.upnpcm",   "UPnP media servers",      true),
@@ -9867,6 +9867,7 @@ static const std::array<ExpectedSourceData, 10> predefined_sources
     ExpectedSourceData("airable.deezer", "Deezer",                  true),
     ExpectedSourceData("airable.qobuz",  "Qobuz",                   true),
     ExpectedSourceData("roon",           "Roon Ready",              false, true),
+    ExpectedSourceData("",               "Inactive",                false),
 };
 
 void cut_setup()
@@ -10084,9 +10085,10 @@ void test_current_audio_source_is_empty_after_initialization()
                                                 dcpregs_read_81_current_audio_source,
                                                 dcpregs_write_81_current_audio_source);
 
-    uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
-    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+    uint8_t buffer[32] = {0xc7, 0xc8};
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 }
 
 /*!\test
@@ -10111,9 +10113,10 @@ void test_selection_of_known_alive_source_reports_selection_asynchronously()
 
     /* source is still empty because successful switch is reported
      * asynchronously */
-    uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
-    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+    uint8_t buffer[32] = {0xc7, 0xc8};
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 }
 
 /*!\test
@@ -10165,9 +10168,10 @@ void test_selection_of_known_alive_source_is_done_when_possible()
     /* source is still empty because (1) the audio path (thus the audio source)
      * is not usable yet, and (2) a successful switch of audio path is reported
      * asynchronously */
-    uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
-    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+    uint8_t buffer[32] = {0xc7, 0xc8};
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 
     /* path is available now (reported via D-Bus) after both, player and
      * source, have started and registered their parts */
@@ -10180,8 +10184,9 @@ void test_selection_of_known_alive_source_is_done_when_possible()
                                       dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
                           });
 
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
-    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 
     /* audio path has been changed as reported by calling the following
      * function (called from D-Bus handler) */
@@ -10398,9 +10403,10 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
                                                             std::get<3>(usb_result),
                                                             std::move(std::get<4>(usb_result)));
 
-    uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
-    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+    uint8_t buffer[32] = {0xc7, 0xc8};
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 
     /* a bit later, the notification about audio path change */
     dcpregs_audiosources_selected_source(asrc_usb, false);
@@ -10424,9 +10430,10 @@ void test_selection_of_known_dead_source_yields_error()
                                               "Audio source \"roon\" is dead");
     cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
 
-    uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
-    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+    uint8_t buffer[32] = {0xc7, 0xc8};
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 }
 
 /*!\test
@@ -10443,9 +10450,257 @@ void test_selection_of_unknown_source_yields_error()
                                               "Audio source \"doesnotexist\" not known");
     cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
 
-    uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
-    cppcut_assert_equal(uint8_t(0xc7), buffer[0]);
+    uint8_t buffer[32] = {0xc7, 0xc8};
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
+}
+
+/*!\test
+ * Spurious deselection of audio source is reported as bug.
+ */
+void test_spurious_deselection_of_audio_source_emits_bug_message()
+{
+    mock_messages->expect_msg_error(0, LOG_CRIT, "BUG: Not selected");
+    dcpregs_playstream_deselect_source();
+}
+
+/*!\test
+ * Selection of idle source right after initialization works.
+ */
+void test_selection_of_idle_source()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    mock_messages->expect_msg_info("Inactive state requested");
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_release_path(
+            dbus_audiopath_manager_iface_dummy, true);
+
+    const uint8_t empty = 0;
+    cppcut_assert_equal(0, reg->write_handler(&empty, sizeof(empty)));
+
+    /* the register still contains the empty audio source */
+    uint8_t buffer[2] = {0x82, 0xeb};
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xeb), buffer[1]);
+}
+
+/*!\test
+ * Selection of audio source is not reported back immediately.
+ */
+void test_selection_of_real_source_followed_by_idle_source()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.upnpcm";
+    static const char player[] = "upnp_player";
+
+    make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x42);
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    /* this function should be called from a D-Bus handler that monitors audio
+     * path changes */
+    dcpregs_audiosources_selected_source(asrc, false);
+    register_changed_data->check(81);
+
+    /* now the register contains our selected audio source ID */
+    uint8_t buffer[32] = {0x19};
+    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
+
+    /* enter idle state */
+    mock_messages->expect_msg_info("Inactive state requested");
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_release_path(
+            dbus_audiopath_manager_iface_dummy, true);
+
+    const uint8_t empty = 0;
+    cppcut_assert_equal(0, reg->write_handler(&empty, sizeof(empty)));
+
+    /* this function should be called from a D-Bus handler that monitors audio
+     * path changes */
+    dcpregs_audiosources_selected_source("", false);
+    register_changed_data->check(81);
+
+    /* the register contains the empty audio source again */
+    buffer[0] = 0xbc;
+    buffer[1] = 0xf1;
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xf1), buffer[1]);
+}
+
+/*!\test
+ * We first select some proper audio source, then go back to inactive state for
+ * the purpose of suspending the appliance.
+ *
+ * The appliance is supposed to append an appropriate option to the destination
+ * source to communicate a reason for the audio source switch.
+ */
+void test_selection_of_inactive_state_for_suspend()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.upnpcm";
+    static const char player[] = "upnp_player";
+
+    make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x42);
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+
+    /* this function should be called from a D-Bus handler that monitors audio
+     * path changes */
+    dcpregs_audiosources_selected_source(asrc, false);
+    register_changed_data->check(81);
+
+    /* now the register contains our selected audio source ID */
+    uint8_t buffer[32] = {0x19};
+    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
+
+    /* enter idle state */
+    mock_messages->expect_msg_info("Inactive state requested");
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+
+    GVariantDict dict;
+    g_variant_dict_init(&dict, nullptr);
+    g_variant_dict_insert_value(&dict, "suspend", g_variant_new_boolean(TRUE));
+    auto request_data(GVariantWrapper(g_variant_dict_end(&dict)));
+
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_release_path(
+            dbus_audiopath_manager_iface_dummy, true, std::move(request_data));
+
+    const char suspend[] = ":suspend";
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(suspend),
+                                              sizeof(suspend)));
+
+    /* this function should be called from a D-Bus handler that monitors audio
+     * path changes */
+    dcpregs_audiosources_selected_source("", false);
+    register_changed_data->check(81);
+
+    /* the register contains the empty audio source again */
+    buffer[0] = 0xbc;
+    buffer[1] = 0xf1;
+    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(uint8_t(0x00), buffer[0]);
+    cppcut_assert_equal(uint8_t(0xf1), buffer[1]);
+}
+
+/*!\test
+ * Audio source option string parsing is done properly.
+ */
+void test_audio_source_request_option_parser()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.upnpcm";
+    static const char player[] = "upnp_player";
+
+    make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x42);
+
+    std::string asrc_with_options(asrc);
+    asrc_with_options += ":flag,key=value,k=,,,, =space,a=b=c=d,n=m=i,x==,  =   ";
+    asrc_with_options += ",\\=,\\=a,a\\=,\\=\\,,\\,\\=";
+    asrc_with_options += ",\\=x==,x\\===\\=,y=\\==\\=,\\,a,a\\,,\\,x\\,==";
+    asrc_with_options += ",col=:,\\\\,a\\\\=x,t=\\\\";
+
+    GVariantDict dict;
+    g_variant_dict_init(&dict, nullptr);
+
+    g_variant_dict_insert_value(&dict, "flag", g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, "key",  g_variant_new_string("value"));
+    g_variant_dict_insert_value(&dict, "k",    g_variant_new_string(""));
+    g_variant_dict_insert_value(&dict, " ",    g_variant_new_string("space"));
+    g_variant_dict_insert_value(&dict, "  ",   g_variant_new_string("   "));
+    g_variant_dict_insert_value(&dict, "a",    g_variant_new_string("b=c=d"));
+    g_variant_dict_insert_value(&dict, "n",    g_variant_new_string("m=i"));
+    g_variant_dict_insert_value(&dict, "x",    g_variant_new_string("="));
+
+    g_variant_dict_insert_value(&dict, "=",    g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, "=a",   g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, "a=",   g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, "=,",   g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, ",=",   g_variant_new_boolean(TRUE));
+
+    g_variant_dict_insert_value(&dict, "=x",   g_variant_new_string("="));
+    g_variant_dict_insert_value(&dict, "x=",   g_variant_new_string("=="));
+    g_variant_dict_insert_value(&dict, "y",    g_variant_new_string("==="));
+    g_variant_dict_insert_value(&dict, ",a",   g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, "a,",   g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, ",x,",  g_variant_new_string("="));
+
+    g_variant_dict_insert_value(&dict, "col",  g_variant_new_string(":"));
+    g_variant_dict_insert_value(&dict, "\\",   g_variant_new_boolean(TRUE));
+    g_variant_dict_insert_value(&dict, "a\\",  g_variant_new_string("x"));
+    g_variant_dict_insert_value(&dict, "t",    g_variant_new_string("\\"));
+
+    auto request_data(GVariantWrapper(g_variant_dict_end(&dict)));
+
+    mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
+    mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
+            dbus_audiopath_manager_iface_dummy, asrc, player, true, false,
+            std::move(request_data));
+
+    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_with_options.c_str()),
+                                              asrc_with_options.length() + 1));
+}
+
+/*!\test
+ * Audio source option string parsing can fail.
+ */
+void test_audio_source_request_option_parser_rejects_malformed_options()
+{
+    auto *reg = lookup_register_expect_handlers(81,
+                                                dcpregs_read_81_current_audio_source,
+                                                dcpregs_write_81_current_audio_source);
+
+    static const char asrc[] = "strbo.upnpcm";
+    static const char player[] = "upnp_player";
+
+    make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x42);
+
+    static const std::array<const char *const, 7> broken_strings
+    {
+        ":=x",
+        ":,=x",
+        ":,a=b,=x",
+        ":a=b,=x",
+        ":a=b,=x,c",
+        ":a=\\",
+        ":\\",
+    };
+
+    for(const auto &broken : broken_strings)
+    {
+        std::string asrc_with_options(asrc);
+        asrc_with_options += broken;
+
+        mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE,
+                "Invalid audio source options (Invalid argument)");
+
+        cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_with_options.c_str()),
+                                                   asrc_with_options.length() + 1));
+    }
 }
 
 }

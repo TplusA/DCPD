@@ -263,6 +263,7 @@ void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
 gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
                                               GDBusMethodInvocation *invocation,
                                               const char *source_id,
+                                              GVariant *request_data,
                                               gpointer user_data)
 {
     msg_info("Selected source \"%s\"", source_id);
@@ -274,6 +275,7 @@ gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
 gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
                                                 GDBusMethodInvocation *invocation,
                                                 const char *source_id,
+                                                GVariant *request_data,
                                                 gpointer user_data)
 {
     msg_info("Deselected source \"%s\"", source_id);

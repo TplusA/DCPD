@@ -458,6 +458,7 @@ class SelectedSource
     const AudioSource *selected_;
     bool selected_is_half_selected_;
     const AudioSource *pending_;
+    GVariantWrapper pending_request_data_;
     GCancellable *cancel_;
 
   public:
@@ -524,7 +525,16 @@ class SelectedSource
         return state_ == SelectionState::SELECTING && &src == pending_;
     }
 
-    void start_request(const AudioSource &src, bool try_switch_now)
+    GVariantWrapper take_pending_request_data()
+    {
+        std::lock_guard<std::recursive_mutex> l(lock_);
+        log_assert(pending_request_data_ != nullptr);
+        auto result(std::move(pending_request_data_));
+        return result;
+    }
+
+    void start_request(const AudioSource &src, GVariantWrapper &&request_data,
+                       bool try_switch_now)
     {
         std::lock_guard<std::recursive_mutex> l(lock_);
 
@@ -553,6 +563,7 @@ class SelectedSource
         }
 
         pending_ = &src;
+        pending_request_data_ = std::move(request_data);
 
         if(try_switch_now)
             do_start_pending();
@@ -606,11 +617,16 @@ class SelectedSource
   private:
     void do_start_pending()
     {
+        log_assert(pending_request_data_ != nullptr);
+
         state_ = SelectionState::SELECTING;
         cancel_ = g_cancellable_new();
         tdbus_aupath_manager_call_request_source(dbus_audiopath_get_manager_iface(),
-                                                 pending_->id_.c_str(), cancel_,
+                                                 pending_->id_.c_str(),
+                                                 GVariantWrapper::get(pending_request_data_),
+                                                 cancel_,
                                                  request_source_done, this);
+        pending_request_data_.release();
     }
 
     static void request_source_done(GObject *source_object,
@@ -723,7 +739,7 @@ class SlavePushCommandQueue
 class AudioSourceData
 {
   public:
-    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 10;
+    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 11;
 
   private:
     std::mutex lock_;
@@ -830,7 +846,9 @@ class AudioSourceData
             apply(s);
     }
 
-    void request_audio_source(const AudioSource &src, bool try_switch_now)
+    void request_audio_source(const AudioSource &src,
+                              GVariantWrapper &&request_data,
+                              bool try_switch_now)
     {
         auto l(selected_.lock());
 
@@ -864,12 +882,13 @@ class AudioSourceData
             break;
         }
 
-        selected_.start_request(src, try_switch_now);
+        selected_.start_request(src, std::move(request_data), try_switch_now);
     }
 
-    void selected_audio_source_notification(const AudioSource &src, bool is_deferred)
+    void selected_audio_source_notification(const AudioSource &src, bool is_deferred,
+                                            bool notify_register_change = true)
     {
-        if(selected_.selected_notification(src, is_deferred))
+        if(selected_.selected_notification(src, is_deferred) && notify_register_change)
             registers_get_data()->register_changed_notification_fn(81);
     }
 
@@ -902,7 +921,7 @@ class AudioSourceData
         auto l(selected_.lock());
 
         if(selected_.is_pending(src))
-            request_audio_source(src, true);
+            request_audio_source(src, std::move(selected_.take_pending_request_data()), true);
 
         return result;
     }
@@ -967,6 +986,7 @@ static AudioSourceData audio_source_data(
                 is_service_unlocked),
     AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN,
                 nullptr, try_invoke_roon, true),
+    AudioSource("",               "Inactive",                0),
 });
 
 void dcpregs_audiosources_init(void)
@@ -978,6 +998,12 @@ void dcpregs_audiosources_init(void)
                 ExternalServiceState::airable_source_id_to_credentials_category(src.id_),
                 src);
     });
+
+    /* preselect placeholder audio source for inactive state */
+    const auto *inactive_src = audio_source_data.lookup_predefined("");
+    if(inactive_src != nullptr)
+        audio_source_data.selected_audio_source_notification(*inactive_src,
+                                                             false, false);
 }
 
 static Maybe<bool> have_credentials_stored(const char *category)
@@ -1314,19 +1340,112 @@ static AudioSourceEnableRequest parse_enable_request(uint8_t request_code)
         return AudioSourceEnableRequest::INVALID;
 }
 
+static bool set_request_options(GVariantDict &dict,
+                                const char *options, size_t end_of_options)
+{
+    if(end_of_options == 0)
+        return true;
+
+    size_t i = 0;
+    bool is_escaping = false;
+
+    while(i < end_of_options)
+    {
+        std::string key;
+        std::string value;
+        std::string *dest = &key;
+
+        while(i < end_of_options)
+        {
+            const char ch = options[i++];
+
+            if(is_escaping)
+            {
+                dest->push_back(ch);
+                is_escaping = false;
+                continue;
+            }
+            else if(ch == '\\')
+            {
+                is_escaping = true;
+                continue;
+            }
+
+            if(ch == ',')
+                break;
+
+            if(ch != '=' || dest == &value)
+                dest->push_back(ch);
+            else
+                dest = &value;
+        }
+
+        if(is_escaping)
+            return false;
+
+        if(key.empty())
+        {
+            if(value.empty())
+                continue;
+
+            return false;
+        }
+
+        GVariant *const gvalue = (dest == &key)
+            ? g_variant_new_boolean(TRUE)
+            : g_variant_new_string(value.c_str());
+
+        g_variant_dict_insert_value(&dict, key.c_str(), gvalue);
+    }
+
+    return true;
+}
+
 int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 81 handler %p %zu", data, length);
 
     size_t i;
+    size_t options_offset = SIZE_MAX;
 
     for(i = 0; i < length && data[i] != '\0'; ++i)
-        ;
+    {
+        if(options_offset == SIZE_MAX && data[i] == ':')
+            options_offset = i + 1;
+    }
 
     if(i >= length)
         return -1;
 
-    if(i == 0)
+    const char *audio_source_name = reinterpret_cast<const char *>(data);;
+    size_t audio_source_name_length;
+    std::string audio_source_name_buffer;
+    GVariantDict dict;
+    g_variant_dict_init(&dict, nullptr);
+
+    if(options_offset == SIZE_MAX)
+        audio_source_name_length = i > 0 ? i - 1 : 0;
+    else if(set_request_options(dict, audio_source_name + options_offset, i - options_offset))
+    {
+        audio_source_name_length = options_offset - 1;
+
+        if(audio_source_name_length > 0)
+            audio_source_name_buffer.insert(0, audio_source_name, audio_source_name_length);
+
+        audio_source_name = audio_source_name_buffer.c_str();
+    }
+    else
+        audio_source_name = nullptr;
+
+    auto request_data(GVariantWrapper(g_variant_dict_end(&dict)));
+
+    if(audio_source_name == nullptr)
+    {
+        msg_error(EINVAL, LOG_NOTICE, "Invalid audio source options");
+        return -1;
+    }
+
+    if(audio_source_name_length == 0)
     {
         /*
          * There is no explicit audio source that represents
@@ -1338,7 +1457,8 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
          */
         msg_info("Inactive state requested");
         tdbus_aupath_manager_call_release_path(dbus_audiopath_get_manager_iface(),
-                                               TRUE, nullptr, nullptr, nullptr);
+                                               TRUE, GVariantWrapper::get(request_data),
+                                               nullptr, nullptr, nullptr);
         return 0;
     }
 
@@ -1349,12 +1469,12 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
     auto lock(audio_source_data.lock());
 
     const AudioSource *src =
-        audio_source_data.lookup_predefined(reinterpret_cast<const char *>(data));
+        audio_source_data.lookup_predefined(audio_source_name);
 
     if(src == nullptr)
     {
         msg_error(0, LOG_NOTICE, "Audio source \"%s\" not known",
-                  reinterpret_cast<const char *>(data));
+                  audio_source_name);
         return -1;
     }
 
@@ -1388,17 +1508,17 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
       case AudioSourceState::ALIVE:
       case AudioSourceState::LOCKED:
       case AudioSourceState::ALIVE_OR_LOCKED:
-        audio_source_data.request_audio_source(*src, true);
+        audio_source_data.request_audio_source(*src, std::move(request_data), true);
         break;
 
       case AudioSourceState::UNAVAILABLE:
-        audio_source_data.request_audio_source(*src, false);
+        audio_source_data.request_audio_source(*src, std::move(request_data), false);
         break;
 
       case AudioSourceState::DEAD:
       case AudioSourceState::ZOMBIE:
         msg_error(0, LOG_NOTICE, "Audio source \"%s\" is %s",
-                  reinterpret_cast<const char *>(data),
+                  audio_source_name,
                   src->get_state() == AudioSourceState::DEAD ? "dead" : "zombie");
         return -1;
     }
