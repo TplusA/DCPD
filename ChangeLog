@@ -1,3 +1,26 @@
+2018-06-22  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.14 released.
+
+	* Roon certification: Modified register 88 (UPnP friendly name) to
+	  allow the SPI slave telling the Streaming Board whether or not the
+	  passed name is the appliance's default name. This information is
+	  required by taroon to make correct use of the auto-naming feature.
+
+	* Roon certification: Extend audio path switching via register 81 so
+	  to allow the SPI slave to pass extra data along with the name of the
+	  target audio source. The mechanism implemented in dcpd is completely
+	  generic; only audio sources and audio players take a look at the new
+	  extra data.
+
+	  There is currently only a single option supported by taroon, namely
+	  "standby". For Roon, the inactive source should be selected by
+	  sending the string ":standby" (inactive source with no name followed
+	  by standby flag) in case the appliance is about to enter standby
+	  mode.
+
+	* DCP protocol: Protocol level bumped to 1.0.6.
+
 2018-05-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.13 released.
