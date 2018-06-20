@@ -364,6 +364,7 @@ class ConnectToConnManServiceData
         expected_network_name_.clear();
         expected_network_name_cstr_ = nullptr;
         expected_network_ssid_.clear();
+        expected_network_ssid_.shrink_to_fit();
         called_mode_ = Mode::NONE;
     }
 
