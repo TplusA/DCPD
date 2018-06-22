@@ -609,7 +609,7 @@ static void shift_dns_servers_if_necessary(void)
 /*!
  * Merge existing DNS server list with newly set servers.
  *
- * Because of the poor DCP design, this function is much more complicated that
+ * Because of the poor DCP design, this function is much more complicated than
  * it should be.
  *
  * There are several cases to consider:
