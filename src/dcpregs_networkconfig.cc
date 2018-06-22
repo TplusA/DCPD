@@ -653,16 +653,6 @@ static void fill_in_missing_dns_server_config_requests(const Connman::ServiceBas
     {
         const auto &dns_servers(service.get_service_data().dns_servers_.get());
 
-        /*
-        if(dns_servers.size() > 0)
-        {
-            copy_as_dns(dns_servers[0], previous_primary);
-
-            if(dns_servers.size() > 1)
-                copy_as_dns(dns_servers[1], previous_secondary);
-        }
-        */
-
         if(IS_REQUESTED(REQ_DNS_SERVER1_62))
         {
             /* have new primary server, now copy over the previously defined,
