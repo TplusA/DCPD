@@ -24,6 +24,7 @@
 #include <map>
 #include <mutex>
 #include <memory>
+#include <functional>
 
 #include "network.h"
 #include "applink.hh"
