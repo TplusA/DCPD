@@ -6993,7 +6993,21 @@ enum class SetTitleAndURLSystemAssumptions
 
 static constexpr const char *const audio_source_id = "strbo.plainurl";
 
-static void set_start_title(const uint8_t *title, size_t length,
+static void set_stream_meta_data_dump_expectations(const std::string &prefix,
+                                                   const std::string &artist,
+                                                   const std::string &album,
+                                                   const std::string &title)
+{
+    mock_messages->expect_msg_is_verbose(true, MESSAGE_LEVEL_DIAG);
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, (prefix + " artist: \"" + artist + "\"").c_str());
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, (prefix + " album : \"" + album + "\"").c_str());
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, (prefix + " title : \"" + title + '"').c_str());
+}
+
+static void set_start_title(const std::string expected_artist,
+                            const std::string expected_album,
+                            const std::string expected_title,
+                            const uint8_t *title, size_t length,
                             SetTitleAndURLFlowAssumptions flow_assumptions,
                             SetTitleAndURLSystemAssumptions system_assumptions)
 {
@@ -7013,6 +7027,9 @@ static void set_start_title(const uint8_t *title, size_t length,
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
         break;
     }
+
+    set_stream_meta_data_dump_expectations("First stream meta data (reg 78)",
+                                           expected_artist, expected_album, expected_title);
 
     const auto *const reg = register_lookup(78);
 
@@ -7039,17 +7056,33 @@ static void set_start_title(const uint8_t *title, size_t length,
     mock_messages->check();
 }
 
+static void set_start_title(const std::string expected_artist,
+                            const std::string expected_album,
+                            const std::string expected_title,
+                            const std::string title,
+                            SetTitleAndURLFlowAssumptions flow_assumptions,
+                            SetTitleAndURLSystemAssumptions system_assumptions)
+{
+    set_start_title(expected_artist, expected_album, expected_title,
+                    reinterpret_cast<const uint8_t *>(title.c_str()),
+                    title.length(), flow_assumptions, system_assumptions);
+}
+
 static void set_start_title(const std::string title,
                             SetTitleAndURLFlowAssumptions flow_assumptions,
                             SetTitleAndURLSystemAssumptions system_assumptions)
 {
-    set_start_title(reinterpret_cast<const uint8_t *>(title.c_str()),
+    set_start_title("", "", title,
+                    reinterpret_cast<const uint8_t *>(title.c_str()),
                     title.length(), flow_assumptions, system_assumptions);
 }
 
 static void set_next_title(const std::string title, bool is_in_app_mode)
 {
-    if(!is_in_app_mode)
+    if(is_in_app_mode)
+        set_stream_meta_data_dump_expectations("Next stream meta data (reg 238)",
+                                               "", "", title);
+    else
         mock_messages->expect_msg_error(0, LOG_CRIT,
                                         "BUG: App sets next stream title while not in app mode");
 
@@ -7106,6 +7139,25 @@ static void set_start_playing_expectations(const std::string expected_artist,
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
         assume_already_playing = true;
+        break;
+    }
+
+    switch(flow_assumptions)
+    {
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__KEEP_MODE:
+        break;
+
+      case SetTitleAndURLFlowAssumptions::IDLE__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::PENDING__IN_APP_MODE__KEEP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_NON_APP_MODE__ENTER_APP_MODE:
+      case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
+        std::string expected_message("First stream URL (reg 79)");
+        expected_message += ": \"";
+        expected_message += url;
+        expected_message += '"';
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, expected_message.c_str());
         break;
     }
 
@@ -7197,7 +7249,8 @@ static void set_start_meta_data_and_url(const std::string meta_data,
                                         SetTitleAndURLSystemAssumptions system_assumptions,
                                         GVariantWrapper *expected_stream_key)
 {
-    set_start_title(meta_data, flow_assumptions, system_assumptions);
+    set_start_title(expected_artist, expected_album, expected_title, meta_data,
+                    flow_assumptions, system_assumptions);
     set_start_url(expected_artist, expected_album, expected_title, meta_data,
                   url, stream_id, flow_assumptions, system_assumptions,
                   expected_stream_key);
@@ -7213,7 +7266,8 @@ static void set_start_meta_data_and_url(const uint8_t *meta_data, size_t meta_da
                                         SetTitleAndURLSystemAssumptions system_assumptions,
                                         GVariantWrapper *expected_stream_key)
 {
-    set_start_title(meta_data, meta_data_length,
+    set_start_title(expected_artist, expected_album, expected_title,
+                    meta_data, meta_data_length,
                     flow_assumptions, system_assumptions);
     set_start_url(expected_artist, expected_album, expected_title,
                   std::string(reinterpret_cast<const char *>(meta_data),
@@ -7247,6 +7301,12 @@ static void set_next_url(const std::string title, const std::string url,
       case SetTitleAndURLFlowAssumptions::PENDING__IN_APP_MODE__KEEP_MODE:
       case SetTitleAndURLFlowAssumptions::PLAYING__IN_APP_MODE__KEEP_MODE:
         {
+            std::string expected_message("Next stream URL (reg 239)");
+            expected_message += ": \"";
+            expected_message += url;
+            expected_message += '"';
+            mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, expected_message.c_str());
+
             MD5::Context ctx;
             MD5::init(ctx);
             MD5::update(ctx, reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
@@ -7290,6 +7350,8 @@ static void set_next_url(const std::string title, const std::string url,
     }
 
     cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(url.c_str()), url.length()));
+
+    mock_messages->check();
 }
 
 static void set_next_title_and_url(const std::string title, const std::string url,
@@ -7475,6 +7537,7 @@ static void stop_stream()
 {
     const auto *const reg = register_lookup(79);
 
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "First stream URL (reg 79): <empty>");
     mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
 

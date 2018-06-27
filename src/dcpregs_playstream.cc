@@ -38,6 +38,8 @@
 
 constexpr const char *ArtCache::ReadError::names_[];
 
+static const auto plainurl_register_dump_level = MESSAGE_LEVEL_DIAG;
+
 enum class DevicePlaymode
 {
     DESELECTED,
@@ -407,7 +409,8 @@ static size_t copy_string_to_slave(const char *const __restrict src,
 }
 
 static bool copy_string_data(char *dest, size_t dest_size,
-                             const uint8_t *src, size_t src_size)
+                             const uint8_t *src, size_t src_size,
+                             const char *what)
 {
     if(src_size == 0 || src[0] == '\0' || dest_size <= src_size)
         dest[0] = '\0';
@@ -416,6 +419,9 @@ static bool copy_string_data(char *dest, size_t dest_size,
         memcpy(dest, src, src_size);
         dest[src_size] = '\0';
     }
+
+    if(dest[0] == '\0')
+        msg_vinfo(plainurl_register_dump_level, "%s: <empty>", what);
 
     return dest[0] != '\0';
 }
@@ -846,8 +852,32 @@ ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length)
     return ret;
 }
 
+static void dump_plainurl_register_meta_data(const char *what,
+                                             const SimplifiedStreamInfo &info)
+{
+    if(!msg_is_verbose(plainurl_register_dump_level))
+        return;
+
+    char meta_data_buffer[sizeof(info.meta_data)];
+    const char *artist_and_album[2];
+
+    tokenize_meta_data(meta_data_buffer, info.meta_data, artist_and_album);
+
+    msg_vinfo(plainurl_register_dump_level, "%s artist: \"%s\"", what, artist_and_album[0]);
+    msg_vinfo(plainurl_register_dump_level, "%s album : \"%s\"", what, artist_and_album[1]);
+    msg_vinfo(plainurl_register_dump_level, "%s title : \"%s\"", what, meta_data_buffer);
+}
+
+static void dump_plainurl_register_url(const char *what,
+                                       const SimplifiedStreamInfo &info)
+{
+    msg_vinfo(plainurl_register_dump_level, "%s: \"%s\"", what, info.url);
+}
+
 int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 {
+    static const char register_description[] = "First stream meta data (reg 78)";
+
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 78 handler %p %zu", data, length);
 
     g_mutex_lock(&play_stream_data.lock);
@@ -862,9 +892,11 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
                                                  NULL, NULL, NULL);
     }
 
-    (void)copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
-                           sizeof(play_stream_data.app.inbuffer_new_stream.meta_data),
-                           data, length);
+    if(copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
+                        sizeof(play_stream_data.app.inbuffer_new_stream.meta_data),
+                        data, length, register_description))
+        dump_plainurl_register_meta_data(register_description,
+                                         play_stream_data.app.inbuffer_new_stream);
 
     g_mutex_unlock(&play_stream_data.lock);
 
@@ -873,6 +905,8 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 
 int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
 {
+    static const char register_description[] = "First stream URL (reg 79)";
+
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 79 handler %p %zu", data, length);
 
     g_mutex_lock(&play_stream_data.lock);
@@ -884,8 +918,11 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
 
     if(copy_string_data(play_stream_data.app.inbuffer_new_stream.url,
                         sizeof(play_stream_data.app.inbuffer_new_stream.url),
-                        data, length))
+                        data, length, register_description))
     {
+        dump_plainurl_register_url(register_description,
+                                   play_stream_data.app.inbuffer_new_stream);
+
         /* maybe start playing */
         if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
         {
@@ -958,16 +995,19 @@ ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length
 
 int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 {
+    static const char register_description[] = "Next stream meta data (reg 238)";
+
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 238 handler %p %zu", data, length);
 
     g_mutex_lock(&play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
         BUG("App sets next stream title while not in app mode");
-    else
-        (void)copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
-                               sizeof(play_stream_data.app.inbuffer_next_stream.meta_data),
-                               data, length);
+    else if(copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
+                             sizeof(play_stream_data.app.inbuffer_next_stream.meta_data),
+                             data, length, register_description))
+        dump_plainurl_register_meta_data(register_description,
+                                         play_stream_data.app.inbuffer_next_stream);
 
     g_mutex_unlock(&play_stream_data.lock);
 
@@ -976,6 +1016,8 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 
 int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
 {
+    static const char register_description[] = "Next stream URL (reg 239)";
+
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 239 handler %p %zu", data, length);
 
     g_mutex_lock(&play_stream_data.lock);
@@ -986,8 +1028,11 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
     {
         if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
                             sizeof(play_stream_data.app.inbuffer_next_stream.url),
-                            data, length))
+                            data, length, register_description))
         {
+            dump_plainurl_register_url(register_description,
+                                       play_stream_data.app.inbuffer_next_stream);
+
             /* maybe send to streamplayer queue */
             if(play_stream_data.app.inbuffer_next_stream.meta_data[0] != '\0')
                 try_start_stream(&play_stream_data.app, &play_stream_data.other,
