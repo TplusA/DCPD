@@ -22,6 +22,7 @@
 
 #include <memory>
 #include <cstring>
+#include <mutex>
 #include <glib.h>
 
 #include "dcpregs_playstream.h"
@@ -687,7 +688,7 @@ static void registered_audio_source(GObject *source_object, GAsyncResult *res,
 
 static struct
 {
-    GMutex lock;
+    std::mutex lock;
 
     struct PlayAppStreamData app;
     struct PlayAnyStreamData other;
@@ -698,8 +699,8 @@ static const char app_audio_source_id[] = "strbo.plainurl";
 
 void dcpregs_playstream_init(void)
 {
-    memset(&play_stream_data, 0, sizeof(play_stream_data));
-    g_mutex_init(&play_stream_data.lock);
+    memset(&play_stream_data.app, 0, sizeof(play_stream_data.app));
+    memset(&play_stream_data.other, 0, sizeof(play_stream_data.other));
     play_stream_data.app.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
 }
 
@@ -716,12 +717,9 @@ void dcpregs_playstream_late_init(void)
 
 void dcpregs_playstream_deinit(void)
 {
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
     play_stream_data.other.tracked_stream_key.clear();
     play_stream_data.other.current_cover_art.clear();
-    g_mutex_unlock(&play_stream_data.lock);
-
-    g_mutex_clear(&play_stream_data.lock);
 }
 
 static bool parse_speed_factor(const uint8_t *data, size_t length,
@@ -826,30 +824,18 @@ ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
 
-    g_mutex_lock(&play_stream_data.lock);
-
-    const ssize_t ret =
-        copy_string_to_slave(play_stream_data.other.current_stream_information.meta_data,
-                             (char *)response, length);
-
-    g_mutex_unlock(&play_stream_data.lock);
-
-    return ret;
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    return copy_string_to_slave(play_stream_data.other.current_stream_information.meta_data,
+                                (char *)response, length);
 }
 
 ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
 
-    g_mutex_lock(&play_stream_data.lock);
-
-    const ssize_t ret =
-        copy_string_to_slave(play_stream_data.other.current_stream_information.url,
-                             (char *)response, length);
-
-    g_mutex_unlock(&play_stream_data.lock);
-
-    return ret;
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    return copy_string_to_slave(play_stream_data.other.current_stream_information.url,
+                                (char *)response, length);
 }
 
 static void dump_plainurl_register_meta_data(const char *what,
@@ -880,7 +866,7 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 78 handler %p %zu", data, length);
 
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -898,8 +884,6 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
         dump_plainurl_register_meta_data(register_description,
                                          play_stream_data.app.inbuffer_new_stream);
 
-    g_mutex_unlock(&play_stream_data.lock);
-
     return 0;
 }
 
@@ -909,7 +893,7 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 79 handler %p %zu", data, length);
 
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     const bool is_in_app_mode = is_app_mode(play_stream_data.app.device_playmode);
 
@@ -955,8 +939,6 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
         break;
     }
 
-    g_mutex_unlock(&play_stream_data.lock);
-
     return 0;
 }
 
@@ -970,7 +952,7 @@ ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
 
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     const size_t len =
         play_stream_data.other.current_cover_art.copy_hash(response, length);
@@ -988,8 +970,6 @@ ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length
     else
         BUG("Cover art: Send %zu hash bytes to SPI slave", len);
 
-    g_mutex_unlock(&play_stream_data.lock);
-
     return len;
 }
 
@@ -999,17 +979,19 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 238 handler %p %zu", data, length);
 
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
+    {
         BUG("App sets next stream title while not in app mode");
-    else if(copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
+        return 0;
+    }
+
+    if(copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
                              sizeof(play_stream_data.app.inbuffer_next_stream.meta_data),
                              data, length, register_description))
         dump_plainurl_register_meta_data(register_description,
                                          play_stream_data.app.inbuffer_next_stream);
-
-    g_mutex_unlock(&play_stream_data.lock);
 
     return 0;
 }
@@ -1020,37 +1002,36 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 239 handler %p %zu", data, length);
 
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
-        BUG("App sets next URL while not in app mode");
-    else
     {
-        if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
-                            sizeof(play_stream_data.app.inbuffer_next_stream.url),
-                            data, length, register_description))
-        {
-            dump_plainurl_register_url(register_description,
-                                       play_stream_data.app.inbuffer_next_stream);
-
-            /* maybe send to streamplayer queue */
-            if(play_stream_data.app.inbuffer_next_stream.meta_data[0] != '\0')
-                try_start_stream(&play_stream_data.app, &play_stream_data.other,
-                                 false);
-            else
-                msg_error(0, LOG_ERR,
-                          "Not starting stream, register 238 still unset");
-        }
-        else
-        {
-            /* ignore funny writes */
-            BUG("App is doing weird stuff");
-        }
-
-        clear_stream_info(&play_stream_data.app.inbuffer_next_stream);
+        BUG("App sets next URL while not in app mode");
+        return 0;
     }
 
-    g_mutex_unlock(&play_stream_data.lock);
+    if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
+                        sizeof(play_stream_data.app.inbuffer_next_stream.url),
+                        data, length, register_description))
+    {
+        dump_plainurl_register_url(register_description,
+                                   play_stream_data.app.inbuffer_next_stream);
+
+        /* maybe send to streamplayer queue */
+        if(play_stream_data.app.inbuffer_next_stream.meta_data[0] != '\0')
+            try_start_stream(&play_stream_data.app, &play_stream_data.other,
+                             false);
+        else
+            msg_error(0, LOG_ERR,
+                      "Not starting stream, register 238 still unset");
+    }
+    else
+    {
+        /* ignore funny writes */
+        BUG("App is doing weird stuff");
+    }
+
+    clear_stream_info(&play_stream_data.app.inbuffer_next_stream);
 
     return 0;
 }
@@ -1063,86 +1044,84 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
 
 void dcpregs_playstream_select_source(void)
 {
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     if(is_app_mode(play_stream_data.app.device_playmode))
-        BUG("Already selected");
-    else
     {
-        msg_info("Enter app mode");
-
-        play_stream_data.app.device_playmode = DevicePlaymode::SELECTED_IDLE;
-
-        switch(play_stream_data.app.pending_request)
-        {
-          case PendingAppRequest::NONE:
-            break;
-
-          case PendingAppRequest::START:
-            msg_vinfo(MESSAGE_LEVEL_DIAG, "Processing pending start request");
-
-            if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
-            {
-                try_start_stream(&play_stream_data.app, &play_stream_data.other,
-                                 true);
-                clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
-            }
-            else
-                BUG("No data available for pending start request");
-
-            break;
-
-          case PendingAppRequest::STOP_KEEP_SELECTED:
-            msg_info("Processing pending stop request");
-            try_stop_stream(&play_stream_data.app, true);
-            break;
-
-          case PendingAppRequest::STOP_FOR_DESELECTION:
-            msg_info("Processing pending stop request and leaving app mode");
-            try_stop_stream(&play_stream_data.app, false);
-            break;
-        }
-
-        play_stream_data.app.pending_request = PendingAppRequest::NONE;
+        BUG("Already selected");
+        return;
     }
 
-    g_mutex_unlock(&play_stream_data.lock);
+    msg_info("Enter app mode");
+
+    play_stream_data.app.device_playmode = DevicePlaymode::SELECTED_IDLE;
+
+    switch(play_stream_data.app.pending_request)
+    {
+      case PendingAppRequest::NONE:
+        break;
+
+      case PendingAppRequest::START:
+        msg_vinfo(MESSAGE_LEVEL_DIAG, "Processing pending start request");
+
+        if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
+        {
+            try_start_stream(&play_stream_data.app, &play_stream_data.other,
+                             true);
+            clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
+        }
+        else
+            BUG("No data available for pending start request");
+
+        break;
+
+      case PendingAppRequest::STOP_KEEP_SELECTED:
+        msg_info("Processing pending stop request");
+        try_stop_stream(&play_stream_data.app, true);
+        break;
+
+      case PendingAppRequest::STOP_FOR_DESELECTION:
+        msg_info("Processing pending stop request and leaving app mode");
+        try_stop_stream(&play_stream_data.app, false);
+        break;
+    }
+
+    play_stream_data.app.pending_request = PendingAppRequest::NONE;
 }
 
 void dcpregs_playstream_deselect_source(void)
 {
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
-        BUG("Not selected");
-    else
     {
-        msg_info("Leave app mode");
-
-        switch(play_stream_data.app.device_playmode)
-        {
-          case DevicePlaymode::SELECTED_IDLE:
-            play_stream_data.app.device_playmode = DevicePlaymode::DESELECTED;
-            break;
-
-          case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
-          case DevicePlaymode::APP_IS_PLAYING:
-            try_stop_stream(&play_stream_data.app, false);
-            break;
-
-          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
-            play_stream_data.app.device_playmode =
-                DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
-            break;
-
-          case DevicePlaymode::DESELECTED:
-          case DevicePlaymode::DESELECTED_PLAYING:
-          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
-            break;
-        }
+        BUG("Not selected");
+        return;
     }
 
-    g_mutex_unlock(&play_stream_data.lock);
+    msg_info("Leave app mode");
+
+    switch(play_stream_data.app.device_playmode)
+    {
+      case DevicePlaymode::SELECTED_IDLE:
+        play_stream_data.app.device_playmode = DevicePlaymode::DESELECTED;
+        break;
+
+      case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
+      case DevicePlaymode::APP_IS_PLAYING:
+        try_stop_stream(&play_stream_data.app, false);
+        break;
+
+      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
+        play_stream_data.app.device_playmode =
+            DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
+        break;
+
+      case DevicePlaymode::DESELECTED:
+      case DevicePlaymode::DESELECTED_PLAYING:
+      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
+        break;
+    }
 }
 
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
@@ -1152,7 +1131,7 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
               "Received explicit title and URL information for stream %u",
               raw_stream_id);
 
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     log_assert((raw_stream_id & STREAM_ID_SOURCE_MASK) != STREAM_ID_SOURCE_INVALID);
     log_assert(title != NULL);
@@ -1168,8 +1147,6 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
         BUG("+   Title: \"%s\"", title);
         BUG("+   URL  : \"%s\"", url);
     }
-
-    g_mutex_unlock(&play_stream_data.lock);
 }
 
 /*!
@@ -1306,7 +1283,7 @@ static inline void notify_cover_art_changed()
 void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
                                            void *stream_key_variant)
 {
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     play_stream_data.other.tracked_stream_key.set(
             std::move(GVariantWrapper(static_cast<GVariant *>(stream_key_variant),
@@ -1399,13 +1376,11 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
     if(try_retrieve_cover_art(val, play_stream_data.other.current_cover_art) ||
        is_new_stream)
         notify_cover_art_changed();
-
-    g_mutex_unlock(&play_stream_data.lock);
 }
 
 void dcpregs_playstream_stop_notification(void)
 {
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     play_stream_data.other.tracked_stream_key.clear();
     play_stream_data.other.current_cover_art.clear();
@@ -1427,13 +1402,11 @@ void dcpregs_playstream_stop_notification(void)
 
     do_notify_stream_info(&play_stream_data.other, NotifyStreamInfo::DEV_NULL,
                           SendStreamUpdate::URL_AND_TITLE);
-
-    g_mutex_unlock(&play_stream_data.lock);
 }
 
 void dcpregs_playstream_cover_art_notification(void *stream_key_variant)
 {
-    g_mutex_lock(&play_stream_data.lock);
+    std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     const GVariantWrapper wrapped_val(static_cast<GVariant *>(stream_key_variant),
                                       GVariantWrapper::Transfer::JUST_MOVE);
@@ -1446,30 +1419,27 @@ void dcpregs_playstream_cover_art_notification(void *stream_key_variant)
 
     if(has_cover_art_changed)
         notify_cover_art_changed();
-
-    g_mutex_unlock(&play_stream_data.lock);
 }
 
 class PictureProvider: public CoverArt::PictureProviderIface
 {
   private:
-    GMutex &lock_;
+    std::mutex &lock_;
     const CoverArt::Picture &picture_;
 
   public:
     PictureProvider(const PictureProvider &) = delete;
     PictureProvider &operator=(const PictureProvider &) = delete;
 
-    explicit PictureProvider(GMutex &lock, const CoverArt::Picture &picture):
+    explicit PictureProvider(std::mutex &lock, const CoverArt::Picture &picture):
         lock_(lock),
         picture_(picture)
     {}
 
     bool copy_picture(CoverArt::Picture &dest) const override
     {
-        g_mutex_lock(&lock_);
+        std::lock_guard<std::mutex> lk(lock_);
         dest = picture_;
-        g_mutex_unlock(&lock_);
 
         return dest.is_available();
     }
