@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -147,7 +147,7 @@ class PictureProviderIface
     virtual bool copy_picture(Picture &dest) const = 0;
 };
 
-void generate_stream_key_for_app(StreamKey &stream_key, const char *url);
+void generate_stream_key_for_app(StreamKey &stream_key, const std::string &url);
 
 }
 

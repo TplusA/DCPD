@@ -21,8 +21,8 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <memory>
-#include <cstring>
 #include <mutex>
+#include <algorithm>
 #include <glib.h>
 
 #include "dcpregs_playstream.h"
@@ -78,8 +78,14 @@ enum class SendStreamUpdate
 
 struct SimplifiedStreamInfo
 {
-    char meta_data[256 + 1];
-    char url[2048 + 1];
+    std::string meta_data;
+    std::string url;
+
+    void clear()
+    {
+        meta_data.clear();
+        url.clear();
+    }
 };
 
 enum class PendingAppRequest
@@ -124,12 +130,43 @@ struct PlayAppStreamData
     /*!
      * Write buffer for registers 78 and 79.
      */
-    struct SimplifiedStreamInfo inbuffer_new_stream;
+    SimplifiedStreamInfo inbuffer_new_stream;
 
     /*!
      * Write buffer for registers 238 and 239, next queued app stream.
      */
-    struct SimplifiedStreamInfo inbuffer_next_stream;
+    SimplifiedStreamInfo inbuffer_next_stream;
+
+    PlayAppStreamData():
+        device_playmode(DevicePlaymode::DESELECTED),
+        pending_request(PendingAppRequest::NONE),
+        next_free_stream_id(STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID),
+        current_stream_id(STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID),
+        next_stream_id(STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID),
+        last_pushed_stream_id(STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID)
+    {
+        reset(0);
+    }
+
+    void reset(stream_id_t next_free_id)
+    {
+        device_playmode = DevicePlaymode::DESELECTED;
+        pending_request = PendingAppRequest::NONE;
+        next_free_stream_id = next_free_id;
+        current_stream_id = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+        next_stream_id = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+        last_pushed_stream_id = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+        inbuffer_new_stream.clear();
+        inbuffer_next_stream.clear();
+    }
+
+    void reset_to_idle_mode()
+    {
+        device_playmode = DevicePlaymode::SELECTED_IDLE;
+        pending_request = PendingAppRequest::NONE;
+        current_stream_id = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+        next_stream_id = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+    }
 };
 
 enum class CoverArtDataState
@@ -171,17 +208,35 @@ struct PlayAnyStreamData
      *
      * These information are used when the registers are read out.
      */
-    struct SimplifiedStreamInfo current_stream_information;
+    SimplifiedStreamInfo current_stream_information;
 
     /*!
      * Write buffer for changes to registers 75 and 76.
      */
-    struct SimplifiedStreamInfo pending_data;
+    SimplifiedStreamInfo pending_data;
 
     /*!
      * Buffer for changes to registers 75 and 76 while changes are pending.
      */
-    struct SimplifiedStreamInfo overwritten_pending_data;
+    SimplifiedStreamInfo overwritten_pending_data;
+
+    PlayAnyStreamData():
+        currently_playing_stream(STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID),
+        pending_stream_id(STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID),
+        overwritten_pending_stream_id(STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID)
+    {}
+
+    void reset()
+    {
+        currently_playing_stream = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+        tracked_stream_key.clear();
+        current_cover_art.clear();
+        pending_stream_id = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+        overwritten_pending_stream_id = STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
+        current_stream_information.clear();
+        pending_data.clear();
+        overwritten_pending_data.clear();
+    }
 };
 
 static inline bool is_app_stream(const stream_id_t raw_stream_id)
@@ -242,7 +297,7 @@ static inline bool is_app_mode_and_playing(const DevicePlaymode mode)
 }
 
 static StreamIdType determine_stream_id_type(const stream_id_t raw_stream_id,
-                                             const struct PlayAppStreamData *data)
+                                             const PlayAppStreamData &data)
 {
     const stream_id_t source_id = (raw_stream_id & STREAM_ID_SOURCE_MASK);
 
@@ -252,9 +307,9 @@ static StreamIdType determine_stream_id_type(const stream_id_t raw_stream_id,
     else if(source_id != STREAM_ID_SOURCE_APP)
         return StreamIdType::NON_APP;
 
-    if(raw_stream_id == data->current_stream_id)
+    if(raw_stream_id == data.current_stream_id)
         return StreamIdType::APP_CURRENT;
-    else if(raw_stream_id == data->next_stream_id)
+    else if(raw_stream_id == data.next_stream_id)
         return StreamIdType::APP_NEXT;
     else
         return StreamIdType::APP_UNKNOWN;
@@ -273,37 +328,25 @@ determine_send_stream_update(bool title_changed, bool url_changed)
 }
 
 static inline SendStreamUpdate
-clear_stream_info(struct SimplifiedStreamInfo *info)
+clear_stream_info(SimplifiedStreamInfo &info)
 {
-    const SendStreamUpdate ret =
-        determine_send_stream_update(info->meta_data[0] != '\0',
-                                     info->url[0] != '\0');
-
-    info->meta_data[0] = '\0';
-    info->url[0] = '\0';
-
+    const auto ret = determine_send_stream_update(!info.meta_data.empty(),
+                                                  !info.url.empty());
+    info.clear();
     return ret;
 }
 
-static inline void reset_to_idle_mode(struct PlayAppStreamData *data)
-{
-    data->device_playmode = DevicePlaymode::SELECTED_IDLE;
-    data->pending_request = PendingAppRequest::NONE;
-    data->current_stream_id = 0;
-    data->next_stream_id = 0;
-}
-
-static inline void notify_app_playback_stopped(void)
+static inline void notify_app_playback_stopped()
 {
     registers_get_data()->register_changed_notification_fn(79);
 }
 
-static inline void notify_ready_for_next_stream_from_slave(void)
+static inline void notify_ready_for_next_stream_from_slave()
 {
     registers_get_data()->register_changed_notification_fn(239);
 }
 
-static void do_notify_stream_info(struct PlayAnyStreamData *data,
+static void do_notify_stream_info(PlayAnyStreamData &data,
                                   const NotifyStreamInfo which,
                                   const SendStreamUpdate update)
 {
@@ -313,28 +356,28 @@ static void do_notify_stream_info(struct PlayAnyStreamData *data,
         break;
 
       case NotifyStreamInfo::PENDING:
-        data->current_stream_information = data->pending_data;
+        data.current_stream_information = data.pending_data;
         break;
 
       case NotifyStreamInfo::OVERWRITTEN_PENDING:
-        data->current_stream_information = data->overwritten_pending_data;
+        data.current_stream_information = data.overwritten_pending_data;
         break;
 
       case NotifyStreamInfo::DEV_NULL:
-        clear_stream_info(&data->current_stream_information);
+        clear_stream_info(data.current_stream_information);
         break;
     }
 
     if(which == NotifyStreamInfo::OVERWRITTEN_PENDING)
     {
-        clear_stream_info(&data->overwritten_pending_data);
-        data->overwritten_pending_stream_id =
+        clear_stream_info(data.overwritten_pending_data);
+        data.overwritten_pending_stream_id =
             STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
     }
     else
     {
-        clear_stream_info(&data->pending_data);
-        data->pending_stream_id =
+        clear_stream_info(data.pending_data);
+        data.pending_stream_id =
             STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
     }
 
@@ -358,79 +401,69 @@ static void do_notify_stream_info(struct PlayAnyStreamData *data,
     }
 }
 
-static void app_stream_started_playing(struct PlayAppStreamData *data,
+static void app_stream_started_playing(PlayAppStreamData &data,
                                        StreamIdType stype, bool is_new_stream)
 {
     log_assert(stype == StreamIdType::APP_CURRENT ||
                stype == StreamIdType::APP_NEXT);
 
-    if(!is_app_mode(data->device_playmode))
+    if(!is_app_mode(data.device_playmode))
         BUG("App stream started in unexpected mode %d",
-            static_cast<int>(data->device_playmode));
+            static_cast<int>(data.device_playmode));
 
-    data->device_playmode = DevicePlaymode::APP_IS_PLAYING;
+    data.device_playmode = DevicePlaymode::APP_IS_PLAYING;
 
     if(stype == StreamIdType::APP_NEXT)
     {
-        data->current_stream_id = data->next_stream_id;
-        data->next_stream_id = 0;
-        clear_stream_info(&data->inbuffer_next_stream);
+        data.current_stream_id = data.next_stream_id;
+        data.next_stream_id = 0;
+        clear_stream_info(data.inbuffer_next_stream);
     }
 
     if(is_new_stream)
         notify_ready_for_next_stream_from_slave();
 }
 
-static inline void other_stream_started_playing(struct PlayAppStreamData *data,
-                                                bool *switched_to_nonapp_mode)
+static inline void other_stream_started_playing(PlayAppStreamData &data,
+                                                bool &switched_to_nonapp_mode)
 {
-    if(data->device_playmode != DevicePlaymode::DESELECTED &&
-       data->device_playmode != DevicePlaymode::DESELECTED_PLAYING)
-        *switched_to_nonapp_mode = true;
+    if(data.device_playmode != DevicePlaymode::DESELECTED &&
+       data.device_playmode != DevicePlaymode::DESELECTED_PLAYING)
+        switched_to_nonapp_mode = true;
 
-    data->device_playmode = DevicePlaymode::DESELECTED_PLAYING;
-    data->pending_request = PendingAppRequest::NONE;
-    data->current_stream_id = 0;
-    data->next_stream_id = 0;
+    data.device_playmode = DevicePlaymode::DESELECTED_PLAYING;
+    data.pending_request = PendingAppRequest::NONE;
+    data.current_stream_id = 0;
+    data.next_stream_id = 0;
 }
 
-static size_t copy_string_to_slave(const char *const __restrict src,
-                                   char *const __restrict dest, size_t dest_size)
+static size_t copy_string_to_slave(const std::string &src,
+                                   char *const dest, size_t dest_size)
 {
     if(dest_size == 0)
         return 0;
 
-    const size_t len = strlen(src);
+    const size_t len = src.length();
     const size_t count = len < dest_size ? len : dest_size;
 
     if(count > 0)
-        memcpy(dest, src, count);
+        std::copy_n(src.begin(), count, dest);
 
     return count;
 }
 
-static bool copy_string_data(char *dest, size_t dest_size,
-                             const uint8_t *src, size_t src_size,
-                             const char *what)
+static bool copy_string_data(std::string &dest, const uint8_t *src,
+                             size_t src_size, const char *what)
 {
-    if(src_size == 0 || src[0] == '\0' || dest_size <= src_size)
-        dest[0] = '\0';
-    else
-    {
-        memcpy(dest, src, src_size);
-        dest[src_size] = '\0';
-    }
+    dest.clear();
 
-    if(dest[0] == '\0')
+    if(src_size > 0 && src[0] != '\0')
+        std::copy_n(src, src_size, std::back_inserter(dest));
+
+    if(dest.empty())
         msg_vinfo(plainurl_register_dump_level, "%s: <empty>", what);
 
-    return dest[0] != '\0';
-}
-
-static void strncpy_terminated(char *dest, const char *src, size_t n)
-{
-    strncpy(dest, src, n);
-    dest[n - 1] = '\0';
+    return !dest.empty();
 }
 
 static stream_id_t get_next_stream_id(stream_id_t *const next_free_id)
@@ -450,16 +483,16 @@ static stream_id_t get_next_stream_id(stream_id_t *const next_free_id)
 }
 
 static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
-                                            const char *title, const char *url,
-                                            struct PlayAnyStreamData *any_stream_data)
+                                            const std::string &title,
+                                            const std::string &url,
+                                            PlayAnyStreamData &any_stream_data)
 {
-    struct SimplifiedStreamInfo *const dest_info =
-        (raw_stream_id == any_stream_data->currently_playing_stream
-         ? &any_stream_data->current_stream_information
-         : &any_stream_data->pending_data);
+    SimplifiedStreamInfo &dest_info(raw_stream_id == any_stream_data.currently_playing_stream
+                                    ? any_stream_data.current_stream_information
+                                    : any_stream_data.pending_data);
 
-    any_stream_data->pending_stream_id =
-        ((dest_info == &any_stream_data->pending_data)
+    any_stream_data.pending_stream_id =
+        ((&dest_info == &any_stream_data.pending_data)
          ? raw_stream_id
          : STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID);
 
@@ -473,31 +506,29 @@ static void unchecked_set_meta_data_and_url(const stream_id_t raw_stream_id,
     }
     else
     {
-        update =
-            determine_send_stream_update(strcmp(dest_info->meta_data, title) != 0,
-                                         strcmp(dest_info->url, url) != 0);
-
-        strncpy_terminated(dest_info->meta_data, title, sizeof(dest_info->meta_data));
-        strncpy_terminated(dest_info->url,       url,   sizeof(dest_info->url));
+        update = determine_send_stream_update(dest_info.meta_data != title,
+                                              dest_info.url != url);
+        dest_info.meta_data = title;
+        dest_info.url = url;
         which = NotifyStreamInfo::UNMODIFIED;
     }
 
     /* direct update */
-    if(!is_stream_with_valid_source(any_stream_data->pending_stream_id))
+    if(!is_stream_with_valid_source(any_stream_data.pending_stream_id))
         do_notify_stream_info(any_stream_data, which, update);
 }
 
-static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
+static void try_notify_pending_stream_info(PlayAnyStreamData &data,
                                            bool switched_to_nonapp_mode)
 {
-    if(is_stream_with_valid_source(data->pending_stream_id) &&
-       data->currently_playing_stream == data->pending_stream_id)
+    if(is_stream_with_valid_source(data.pending_stream_id) &&
+       data.currently_playing_stream == data.pending_stream_id)
     {
         do_notify_stream_info(data, NotifyStreamInfo::PENDING,
                               SendStreamUpdate::URL_AND_TITLE);
     }
-    else if(is_stream_with_valid_source(data->overwritten_pending_stream_id) &&
-            data->currently_playing_stream == data->overwritten_pending_stream_id)
+    else if(is_stream_with_valid_source(data.overwritten_pending_stream_id) &&
+            data.currently_playing_stream == data.overwritten_pending_stream_id)
     {
         do_notify_stream_info(data, NotifyStreamInfo::OVERWRITTEN_PENDING,
                               SendStreamUpdate::URL_AND_TITLE);
@@ -513,75 +544,77 @@ static void try_notify_pending_stream_info(struct PlayAnyStreamData *data,
     }
 }
 
-static void tokenize_meta_data(char *dest, const char *src,
-                               const char *(&artist_and_album)[2])
+static std::tuple<std::string, const size_t, const size_t>
+tokenize_meta_data(const std::string &src)
 {
-    static const char empty[] = "";
+    std::string dest;
+    dest.reserve(src.length() + 1);
 
-    dest[0] = '\0';
-    artist_and_album[0] = empty;
-    artist_and_album[1] = empty;
-
+    size_t artist = src.length();
+    size_t album = src.length();
     size_t idx = 0;
 
-    for(size_t i = 0; /* nothing */; ++i)
+    for(size_t i = 0; i < src.length(); ++i)
     {
         const char ch = src[i];
 
         if(ch == '\x1d')
         {
-            dest[i] = '\0';
+            dest.push_back('\0');
 
             if(idx < 2)
-                artist_and_album[idx++] = &dest[i + 1];
+            {
+                if(idx == 0)
+                    artist = i + 1;
+                else
+                    album = i + 1;
+
+                ++idx;
+            }
         }
         else
-            dest[i] = ch;
-
-        if(ch == '\0')
-            break;
+            dest.push_back(ch);
     }
+
+    return std::make_tuple(std::move(dest), artist, album);
 }
 
-static void try_start_stream(struct PlayAppStreamData *const data,
-                             struct PlayAnyStreamData *any_stream_data,
+static void try_start_stream(PlayAppStreamData &data,
+                             PlayAnyStreamData &any_stream_data,
                              bool is_restart)
 {
     stream_id_t stream_id;
 
     do
     {
-        stream_id = get_next_stream_id(&data->next_free_stream_id);
+        stream_id = get_next_stream_id(&data.next_free_stream_id);
     }
-    while(stream_id == data->current_stream_id ||
-          stream_id == data->next_stream_id);
+    while(stream_id == data.current_stream_id ||
+          stream_id == data.next_stream_id);
 
     gboolean fifo_overflow;
     gboolean is_playing;
 
-    const char *const meta_data = (is_restart
-                                   ? data->inbuffer_new_stream.meta_data
-                                   : data->inbuffer_next_stream.meta_data);
-    const char *const url = (is_restart
-                             ? data->inbuffer_new_stream.url
-                             : data->inbuffer_next_stream.url);
-
-    char meta_data_buffer[sizeof(data->inbuffer_new_stream.meta_data)];
-    const char *artist_and_album[2];
+    const SimplifiedStreamInfo &selected(is_restart
+                                         ? data.inbuffer_new_stream
+                                         : data.inbuffer_next_stream);
 
     CoverArt::StreamKey stream_key;
-    CoverArt::generate_stream_key_for_app(stream_key, url);
+    CoverArt::generate_stream_key_for_app(stream_key, selected.url);
 
-    tokenize_meta_data(meta_data_buffer, meta_data, artist_and_album);
+    const auto tokenized(tokenize_meta_data(selected.meta_data));
+    const auto token_store(std::get<0>(tokenized).c_str());
 
     tdbus_dcpd_playback_emit_stream_info(dbus_get_playback_iface(), stream_id,
-                                         artist_and_album[0],
-                                         artist_and_album[1],
-                                         meta_data_buffer, meta_data, url);
+                                         &token_store[std::get<1>(tokenized)],
+                                         &token_store[std::get<2>(tokenized)],
+                                         token_store,
+                                         selected.meta_data.c_str(),
+                                         selected.url.c_str());
     GError *error = NULL;
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
-                                           stream_id, url,
+                                           stream_id, selected.url.c_str(),
                                            g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
                                                                      stream_key.key_,
                                                                      sizeof(stream_key.key_),
@@ -592,7 +625,7 @@ static void try_start_stream(struct PlayAppStreamData *const data,
                                            NULL, &error))
     {
         BUG("Failed pushing stream %u, URL %s to stream player",
-            stream_id, url);
+            stream_id, selected.url.c_str());
         dbus_common_handle_dbus_error(&error, "Push stream to player");
         return;
     }
@@ -603,31 +636,32 @@ static void try_start_stream(struct PlayAppStreamData *const data,
         return;
     }
 
-    if(is_app_stream_and_valid(any_stream_data->pending_stream_id) &&
-       any_stream_data->pending_stream_id == data->last_pushed_stream_id)
+    if(is_app_stream_and_valid(any_stream_data.pending_stream_id) &&
+       any_stream_data.pending_stream_id == data.last_pushed_stream_id)
     {
         /* slave sent the next stream very quickly after the first stream,
          * didn't receive any start notification from streamplayer yet */
-        any_stream_data->overwritten_pending_stream_id = any_stream_data->pending_stream_id;
-        any_stream_data->overwritten_pending_data = any_stream_data->pending_data;
+        any_stream_data.overwritten_pending_stream_id = any_stream_data.pending_stream_id;
+        any_stream_data.overwritten_pending_data = any_stream_data.pending_data;
     }
 
-    data->last_pushed_stream_id = stream_id;
+    data.last_pushed_stream_id = stream_id;
 
-    unchecked_set_meta_data_and_url(stream_id, meta_data, url, any_stream_data);
+    unchecked_set_meta_data_and_url(stream_id, selected.meta_data,
+                                    selected.url, any_stream_data);
 
-    if(!is_playing && data->device_playmode == DevicePlaymode::SELECTED_IDLE)
+    if(!is_playing && data.device_playmode == DevicePlaymode::SELECTED_IDLE)
     {
 
         if(tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
                                                  NULL, &error))
-            data->device_playmode = DevicePlaymode::WAIT_FOR_START_NOTIFICATION;
+            data.device_playmode = DevicePlaymode::WAIT_FOR_START_NOTIFICATION;
         else
         {
             msg_error(0, LOG_NOTICE, "Failed starting stream");
             dbus_common_handle_dbus_error(&error, "Start stream");
 
-            reset_to_idle_mode(data);
+            data.reset_to_idle_mode();
 
             if(!tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
                                                     0, NULL, NULL, NULL,
@@ -643,24 +677,23 @@ static void try_start_stream(struct PlayAppStreamData *const data,
 
     if(is_restart)
     {
-        data->current_stream_id = stream_id;
-        data->next_stream_id = 0;
+        data.current_stream_id = stream_id;
+        data.next_stream_id = 0;
 
         tdbus_dcpd_views_emit_open(dbus_get_views_iface(), "Play");
     }
     else
     {
-        log_assert(data->device_playmode == DevicePlaymode::WAIT_FOR_START_NOTIFICATION ||
-                   data->device_playmode == DevicePlaymode::SELECTED_IDLE ||
-                   data->device_playmode == DevicePlaymode::APP_IS_PLAYING);
-        data->next_stream_id = stream_id;
+        log_assert(data.device_playmode == DevicePlaymode::WAIT_FOR_START_NOTIFICATION ||
+                   data.device_playmode == DevicePlaymode::SELECTED_IDLE ||
+                   data.device_playmode == DevicePlaymode::APP_IS_PLAYING);
+        data.next_stream_id = stream_id;
     }
 }
 
-static void try_stop_stream(struct PlayAppStreamData *const data,
-                            bool stay_in_app_mode)
+static void try_stop_stream(PlayAppStreamData &data, bool stay_in_app_mode)
 {
-    data->device_playmode = stay_in_app_mode
+    data.device_playmode = stay_in_app_mode
         ? DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED
         : DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
 
@@ -671,7 +704,7 @@ static void try_stop_stream(struct PlayAppStreamData *const data,
     {
         msg_error(0, LOG_NOTICE, "Failed stopping stream player");
         dbus_common_handle_dbus_error(&error, "Stop stream");
-        reset_to_idle_mode(data);
+        data.reset_to_idle_mode();
     }
 }
 
@@ -690,8 +723,8 @@ static struct
 {
     std::mutex lock;
 
-    struct PlayAppStreamData app;
-    struct PlayAnyStreamData other;
+    PlayAppStreamData app;
+    PlayAnyStreamData other;
 }
 play_stream_data;
 
@@ -699,9 +732,8 @@ static const char app_audio_source_id[] = "strbo.plainurl";
 
 void dcpregs_playstream_init(void)
 {
-    memset(&play_stream_data.app, 0, sizeof(play_stream_data.app));
-    memset(&play_stream_data.other, 0, sizeof(play_stream_data.other));
-    play_stream_data.app.next_free_stream_id = STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN;
+    play_stream_data.app.reset(STREAM_ID_SOURCE_APP | STREAM_ID_COOKIE_MIN);
+    play_stream_data.other.reset();
 }
 
 void dcpregs_playstream_late_init(void)
@@ -844,20 +876,18 @@ static void dump_plainurl_register_meta_data(const char *what,
     if(!msg_is_verbose(plainurl_register_dump_level))
         return;
 
-    char meta_data_buffer[sizeof(info.meta_data)];
-    const char *artist_and_album[2];
+    const auto tokenized(tokenize_meta_data(info.meta_data));
+    const auto d(std::get<0>(tokenized).c_str());
 
-    tokenize_meta_data(meta_data_buffer, info.meta_data, artist_and_album);
-
-    msg_vinfo(plainurl_register_dump_level, "%s artist: \"%s\"", what, artist_and_album[0]);
-    msg_vinfo(plainurl_register_dump_level, "%s album : \"%s\"", what, artist_and_album[1]);
-    msg_vinfo(plainurl_register_dump_level, "%s title : \"%s\"", what, meta_data_buffer);
+    msg_vinfo(plainurl_register_dump_level, "%s artist: \"%s\"", what, &d[std::get<1>(tokenized)]);
+    msg_vinfo(plainurl_register_dump_level, "%s album : \"%s\"", what, &d[std::get<2>(tokenized)]);
+    msg_vinfo(plainurl_register_dump_level, "%s title : \"%s\"", what, d);
 }
 
 static void dump_plainurl_register_url(const char *what,
                                        const SimplifiedStreamInfo &info)
 {
-    msg_vinfo(plainurl_register_dump_level, "%s: \"%s\"", what, info.url);
+    msg_vinfo(plainurl_register_dump_level, "%s: \"%s\"", what, info.url.c_str());
 }
 
 int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
@@ -879,7 +909,6 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
     }
 
     if(copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
-                        sizeof(play_stream_data.app.inbuffer_new_stream.meta_data),
                         data, length, register_description))
         dump_plainurl_register_meta_data(register_description,
                                          play_stream_data.app.inbuffer_new_stream);
@@ -901,7 +930,6 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
         play_stream_data.app.pending_request = PendingAppRequest::NONE;
 
     if(copy_string_data(play_stream_data.app.inbuffer_new_stream.url,
-                        sizeof(play_stream_data.app.inbuffer_new_stream.url),
                         data, length, register_description))
     {
         dump_plainurl_register_url(register_description,
@@ -911,7 +939,7 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
         if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
         {
             if(is_in_app_mode)
-                try_start_stream(&play_stream_data.app, &play_stream_data.other,
+                try_start_stream(play_stream_data.app, play_stream_data.other,
                                  true);
             else
                 play_stream_data.app.pending_request = PendingAppRequest::START;
@@ -922,7 +950,7 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
     else if(is_in_app_mode)
     {
         /* stop command */
-        try_stop_stream(&play_stream_data.app, true);
+        try_stop_stream(play_stream_data.app, true);
     }
     else
         play_stream_data.app.pending_request = PendingAppRequest::STOP_KEEP_SELECTED;
@@ -935,7 +963,7 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
       case PendingAppRequest::NONE:
       case PendingAppRequest::STOP_KEEP_SELECTED:
       case PendingAppRequest::STOP_FOR_DESELECTION:
-        clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
+        clear_stream_info(play_stream_data.app.inbuffer_new_stream);
         break;
     }
 
@@ -988,8 +1016,7 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
     }
 
     if(copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
-                             sizeof(play_stream_data.app.inbuffer_next_stream.meta_data),
-                             data, length, register_description))
+                        data, length, register_description))
         dump_plainurl_register_meta_data(register_description,
                                          play_stream_data.app.inbuffer_next_stream);
 
@@ -1011,7 +1038,6 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
     }
 
     if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
-                        sizeof(play_stream_data.app.inbuffer_next_stream.url),
                         data, length, register_description))
     {
         dump_plainurl_register_url(register_description,
@@ -1019,7 +1045,7 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
 
         /* maybe send to streamplayer queue */
         if(play_stream_data.app.inbuffer_next_stream.meta_data[0] != '\0')
-            try_start_stream(&play_stream_data.app, &play_stream_data.other,
+            try_start_stream(play_stream_data.app, play_stream_data.other,
                              false);
         else
             msg_error(0, LOG_ERR,
@@ -1031,7 +1057,7 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
         BUG("App is doing weird stuff");
     }
 
-    clear_stream_info(&play_stream_data.app.inbuffer_next_stream);
+    clear_stream_info(play_stream_data.app.inbuffer_next_stream);
 
     return 0;
 }
@@ -1042,7 +1068,7 @@ ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
     return 0;
 }
 
-void dcpregs_playstream_select_source(void)
+void dcpregs_playstream_select_source()
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1066,9 +1092,9 @@ void dcpregs_playstream_select_source(void)
 
         if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
         {
-            try_start_stream(&play_stream_data.app, &play_stream_data.other,
+            try_start_stream(play_stream_data.app, play_stream_data.other,
                              true);
-            clear_stream_info(&play_stream_data.app.inbuffer_new_stream);
+            clear_stream_info(play_stream_data.app.inbuffer_new_stream);
         }
         else
             BUG("No data available for pending start request");
@@ -1077,19 +1103,19 @@ void dcpregs_playstream_select_source(void)
 
       case PendingAppRequest::STOP_KEEP_SELECTED:
         msg_info("Processing pending stop request");
-        try_stop_stream(&play_stream_data.app, true);
+        try_stop_stream(play_stream_data.app, true);
         break;
 
       case PendingAppRequest::STOP_FOR_DESELECTION:
         msg_info("Processing pending stop request and leaving app mode");
-        try_stop_stream(&play_stream_data.app, false);
+        try_stop_stream(play_stream_data.app, false);
         break;
     }
 
     play_stream_data.app.pending_request = PendingAppRequest::NONE;
 }
 
-void dcpregs_playstream_deselect_source(void)
+void dcpregs_playstream_deselect_source()
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1109,7 +1135,7 @@ void dcpregs_playstream_deselect_source(void)
 
       case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
       case DevicePlaymode::APP_IS_PLAYING:
-        try_stop_stream(&play_stream_data.app, false);
+        try_stop_stream(play_stream_data.app, false);
         break;
 
       case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
@@ -1125,7 +1151,7 @@ void dcpregs_playstream_deselect_source(void)
 }
 
 void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
-                                          const char *title, const char *url)
+                                          std::string &&title, std::string &&url)
 {
     msg_vinfo(MESSAGE_LEVEL_DIAG,
               "Received explicit title and URL information for stream %u",
@@ -1134,18 +1160,16 @@ void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
     log_assert((raw_stream_id & STREAM_ID_SOURCE_MASK) != STREAM_ID_SOURCE_INVALID);
-    log_assert(title != NULL);
-    log_assert(url != NULL);
 
     if(!is_app_stream(raw_stream_id))
         unchecked_set_meta_data_and_url(raw_stream_id, title, url,
-                                        &play_stream_data.other);
+                                        play_stream_data.other);
     else
     {
         BUG("Got title and URL information for app stream ID %u",
             raw_stream_id);
-        BUG("+   Title: \"%s\"", title);
-        BUG("+   URL  : \"%s\"", url);
+        BUG("+   Title: \"%s\"", title.c_str());
+        BUG("+   URL  : \"%s\"", url.c_str());
     }
 }
 
@@ -1290,7 +1314,7 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
                                       GVariantWrapper::Transfer::JUST_MOVE)));
 
     const StreamIdType stream_id_type =
-        determine_stream_id_type(raw_stream_id, &play_stream_data.app);
+        determine_stream_id_type(raw_stream_id, play_stream_data.app);
 
     const bool is_new_stream =
         play_stream_data.other.currently_playing_stream != raw_stream_id;
@@ -1311,8 +1335,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
                       "Got start notification for unknown app stream ID %u",
                       raw_stream_id);
         else
-            other_stream_started_playing(&play_stream_data.app,
-                                         &switched_to_nonapp_mode);
+            other_stream_started_playing(play_stream_data.app,
+                                         switched_to_nonapp_mode);
 
         break;
 
@@ -1325,8 +1349,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
             BUG("App stream %u started, but audio source not selected",
                 raw_stream_id);
 
-            other_stream_started_playing(&play_stream_data.app,
-                                         &switched_to_nonapp_mode);
+            other_stream_started_playing(play_stream_data.app,
+                                         switched_to_nonapp_mode);
             break;
 
           case DevicePlaymode::SELECTED_IDLE:
@@ -1335,15 +1359,15 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
           case DevicePlaymode::APP_IS_PLAYING:
             msg_info("%s app stream %u",
                      is_new_stream ? "Next" : "Continue with", raw_stream_id);
-            app_stream_started_playing(&play_stream_data.app, stream_id_type, is_new_stream);
+            app_stream_started_playing(play_stream_data.app, stream_id_type, is_new_stream);
             break;
 
           case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
             msg_error(0, LOG_NOTICE,
                       "Unexpected start of app stream %u", raw_stream_id);
 
-            other_stream_started_playing(&play_stream_data.app,
-                                         &switched_to_nonapp_mode);
+            other_stream_started_playing(play_stream_data.app,
+                                         switched_to_nonapp_mode);
             break;
         }
 
@@ -1357,8 +1381,8 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
                 play_stream_data.app.next_stream_id,
                 play_stream_data.app.current_stream_id);
 
-        other_stream_started_playing(&play_stream_data.app,
-                                     &switched_to_nonapp_mode);
+        other_stream_started_playing(play_stream_data.app,
+                                     switched_to_nonapp_mode);
 
         if(switched_to_nonapp_mode)
             notify_app_playback_stopped();
@@ -1366,7 +1390,7 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
         break;
     }
 
-    try_notify_pending_stream_info(&play_stream_data.other,
+    try_notify_pending_stream_info(play_stream_data.other,
                                    switched_to_nonapp_mode);
 
     GVariant *val = play_stream_data.other.tracked_stream_key.is_tracking()
@@ -1378,7 +1402,7 @@ void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
         notify_cover_art_changed();
 }
 
-void dcpregs_playstream_stop_notification(void)
+void dcpregs_playstream_stop_notification()
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1400,7 +1424,7 @@ void dcpregs_playstream_stop_notification(void)
     play_stream_data.other.currently_playing_stream =
         STREAM_ID_SOURCE_INVALID | STREAM_ID_COOKIE_INVALID;
 
-    do_notify_stream_info(&play_stream_data.other, NotifyStreamInfo::DEV_NULL,
+    do_notify_stream_info(play_stream_data.other, NotifyStreamInfo::DEV_NULL,
                           SendStreamUpdate::URL_AND_TITLE);
 }
 

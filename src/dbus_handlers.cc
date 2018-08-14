@@ -31,6 +31,7 @@
 #include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_playstream.h"
+#include "dcpregs_playstream.hh"
 #include "dcpregs_status.h"
 #include "volume_control.hh"
 #include "smartphone_app_send.hh"

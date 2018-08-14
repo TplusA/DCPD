@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,6 +19,8 @@
 #ifndef DCPREGS_PLAYSTREAM_HH
 #define DCPREGS_PLAYSTREAM_HH
 
+#include <string>
+
 #include "coverart.hh"
 
 /*!
@@ -27,6 +29,15 @@
 /*!@{*/
 
 const CoverArt::PictureProviderIface &dcpregs_playstream_get_picture_provider();
+
+void dcpregs_playstream_select_source();
+void dcpregs_playstream_deselect_source();
+void dcpregs_playstream_set_title_and_url(stream_id_t raw_stream_id,
+                                          std::string &&title, std::string &&url);
+void dcpregs_playstream_start_notification(stream_id_t raw_stream_id,
+                                           void *stream_key_variant);
+void dcpregs_playstream_stop_notification();
+void dcpregs_playstream_cover_art_notification(void *stream_key_variant);
 
 /*!@}*/
 
