@@ -648,7 +648,7 @@ void test_register_read_request_size_1_transaction()
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
                                             TRANSACTION_DUMP_SENT_NONE, &e));
 
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 55, 1 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 55 [DHCP control], 1 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -748,7 +748,7 @@ void test_register_read_request_size_16_transaction()
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
                                             TRANSACTION_DUMP_SENT_NONE, &e));
 
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 56, 16 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 56 [IPv4 address], 16 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -823,7 +823,7 @@ void test_register_multi_step_read_request_transaction()
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
                                             TRANSACTION_DUMP_SENT_NONE, &e));
 
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 51, 18 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 51 [MAC address], 18 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -948,7 +948,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
                                             TRANSACTION_DUMP_SENT_NONE, &e));
 
     /* this is our \c #big_register defined above */
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 0, 683 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 0 [big register (unit tests)], 683 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(head, expected_from_slave_fd, expected_to_slave_fd,
@@ -1231,7 +1231,7 @@ void test_register_write_request_transaction()
     dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
     mock_messages->expect_msg_info("Could not determine active network technology, trying fallback");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54, 1 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54 [start network configuration], 1 bytes");
 
     cut_assert_false(transaction_is_input_required(t));
 
@@ -1744,7 +1744,7 @@ void test_big_slave_transaction()
               std::back_inserter(expected_data));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
-                                              "RegIO W: 0, 256 bytes (incomplete)");
+                                              "RegIO W: 0 [big write (unit tests)], 256 bytes (incomplete)");
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -1775,7 +1775,7 @@ void test_big_slave_transaction()
               std::back_inserter(expected_data));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
-                                              "RegIO W: 0, 512 bytes (continued)");
+                                              "RegIO W: 0 [big write (unit tests)], 512 bytes (continued)");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -1820,7 +1820,7 @@ void test_big_slave_transaction()
     big_write_data.clear();
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
-                                              "RegIO W: 0, 518 bytes (complete)");
+                                              "RegIO W: 0 [big write (unit tests)], 518 bytes (complete)");
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -1889,7 +1889,7 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
               std::back_inserter(expected_data));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
-                                              "RegIO W: 0, 256 bytes (incomplete)");
+                                              "RegIO W: 0 [big write (unit tests)], 256 bytes (incomplete)");
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -1920,7 +1920,7 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
               std::back_inserter(expected_data));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
-                                              "RegIO W: 0, 512 bytes (continued)");
+                                              "RegIO W: 0 [big write (unit tests)], 512 bytes (continued)");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -1954,7 +1954,7 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     big_write_data.clear();
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
-                                              "RegIO W: 0, 512 bytes (complete)");
+                                              "RegIO W: 0 [big write (unit tests)], 512 bytes (complete)");
 
     cppcut_assert_equal(TRANSACTION_FINISHED,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -2034,7 +2034,7 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
                                             TRANSACTION_DUMP_SENT_NONE, &e));
 
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17 [device status], 2 bytes");
 
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -2078,7 +2078,7 @@ void test_register_push_transaction()
     cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
     cppcut_assert_not_null(t);
 
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17 [device status], 2 bytes");
 
     struct transaction_exception e;
     cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
@@ -2132,7 +2132,7 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
 
         mock_messages->expect_msg_vinfo_if_not_ignored(MESSAGE_LEVEL_TRACE,
                                                        "read 17 handler %p %zu");
-        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17, 2 bytes");
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17 [device status], 2 bytes");
 
         cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
                             transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
@@ -2474,7 +2474,7 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
     /* the push transaction is moved to some other place for deferred
      * processing, a new transaction has been allocated for the newly detected
      * slave transaction; now continue processing that one */
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 87, 5 bytes");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 87 [appliance ID], 5 bytes");
 
     cppcut_assert_equal(TRANSACTION_PUSH_BACK,
                         transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd,

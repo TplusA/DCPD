@@ -120,6 +120,8 @@ global_data;
 #define MAX_NUMBER_OF_TRANSACTIONS \
     (sizeof(global_data.tpool) / sizeof(global_data.tpool[0]))
 
+#define REGISTER_FORMAT_STRING  "%d [%s]"
+
 static inline void log_register_write(const struct transaction *t,
                                       enum LogWrite what)
 {
@@ -146,8 +148,9 @@ static inline void log_register_write(const struct transaction *t,
         break;
     }
 
-    msg_vinfo(MESSAGE_LEVEL_DIAG, "RegIO W: %d, %zu bytes%s",
-              t->reg->address,
+    msg_vinfo(MESSAGE_LEVEL_DIAG,
+              "RegIO W: " REGISTER_FORMAT_STRING ", %zu bytes%s",
+              t->reg->address, t->reg->name,
               t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos,
               suffix);
 }
@@ -801,14 +804,16 @@ static bool do_read_register(struct transaction *t)
 
         if(read_result < 0)
         {
-            msg_error(0, LOG_ERR, "RegIO R: FAILED READING %d (%zd)",
-                      t->reg->address, read_result);
+            msg_error(0, LOG_ERR,
+                      "RegIO R: FAILED READING " REGISTER_FORMAT_STRING " (%zd)",
+                      t->reg->address, t->reg->name, read_result);
             return false;
         }
 
         if(t->reg->address != 120 || msg_is_verbose(MESSAGE_LEVEL_DEBUG))
             msg_vinfo(MESSAGE_LEVEL_DIAG,
-                      "RegIO R: %d, %zu bytes", t->reg->address, read_result);
+                      "RegIO R: " REGISTER_FORMAT_STRING ", %zu bytes",
+                      t->reg->address, t->reg->name, read_result);
 
         t->payload.pos = read_result;
 
@@ -826,13 +831,15 @@ static bool do_read_register(struct transaction *t)
 
         if(!t->reg->read_handler_dynamic(&t->payload))
         {
-            msg_error(0, LOG_ERR, "RegIO R: FAILED READING %d",
-                      t->reg->address);
+            msg_error(0, LOG_ERR,
+                      "RegIO R: FAILED READING " REGISTER_FORMAT_STRING,
+                      t->reg->address, t->reg->name);
             return false;
         }
 
         msg_vinfo(MESSAGE_LEVEL_DIAG,
-                  "RegIO R: %d, %zu bytes", t->reg->address, t->payload.pos);
+                  "RegIO R: " REGISTER_FORMAT_STRING ", %zu bytes",
+                  t->reg->address, t->reg->name, t->payload.pos);
 
         return true;
     }
@@ -1154,9 +1161,9 @@ enum transaction_process_status transaction_process(struct transaction *t,
         if(write_result < 0)
         {
             msg_error(0, LOG_ERR,
-                      "RegIO W: FAILED WRITING %zu bytes to %d (%d)",
+                      "RegIO W: FAILED WRITING %zu bytes to " REGISTER_FORMAT_STRING " (%d)",
                       t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos,
-                      t->reg->address, write_result);
+                      t->reg->address, t->reg->name, write_result);
             break;
         }
 
