@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -43,6 +43,7 @@ struct RegisterProtocolLevel { uint32_t code; };
 struct dcp_register_t
 {
     uint8_t address;         /*!< Register number. */
+    const char *name;
     struct RegisterProtocolLevel minimum_protocol_version;
     struct RegisterProtocolLevel maximum_protocol_version;
 

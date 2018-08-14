@@ -918,6 +918,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
     static const struct dcp_register_t big_register =
     {
         .address = 0,
+        .name = "big register (unit tests)",
         .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
         .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
         .flags = 0,
@@ -1700,6 +1701,7 @@ void test_big_slave_transaction()
     static const struct dcp_register_t big_write =
     {
         .address = 0,
+        .name = "big write (unit tests)",
         .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
         .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
         .flags = 0,
@@ -1844,6 +1846,7 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     static const struct dcp_register_t big_write =
     {
         .address = 0,
+        .name = "big write (unit tests)",
         .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
         .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
         .flags = 0,
