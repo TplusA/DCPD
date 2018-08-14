@@ -1,3 +1,20 @@
+2018-08-21  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.15 released.
+
+	* Audio sources: Added source for HIGHRESAUDIO service (via Airable).
+
+	* Logging: Register names are printed along with the register numbers
+	  to the log. This is going to reduce the guesswork when reading logs.
+
+	* Logging: Extra logs on writes to registers 78, 79, 238, 239 at
+	  verbosity level "diag". We can see now which URLs are written, and
+	  which fall-back meta data belongs to it. This is going to supportive
+	  for app development and debugging.
+
+	* Misc: Ported some portions of the code base to C++ to enable easier
+	  and safer ways for adding future extensions and refactoring.
+
 2018-06-22  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.14 released.
