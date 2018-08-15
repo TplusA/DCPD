@@ -38,8 +38,7 @@
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
-#include "dcpregs_audiosources.h"
-#include "dcpregs_playstream.h"
+#include "dcpregs_audiosources.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.h"
@@ -5931,7 +5930,7 @@ void cut_setup()
 
     network_prefs_init(nullptr, nullptr);
     Regs::init(register_changed_callback);
-    dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
+    dcpregs_filetransfer_set_picture_provider(Regs::PlayStream::get_picture_provider());
 }
 
 void cut_teardown()
@@ -6319,7 +6318,7 @@ void test_download_empty_cover_art()
 {
     /* no picture hash available */
     auto *reg =
-        lookup_register_expect_handlers(210, dcpregs_read_210_current_cover_art_hash, nullptr);
+        lookup_register_expect_handlers(210, Regs::PlayStreamHandlers::read_210_current_cover_art_hash, nullptr);
 
     mock_messages->expect_msg_info("Cover art: Send empty hash to SPI slave");
 
@@ -7095,7 +7094,7 @@ static void set_start_title(const std::string expected_artist,
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION:
         /* audio source selection immediately acknowledged */
         mock_messages->expect_msg_info("Enter app mode");
-        dcpregs_playstream_select_source();
+        Regs::PlayStream::select_source();
         break;
 
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS:
@@ -7578,7 +7577,7 @@ static void send_title_and_url(const ID::Stream stream_id,
     if(expecting_direct_slave_notification)
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
 
-    dcpregs_playstream_set_title_and_url(stream_id, expected_title, expected_url);
+    Regs::PlayStream::set_title_and_url(stream_id, expected_title, expected_url);
 }
 
 static void stop_stream()
@@ -7636,7 +7635,7 @@ void test_start_stream_with_slow_audio_source_selection()
                                    SetTitleAndURLFlowAssumptions::IDLE__IN_APP_MODE__KEEP_MODE,
                                    SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION);
 
-    dcpregs_playstream_select_source();
+    Regs::PlayStream::select_source();
 }
 
 /*!\test
@@ -7657,10 +7656,10 @@ void test_start_stream_and_deselect_audio_source()
     mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
 
-    dcpregs_playstream_deselect_source();
+    Regs::PlayStream::deselect_source();
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_stop_notification();
+    Regs::PlayStream::stop_notification();
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
 }
 
@@ -7675,7 +7674,7 @@ void test_enter_app_mode_and_immediately_deselect_audio_source()
                     SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE);
 
     mock_messages->expect_msg_info("Leave app mode");
-    dcpregs_playstream_deselect_source();
+    Regs::PlayStream::deselect_source();
 }
 
 /*!\test
@@ -7831,8 +7830,8 @@ void test_start_stream_then_start_another_stream()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper hash_first;
     expect_cover_art_notification(skey_first, GVariantWrapper(), cached_image_first, &hash_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
@@ -7850,8 +7849,8 @@ void test_start_stream_then_start_another_stream()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_cover_art_notification(skey_second, hash_first, cached_image_second);
-    dcpregs_playstream_start_notification(stream_id_second.get(),
-                                          GVariantWrapper::move(skey_second));
+    Regs::PlayStream::start_notification(stream_id_second.get(),
+                                         GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
@@ -7887,8 +7886,8 @@ void test_start_stream_then_quickly_start_another_stream()
                                               "Got start notification for unknown app stream ID 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 3>{75, 76, 210});
     mock_messages->check();
     expect_current_title_and_url("First", "http://app-provided.url.org/first.flac");
@@ -7896,8 +7895,8 @@ void test_start_stream_then_quickly_start_another_stream()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    dcpregs_playstream_start_notification(stream_id_second.get(),
-                                          GVariantWrapper::move(skey_second));
+    Regs::PlayStream::start_notification(stream_id_second.get(),
+                                         GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second", "http://app-provided.url.org/second.flac");
@@ -7913,8 +7912,8 @@ void test_app_can_start_stream_while_other_source_is_playing()
 {
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    dcpregs_playstream_start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI),
-                                          GVariantWrapper::move(dummy_stream_key));
+    Regs::PlayStream::start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI),
+                                         GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check({210});
     expect_current_title_and_url("", "");
 
@@ -7930,8 +7929,8 @@ void test_app_can_start_stream_while_other_source_is_playing()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    dcpregs_playstream_start_notification(stream_id.get(),
-                                          GVariantWrapper::move(skey));
+    Regs::PlayStream::start_notification(stream_id.get(),
+                                         GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
@@ -7959,8 +7958,8 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    dcpregs_playstream_start_notification(stream_id.get(),
-                                          GVariantWrapper::move(skey));
+    Regs::PlayStream::start_notification(stream_id.get(),
+                                         GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
@@ -7974,8 +7973,8 @@ void test_app_mode_ends_when_another_source_starts_playing_info_after_start()
     const auto ui_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    dcpregs_playstream_start_notification(ui_stream_id,
-                                          GVariantWrapper::move(dummy_stream_key));
+    Regs::PlayStream::start_notification(ui_stream_id,
+                                         GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check(std::array<uint8_t, 4>{79, 75, 76, 210});
     expect_current_title_and_url("", "");
 
@@ -8004,8 +8003,8 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    dcpregs_playstream_start_notification(stream_id.get(),
-                                          GVariantWrapper::move(skey));
+    Regs::PlayStream::start_notification(stream_id.get(),
+                                         GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
@@ -8023,8 +8022,8 @@ void test_app_mode_ends_when_another_source_starts_playing_start_after_info()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    dcpregs_playstream_start_notification(ui_stream_id,
-                                          GVariantWrapper::move(dummy_stream_key));
+    Regs::PlayStream::start_notification(ui_stream_id,
+                                         GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check(std::array<uint8_t, 4>{79, 75, 76, 210});
     expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
 }
@@ -8046,8 +8045,8 @@ static void start_stop_single_stream(bool with_notifications)
         mock_messages->expect_msg_info_formatted("Next app stream 257");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         expect_empty_cover_art_notification(skey);
-        dcpregs_playstream_start_notification(stream_id.get(),
-                                              GVariantWrapper::move(skey));
+        Regs::PlayStream::start_notification(stream_id.get(),
+                                             GVariantWrapper::move(skey));
         register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
         mock_messages->check();
         expect_next_url_empty();
@@ -8061,7 +8060,7 @@ static void start_stop_single_stream(bool with_notifications)
     {
         mock_messages->expect_msg_info("App mode: streamplayer has stopped");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-        dcpregs_playstream_stop_notification();
+        Regs::PlayStream::stop_notification();
         register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
         mock_messages->check();
         expect_current_title_and_url("", "");
@@ -8094,14 +8093,14 @@ void test_quick_start_stop_single_stream()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    dcpregs_playstream_start_notification(OurStream::make().get(),
-                                          GVariantWrapper::move(dummy_stream_key));
+    Regs::PlayStream::start_notification(OurStream::make().get(),
+                                         GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_current_title_and_url("Stream", "http://app-provided.url.org/stream.flac");
 
     mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_stop_notification();
+    Regs::PlayStream::stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 }
@@ -8120,8 +8119,8 @@ void test_url_is_not_sent_to_spi_slave_if_unchanged()
 
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    dcpregs_playstream_start_notification(stream_id,
-                                          GVariantWrapper::move(dummy_stream_key));
+    Regs::PlayStream::start_notification(stream_id,
+                                         GVariantWrapper::move(dummy_stream_key));
 
     register_changed_data->check({210});
     mock_messages->check();
@@ -8131,7 +8130,7 @@ void test_url_is_not_sent_to_spi_slave_if_unchanged()
              "Received explicit title and URL information for stream 129");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
 
-    dcpregs_playstream_set_title_and_url(stream_id, "My stream", url);
+    Regs::PlayStream::set_title_and_url(stream_id, "My stream", url);
 
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     mock_messages->check();
@@ -8141,7 +8140,7 @@ void test_url_is_not_sent_to_spi_slave_if_unchanged()
              "Received explicit title and URL information for stream 129");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send only new title to SPI slave");
 
-    dcpregs_playstream_set_title_and_url(stream_id, "Other title", url);
+    Regs::PlayStream::set_title_and_url(stream_id, "Other title", url);
 
     register_changed_data->check(75);
     expect_current_title_and_url("Other title", url);
@@ -8162,8 +8161,8 @@ void test_nothing_is_sent_to_spi_slave_if_title_and_url_unchanged()
 
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    dcpregs_playstream_start_notification(stream_id,
-                                          GVariantWrapper::move(dummy_stream_key));
+    Regs::PlayStream::start_notification(stream_id,
+                                         GVariantWrapper::move(dummy_stream_key));
 
     register_changed_data->check({210});
     mock_messages->check();
@@ -8174,7 +8173,7 @@ void test_nothing_is_sent_to_spi_slave_if_title_and_url_unchanged()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
                                     "Send title and URL to SPI slave");
 
-    dcpregs_playstream_set_title_and_url(stream_id, title, url);
+    Regs::PlayStream::set_title_and_url(stream_id, title, url);
 
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     mock_messages->check();
@@ -8185,7 +8184,7 @@ void test_nothing_is_sent_to_spi_slave_if_title_and_url_unchanged()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
                                     "Suppress sending title and URL to SPI slave");
 
-    dcpregs_playstream_set_title_and_url(stream_id, title, url);
+    Regs::PlayStream::set_title_and_url(stream_id, title, url);
 
     register_changed_data->check();
     expect_current_title_and_url(title, url);
@@ -8213,8 +8212,8 @@ void test_start_stream_and_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
     expect_next_url_empty();
@@ -8231,8 +8230,8 @@ void test_start_stream_and_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    dcpregs_playstream_start_notification(stream_id_second.get(),
-                                          GVariantWrapper::move(skey_second));
+    Regs::PlayStream::start_notification(stream_id_second.get(),
+                                         GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
     expect_next_url_empty();
@@ -8241,7 +8240,7 @@ void test_start_stream_and_queue_next()
     /* after a while, the stream may finish */
     mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_stop_notification();
+    Regs::PlayStream::stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 }
@@ -8277,8 +8276,8 @@ void test_play_multiple_tracks_in_a_row()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url(title_and_url[0].first, title_and_url[0].second);
@@ -8302,8 +8301,8 @@ void test_play_multiple_tracks_in_a_row()
         mock_messages->expect_msg_info_formatted(buffer);
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         expect_empty_cover_art_notification(skey);
-        dcpregs_playstream_start_notification(stream_id.get(),
-                                              GVariantWrapper::move(skey));
+        Regs::PlayStream::start_notification(stream_id.get(),
+                                             GVariantWrapper::move(skey));
         register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
         mock_messages->check();
         expect_next_url_empty();
@@ -8313,7 +8312,7 @@ void test_play_multiple_tracks_in_a_row()
     /* after a while, the last stream finishes playing */
     mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_stop_notification();
+    Regs::PlayStream::stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 }
@@ -8353,8 +8352,8 @@ void test_start_stream_and_quickly_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
@@ -8362,8 +8361,8 @@ void test_start_stream_and_quickly_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    dcpregs_playstream_start_notification(stream_id_second.get(),
-                                          GVariantWrapper::move(skey_second));
+    Regs::PlayStream::start_notification(stream_id_second.get(),
+                                         GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
@@ -8392,8 +8391,8 @@ void test_queue_next_after_stop_notification_is_not_ignored()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
@@ -8401,7 +8400,7 @@ void test_queue_next_after_stop_notification_is_not_ignored()
     /* the stream finishes... */
     mock_messages->expect_msg_info("App mode: streamplayer has stopped");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    dcpregs_playstream_stop_notification();
+    Regs::PlayStream::stop_notification();
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 
@@ -8463,8 +8462,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Playing stream", "http://app-provided.url.org/first.mp3");
@@ -8502,8 +8501,8 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     mock_messages->expect_msg_info_formatted("Next app stream 260");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_fourth);
-    dcpregs_playstream_start_notification(stream_id_fourth.get(),
-                                          GVariantWrapper::move(skey_fourth));
+    Regs::PlayStream::start_notification(stream_id_fourth.get(),
+                                         GVariantWrapper::move(skey_fourth));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Stream 4", "http://app-provided.url.org/4.mp3");
@@ -8526,8 +8525,8 @@ void test_pause_and_continue()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
     expect_next_url_empty();
@@ -8546,23 +8545,23 @@ void test_pause_and_continue()
      * starting the same stream is treated as continue from pause */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* also works a second time */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
     expect_empty_cover_art_notification(skey_first);
-    dcpregs_playstream_start_notification(stream_id_first.get(),
-                                          GVariantWrapper::move(skey_first));
+    Regs::PlayStream::start_notification(stream_id_first.get(),
+                                         GVariantWrapper::move(skey_first));
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* now assume the next stream has started */
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    dcpregs_playstream_start_notification(stream_id_second.get(),
-                                          GVariantWrapper::move(skey_second));
+    Regs::PlayStream::start_notification(stream_id_second.get(),
+                                         GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
@@ -8632,7 +8631,7 @@ void cut_setup()
     network_prefs_init(nullptr, nullptr);
     Regs::init(register_changed_callback);
 
-    dcpregs_audiosources_set_unit_test_mode();
+    Regs::AudioSources::set_unit_test_mode();
 }
 
 void cut_teardown()
@@ -9661,7 +9660,7 @@ void test_status_byte_updates_are_only_sent_if_changed()
 static void set_speed_factor_successful_cases(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
     const double sign_mul = (subcommand == 0xc1) ? 1.0 : -1.0;
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -9703,7 +9702,7 @@ static void set_speed_factor_successful_cases(uint8_t subcommand)
 static void set_speed_factor_wrong_command_format(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
 
     /* too long */
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
@@ -9723,7 +9722,7 @@ static void set_speed_factor_wrong_command_format(uint8_t subcommand)
 static void set_speed_factor_invalid_factor(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
 
@@ -9741,7 +9740,7 @@ static void set_speed_factor_invalid_factor(uint8_t subcommand)
 static void set_speed_factor_zero(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor too small (Invalid argument)");
 
@@ -9819,7 +9818,7 @@ void test_playback_set_speed_reverse_zero_factor_is_invalid()
 void test_playback_regular_speed()
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy, 0.0);
@@ -9834,7 +9833,7 @@ void test_playback_regular_speed()
 void test_playback_stream_seek()
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
@@ -9850,7 +9849,7 @@ void test_playback_stream_seek()
 void test_playback_stream_seek_boundaries()
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
@@ -10007,7 +10006,7 @@ void cut_setup()
     network_prefs_init(nullptr, nullptr);
     Regs::init(register_changed_callback);
 
-    dcpregs_audiosources_set_unit_test_mode();
+    Regs::AudioSources::set_unit_test_mode();
 }
 
 void cut_teardown()
@@ -10063,7 +10062,7 @@ static void make_source_available(const char *source_id, const char *player_id,
     if(inject_expectations != nullptr)
         inject_expectations();
 
-    dcpregs_audiosources_source_available(source_id);
+    Regs::AudioSources::source_available(source_id);
 
     register_changed_data->check(80);
 
@@ -10090,8 +10089,8 @@ static void make_source_available(const char *source_id, const char *player_id,
 void test_read_out_all_audio_sources_after_initialization()
 {
     auto *reg = lookup_register_expect_handlers(80,
-                                                dcpregs_read_80_get_known_audio_sources,
-                                                dcpregs_write_80_get_known_audio_sources);
+                                                Regs::AudioSourcesHandlers::read_80_get_known_audio_sources,
+                                                Regs::AudioSourcesHandlers::write_80_get_known_audio_sources);
 
     static const uint8_t subcommand = 0x00;
     reg->write(&subcommand, sizeof(subcommand));
@@ -10124,8 +10123,8 @@ static void read_out_all_audio_sources_after_making_airable_available(bool is_on
     make_source_available("airable.qobuz",  "p", "de.tahifi.Qobuz",   "dbus/qobuz",   0x44);
 
     auto *reg = lookup_register_expect_handlers(80,
-                                                dcpregs_read_80_get_known_audio_sources,
-                                                dcpregs_write_80_get_known_audio_sources);
+                        Regs::AudioSourcesHandlers::read_80_get_known_audio_sources,
+                        Regs::AudioSourcesHandlers::write_80_get_known_audio_sources);
 
     /* read out all audio source information after the audio paths have been
      * made available */
@@ -10186,8 +10185,8 @@ void test_read_out_all_audio_sources_after_making_some_sources_available_offline
 void test_current_audio_source_is_empty_after_initialization()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     uint8_t buffer[32] = {0xc7, 0xc8};
     cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
@@ -10201,8 +10200,8 @@ void test_current_audio_source_is_empty_after_initialization()
 void test_selection_of_known_alive_source_reports_selection_asynchronously()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
@@ -10229,8 +10228,8 @@ void test_selection_of_known_alive_source_reports_selection_asynchronously()
 void test_selection_of_known_alive_source_with_async_notification()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
@@ -10245,7 +10244,7 @@ void test_selection_of_known_alive_source_with_async_notification()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc, false);
+    Regs::AudioSources::selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* now the register contains our selected audio source ID */
@@ -10261,8 +10260,8 @@ void test_selection_of_known_alive_source_with_async_notification()
 void test_selection_of_known_alive_source_is_done_when_possible()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
@@ -10294,7 +10293,7 @@ void test_selection_of_known_alive_source_is_done_when_possible()
 
     /* audio path has been changed as reported by calling the following
      * function (called from D-Bus handler) */
-    dcpregs_audiosources_selected_source(asrc, false);
+    Regs::AudioSources::selected_source(asrc, false);
     register_changed_data->check(81);
 
     cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
@@ -10308,14 +10307,14 @@ void test_selection_of_known_alive_source_is_done_when_possible()
 void test_unrequested_change_of_known_audio_path_is_propagated_to_spi_slave()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "roon";
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc, false);
+    Regs::AudioSources::selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* the register now contains some audio source ID */
@@ -10331,14 +10330,14 @@ void test_unrequested_change_of_known_audio_path_is_propagated_to_spi_slave()
 void test_unrequested_change_of_unknown_audio_path_is_propagated_to_spi_slave()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "new_streaming_service";
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc, false);
+    Regs::AudioSources::selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* the register now contains some audio source ID */
@@ -10353,13 +10352,13 @@ void test_unrequested_change_of_unknown_audio_path_is_propagated_to_spi_slave()
 void test_selection_of_known_unusable_source()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
-    dcpregs_audiosources_selected_source(asrc, false);
+    Regs::AudioSources::selected_source(asrc, false);
     register_changed_data->check(81);
 
     uint8_t buffer[32] = {0xc7};
@@ -10395,8 +10394,8 @@ void test_quickly_selecting_audio_source_twice_switches_once()
     make_source_available(asrc, player, "usb_source", "/some/dbus/path", 0x62);
 
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     RequestSourceResultBundle result;
 
@@ -10449,8 +10448,8 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
     make_source_available(asrc_usb,  player_usb,  "de.tahifi.USB",  "/dbus/usb",  0x62);
 
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     /* request UPnP audio source */
     RequestSourceResultBundle upnp_result;
@@ -10511,7 +10510,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 
     /* a bit later, the notification about audio path change */
-    dcpregs_audiosources_selected_source(asrc_usb, false);
+    Regs::AudioSources::selected_source(asrc_usb, false);
     register_changed_data->check(81);
 
     cppcut_assert_equal(sizeof(asrc_usb), reg->read(buffer, sizeof(buffer)));
@@ -10524,8 +10523,8 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
 void test_selection_of_known_dead_source_yields_error()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "roon";
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
@@ -10544,8 +10543,8 @@ void test_selection_of_known_dead_source_yields_error()
 void test_selection_of_unknown_source_yields_error()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "doesnotexist";
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
@@ -10564,7 +10563,7 @@ void test_selection_of_unknown_source_yields_error()
 void test_spurious_deselection_of_audio_source_emits_bug_message()
 {
     mock_messages->expect_msg_error(0, LOG_CRIT, "BUG: Not selected");
-    dcpregs_playstream_deselect_source();
+    Regs::PlayStream::deselect_source();
 }
 
 /*!\test
@@ -10573,8 +10572,8 @@ void test_spurious_deselection_of_audio_source_emits_bug_message()
 void test_selection_of_idle_source()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     mock_messages->expect_msg_info("Inactive state requested");
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
@@ -10597,8 +10596,8 @@ void test_selection_of_idle_source()
 void test_selection_of_real_source_followed_by_idle_source()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";
@@ -10613,7 +10612,7 @@ void test_selection_of_real_source_followed_by_idle_source()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc, false);
+    Regs::AudioSources::selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* now the register contains our selected audio source ID */
@@ -10632,7 +10631,7 @@ void test_selection_of_real_source_followed_by_idle_source()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source("", false);
+    Regs::AudioSources::selected_source("", false);
     register_changed_data->check(81);
 
     /* the register contains the empty audio source again */
@@ -10653,8 +10652,8 @@ void test_selection_of_real_source_followed_by_idle_source()
 void test_selection_of_inactive_state_for_suspend()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";
@@ -10669,7 +10668,7 @@ void test_selection_of_inactive_state_for_suspend()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source(asrc, false);
+    Regs::AudioSources::selected_source(asrc, false);
     register_changed_data->check(81);
 
     /* now the register contains our selected audio source ID */
@@ -10694,7 +10693,7 @@ void test_selection_of_inactive_state_for_suspend()
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
-    dcpregs_audiosources_selected_source("", false);
+    Regs::AudioSources::selected_source("", false);
     register_changed_data->check(81);
 
     /* the register contains the empty audio source again */
@@ -10711,8 +10710,8 @@ void test_selection_of_inactive_state_for_suspend()
 void test_audio_source_request_option_parser()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";
@@ -10771,8 +10770,8 @@ void test_audio_source_request_option_parser()
 void test_audio_source_request_option_parser_rejects_malformed_options()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                                                dcpregs_read_81_current_audio_source,
-                                                dcpregs_write_81_current_audio_source);
+                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
+                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";

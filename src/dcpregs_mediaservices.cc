@@ -24,7 +24,7 @@
 #include <errno.h>
 
 #include "dcpregs_mediaservices.hh"
-#include "dcpregs_audiosources.h"
+#include "dcpregs_audiosources.hh"
 #include "registers_priv.hh"
 #include "dynamic_buffer_util.h"
 #include "credentials_dbus.h"
@@ -80,7 +80,7 @@ static int delete_credentials(const char *service_id, bool logout_on_failure,
         g_free(dummy);
 
         if(delete_ret_ptr == NULL && delete_ret == 0)
-            dcpregs_audiosources_set_have_credentials(service_id, false);
+            Regs::AudioSources::set_have_credentials(service_id, false);
     }
 
     if(dbus_get_airable_sec_iface() != NULL)
@@ -115,9 +115,9 @@ static int set_credentials(const char *service_id,
     const int ret = dbus_common_handle_dbus_error(&error, "Set credentials");
 
     if(ret == 0)
-        dcpregs_audiosources_set_have_credentials(service_id, true);
+        Regs::AudioSources::set_have_credentials(service_id, true);
     else if(delete_ret == 0)
-        dcpregs_audiosources_set_have_credentials(service_id, false);
+        Regs::AudioSources::set_have_credentials(service_id, false);
 
     tdbus_airable_call_external_service_login_sync(dbus_get_airable_sec_iface(),
                                                    service_id, login, true,

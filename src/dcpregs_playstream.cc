@@ -25,9 +25,8 @@
 #include <algorithm>
 #include <glib.h>
 
-#include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
-#include "dcpregs_audiosources.h"
+#include "dcpregs_audiosources.hh"
 #include "registers_priv.hh"
 #include "coverart.hh"
 #include "streamplayer_dbus.h"
@@ -739,7 +738,7 @@ static void registered_audio_source(GObject *source_object, GAsyncResult *res,
                                                      res, &error);
     dbus_common_handle_dbus_error(&error, "Register audio source");
 
-    dcpregs_audiosources_fetch_audio_paths();
+    Regs::AudioSources::fetch_audio_paths();
 }
 
 static struct
@@ -753,13 +752,13 @@ play_stream_data;
 
 static const char app_audio_source_id[] = "strbo.plainurl";
 
-void dcpregs_playstream_init(void)
+void Regs::PlayStream::init(void)
 {
     play_stream_data.app.reset();
     play_stream_data.other.reset();
 }
 
-void dcpregs_playstream_late_init(void)
+void Regs::PlayStream::late_init(void)
 {
     tdbus_aupath_manager_call_register_source(dbus_audiopath_get_manager_iface(),
                                               app_audio_source_id,
@@ -770,7 +769,7 @@ void dcpregs_playstream_late_init(void)
                                               registered_audio_source, &play_stream_data);
 }
 
-void dcpregs_playstream_deinit(void)
+void Regs::PlayStream::deinit(void)
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
     play_stream_data.other.tracked_stream_key.clear();
@@ -821,7 +820,7 @@ static bool parse_absolute_position_ms(const uint8_t *data, size_t length,
     return true;
 }
 
-int dcpregs_write_73_seek_or_set_speed(const uint8_t *data, size_t length)
+int Regs::PlayStreamHandlers::write_73_seek_or_set_speed(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 73 handler %p %zu", data, length);
 
@@ -875,7 +874,7 @@ int dcpregs_write_73_seek_or_set_speed(const uint8_t *data, size_t length)
     return -1;
 }
 
-ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length)
+ssize_t Regs::PlayStreamHandlers::read_75_current_stream_title(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
 
@@ -884,7 +883,7 @@ ssize_t dcpregs_read_75_current_stream_title(uint8_t *response, size_t length)
                                 (char *)response, length);
 }
 
-ssize_t dcpregs_read_76_current_stream_url(uint8_t *response, size_t length)
+ssize_t Regs::PlayStreamHandlers::read_76_current_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
 
@@ -913,7 +912,7 @@ static void dump_plainurl_register_url(const char *what,
     msg_vinfo(plainurl_register_dump_level, "%s: \"%s\"", what, info.url.c_str());
 }
 
-int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
+int Regs::PlayStreamHandlers::write_78_start_play_stream_title(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "First stream meta data (reg 78)";
 
@@ -939,7 +938,7 @@ int dcpregs_write_78_start_play_stream_title(const uint8_t *data, size_t length)
     return 0;
 }
 
-int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
+int Regs::PlayStreamHandlers::write_79_start_play_stream_url(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "First stream URL (reg 79)";
 
@@ -993,13 +992,13 @@ int dcpregs_write_79_start_play_stream_url(const uint8_t *data, size_t length)
     return 0;
 }
 
-ssize_t dcpregs_read_79_start_play_stream_url(uint8_t *response, size_t length)
+ssize_t Regs::PlayStreamHandlers::read_79_start_play_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 79 handler %p %zu", response, length);
     return 0;
 }
 
-ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length)
+ssize_t Regs::PlayStreamHandlers::read_210_current_cover_art_hash(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
 
@@ -1024,7 +1023,7 @@ ssize_t dcpregs_read_210_current_cover_art_hash(uint8_t *response, size_t length
     return len;
 }
 
-int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
+int Regs::PlayStreamHandlers::write_238_next_stream_title(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "Next stream meta data (reg 238)";
 
@@ -1046,7 +1045,7 @@ int dcpregs_write_238_next_stream_title(const uint8_t *data, size_t length)
     return 0;
 }
 
-int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
+int Regs::PlayStreamHandlers::write_239_next_stream_url(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "Next stream URL (reg 239)";
 
@@ -1085,13 +1084,13 @@ int dcpregs_write_239_next_stream_url(const uint8_t *data, size_t length)
     return 0;
 }
 
-ssize_t dcpregs_read_239_next_stream_url(uint8_t *response, size_t length)
+ssize_t Regs::PlayStreamHandlers::read_239_next_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 239 handler %p %zu", response, length);
     return 0;
 }
 
-void dcpregs_playstream_select_source()
+void Regs::PlayStream::select_source()
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1138,7 +1137,7 @@ void dcpregs_playstream_select_source()
     play_stream_data.app.pending_request = PendingAppRequest::NONE;
 }
 
-void dcpregs_playstream_deselect_source()
+void Regs::PlayStream::deselect_source()
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1173,8 +1172,8 @@ void dcpregs_playstream_deselect_source()
     }
 }
 
-void dcpregs_playstream_set_title_and_url(ID::Stream stream_id,
-                                          std::string &&title, std::string &&url)
+void Regs::PlayStream::set_title_and_url(ID::Stream stream_id,
+                                         std::string &&title, std::string &&url)
 {
     msg_vinfo(MESSAGE_LEVEL_DIAG,
               "Received explicit title and URL information for stream %u",
@@ -1321,14 +1320,14 @@ static inline void notify_cover_art_changed()
  * only sent in app mode, so that there should be no accidental communication
  * with the regular stream player while Roon is active.
  *
- * The mechanisms in here (and in #dcpregs_playstream_stop_notification())
+ * The mechanisms in here (and in #Regs::PlayStream::stop_notification())
  * operate orthogonal to and completely independent of audio path selection,
  * AND OF COURSE THIS IS A PROBLEM. It currently works, but an adaption to make
  * use of audio source information is required to make this code simpler and
  * also more stable against possible misdetections of app/no-app modes. FIXME.
  */
-void dcpregs_playstream_start_notification(ID::Stream stream_id,
-                                           void *stream_key_variant)
+void Regs::PlayStream::start_notification(ID::Stream stream_id,
+                                          void *stream_key_variant)
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1424,7 +1423,7 @@ void dcpregs_playstream_start_notification(ID::Stream stream_id,
         notify_cover_art_changed();
 }
 
-void dcpregs_playstream_stop_notification()
+void Regs::PlayStream::stop_notification()
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1447,7 +1446,7 @@ void dcpregs_playstream_stop_notification()
                           SendStreamUpdate::URL_AND_TITLE);
 }
 
-void dcpregs_playstream_cover_art_notification(void *stream_key_variant)
+void Regs::PlayStream::cover_art_notification(void *stream_key_variant)
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
 
@@ -1491,7 +1490,7 @@ class PictureProvider: public CoverArt::PictureProviderIface
 static PictureProvider picture_provider(play_stream_data.lock,
                                         play_stream_data.other.current_cover_art);
 
-const CoverArt::PictureProviderIface &dcpregs_playstream_get_picture_provider()
+const CoverArt::PictureProviderIface &Regs::PlayStream::get_picture_provider()
 {
     return picture_provider;
 }

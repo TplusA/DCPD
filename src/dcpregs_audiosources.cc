@@ -30,7 +30,7 @@
 #include <mutex>
 #include <sstream>
 
-#include "dcpregs_audiosources.h"
+#include "dcpregs_audiosources.hh"
 #include "dcpregs_common.h"
 #include "connman_service_list.hh"
 #include "registers_priv.hh"
@@ -989,7 +989,7 @@ static AudioSourceData audio_source_data(
     AudioSource("",               "Inactive",                0),
 });
 
-void dcpregs_audiosources_init(void)
+void Regs::AudioSources::init(void)
 {
     audio_source_data.for_each([] (AudioSource &src)
     {
@@ -1032,7 +1032,7 @@ static Maybe<bool> have_credentials_stored(const char *category)
     return result;
 }
 
-void dcpregs_audiosources_fetch_audio_paths(void)
+void Regs::AudioSources::fetch_audio_paths(void)
 {
     GVariant *usable_variant = nullptr;
     GVariant *incomplete_variant = nullptr;
@@ -1055,10 +1055,10 @@ void dcpregs_audiosources_fetch_audio_paths(void)
     g_variant_iter_init(&iter, GVariantWrapper::get(usable));
 
     while(g_variant_iter_next(&iter, "(&s&s)", &source_id, &player_id))
-        dcpregs_audiosources_source_available(source_id);
+        Regs::AudioSources::source_available(source_id);
 }
 
-void dcpregs_audiosources_check_external_service_credentials()
+void Regs::AudioSources::check_external_service_credentials()
 {
     bool changed = false;
 
@@ -1077,7 +1077,7 @@ void dcpregs_audiosources_check_external_service_credentials()
         audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
 }
 
-void dcpregs_audiosources_deinit(void)
+void Regs::AudioSources::deinit(void)
 {
     auto lock(audio_source_data.lock());
     audio_source_data.reset({AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
@@ -1173,7 +1173,7 @@ static void write_audio_source_info(RegisterResponseWriter &out,
     out.push_back(status_byte);
 }
 
-ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length)
+ssize_t Regs::AudioSourcesHandlers::read_80_get_known_audio_sources(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 80 handler %p %zu", response, length);
 
@@ -1271,7 +1271,7 @@ static int queue_read_one_command(const uint8_t *data, size_t length)
     return 0;
 }
 
-int dcpregs_write_80_get_known_audio_sources(const uint8_t *data, size_t length)
+int Regs::AudioSourcesHandlers::write_80_get_known_audio_sources(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 80 handler %p %zu", data, length);
 
@@ -1310,7 +1310,7 @@ int dcpregs_write_80_get_known_audio_sources(const uint8_t *data, size_t length)
     return result;
 }
 
-ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length)
+ssize_t Regs::AudioSourcesHandlers::read_81_current_audio_source(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 81 handler %p %zu", response, length);
 
@@ -1401,7 +1401,7 @@ static bool set_request_options(GVariantDict &dict,
     return true;
 }
 
-int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
+int Regs::AudioSourcesHandlers::write_81_current_audio_source(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 81 handler %p %zu", data, length);
 
@@ -1526,7 +1526,7 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length)
     return 0;
 }
 
-void dcpregs_audiosources_source_available(const char *source_id)
+void Regs::AudioSources::source_available(const char *source_id)
 {
     auto lock(audio_source_data.lock());
 
@@ -1539,8 +1539,8 @@ void dcpregs_audiosources_source_available(const char *source_id)
         push_80_command_queue.add(GetAudioSourcesCommand::SOURCES_CHANGED);
 }
 
-void dcpregs_audiosources_selected_source(const char *source_id,
-                                          bool is_deferred)
+void Regs::AudioSources::selected_source(const char *source_id,
+                                         bool is_deferred)
 {
     auto lock(audio_source_data.lock());
 
@@ -1572,8 +1572,8 @@ void dcpregs_audiosources_selected_source(const char *source_id,
     audio_source_data.selected_audio_source_notification(*src, is_deferred);
 }
 
-void dcpregs_audiosources_set_have_credentials(const char *cred_category,
-                                               bool have_credentials)
+void Regs::AudioSources::set_have_credentials(const char *cred_category,
+                                              bool have_credentials)
 {
     if(global_external_service_state.set_credentials_state(
             cred_category, Maybe<bool>(have_credentials),
@@ -1581,8 +1581,8 @@ void dcpregs_audiosources_set_have_credentials(const char *cred_category,
         audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
 }
 
-void dcpregs_audiosources_set_login_state(const char *cred_category,
-                                          bool is_logged_in)
+void Regs::AudioSources::set_login_state(const char *cred_category,
+                                         bool is_logged_in)
 {
     if(global_external_service_state.set_login_state(
             cred_category, Maybe<bool>(is_logged_in),
@@ -1595,7 +1595,7 @@ void dcpregs_audiosources_set_login_state(const char *cred_category,
     }
 }
 
-void dcpregs_audiosources_set_unit_test_mode(void)
+void Regs::AudioSources::set_unit_test_mode(void)
 {
     audio_source_data.set_unit_test_mode();
 }

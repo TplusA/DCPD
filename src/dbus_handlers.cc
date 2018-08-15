@@ -25,12 +25,11 @@
 #include <errno.h>
 
 #include "dbus_handlers.h"
-#include "dcpregs_audiosources.h"
+#include "dcpregs_audiosources.hh"
 #include "dcpregs_appliance.h"
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_upnpname.h"
 #include "dcpregs_filetransfer.h"
-#include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_status.h"
 #include "volume_control.hh"
@@ -179,14 +178,14 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
         uint16_t stream_id = g_variant_get_uint16(val);
         g_variant_unref(val);
 
-        dcpregs_playstream_start_notification(ID::Stream::make_from_raw_id(stream_id),
-                                              g_variant_get_child_value(parameters, 1));
+        Regs::PlayStream::start_notification(ID::Stream::make_from_raw_id(stream_id),
+                                             g_variant_get_child_value(parameters, 1));
     }
     else if(strcmp(signal_name, "Stopped") == 0 ||
             strcmp(signal_name, "StoppedWithError") == 0)
     {
         /* stream stopped playing */
-        dcpregs_playstream_stop_notification();
+        Regs::PlayStream::stop_notification();
     }
     else if(strcmp(signal_name, "MetaDataChanged") == 0 ||
             strcmp(signal_name, "PositionChanged") == 0 ||
@@ -221,7 +220,7 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     if(clear_info)
         id = ID::Stream::make_complete(id.get_source(), STREAM_ID_COOKIE_INVALID);
 
-    dcpregs_playstream_set_title_and_url(id, title, url);
+    Regs::PlayStream::set_title_and_url(id, title, url);
 
     tdbus_dcpd_playback_complete_set_stream_info(object, invocation);
 
@@ -240,7 +239,7 @@ void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
         const gchar *player_id;
 
         g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
-        dcpregs_audiosources_source_available(source_id);
+        Regs::AudioSources::source_available(source_id);
     }
     else if(strcmp(signal_name, "PathActivated") == 0 ||
             strcmp(signal_name, "PathDeferred") == 0)
@@ -249,7 +248,7 @@ void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
         const gchar *player_id;
 
         g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
-        dcpregs_audiosources_selected_source(source_id, strcmp(signal_name, "PathDeferred") == 0);
+        Regs::AudioSources::selected_source(source_id, strcmp(signal_name, "PathDeferred") == 0);
     }
     else if(strcmp(signal_name, "PlayerRegistered") == 0)
     {
@@ -266,7 +265,7 @@ gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
                                               gpointer user_data)
 {
     msg_info("Selected source \"%s\"", source_id);
-    dcpregs_playstream_select_source();
+    Regs::PlayStream::select_source();
     tdbus_aupath_source_complete_selected(object, invocation);
     return TRUE;
 }
@@ -278,7 +277,7 @@ gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
                                                 gpointer user_data)
 {
     msg_info("Deselected source \"%s\"", source_id);
-    dcpregs_playstream_deselect_source();
+    Regs::PlayStream::deselect_source();
     tdbus_aupath_source_complete_deselected(object, invocation);
     return TRUE;
 }
@@ -466,7 +465,7 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
                       &raw_error_code, &info);
 
         if(raw_error_code == 0)
-            dcpregs_audiosources_set_login_state(service_id, is_login);
+            Regs::AudioSources::set_login_state(service_id, is_login);
 
         if(actor_id != ACTOR_ID_SMARTPHONE_APP && raw_error_code == 0)
         {
@@ -498,7 +497,7 @@ void dbussignal_artcache_monitor(GDBusProxy *proxy, const gchar *sender_name,
     else if(strcmp(signal_name, "Removed") == 0)
     {
         check_parameter_assertions(parameters, 1);
-        dcpregs_playstream_cover_art_notification(g_variant_get_child_value(parameters, 0));
+        Regs::PlayStream::cover_art_notification(g_variant_get_child_value(parameters, 0));
     }
     else if(strcmp(signal_name, "Added") == 0)
     {
@@ -512,14 +511,14 @@ void dbussignal_artcache_monitor(GDBusProxy *proxy, const gchar *sender_name,
                       &stream_key_variant, &stream_key_priority, &is_updated);
 
         if(is_updated)
-            dcpregs_playstream_cover_art_notification(stream_key_variant);
+            Regs::PlayStream::cover_art_notification(stream_key_variant);
         else
             g_variant_unref(stream_key_variant);
     }
     else if(strcmp(signal_name, "Failed") == 0)
     {
         check_parameter_assertions(parameters, 3);
-        dcpregs_playstream_cover_art_notification(g_variant_get_child_value(parameters, 0));
+        Regs::PlayStream::cover_art_notification(g_variant_get_child_value(parameters, 0));
     }
     else
         unknown_signal(iface_name, signal_name, sender_name);

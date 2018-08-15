@@ -33,8 +33,8 @@ dcpd_SOURCES = \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_playstream.hh dcpregs_status.h \
-    dcpregs_upnpname.h dcpregs_upnpname.hh dcpregs_audiosources.h dcpregs_volume.h \
+    dcpregs_tcptunnel.h dcpregs_playstream.hh dcpregs_status.h \
+    dcpregs_upnpname.h dcpregs_upnpname.hh dcpregs_audiosources.hh dcpregs_volume.h \
     dcpregs_searchparameters.h dcpregs_appliance.h dcpregs_internationalization.h \
     connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
@@ -112,8 +112,8 @@ libregisters_la_SOURCES = \
     dcpregs_wlansurvey.cc dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.cc dcpregs_tcptunnel.h \
-    dcpregs_audiosources.cc dcpregs_audiosources.h \
-    dcpregs_playstream.cc dcpregs_playstream.h dcpregs_playstream.hh \
+    dcpregs_audiosources.cc dcpregs_audiosources.hh \
+    dcpregs_playstream.cc dcpregs_playstream.hh \
     dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
     dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
@@ -173,8 +173,8 @@ libdbus_handlers_la_SOURCES = \
     dcpregs_upnpname.h \
     dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.h \
-    dcpregs_audiosources.h \
-    dcpregs_playstream.h \
+    dcpregs_audiosources.hh \
+    dcpregs_playstream.hh \
     dcpregs_status.h
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 libdbus_handlers_la_CXXFLAGS = $(AM_CXXFLAGS)

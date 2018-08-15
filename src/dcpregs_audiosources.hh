@@ -16,11 +16,10 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_AUDIOSOURCES_H
-#define DCPREGS_AUDIOSOURCES_H
+#ifndef DCPREGS_AUDIOSOURCES_HH
+#define DCPREGS_AUDIOSOURCES_HH
 
-#include <stdint.h>
-#include <stdbool.h>
+#include <cinttypes>
 #include <unistd.h>
 
 /*!
@@ -28,18 +27,14 @@
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
-void dcpregs_audiosources_init(void);
-void dcpregs_audiosources_deinit(void);
+namespace AudioSources
+{
 
-ssize_t dcpregs_read_80_get_known_audio_sources(uint8_t *response, size_t length);
-int dcpregs_write_80_get_known_audio_sources(const uint8_t *data, size_t length);
-
-ssize_t dcpregs_read_81_current_audio_source(uint8_t *response, size_t length);
-int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length);
+void init(void);
+void deinit(void);
 
 /*!
  * Retrieve audio paths from audio path manager for first initialization.
@@ -50,7 +45,7 @@ int dcpregs_write_81_current_audio_source(const uint8_t *data, size_t length);
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void dcpregs_audiosources_fetch_audio_paths(void);
+void fetch_audio_paths(void);
 
 /*!
  * Retrieve availability of credentials for external media services.
@@ -62,7 +57,7 @@ void dcpregs_audiosources_fetch_audio_paths(void);
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void dcpregs_audiosources_check_external_service_credentials(void);
+void check_external_service_credentials(void);
 
 /*!
  * Report availability of an audio source as part of a usable audio path.
@@ -70,7 +65,7 @@ void dcpregs_audiosources_check_external_service_credentials(void);
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void dcpregs_audiosources_source_available(const char *source_id);
+void source_available(const char *source_id);
 
 /*!
  * Report selection of audio source.
@@ -78,14 +73,12 @@ void dcpregs_audiosources_source_available(const char *source_id);
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void dcpregs_audiosources_selected_source(const char *source_id,
-                                          bool is_deferred);
+void selected_source(const char *source_id, bool is_deferred);
 
 /*!
  * Report update of service credentials state for given credentials category.
  */
-void dcpregs_audiosources_set_have_credentials(const char *cred_category,
-                                               bool have_credentials);
+void set_have_credentials(const char *cred_category, bool have_credentials);
 
 /*!
  * Report login status change of external media service.
@@ -93,8 +86,7 @@ void dcpregs_audiosources_set_have_credentials(const char *cred_category,
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void dcpregs_audiosources_set_login_state(const char *cred_category,
-                                          bool is_logged_in);
+void set_login_state(const char *cred_category, bool is_logged_in);
 
 /*!
  * Be aware of unit test mode.
@@ -105,12 +97,20 @@ void dcpregs_audiosources_set_login_state(const char *cred_category,
  *      type cast from \c GObject to #tdbusaupathManager works without any
  *      special code.
  */
-void dcpregs_audiosources_set_unit_test_mode(void);
-
-#ifdef __cplusplus
+void set_unit_test_mode(void);
 }
-#endif
+
+namespace AudioSourcesHandlers
+{
+ssize_t read_80_get_known_audio_sources(uint8_t *response, size_t length);
+int write_80_get_known_audio_sources(const uint8_t *data, size_t length);
+
+ssize_t read_81_current_audio_source(uint8_t *response, size_t length);
+int write_81_current_audio_source(const uint8_t *data, size_t length);
+}
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_AUDIOSOURCES_H */
+#endif /* !DCPREGS_AUDIOSOURCES_HH */
