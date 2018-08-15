@@ -26,7 +26,7 @@
 #include <sys/socket.h>
 
 #include "dcpregs_tcptunnel.h"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "network.h"
 #include "network_dispatcher.hh"
 #include "messages.h"

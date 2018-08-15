@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,36 +16,33 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef REGISTERS_PRIV_H
-#define REGISTERS_PRIV_H
+#ifndef DCPREGS_PROTOLEVEL_H
+#define DCPREGS_PROTOLEVEL_H
 
-#include <stdbool.h>
+#include <stdint.h>
+#include <unistd.h>
 
 /*!
- * \internal
- * DCP registers configuration data.
+ * \addtogroup registers
  */
-struct register_configuration_t
-{
-    void (*register_changed_notification_fn)(uint8_t reg_number);
-};
+/*!@{*/
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*!
- * Get private data.
+ * Function required by unit tests for initializing static data.
  */
-const struct register_configuration_t *registers_get_data(void);
+void dcpregs_protocol_level_init(void);
 
-/*!
- * Get private data for writing.
- */
-struct register_configuration_t *registers_get_nonconst_data(void);
+ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length);
+int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* !REGISTERS_PRIV_H */
+/*!@}*/
+
+#endif /* !DCPREGS_PROTOLEVEL_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -23,9 +23,9 @@
 #include <string.h>
 #include <errno.h>
 
-#include "dcpregs_mediaservices.h"
+#include "dcpregs_mediaservices.hh"
 #include "dcpregs_audiosources.h"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "dynamic_buffer_util.h"
 #include "credentials_dbus.h"
 #include "dbus_common.h"

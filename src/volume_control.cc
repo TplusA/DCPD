@@ -26,7 +26,7 @@
 
 #include "volume_control.hh"
 #include "dcpregs_volume.h"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "dbus_iface_deep.h"
 #include "fixpoint.hh"
 #include "messages.h"

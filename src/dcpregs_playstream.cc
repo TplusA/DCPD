@@ -28,7 +28,7 @@
 #include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_audiosources.h"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "coverart.hh"
 #include "streamplayer_dbus.h"
 #include "artcache_dbus.h"

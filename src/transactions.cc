@@ -27,9 +27,9 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "transactions.h"
+#include "transactions.hh"
 #include "dynamic_buffer.h"
-#include "registers.h"
+#include "registers.hh"
 #include "named_pipe.h"
 #include "dcpdefs.h"
 #include "messages.h"
@@ -100,7 +100,7 @@ struct transaction
     uint8_t request_header[DCP_HEADER_SIZE];
     uint8_t command;
 
-    const struct dcp_register_t *reg;
+    const Regs::Register *reg;
 
     enum transaction_channel channel;
     struct dynamic_buffer payload;
@@ -125,7 +125,7 @@ global_data;
 static inline void log_register_write(const struct transaction *t,
                                       enum LogWrite what)
 {
-    if(t->reg->address == 121 && !msg_is_verbose(MESSAGE_LEVEL_DEBUG))
+    if(t->reg->address_ == 121 && !msg_is_verbose(MESSAGE_LEVEL_DEBUG))
         return;
 
     const char *suffix = "";
@@ -150,7 +150,7 @@ static inline void log_register_write(const struct transaction *t,
 
     msg_vinfo(MESSAGE_LEVEL_DIAG,
               "RegIO W: " REGISTER_FORMAT_STRING ", %zu bytes%s",
-              t->reg->address, t->reg->name,
+              t->reg->address_, t->reg->name_.c_str(),
               t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos,
               suffix);
 }
@@ -297,11 +297,11 @@ void transaction_reset_for_slave(struct transaction *t)
                      t->channel, t->is_pinned);
 }
 
-static const struct dcp_register_t *
+static const Regs::Register *
 lookup_register_for_transaction(uint8_t register_address,
                                 bool master_not_slave)
 {
-    const struct dcp_register_t *reg = register_lookup(register_address);
+    const auto *reg = Regs::lookup(register_address);
 
     if(reg == NULL)
         BUG("%s requested register 0x%02x, but is not implemented",
@@ -317,7 +317,7 @@ lookup_register_for_transaction(uint8_t register_address,
  * process them.
  */
 static void transaction_bind(struct transaction *t,
-                             const struct dcp_register_t *reg, uint8_t command)
+                             const Regs::Register *reg, uint8_t command)
 {
     log_assert(reg != NULL);
     t->reg = reg;
@@ -433,7 +433,7 @@ struct transaction *transaction_queue_cut_element(struct transaction *t)
 
 static bool
 request_command_matches_register_definition(uint8_t command,
-                                            const struct dcp_register_t *reg)
+                                            const Regs::Register *reg)
 {
     switch(command)
     {
@@ -473,7 +473,7 @@ static enum read_to_buffer_result read_to_buffer(uint8_t *dest, size_t count,
 
                 /* we retry reading up to 40 times with a delay of 25 ms in
                  * between, so that's at least one second, but not much more */
-                static const struct timespec t = { .tv_nsec = 25L * 1000L * 1000L, };
+                static const struct timespec t = { .tv_sec =0, .tv_nsec = 25L * 1000L * 1000L, };
                 os_nanosleep(&t);
 
                 continue;
@@ -636,6 +636,7 @@ static bool fill_request_header(struct transaction *t, const int fd)
     }
 
     const bool is_header_valid = ((t->request_header[0] & 0xf0) == 0);
+    const Regs::Register *reg;
 
     if(!is_header_valid)
     {
@@ -645,7 +646,7 @@ static bool fill_request_header(struct transaction *t, const int fd)
         goto error_invalid_header;
     }
 
-    const struct dcp_register_t *reg = lookup_register_for_transaction(t->request_header[1], false);
+    reg = lookup_register_for_transaction(t->request_header[1], false);
 
     if(reg == NULL)
     {
@@ -704,6 +705,8 @@ static bool fill_payload_buffer(struct transaction *t, const int fd,
     if(size == 0)
         return true;
 
+    const size_t offset = append ? t->payload.pos : 0;
+
     if(t->dcpsync.is_enabled)
     {
         if(size < t->dcpsync.remaining_payload_size)
@@ -718,8 +721,6 @@ static bool fill_payload_buffer(struct transaction *t, const int fd,
             goto error_exit;
         }
     }
-
-    const size_t offset = append ? t->payload.pos : 0;
 
     if(append)
     {
@@ -743,7 +744,7 @@ static bool fill_payload_buffer(struct transaction *t, const int fd,
             msg_error(0, LOG_ERR,
                       "Expecting at most %zu bytes payload for register %u, "
                       "received %zu bytes",
-                      t->payload.size, t->reg->address, offset + size);
+                      t->payload.size, t->reg->address_, offset + size);
 
             if(!dynamic_buffer_resize(&t->payload, offset + size))
                 goto error_exit;
@@ -779,8 +780,8 @@ error_exit:
 
 static bool allocate_payload_buffer(struct transaction *t)
 {
-    if(register_is_static_size(t->reg))
-        return dynamic_buffer_resize(&t->payload, t->reg->max_data_size);
+    if(t->reg->is_static_size())
+        return dynamic_buffer_resize(&t->payload, t->reg->max_data_size_);
 
     dynamic_buffer_clear(&t->payload);
 
@@ -789,57 +790,64 @@ static bool allocate_payload_buffer(struct transaction *t)
 
 static bool do_read_register(struct transaction *t)
 {
-    if(register_is_static_size(t->reg))
+    if(t->reg->is_static_size())
     {
-        if(t->reg->read_handler == NULL)
+        size_t n;
+
+        try
+        {
+            n = t->reg->read(t->payload.data, t->payload.size);
+        }
+        catch(const Regs::no_handler &e)
         {
             msg_error(ENOSYS, LOG_ERR,
-                      "No read handler defined for register %u",
-                      t->reg->address);
+                      "No read handler defined for register "
+                      REGISTER_FORMAT_STRING,
+                      t->reg->address_, t->reg->name_.c_str());
             return false;
         }
-
-        const ssize_t read_result =
-            t->reg->read_handler(t->payload.data, t->payload.size);
-
-        if(read_result < 0)
+        catch(const Regs::io_error &e)
         {
             msg_error(0, LOG_ERR,
                       "RegIO R: FAILED READING " REGISTER_FORMAT_STRING " (%zd)",
-                      t->reg->address, t->reg->name, read_result);
+                      t->reg->address_, t->reg->name_.c_str(), e.result());
             return false;
         }
 
-        if(t->reg->address != 120 || msg_is_verbose(MESSAGE_LEVEL_DEBUG))
+        if(t->reg->address_ != 120 || msg_is_verbose(MESSAGE_LEVEL_DEBUG))
             msg_vinfo(MESSAGE_LEVEL_DIAG,
                       "RegIO R: " REGISTER_FORMAT_STRING ", %zu bytes",
-                      t->reg->address, t->reg->name, read_result);
+                      t->reg->address_, t->reg->name_.c_str(), n);
 
-        t->payload.pos = read_result;
+        t->payload.pos = n;
 
         return true;
     }
     else
     {
-        if(t->reg->read_handler_dynamic == NULL)
+        try
+        {
+            t->reg->read(t->payload);
+        }
+        catch(const Regs::no_handler &e)
         {
             msg_error(ENOSYS, LOG_ERR,
-                      "No dynamic read handler defined for register %u",
-                      t->reg->address);
+                      "No dynamic read handler defined for register "
+                      REGISTER_FORMAT_STRING,
+                      t->reg->address_, t->reg->name_.c_str());
             return false;
         }
-
-        if(!t->reg->read_handler_dynamic(&t->payload))
+        catch(const Regs::io_error &e)
         {
             msg_error(0, LOG_ERR,
                       "RegIO R: FAILED READING " REGISTER_FORMAT_STRING,
-                      t->reg->address, t->reg->name);
+                      t->reg->address_, t->reg->name_.c_str());
             return false;
         }
 
         msg_vinfo(MESSAGE_LEVEL_DIAG,
                   "RegIO R: " REGISTER_FORMAT_STRING ", %zu bytes",
-                  t->reg->address, t->reg->name, t->payload.pos);
+                  t->reg->address_, t->reg->name_.c_str(), t->payload.pos);
 
         return true;
     }
@@ -1105,6 +1113,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
         }
 
       case TRANSACTION_STATE_SLAVE_READ_APPEND:
+        {
         log_assert(t->command == DCP_COMMAND_MULTI_WRITE_REGISTER);
         log_assert(t->payload.pos > 0);
 
@@ -1122,6 +1131,7 @@ enum transaction_process_status transaction_process(struct transaction *t,
             log_register_write(t, LOG_WRITE_CONTINUED);
 
         return TRANSACTION_IN_PROGRESS;
+        }
 
       case TRANSACTION_STATE_PUSH_TO_SLAVE__INIT:
         if(!allocate_payload_buffer(t))
@@ -1145,25 +1155,28 @@ enum transaction_process_status transaction_process(struct transaction *t,
         return TRANSACTION_IN_PROGRESS;
 
       case TRANSACTION_STATE_SLAVE_PROCESS_WRITE:
-        if(t->reg->write_handler == NULL)
+        try
+        {
+            if(t->command == DCP_COMMAND_WRITE_REGISTER)
+                t->reg->write(t->request_header + DCP_HEADER_DATA_OFFSET, 2);
+            else
+                t->reg->write(t->payload.data, t->payload.pos);
+        }
+        catch(const Regs::no_handler &ex)
         {
             msg_error(ENOSYS, LOG_ERR,
-                      "No write handler defined for register %u",
-                      t->reg->address);
+                      "No write handler defined for register "
+                      REGISTER_FORMAT_STRING,
+                      t->reg->address_, t->reg->name_.c_str());
             break;
         }
-
-        const int write_result =
-            (t->command == DCP_COMMAND_WRITE_REGISTER
-             ? t->reg->write_handler(t->request_header + DCP_HEADER_DATA_OFFSET, 2)
-             : t->reg->write_handler(t->payload.data, t->payload.pos));
-
-        if(write_result < 0)
+        catch(const Regs::io_error &ex)
         {
             msg_error(0, LOG_ERR,
-                      "RegIO W: FAILED WRITING %zu bytes to " REGISTER_FORMAT_STRING " (%d)",
+                      "RegIO W: FAILED WRITING %zu bytes to "
+                      REGISTER_FORMAT_STRING " (%zd)",
                       t->command == DCP_COMMAND_WRITE_REGISTER ? 2 : t->payload.pos,
-                      t->reg->address, t->reg->name, write_result);
+                      t->reg->address_, t->reg->name_.c_str(), ex.result());
             break;
         }
 
@@ -1447,9 +1460,9 @@ uint16_t transaction_get_max_data_size(const struct transaction *t)
 {
     log_assert(t != NULL);
     log_assert(t->reg);
-    log_assert(t->reg->max_data_size > 0);
+    log_assert(t->reg->max_data_size_ > 0);
 
-    return t->reg->max_data_size;
+    return t->reg->max_data_size_;
 }
 
 /*!
@@ -1459,17 +1472,17 @@ uint16_t transaction_get_max_data_size(const struct transaction *t)
  * The size, if any, is inserted later.
  */
 static void set_address_for_master(struct transaction *t,
-                                   const struct dcp_register_t *reg)
+                                   const Regs::Register *reg)
 {
     transaction_bind(t, reg, DCP_COMMAND_MULTI_WRITE_REGISTER);
 
     t->request_header[0] = t->command;
-    t->request_header[1] = reg->address;
+    t->request_header[1] = reg->address_;
     dcp_put_header_data(t->request_header + DCP_HEADER_DATA_OFFSET, 0);
 }
 
 static struct transaction *mk_push_transaction(struct transaction **head,
-                                               const struct dcp_register_t *reg,
+                                               const Regs::Register *reg,
                                                bool is_register_push,
                                                enum transaction_channel channel)
 {
@@ -1520,8 +1533,7 @@ transaction_fragments_from_data(const uint8_t *const data, const size_t length,
     log_assert(data != NULL);
     log_assert(length > 0);
 
-    const struct dcp_register_t *reg =
-        lookup_register_for_transaction(register_address, true);
+    const auto *reg = lookup_register_for_transaction(register_address, true);
 
     if(reg == NULL)
         return NULL;
@@ -1562,8 +1574,7 @@ bool transaction_push_register_to_slave(struct transaction **head,
                                         uint8_t register_address,
                                         enum transaction_channel channel)
 {
-    const struct dcp_register_t *reg =
-        lookup_register_for_transaction(register_address, true);
+    const auto *reg = lookup_register_for_transaction(register_address, true);
 
     if(reg == NULL)
         return false;

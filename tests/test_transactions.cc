@@ -25,8 +25,8 @@
 #include <algorithm>
 #include <glib.h>
 
-#include "transactions.h"
-#include "registers.h"
+#include "transactions.hh"
+#include "registers.hh"
 #include "networkprefs.h"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
@@ -100,8 +100,8 @@ class read_data_t
     }
 };
 
-ssize_t (*os_read)(int fd, void *dest, size_t count) = NULL;
-ssize_t (*os_write)(int fd, const void *buf, size_t count) = NULL;
+ssize_t (*os_read)(int fd, void *dest, size_t count) = nullptr;
+ssize_t (*os_write)(int fd, const void *buf, size_t count) = nullptr;
 
 GVariant *configuration_get_key(const char *key)
 {
@@ -116,8 +116,8 @@ static MockMessages *mock_messages;
 
 void cut_setup()
 {
-    os_read = NULL;
-    os_write = NULL;
+    os_read = nullptr;
+    os_write = nullptr;
 
     mock_messages = new MockMessages;
     cppcut_assert_not_null(mock_messages);
@@ -129,7 +129,7 @@ void cut_setup()
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
-    register_zero_for_unit_tests = NULL;
+    Regs::register_zero_for_unit_tests = nullptr;
     transaction_init_allocator();
 }
 
@@ -202,7 +202,7 @@ void test_deallocation_frees_payload_buffer()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    register_init(NULL);
+    Regs::init(nullptr);
 
     struct transaction *t =
         transaction_fragments_from_data(payload_data, sizeof(payload_data),
@@ -212,7 +212,7 @@ void test_deallocation_frees_payload_buffer()
     transaction_free(&t);
     cppcut_assert_null(t);
 
-    register_deinit();
+    Regs::deinit();
 }
 
 /*!
@@ -232,7 +232,7 @@ static size_t allocate_all_transactions(std::array<struct transaction *, max_all
         dest[i] = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
                                     TRANSACTION_CHANNEL_SPI, false);
 
-        if(dest[i] == NULL)
+        if(dest[i] == nullptr)
             break;
 
         ++count;
@@ -251,7 +251,7 @@ static struct transaction *
 queue_up_all_transactions(std::array<struct transaction *, max_allocs> &objects,
                           size_t count)
 {
-    struct transaction *head = NULL;
+    struct transaction *head = nullptr;
 
     for(size_t i = 0; i < count; ++i)
     {
@@ -546,7 +546,7 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
-    register_zero_for_unit_tests = NULL;
+    Regs::register_zero_for_unit_tests = nullptr;
 
     read_data = new read_data_t;
     cppcut_assert_not_null(read_data);
@@ -625,7 +625,7 @@ void test_register_read_request_size_1_transaction()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    register_init(NULL);
+    Regs::init(nullptr);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -681,7 +681,7 @@ void test_register_read_request_size_1_transaction()
     transaction_free(&t);
     cppcut_assert_null(t);
 
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 }
 
@@ -724,7 +724,7 @@ void test_register_read_request_size_16_transaction()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    register_init(NULL);
+    Regs::init(nullptr);
     setup_network_config("11:23:34:45:56:67");
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
@@ -782,7 +782,7 @@ void test_register_read_request_size_16_transaction()
     transaction_free(&t);
     cppcut_assert_null(t);
 
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 }
 
@@ -799,7 +799,7 @@ void test_register_multi_step_read_request_transaction()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    register_init(NULL);
+    Regs::init(nullptr);
     setup_network_config("11:34:56:78:9A:BC");
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
@@ -858,7 +858,7 @@ void test_register_multi_step_read_request_transaction()
     transaction_free(&t);
     cppcut_assert_null(t);
 
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 }
 
@@ -900,7 +900,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    register_init(NULL);
+    Regs::init(nullptr);
 
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
@@ -915,20 +915,12 @@ void test_big_data_is_sent_to_slave_in_fragments()
     cppcut_assert_not_null(tail);
     transaction_queue_add(&head, tail);
 
-    static const struct dcp_register_t big_register =
-    {
-        .address = 0,
-        .name = "big register (unit tests)",
-        .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
-        .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
-        .flags = 0,
-        .max_data_size = 0,
-        .read_handler = NULL,
-        .read_handler_dynamic = return_big_data,
-        .write_handler = NULL,
-    };
+    static const Regs::Register big_register("big register (unit tests)", 0,
+                                             REGISTER_MK_VERSION(1, 0, 0),
+                                             REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX),
+                                             return_big_data, nullptr);
 
-    register_zero_for_unit_tests = &big_register;
+    Regs::register_zero_for_unit_tests = &big_register;
 
     static const uint8_t dcpsync_header[] =
     {
@@ -1026,7 +1018,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
     cppcut_assert_equal(t, tail);
     transaction_free(&t);
 
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 }
 
@@ -1092,7 +1084,7 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
-    register_zero_for_unit_tests = NULL;
+    Regs::register_zero_for_unit_tests = nullptr;
 
     read_data = new read_data_t;
     cppcut_assert_not_null(read_data);
@@ -1111,13 +1103,13 @@ void cut_setup()
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
-    network_prefs_init(NULL, NULL);
-    register_init(NULL);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(nullptr);
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     Connman::ServiceList::get_singleton_for_update().first.clear();
@@ -1571,7 +1563,7 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
             static_cast<uint8_t>(expected_data_size >> 8)
         };
 
-        if(*head == NULL && (xml_size % DCP_PACKET_MAX_PAYLOAD_SIZE) == 0)
+        if(*head == nullptr && (xml_size % DCP_PACKET_MAX_PAYLOAD_SIZE) == 0)
         {
             /* this particular last packet must be empty */
             cppcut_assert_equal(size_t(DCPSYNC_HEADER_SIZE + DCP_HEADER_SIZE),
@@ -1599,7 +1591,7 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
         ++number_of_transactions;
         ++expected_serial;
     }
-    while(*head != NULL && number_of_transactions < expected_number_of_transactions);
+    while(*head != nullptr && number_of_transactions < expected_number_of_transactions);
 
     cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
 }
@@ -1698,22 +1690,14 @@ static int big_write_handler(const uint8_t *data, size_t length)
  */
 void test_big_slave_transaction()
 {
-    static const struct dcp_register_t big_write =
-    {
-        .address = 0,
-        .name = "big write (unit tests)",
-        .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
-        .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
-        .flags = 0,
-        .max_data_size = 1024,
-        .read_handler = nullptr,
-        .read_handler_dynamic = nullptr,
-        .write_handler = big_write_handler,
-    };
+    static const Regs::Register big_write("big write (unit tests)", 0,
+                                          REGISTER_MK_VERSION(1, 0, 0),
+                                          REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX),
+                                          1024, nullptr, big_write_handler);
 
     big_write_calls_expected = 0;
     big_write_calls_count = 0;
-    register_zero_for_unit_tests = &big_write;
+    Regs::register_zero_for_unit_tests = &big_write;
 
     std::vector<uint8_t> expected_data;
 
@@ -1843,22 +1827,14 @@ void test_big_slave_transaction()
  */
 void test_big_slave_transaction_with_size_of_multiple_of_256()
 {
-    static const struct dcp_register_t big_write =
-    {
-        .address = 0,
-        .name = "big write (unit tests)",
-        .minimum_protocol_version = { .code = REGISTER_MK_VERSION(1, 0, 0) },
-        .maximum_protocol_version = { .code = REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX) },
-        .flags = 0,
-        .max_data_size = 1024,
-        .read_handler = nullptr,
-        .read_handler_dynamic = nullptr,
-        .write_handler = big_write_handler,
-    };
+    static const Regs::Register big_write("big write (unit tests)", 0,
+                                          REGISTER_MK_VERSION(1, 0, 0),
+                                          REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX),
+                                          1024, nullptr, big_write_handler);
 
     big_write_calls_expected = 0;
     big_write_calls_count = 0;
-    register_zero_for_unit_tests = &big_write;
+    Regs::register_zero_for_unit_tests = &big_write;
 
     std::vector<uint8_t> expected_data;
 
@@ -2073,7 +2049,7 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
  */
 void test_register_push_transaction()
 {
-    struct transaction *t = NULL;
+    struct transaction *t = nullptr;
 
     cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
     cppcut_assert_not_null(t);
@@ -2125,7 +2101,7 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
 {
     struct transaction_exception e;
 
-    if(t == NULL)
+    if(t == nullptr)
     {
         cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
         cppcut_assert_not_null(t);
@@ -2185,7 +2161,7 @@ void test_register_push_transaction_can_be_rejected()
 
     /* first try fails */
     struct transaction *t =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001, resending packet as 0x8002");
 
@@ -2234,7 +2210,7 @@ void test_register_push_transaction_can_be_rejected()
  */
 void test_bad_register_addresses_are_handled_in_push_transactions()
 {
-    struct transaction *t = NULL;
+    struct transaction *t = nullptr;
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");
@@ -2268,7 +2244,7 @@ void test_waiting_for_command_interrupted_by_ack()
     mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
 
     struct transaction *to_be_acked =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -2311,7 +2287,7 @@ void test_waiting_for_command_interrupted_by_nack()
     mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
 
     struct transaction *to_be_acked =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
                                               TRANSACTION_CHANNEL_SPI, false);
     cppcut_assert_not_null(t);
@@ -2355,9 +2331,9 @@ void test_waiting_for_command_interrupted_by_nack()
 void test_waiting_for_master_ack_interrupted_by_ack_for_other_transaction()
 {
     struct transaction *to_be_acked =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     struct transaction *t =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN + 1, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN + 1, UINT8_MAX);
 
     struct transaction_exception e = {};
     send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t, TRANSACTION_EXCEPTION, true, &e);
@@ -2395,9 +2371,9 @@ void test_waiting_for_master_ack_interrupted_by_nack_for_other_transaction()
     mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
 
     struct transaction *to_be_acked =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
     struct transaction *t =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN + 1, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN + 1, UINT8_MAX);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001 while waiting for 0x8002 ACK");
@@ -2450,7 +2426,7 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
 
     struct transaction_exception e;
     struct transaction *t_push =
-        create_master_transaction_that_waits_for_ack(NULL, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
+        create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
 
     /* colliding slave read transaction */
     static const uint8_t dcpsync_header[] = { 'c', UINT8_MAX, 0x60, 0xc7, 0x00, DCP_HEADER_SIZE, };

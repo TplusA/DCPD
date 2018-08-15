@@ -31,7 +31,7 @@
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
 #include "dbus_iface_deep.h"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "xmodem.h"
 #include "inifile.h"
 #include "shutdown_guard.h"

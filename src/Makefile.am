@@ -22,16 +22,16 @@ bin_PROGRAMS = dcpd
 
 dcpd_SOURCES = \
     dcpd.cc os.c os.h named_pipe.c named_pipe.h \
-    registers.h registers_priv.h register_response_writer.hh \
+    registers.hh registers_priv.hh register_response_writer.hh \
     dcp_over_tcp.c dcp_over_tcp.h \
     smartphone_app_send.cc smartphone_app_send.hh smartphone_app.hh \
     actor_id.h \
     applink.hh applink_variables.hh \
     network.h network_status_bits.h \
-    transactions.h dcpdefs.h \
+    transactions.hh dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
-    dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_networkconfig.hh dcpregs_wlansurvey.h \
+    dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.h dcpregs_playstream.h dcpregs_playstream.hh dcpregs_status.h \
     dcpregs_upnpname.h dcpregs_upnpname.hh dcpregs_audiosources.h dcpregs_volume.h \
@@ -101,20 +101,20 @@ libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 libdynamic_buffer_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libregisters_la_SOURCES = \
-    registers.c registers.h registers_priv.h register_response_writer.hh \
+    registers.cc registers.hh registers_priv.hh register_response_writer.hh \
     dcpregs_common.c dcpregs_common.h \
     dcpregs_drcp.c dcpregs_drcp.h \
-    dcpregs_protolevel.c dcpregs_protolevel.h \
+    dcpregs_protolevel.cc dcpregs_protolevel.hh \
     dcpregs_appliance.cc dcpregs_appliance.h \
     dcpregs_internationalization.cc dcpregs_internationalization.h \
     dcpregs_networkconfig.cc dcpregs_networkconfig.h dcpregs_networkconfig.hh \
     dcpregs_upnpname.cc dcpregs_upnpname.h dcpregs_upnpname.hh \
-    dcpregs_wlansurvey.c dcpregs_wlansurvey.h \
+    dcpregs_wlansurvey.cc dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.cc dcpregs_tcptunnel.h \
     dcpregs_audiosources.cc dcpregs_audiosources.h \
     dcpregs_playstream.cc dcpregs_playstream.h dcpregs_playstream.hh \
-    dcpregs_mediaservices.c dcpregs_mediaservices.h \
+    dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
     dcpregs_searchparameters.c dcpregs_searchparameters.h \
     dcpregs_status.h \
     volume_control.cc volume_control.hh dcpregs_volume.h \
@@ -171,7 +171,7 @@ libdbus_handlers_la_SOURCES = \
     dcpregs_networkconfig.h \
     dcpregs_networkconfig.hh \
     dcpregs_upnpname.h \
-    dcpregs_wlansurvey.h \
+    dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.h \
     dcpregs_audiosources.h \
     dcpregs_playstream.h \
@@ -230,9 +230,9 @@ libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 libdrcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libtransactions_la_SOURCES = \
-    transactions.c transactions.h os.h \
+    transactions.cc transactions.hh os.h \
     hexdump.c hexdump.h \
-    dynamic_buffer.h registers.h named_pipe.h dcpdefs.h messages.h
+    dynamic_buffer.h registers.hh named_pipe.h dcpdefs.h messages.h
 libtransactions_la_CFLAGS = $(AM_CFLAGS)
 libtransactions_la_CXXFLAGS = $(AM_CXXFLAGS)
 

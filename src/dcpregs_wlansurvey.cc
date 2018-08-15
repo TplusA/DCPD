@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,8 +28,8 @@
 /* for mutex */
 #include <glib.h>
 
-#include "dcpregs_wlansurvey.h"
-#include "registers_priv.h"
+#include "dcpregs_wlansurvey.hh"
+#include "registers_priv.hh"
 #include "connman.h"
 #include "dynamic_buffer_util.h"
 #include "messages.h"
@@ -257,10 +257,10 @@ static bool fill_buffer_with_services(struct dynamic_buffer *const buffer)
         return retval;
     }
 
+    size_t idx = 0;
+
     TRY_EMIT(buffer, goto exit_free_service_iter;,
              "<bss_list count=\"%zu\">", number_of_wifi_services);
-
-    size_t idx = 0;
 
     do
     {

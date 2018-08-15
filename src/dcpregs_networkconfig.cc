@@ -30,7 +30,7 @@
 #include "dcpregs_networkconfig.hh"
 #include "dcpregs_common.h"
 #include "network_status_bits.h"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
 #include "connman.h"

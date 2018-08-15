@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,11 +16,12 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_PROTOLEVEL_H
-#define DCPREGS_PROTOLEVEL_H
+#ifndef DCPREGS_WLANSURVEY_HH
+#define DCPREGS_WLANSURVEY_HH
 
-#include <stdint.h>
-#include <unistd.h>
+#include <inttypes.h>
+
+#include "dynamic_buffer.h"
 
 /*!
  * \addtogroup registers
@@ -31,13 +32,11 @@
 extern "C" {
 #endif
 
-/*!
- * Function required by unit tests for initializing static data.
- */
-void dcpregs_protocol_level_init(void);
+void dcpregs_wlansurvey_init(void);
+void dcpregs_wlansurvey_deinit(void);
 
-ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length);
-int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length);
+int dcpregs_write_104_start_wlan_site_survey(const uint8_t *data, size_t length);
+bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer);
 
 #ifdef __cplusplus
 }
@@ -45,4 +44,4 @@ int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length);
 
 /*!@}*/
 
-#endif /* !DCPREGS_PROTOLEVEL_H */
+#endif /* !DCPREGS_WLANSURVEY_HH */

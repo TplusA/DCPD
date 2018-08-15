@@ -33,7 +33,7 @@
 #include "dcpregs_audiosources.h"
 #include "dcpregs_common.h"
 #include "connman_service_list.hh"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "register_response_writer.hh"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"

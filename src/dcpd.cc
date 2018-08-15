@@ -32,13 +32,13 @@
 #include "network_dispatcher.hh"
 #include "messages.h"
 #include "messages_glib.h"
-#include "transactions.h"
+#include "transactions.hh"
 #include "dynamic_buffer.h"
 #include "dynamic_buffer_util.h"
 #include "drcp.h"
 #include "dbus_iface.h"
 #include "dbus_handlers_connman_manager_glue.h"
-#include "registers.h"
+#include "registers.hh"
 #include "dcpregs_appliance.h"
 #include "dcpregs_status.h"
 #include "dcpregs_filetransfer.h"
@@ -951,7 +951,7 @@ static bool main_loop_init(const struct parameters *parameters,
     if(!is_upgrading)
         network_prefs_migrate_old_network_configuration_files(connman_config_dir);
 
-    register_init(push_register_to_slave);
+    Regs::init(push_register_to_slave);
     dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
 
     transaction_init_allocator();
@@ -1094,7 +1094,7 @@ static int trigger_system_upgrade(bool is_enforced)
     else
         msg_info("**** Incomplete or broken upgrade state detected ****");
 
-    register_init(push_register_to_nowhere);
+    Regs::init(push_register_to_nowhere);
 
     static const uint8_t update_command[] =
     {
@@ -1476,7 +1476,7 @@ int main(int argc, char *argv[])
     shutdown(&files);
     dbus_unlock_shutdown_sequence();
     dbus_shutdown();
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
     configproxy_deinit();
 

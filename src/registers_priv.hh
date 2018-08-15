@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,32 +16,36 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_WLANSURVEY_H
-#define DCPREGS_WLANSURVEY_H
+#ifndef REGISTERS_PRIV_HH
+#define REGISTERS_PRIV_HH
 
-#include <inttypes.h>
-
-#include "dynamic_buffer.h"
+#include <stdbool.h>
 
 /*!
- * \addtogroup registers
+ * \internal
+ * DCP registers configuration data.
  */
-/*!@{*/
+struct register_configuration_t
+{
+    void (*register_changed_notification_fn)(uint8_t reg_number);
+};
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void dcpregs_wlansurvey_init(void);
-void dcpregs_wlansurvey_deinit(void);
+/*!
+ * Get private data.
+ */
+const struct register_configuration_t *registers_get_data(void);
 
-int dcpregs_write_104_start_wlan_site_survey(const uint8_t *data, size_t length);
-bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer);
+/*!
+ * Get private data for writing.
+ */
+struct register_configuration_t *registers_get_nonconst_data(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-/*!@}*/
-
-#endif /* !DCPREGS_WLANSURVEY_H */
+#endif /* !REGISTERS_PRIV_HH */

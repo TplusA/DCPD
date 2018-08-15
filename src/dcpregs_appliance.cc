@@ -32,7 +32,7 @@
 #include "configproxy.h"
 #include "dbus_iface_deep.h"
 #include "maybe.hh"
-#include "registers_priv.h"
+#include "registers_priv.hh"
 #include "messages.h"
 
 /*!

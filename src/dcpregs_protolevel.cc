@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -22,9 +22,9 @@
 
 #include <string.h>
 
-#include "dcpregs_protolevel.h"
-#include "registers.h"
-#include "registers_priv.h"
+#include "dcpregs_protolevel.hh"
+#include "registers.hh"
+#include "registers_priv.hh"
 #include "messages.h"
 
 /*! Number of bytes needed to store a protocol level specification. */
@@ -41,14 +41,14 @@ enum NegotiationState
 struct NegotiationStateData
 {
     enum NegotiationState state;
-    struct RegisterProtocolLevel negotiated_level;
+    Regs::ProtocolLevel negotiated_level;
 };
 
 static bool fill_in_highest_supported_level(const uint8_t *const ranges,
                                             const size_t number_of_ranges,
-                                            const struct RegisterProtocolLevel *supported,
+                                            const Regs::ProtocolLevel *supported,
                                             const size_t number_of_supported_ranges,
-                                            struct RegisterProtocolLevel *level)
+                                            Regs::ProtocolLevel *level)
 {
     level->code = REGISTER_MK_VERSION(0, 0, 0);
 
@@ -58,11 +58,11 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
     for(size_t i = 0; i < number_of_ranges; ++i)
     {
         const uint8_t *const range_spec = &ranges[i * SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC];
-        const struct RegisterProtocolLevel from =
+        const Regs::ProtocolLevel from =
         {
             .code = REGISTER_MK_VERSION(range_spec[0], range_spec[1], range_spec[2]),
         };
-        const struct RegisterProtocolLevel to =
+        const Regs::ProtocolLevel to =
         {
             .code = REGISTER_MK_VERSION(range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 0],
                                         range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 1],
@@ -75,7 +75,7 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
         if(from.code > supported[1].code || to.code < supported[0].code)
             continue;
 
-        const struct RegisterProtocolLevel overlap_max =
+        const Regs::ProtocolLevel overlap_max =
             (to.code < supported[1].code) ? to : supported[1];
 
         if(overlap_max.code > level->code)
@@ -86,10 +86,10 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
 }
 
 static size_t copy_protocol_level_to_response(uint8_t *response,
-                                              struct RegisterProtocolLevel level)
+                                              Regs::ProtocolLevel level)
 {
-    register_unpack_protocol_level(level,
-                                   &response[0], &response[1], &response[2]);
+    Regs::unpack_protocol_level(level,
+                                &response[0], &response[1], &response[2]);
 
     if(response[0] > 0)
         return SIZE_OF_PROTOCOL_LEVEL_SPEC;
@@ -110,12 +110,12 @@ ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 1 handler %p %zu", response, length);
 
-    struct RegisterProtocolLevel level = { .code = REGISTER_MK_VERSION(0, 0, 0) };
+    Regs::ProtocolLevel level = { .code = REGISTER_MK_VERSION(0, 0, 0) };
 
     switch(global_negotiation_data.state)
     {
       case NEGOTIATION_NOT_IN_PROGRESS:
-        level = *register_get_protocol_level();
+        level = Regs::get_protocol_level();
         break;
 
       case NEGOTIATION_SUCCEEDED:
@@ -144,13 +144,13 @@ int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 1 handler %p %zu", data, length);
 
-    const struct RegisterProtocolLevel *supported_ranges;
+    const Regs::ProtocolLevel *supported_ranges;
     const size_t number_of_supported_ranges =
-        register_get_supported_protocol_levels(&supported_ranges);
+        Regs::get_supported_protocol_levels(&supported_ranges);
 
     if(length == SIZE_OF_PROTOCOL_LEVEL_SPEC)
     {
-        register_set_protocol_level(data[0], data[1], data[2]);
+        Regs::set_protocol_level(data[0], data[1], data[2]);
         global_negotiation_data.state = NEGOTIATION_NOT_IN_PROGRESS;
     }
     else if(fill_in_highest_supported_level(data, length / SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC,

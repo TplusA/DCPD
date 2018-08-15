@@ -25,14 +25,14 @@
 #include <algorithm>
 #include <glib.h>
 
-#include "registers.h"
+#include "registers.hh"
 #include "register_response_writer.hh"
 #include "networkprefs.h"
 #include "network_status_bits.h"
 #include "dcpregs_drcp.h"
-#include "dcpregs_protolevel.h"
+#include "dcpregs_protolevel.hh"
 #include "dcpregs_networkconfig.h"
-#include "dcpregs_wlansurvey.h"
+#include "dcpregs_wlansurvey.hh"
 #include "dcpregs_upnpname.h"
 #include "dcpregs_upnpname.hh"
 #include "dcpregs_filetransfer.h"
@@ -41,7 +41,7 @@
 #include "dcpregs_audiosources.h"
 #include "dcpregs_playstream.h"
 #include "dcpregs_playstream.hh"
-#include "dcpregs_mediaservices.h"
+#include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.h"
 #include "dcpregs_status.h"
 #include "drcp_command_codes.h"
@@ -101,40 +101,74 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 ssize_t (*os_read)(int fd, void *dest, size_t count) = test_os_read;
 ssize_t (*os_write)(int fd, const void *buf, size_t count) = test_os_write;
 
-static const struct dcp_register_t *lookup_register_expect_handlers_full(
+static void read_buffer_expect_failure(const Regs::Register *reg,
+                                       uint8_t *buffer, size_t buffer_size,
+                                       int expected_error_code)
+{
+    try
+    {
+        reg->read(buffer, buffer_size);
+        cppcut_assert_equal(0, expected_error_code);
+    }
+    catch(const Regs::io_error &e)
+    {
+        cppcut_assert_equal(ssize_t(expected_error_code), e.result());
+    }
+}
+
+static void write_buffer_expect_failure(const Regs::Register *reg,
+                                        const uint8_t *buffer, size_t buffer_size,
+                                        int expected_error_code)
+{
+    try
+    {
+        reg->write(buffer, buffer_size);
+        cppcut_assert_equal(0, expected_error_code);
+    }
+    catch(const Regs::io_error &e)
+    {
+        cppcut_assert_equal(ssize_t(expected_error_code), e.result());
+    }
+}
+
+static void write_buffer_expect_failure(const Regs::Register *reg,
+                                        const char *buffer, size_t buffer_size,
+                                        int expected_error_code)
+{
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(buffer),
+                                buffer_size, expected_error_code);
+}
+
+static const Regs::Register *lookup_register_expect_handlers_full(
     uint8_t register_number,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
     bool (*const expected_read_handler_dynamic)(struct dynamic_buffer *buffer),
     int (*const expected_write_handler)(const uint8_t *, size_t),
     uint8_t version_major = 0, uint8_t version_minor = 0, uint8_t version_patch = 0)
 {
-    const auto *protocol_level = version_major > 0 ? register_get_protocol_level() : nullptr;
+    const auto protocol_level(Regs::get_protocol_level());
 
     if(version_major > 0)
-        cut_assert_true(register_set_protocol_level(version_major, version_minor, version_patch));
+        cut_assert_true(Regs::set_protocol_level(version_major, version_minor, version_patch));
     else
     {
         cppcut_assert_equal(uint8_t(0), version_minor);
         cppcut_assert_equal(uint8_t(0), version_patch);
     }
 
-    const struct dcp_register_t *reg = register_lookup(register_number);
+    const auto *reg = Regs::lookup(register_number);
     cppcut_assert_not_null(reg);
 
-    if(protocol_level != nullptr)
+    if(version_major > 0)
     {
-        register_unpack_protocol_level(*protocol_level, &version_major,
-                                       &version_minor, &version_patch);
-        cut_assert_true(register_set_protocol_level(version_major, version_minor, version_patch));
+        Regs::unpack_protocol_level(protocol_level, &version_major,
+                                    &version_minor, &version_patch);
+        cut_assert_true(Regs::set_protocol_level(version_major, version_minor, version_patch));
     }
 
-    cppcut_assert_equal(reinterpret_cast<void *>(reg->read_handler),
-                        reinterpret_cast<void *>(expected_read_handler));
-    cppcut_assert_equal(reinterpret_cast<void *>(reg->write_handler),
-                        reinterpret_cast<void *>(expected_write_handler));
-    cppcut_assert_equal(reinterpret_cast<void *>(reg->read_handler_dynamic),
-                        reinterpret_cast<void *>(expected_read_handler_dynamic));
-    cut_assert(!(reg->read_handler != nullptr && reg->read_handler_dynamic != nullptr));
+    cut_assert_true(reg->has_handler(expected_read_handler));
+    cut_assert_true(reg->has_handler(expected_read_handler_dynamic));
+    cut_assert_true(reg->has_handler(expected_write_handler));
 
     return reg;
 }
@@ -142,7 +176,7 @@ static const struct dcp_register_t *lookup_register_expect_handlers_full(
 /*
  * For write-only registers.
  */
-static inline const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
     int (*const expected_write_handler)(const uint8_t *, size_t))
 {
@@ -151,7 +185,7 @@ static inline const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
-static inline const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
     uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
     int (*const expected_write_handler)(const uint8_t *, size_t))
@@ -165,7 +199,7 @@ static inline const struct dcp_register_t *lookup_register_expect_handlers(
 /*
  * For readable registers with static size.
  */
-static inline const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
     int (*const expected_write_handler)(const uint8_t *, size_t))
@@ -175,7 +209,7 @@ static inline const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
-static inline const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
     uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
@@ -190,7 +224,7 @@ static inline const struct dcp_register_t *lookup_register_expect_handlers(
 /*
  * For readable registers with dynamic size.
  */
-static inline const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
     bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
     int (*const expected_write_handler)(const uint8_t *, size_t))
@@ -200,7 +234,7 @@ static inline const struct dcp_register_t *lookup_register_expect_handlers(
                                                 expected_write_handler);
 }
 
-static inline const struct dcp_register_t *lookup_register_expect_handlers(
+static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
     uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
     bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
@@ -1199,13 +1233,13 @@ void cut_setup()
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
-    network_prefs_init(NULL, NULL);
-    register_init(NULL);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(nullptr);
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     mock_messages->check();
@@ -1226,10 +1260,10 @@ void cut_teardown()
  */
 void test_lookup_existing_register()
 {
-    const struct dcp_register_t *reg = register_lookup(51);
+    const auto *reg = Regs::lookup(51);
 
     cppcut_assert_not_null(reg);
-    cppcut_assert_equal(51U, unsigned(reg->address));
+    cppcut_assert_equal(51U, unsigned(reg->address_));
 }
 
 /*!\test
@@ -1237,7 +1271,7 @@ void test_lookup_existing_register()
  */
 void test_lookup_nonexistent_register_fails_gracefully()
 {
-    cppcut_assert_null(register_lookup(10));
+    cppcut_assert_null(Regs::lookup(10));
 }
 
 /*!\test
@@ -1249,21 +1283,24 @@ void test_lookup_all_existing_registers()
 {
     for(const auto &regset : all_registers)
     {
-        cut_assert_true(register_set_protocol_level(regset.version_major_,
-                                                    regset.version_minor_,
-                                                    regset.version_patch_));
+        cut_assert_true(Regs::set_protocol_level(regset.version_major_,
+                                                 regset.version_minor_,
+                                                 regset.version_patch_));
 
         for(size_t i = 0; i < regset.number_of_registers_; ++i)
         {
             const uint8_t &r = regset.registers_[i];
-            const struct dcp_register_t *reg = register_lookup(r);
+            const auto *reg = Regs::lookup(r);
 
             cppcut_assert_not_null(reg);
-            cppcut_assert_equal(unsigned(r), unsigned(reg->address));
-            cut_assert(reg->max_data_size > 0 || reg->read_handler_dynamic != nullptr);
-            cppcut_assert_operator(reg->minimum_protocol_version.code, <=, reg->maximum_protocol_version.code);
-            cppcut_assert_equal(uint32_t(REGISTER_MK_VERSION(regset.version_major_, regset.version_minor_, regset.version_patch_)),
-                                reg->minimum_protocol_version.code);
+            cppcut_assert_equal(unsigned(r), unsigned(reg->address_));
+            cut_assert(reg->max_data_size_ > 0 ||
+                       !reg->has_handler(static_cast<bool (*)(struct dynamic_buffer *)>(nullptr)));
+            cppcut_assert_operator(reg->minimum_protocol_version_.code, <=, reg->maximum_protocol_version_.code);
+            cppcut_assert_equal(uint32_t(REGISTER_MK_VERSION(regset.version_major_,
+                                                             regset.version_minor_,
+                                                             regset.version_patch_)),
+                                reg->minimum_protocol_version_.code);
         }
     }
 }
@@ -1281,9 +1318,9 @@ void test_lookup_all_nonexistent_registers()
                   &regset.registers_[regset.number_of_registers_],
                   std::back_inserter(all_registers_up_to_selected_version));
 
-        cut_assert_true(register_set_protocol_level(regset.version_major_,
-                                                    regset.version_minor_,
-                                                    regset.version_patch_));
+        cut_assert_true(Regs::set_protocol_level(regset.version_major_,
+                                                 regset.version_minor_,
+                                                 regset.version_patch_));
 
         const uint32_t selected_version_code(REGISTER_MK_VERSION(regset.version_major_,
                                                                  regset.version_minor_,
@@ -1296,13 +1333,13 @@ void test_lookup_all_nonexistent_registers()
                                        r));
 
             if(found == all_registers_up_to_selected_version.end())
-                cppcut_assert_null(register_lookup(r));
+                cppcut_assert_null(Regs::lookup(r));
             else
             {
-                const struct dcp_register_t *reg = register_lookup(r);
+                const auto *reg = Regs::lookup(r);
 
                 cppcut_assert_not_null(reg);
-                cppcut_assert_operator(selected_version_code, >=, reg->minimum_protocol_version.code);
+                cppcut_assert_operator(selected_version_code, >=, reg->minimum_protocol_version_.code);
             }
         }
     }
@@ -1313,8 +1350,8 @@ void test_lookup_all_nonexistent_registers()
  * */
 void test_assert_all_registers_are_checked_by_unit_tests()
 {
-    const struct RegisterProtocolLevel *level_ranges = nullptr;
-    const size_t level_ranges_count = register_get_supported_protocol_levels(&level_ranges);
+    const Regs::ProtocolLevel *level_ranges = nullptr;
+    const size_t level_ranges_count = Regs::get_supported_protocol_levels(&level_ranges);
 
     cppcut_assert_equal(size_t(1), level_ranges_count);
 
@@ -1438,16 +1475,16 @@ void test_dcp_register_72_calls_correct_write_handler()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    register_init(NULL);
+    Regs::init(nullptr);
 
-    const struct dcp_register_t *reg = register_lookup(72);
+    const auto *reg = Regs::lookup(72);
 
     cppcut_assert_not_null(reg);
-    cppcut_assert_equal(72U, unsigned(reg->address));
-    cut_assert(reg->write_handler == dcpregs_write_drcp_command);
-    cut_assert(reg->read_handler == NULL);
+    cppcut_assert_equal(72U, unsigned(reg->address_));
+    cut_assert(reg->has_handler(dcpregs_write_drcp_command));
+    cut_assert(reg->has_handler(static_cast<ssize_t (*)(uint8_t *, size_t)>(nullptr)));
 
-    register_deinit();
+    Regs::deinit();
 }
 
 /*!\test
@@ -1742,13 +1779,13 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(register_changed_callback);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(register_changed_callback);
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     register_changed_data->check();
@@ -1774,7 +1811,7 @@ void test_read_out_protocol_level()
     uint8_t buffer[sizeof(redzone_content) + 3 + sizeof(redzone_content)];
     memset(buffer, 0xff, sizeof(buffer));
 
-    reg->read_handler(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
+    reg->read(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
 
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
                             sizeof(redzone_content));
@@ -1794,19 +1831,19 @@ void test_protocol_level_negotiation_does_not_set_protocol_level()
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    cppcut_assert_equal(0, reg->write_handler(range, sizeof(range)));
+    reg->write(range, sizeof(range));
     register_changed_data->check(1);
 
     static const uint8_t expected[3] = { 1, 0, 2, };
 
     /* read out result of negotiation */
     uint8_t buffer[3] = {0};
-    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(expected, sizeof(expected), buffer, sizeof(buffer));
 
     /* read out configured protocol version, still at default */
     buffer[0] = 0;
-    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
     cut_assert_equal_memory(expected_default_protocol_level,
                             sizeof(expected_default_protocol_level),
@@ -1820,22 +1857,22 @@ void test_protocol_level_can_be_changed()
                                                 dcpregs_write_1_protocol_level);
 
     uint8_t buffer[3] = {0};
-    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(expected_default_protocol_level,
                             sizeof(expected_default_protocol_level),
                             buffer, sizeof(buffer));
 
     static const uint8_t version[3] = { 1, 0, 2, };
 
-    cppcut_assert_equal(0, reg->write_handler(version, sizeof(version)));
+    reg->write(version, sizeof(version));
     register_changed_data->check(1);
 
     buffer[0] = {0};
-    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(version, sizeof(version), buffer, sizeof(buffer));
 
     buffer[0] = {0};
-    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(version, sizeof(version), buffer, sizeof(buffer));
 }
 
@@ -1896,11 +1933,11 @@ void test_negotiate_protocol_level_single_range_with_match()
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
-        cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
+        reg->write(requests[i], sizeof(requests[0]));
         register_changed_data->check(1);
 
         uint8_t buffer[3] = {0};
-        cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+        cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
         cut_assert_equal_memory(expected[i], sizeof(expected[0]),
                                 buffer, sizeof(buffer));
@@ -1946,11 +1983,11 @@ void test_negotiate_protocol_level_multiple_ranges_with_match()
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
-        cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(match_in_first_range)));
+        reg->write(requests[i], sizeof(match_in_first_range));
         register_changed_data->check(1);
 
         uint8_t buffer[3] = {0};
-        cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+        cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
         cut_assert_equal_memory(expected_default_protocol_level,
                                 sizeof(expected_default_protocol_level),
@@ -1987,11 +2024,11 @@ void test_negotiate_protocol_level_single_range_with_mismatch()
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
-        cppcut_assert_equal(0, reg->write_handler(requests[i], sizeof(requests[0])));
+        reg->write(requests[i], sizeof(requests[0]));
         register_changed_data->check(1);
 
         uint8_t buffer[3] = {0};
-        cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+        cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
         cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
     }
 }
@@ -2009,11 +2046,11 @@ void test_negotiate_protocol_level_multiple_ranges_with_mismatch()
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    cppcut_assert_equal(0, reg->write_handler(mismatch, sizeof(mismatch)));
+    reg->write(mismatch, sizeof(mismatch));
     register_changed_data->check(1);
 
     uint8_t buffer[3] = {0};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
 }
 
@@ -2025,12 +2062,11 @@ static void choose_maximum_level_of_overlapping_ranges(const uint8_t *const over
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    cppcut_assert_equal(0, reg->write_handler(overlapping, overlapping_size));
+    reg->write(overlapping, overlapping_size);
     register_changed_data->check(1);
 
     uint8_t buffer[3] = {0};
-    cppcut_assert_equal(ssize_t(sizeof(buffer)),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
     cut_assert_equal_memory(expected, sizeof(expected_default_protocol_level),
                             buffer, sizeof(buffer));
@@ -2107,11 +2143,11 @@ void test_broken_ranges_are_ignored()
 
     for(size_t i = 0; i < sizeof(broken) / sizeof(broken[0]); ++i)
     {
-        cppcut_assert_equal(0, reg->write_handler(broken[i], sizeof(broken[0])));
+        reg->write(broken[i], sizeof(broken[0]));
         register_changed_data->check(1);
 
         uint8_t buffer[3] = {0};
-        cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+        cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
         cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
     }
 }
@@ -2124,13 +2160,13 @@ void test_negotiation_requires_at_least_one_range()
                                                 dcpregs_read_1_protocol_level,
                                                 dcpregs_write_1_protocol_level);
 
-    cppcut_assert_equal(0, reg->write_handler(too_short, sizeof(too_short)));
+    reg->write(too_short, sizeof(too_short));
     register_changed_data->check(1);
 
     /* because this register is really important, even broken requests generate
      * an answer */
     uint8_t buffer[3] = {0};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
 }
 
@@ -2431,14 +2467,14 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(network_config_path, network_config_file);
-    register_init(register_changed_callback);
+    Regs::init(register_changed_callback);
 
     setup_default_connman_service_list();
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     Connman::ServiceList::get_singleton_for_update().first.clear();
@@ -2480,14 +2516,14 @@ void test_read_mac_address()
 {
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
-                                                NULL);
+                                                nullptr);
     uint8_t redzone_content[10];
     memset(redzone_content, 0xff, sizeof(redzone_content));
 
     uint8_t buffer[sizeof(redzone_content) + 18 + sizeof(redzone_content)];
     memset(buffer, 0xff, sizeof(buffer));
 
-    reg->read_handler(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
+    reg->read(buffer + sizeof(redzone_content), sizeof(buffer) - 2 * sizeof(redzone_content));
 
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
                             sizeof(redzone_content));
@@ -2502,7 +2538,7 @@ void test_read_mac_address()
  */
 void test_read_mac_address_default()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     {
@@ -2517,14 +2553,14 @@ void test_read_mac_address_default()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(NULL);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(nullptr);
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 dcpregs_read_51_mac_address,
-                                                NULL);
+                                                nullptr);
     uint8_t buffer[18];
-    cppcut_assert_equal(ssize_t(sizeof(buffer)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
     const char *buffer_ptr = reinterpret_cast<const char *>(buffer);
     cppcut_assert_equal("02:00:00:00:00:00", buffer_ptr);
@@ -2552,7 +2588,7 @@ static void start_ipv4_config(Connman::Technology expected_technology)
     }
 
     static const uint8_t zero = 0;
-    cppcut_assert_equal(0, reg->write_handler(&zero, 1));
+    reg->write(&zero, 1);
 }
 
 static void commit_ipv4_config(enum NetworkPrefsTechnology tech,
@@ -2582,7 +2618,7 @@ static void commit_ipv4_config(enum NetworkPrefsTechnology tech,
     }
 
     static const uint8_t zero = 0;
-    cppcut_assert_equal(expected_return_value, reg->write_handler(&zero, 1));
+    write_buffer_expect_failure(reg, &zero, 1, expected_return_value);
 }
 
 static void move_os_write_buffer_to_file(struct os_mapped_file_data &mapped_file,
@@ -2661,22 +2697,22 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
                                                 dcpregs_read_56_ipv4_address,
                                                 dcpregs_write_56_ipv4_address);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_ipv4_address),
-                                              sizeof(standard_ipv4_address)));
+    reg->write(reinterpret_cast<const uint8_t *>(standard_ipv4_address),
+               sizeof(standard_ipv4_address));
 
     reg = lookup_register_expect_handlers(57,
                                           dcpregs_read_57_ipv4_netmask,
                                           dcpregs_write_57_ipv4_netmask);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_ipv4_netmask),
-                                              sizeof(standard_ipv4_netmask)));
+    reg->write(reinterpret_cast<const uint8_t *>(standard_ipv4_netmask),
+               sizeof(standard_ipv4_netmask));
 
     reg = lookup_register_expect_handlers(58,
                                           dcpregs_read_58_ipv4_gateway,
                                           dcpregs_write_58_ipv4_gateway);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_ipv4_gateway),
-                                              sizeof(standard_ipv4_gateway)));
+    reg->write(reinterpret_cast<const uint8_t *>(standard_ipv4_gateway),
+               sizeof(standard_ipv4_gateway));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -2743,7 +2779,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
 
     mock_messages->expect_msg_info_formatted("Enable DHCP");
     static const uint8_t one = 1;
-    cppcut_assert_equal(0, reg->write_handler(&one, 1));
+    reg->write(&one, 1);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -2784,7 +2820,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
 void test_set_initial_static_ipv4_configuration()
 {
     char buffer[512];
-    (void)do_test_set_static_ipv4_config(NULL, buffer, sizeof(buffer));
+    (void)do_test_set_static_ipv4_config(nullptr, buffer, sizeof(buffer));
 }
 
 /*!\test
@@ -2811,13 +2847,13 @@ void test_leading_zeros_are_removed_from_ipv4_addresses()
 
     for(const auto &p : addresses_with_zeros)
     {
-        cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(p.first), strlen(p.first)));
+        reg->write(reinterpret_cast<const uint8_t *>(p.first), strlen(p.first));
 
         uint8_t buffer[32];
-        const ssize_t len = reg->read_handler(buffer, sizeof(buffer));
+        const size_t len = reg->read(buffer, sizeof(buffer));
         buffer[sizeof(buffer) - 1] = '\0';
         cppcut_assert_equal(p.second, reinterpret_cast<const char *>(buffer));
-        cppcut_assert_equal(ssize_t(strlen(p.second) + 1), len);
+        cppcut_assert_equal(strlen(p.second) + 1, len);
     }
 }
 
@@ -2827,7 +2863,7 @@ void test_leading_zeros_are_removed_from_ipv4_addresses()
 void test_set_initial_dhcp_ipv4_configuration()
 {
     char buffer[512];
-    (void)do_test_set_dhcp_ipv4_config(NULL, buffer, sizeof(buffer));
+    (void)do_test_set_dhcp_ipv4_config(nullptr, buffer, sizeof(buffer));
 }
 
 /*!\test
@@ -2841,7 +2877,7 @@ void test_switch_to_dhcp_ipv4_configuration()
     {
         .fd = expected_os_map_file_to_memory_fd,
         .ptr = config_file_buffer,
-        .length = do_test_set_static_ipv4_config(NULL, config_file_buffer,
+        .length = do_test_set_static_ipv4_config(nullptr, config_file_buffer,
                                                  sizeof(config_file_buffer)),
     };
 
@@ -2863,7 +2899,7 @@ void test_switch_to_static_ipv4_configuration()
     {
         .fd = expected_os_map_file_to_memory_fd,
         .ptr = config_file_buffer,
-        .length = do_test_set_dhcp_ipv4_config(NULL, config_file_buffer,
+        .length = do_test_set_dhcp_ipv4_config(nullptr, config_file_buffer,
                                                sizeof(config_file_buffer)),
     };
 
@@ -2889,13 +2925,31 @@ void test_dhcp_parameter_boundaries()
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Received invalid DHCP configuration parameter 0x02 (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(&buffer, 1));
+
+    try
+    {
+        reg->write(&buffer, 1);
+        cut_fail("Missing exception");
+    }
+    catch(const Regs::io_error &e)
+    {
+        cppcut_assert_equal(ssize_t(-1), e.result());
+    }
 
     buffer = UINT8_MAX;
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Received invalid DHCP configuration parameter 0xff (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(&buffer, 1));
+
+    try
+    {
+        reg->write(&buffer, 1);
+        cut_fail("Missing exception");
+    }
+    catch(const Regs::io_error &e)
+    {
+        cppcut_assert_equal(ssize_t(-1), e.result());
+    }
 }
 
 /*!\test
@@ -2913,7 +2967,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     static const uint8_t zero = 0;
 
     mock_messages->expect_msg_info_formatted("Disable DHCP");
-    cppcut_assert_equal(0, reg->write_handler(&zero, 1));
+    reg->write(&zero, 1);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -2977,7 +3031,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
                                                 dcpregs_write_55_dhcp_enabled);
 
     uint8_t buffer = UINT8_MAX;
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+    cppcut_assert_equal(size_t(1), reg->read(&buffer, 1));
 
     cppcut_assert_equal(0, int(buffer));
 }
@@ -3003,7 +3057,7 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
                                                 dcpregs_write_55_dhcp_enabled);
 
     uint8_t buffer = UINT8_MAX;
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+    cppcut_assert_equal(size_t(1), reg->read(&buffer, 1));
 
     cppcut_assert_equal(1, int(buffer));
 }
@@ -3021,7 +3075,7 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
                                                 dcpregs_write_55_dhcp_enabled);
 
     uint8_t buffer = UINT8_MAX;
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+    cppcut_assert_equal(size_t(1), reg->read(&buffer, 1));
 
     cppcut_assert_equal(1, int(buffer));
 }
@@ -3040,10 +3094,10 @@ void test_read_dhcp_mode_in_edit_mode_after_change()
 
     mock_messages->expect_msg_info_formatted("Enable DHCP");
     static const uint8_t one = 1;
-    cppcut_assert_equal(0, reg->write_handler(&one, 1));
+    reg->write(&one, 1);
 
     uint8_t buffer = UINT8_MAX;
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(&buffer, 1));
+    cppcut_assert_equal(size_t(1), reg->read(&buffer, 1));
 
     cppcut_assert_equal(1, int(buffer));
 }
@@ -3100,8 +3154,8 @@ static void read_ipv4_parameter_in_normal_mode()
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(RegTraits::expected_address)),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(RegTraits::expected_address),
+                        reg->read(buffer, sizeof(buffer)));
 
     cut_assert_equal_memory(RegTraits::expected_address, sizeof(RegTraits::expected_address),
                             buffer, sizeof(RegTraits::expected_address));
@@ -3118,8 +3172,8 @@ static void read_ipv4_parameter_in_edit_mode_before_any_changes()
     uint8_t buffer[50];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(RegTraits::expected_address)),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(RegTraits::expected_address),
+                        reg->read(buffer, sizeof(buffer)));
 
     cut_assert_equal_memory(RegTraits::expected_address, sizeof(RegTraits::expected_address),
                             buffer, sizeof(RegTraits::expected_address));
@@ -3133,15 +3187,14 @@ static void read_ipv4_parameter_in_edit_mode_after_change()
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
                                                 RegTraits::expected_write_handler);
-    cppcut_assert_equal(0, reg->write_handler((uint8_t *)standard_ipv4_address,
-                                              sizeof(standard_ipv4_address)));
+    reg->write((uint8_t *)standard_ipv4_address, sizeof(standard_ipv4_address));
 
     uint8_t buffer[4 + 16 + 4];
     memset(buffer, UINT8_MAX, sizeof(buffer));
     cppcut_assert_operator(sizeof(standard_ipv4_address), <=, sizeof(buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(standard_ipv4_address)),
-                        reg->read_handler(buffer + 4, sizeof(standard_ipv4_address)));
+    cppcut_assert_equal(sizeof(standard_ipv4_address),
+                        reg->read(buffer + 4, sizeof(standard_ipv4_address)));
 
     cut_assert_equal_memory(standard_ipv4_address, sizeof(standard_ipv4_address), buffer + 4, sizeof(standard_ipv4_address));
 
@@ -3243,7 +3296,7 @@ static void set_one_dns_server()
     {
         .fd = expected_os_map_file_to_memory_fd,
         .ptr = config_file_buffer,
-        .length = do_test_set_static_ipv4_config(NULL, config_file_buffer,
+        .length = do_test_set_static_ipv4_config(nullptr, config_file_buffer,
                                                  sizeof(config_file_buffer)),
     };
 
@@ -3261,7 +3314,8 @@ static void set_one_dns_server()
     auto *reg = lookup_register_expect_handlers(Register,
                                                 RegTraits::expected_read_handler,
                                                 RegTraits::expected_write_handler);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(RegTraits::expected_address), sizeof(RegTraits::expected_address)));
+    reg->write(reinterpret_cast<const uint8_t *>(RegTraits::expected_address),
+               sizeof(RegTraits::expected_address));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -3333,7 +3387,7 @@ void test_set_both_dns_servers()
     {
         .fd = expected_os_map_file_to_memory_fd,
         .ptr = config_file_buffer,
-        .length = do_test_set_static_ipv4_config(NULL, config_file_buffer,
+        .length = do_test_set_static_ipv4_config(nullptr, config_file_buffer,
                                                  sizeof(config_file_buffer)),
     };
 
@@ -3344,14 +3398,14 @@ void test_set_both_dns_servers()
     auto *reg = lookup_register_expect_handlers(62,
                                                 dcpregs_read_62_primary_dns,
                                                 dcpregs_write_62_primary_dns);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_dns1_address),
-                                              sizeof(standard_dns1_address)));
+    reg->write(reinterpret_cast<const uint8_t *>(standard_dns1_address),
+               sizeof(standard_dns1_address));
 
     reg = lookup_register_expect_handlers(63,
                                           dcpregs_read_63_secondary_dns,
                                           dcpregs_write_63_secondary_dns);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_dns2_address),
-                                              sizeof(standard_dns2_address)));
+    reg->write(reinterpret_cast<const uint8_t *>(standard_dns2_address),
+               sizeof(standard_dns2_address));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -3406,9 +3460,9 @@ void test_read_primary_dns_in_edit_mode_before_any_changes()
 
     char buffer[128];
 
-    ssize_t dns_server_size = reg->read_handler(reinterpret_cast<uint8_t *>(buffer), sizeof(buffer));
+    size_t dns_server_size = reg->read(reinterpret_cast<uint8_t *>(buffer), sizeof(buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(standard_dns1_address)), dns_server_size);
+    cppcut_assert_equal(sizeof(standard_dns1_address), dns_server_size);
     cppcut_assert_equal(standard_dns1_address, static_cast<const char *>(buffer));
 
     commit_ipv4_config(NWPREFSTECH_UNKNOWN);
@@ -3428,9 +3482,9 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes()
 
     char buffer[128];
 
-    ssize_t dns_server_size = reg->read_handler(reinterpret_cast<uint8_t *>(buffer), sizeof(buffer));
+    size_t dns_server_size = reg->read(reinterpret_cast<uint8_t *>(buffer), sizeof(buffer));
 
-    cppcut_assert_equal(ssize_t(sizeof(standard_dns2_address)), dns_server_size);
+    cppcut_assert_equal(sizeof(standard_dns2_address), dns_server_size);
     cppcut_assert_equal(standard_dns2_address, static_cast<const char *>(buffer));
 
     commit_ipv4_config(NWPREFSTECH_UNKNOWN);
@@ -3449,8 +3503,8 @@ void test_replace_primary_dns_server_of_two_servers()
                                                 dcpregs_read_62_primary_dns,
                                                 dcpregs_write_62_primary_dns);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(new_primary_dns),
-                                              sizeof(new_primary_dns)));
+    reg->write(reinterpret_cast<const uint8_t *>(new_primary_dns),
+               sizeof(new_primary_dns));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -3506,8 +3560,8 @@ void test_replace_secondary_dns_server_of_two_servers()
                                                 dcpregs_read_63_secondary_dns,
                                                 dcpregs_write_63_secondary_dns);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(new_secondary_dns),
-                                              sizeof(new_secondary_dns)));
+    reg->write(reinterpret_cast<const uint8_t *>(new_secondary_dns),
+               sizeof(new_secondary_dns));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -3570,8 +3624,8 @@ void test_add_secondary_dns_server_to_primary_server()
                                                 dcpregs_read_63_secondary_dns,
                                                 dcpregs_write_63_secondary_dns);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(standard_dns2_address),
-                                              sizeof(standard_dns2_address)));
+    reg->write(reinterpret_cast<const uint8_t *>(standard_dns2_address),
+               sizeof(standard_dns2_address));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -3624,7 +3678,7 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("none"), 4));
+    reg->write(reinterpret_cast<const uint8_t *>("none"), 4);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
@@ -3661,7 +3715,7 @@ void test_get_wlan_security_mode_for_ethernet_returns_error()
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
 
-    cppcut_assert_equal(ssize_t(-1), reg->read_handler(buffer, sizeof(buffer)));
+    read_buffer_expect_failure(reg, buffer, sizeof(buffer), -1);
     cppcut_assert_equal(uint8_t(0), buffer[0]);
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[1]);
 }
@@ -3674,9 +3728,7 @@ static void set_wlan_name(const char *wps_name)
                                                 dcpregs_read_94_ssid,
                                                 dcpregs_write_94_ssid);
 
-    cppcut_assert_equal(0,
-                        reg->write_handler(reinterpret_cast<const uint8_t *>(wps_name),
-                                           strlen(wps_name)));
+    reg->write(reinterpret_cast<const uint8_t *>(wps_name), strlen(wps_name));
 }
 
 static void set_wlan_name(const std::vector<uint8_t> &wps_ssid)
@@ -3687,7 +3739,7 @@ static void set_wlan_name(const std::vector<uint8_t> &wps_ssid)
                                                 dcpregs_read_94_ssid,
                                                 dcpregs_write_94_ssid);
 
-    cppcut_assert_equal(0, reg->write_handler(wps_ssid.data(), wps_ssid.size()));
+    reg->write(wps_ssid.data(), wps_ssid.size());
 }
 
 static void set_wlan_security_mode(const char *requested_security_mode,
@@ -3704,7 +3756,8 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(requested_security_mode), strlen(requested_security_mode)));
+    reg->write(reinterpret_cast<const uint8_t *>(requested_security_mode),
+               strlen(requested_security_mode));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
@@ -3827,7 +3880,7 @@ void test_set_wlan_security_mode_wep()
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("wep"), 3));
+    reg->write(reinterpret_cast<const uint8_t *>("wep"), 3);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
@@ -3862,7 +3915,7 @@ void test_set_invalid_wlan_security_mode()
     auto *reg = lookup_register_expect_handlers(92,
                                                 dcpregs_read_92_wlan_security,
                                                 dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("foo"), 3));
+    reg->write(reinterpret_cast<const uint8_t *>("foo"), 3);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
@@ -3914,9 +3967,9 @@ static void get_wlan_security_mode(const char *assumed_connman_security_mode,
         mock_messages->expect_msg_error_formatted(0, LOG_ERR,
                                                   expected_error_message);
 
-    const ssize_t mode_length = reg->read_handler(dest, read_size);
+    const size_t mode_length = reg->read(dest, read_size);
 
-    cppcut_assert_operator(ssize_t(0), <, mode_length);
+    cppcut_assert_operator(size_t(0), <, mode_length);
     cppcut_assert_equal('\0', static_cast<char>(dest[mode_length - 1]));
     cppcut_assert_equal(assumed_connman_security_mode,
                         reinterpret_cast<char *>(dest));
@@ -3981,12 +4034,12 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
                                                 dcpregs_write_102_passphrase);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), passphrase_size));
+    reg->write(reinterpret_cast<const uint8_t *>(passphrase), passphrase_size);
 
     reg = lookup_register_expect_handlers(92,
                                           dcpregs_read_92_wlan_security,
                                           dcpregs_write_92_wlan_security);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(connman_security_mode), strlen(connman_security_mode)));
+    reg->write(reinterpret_cast<const uint8_t *>(connman_security_mode), strlen(connman_security_mode));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
@@ -4088,18 +4141,17 @@ void test_ascii_passphrase_minimum_and_maximum_length()
                                                 dcpregs_read_102_passphrase,
                                                 dcpregs_write_102_passphrase);
 
-    cppcut_assert_equal(0, reg->write_handler(passphrase_arg, 0));
-    cppcut_assert_equal(0, reg->write_handler(passphrase_arg, 1));
-    cppcut_assert_equal(0, reg->write_handler(passphrase_arg, 63));
+    reg->write(passphrase_arg, 0);
+    reg->write(passphrase_arg, 1);
+    reg->write(passphrase_arg, 63);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Invalid passphrase: not a hex-string (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(passphrase_arg, 64));
+    write_buffer_expect_failure(reg, passphrase_arg, 64, -1);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Unexpected data length 65 (expected 0...64) (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(passphrase_arg,
-                                               sizeof(passphrase)));
+    write_buffer_expect_failure(reg, passphrase_arg, sizeof(passphrase), -1);
 }
 
 struct StringWithLength
@@ -4147,7 +4199,7 @@ void test_ascii_passphrase_character_set()
     {
         mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
             "Invalid passphrase: expected ASCII passphrase (Invalid argument)");
-        cppcut_assert_equal(-1, reg->write_handler(str.string_, str.length_));
+        write_buffer_expect_failure(reg, str.string_, str.length_, -1);
     }
 }
 
@@ -4189,7 +4241,7 @@ void test_set_passphrase_without_security_mode_does_not_work()
     auto *reg = lookup_register_expect_handlers(102,
                                                 dcpregs_read_102_passphrase,
                                                 dcpregs_write_102_passphrase);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1));
+    reg->write(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
@@ -4232,7 +4284,7 @@ void test_get_wlan_passphrase_in_edit_mode()
 
     mock_messages->expect_msg_info("No passphrase set yet");
 
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(0), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[sizeof(buffer) - 1]);
 
@@ -4243,12 +4295,12 @@ void test_get_wlan_passphrase_in_edit_mode()
         "12345678901234567890"
         "abcd";
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1));
+    reg->write(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1);
 
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
-    const ssize_t passphrase_length = reg->read_handler(dest, 64);
+    const size_t passphrase_length = reg->read(dest, 64);
 
-    cppcut_assert_equal(ssize_t(64), passphrase_length);
+    cppcut_assert_equal(size_t(64), passphrase_length);
     cut_assert_equal_memory(passphrase, sizeof(passphrase) - 1,
                             dest, 64);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -4258,12 +4310,12 @@ void test_get_wlan_passphrase_in_edit_mode()
                             sizeof(redzone_content));
 
     /* wipe out passphrase and read back */
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(passphrase), 0));
+    reg->write(reinterpret_cast<const uint8_t *>(passphrase), 0);
 
     mock_messages->expect_msg_info("Passphrase set, but empty");
 
     memset(buffer, UINT8_MAX, sizeof(buffer));
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(dest, 64));
+    cppcut_assert_equal(size_t(0), reg->read(dest, 64));
     cppcut_assert_equal(uint8_t(UINT8_MAX), dest[0]);
     cppcut_assert_equal(uint8_t(UINT8_MAX), dest[63]);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -4290,7 +4342,7 @@ void test_get_wlan_passphrase_in_regular_mode()
     mock_messages->expect_msg_error(0, LOG_NOTICE,
                                     "Passphrase cannot be read out while in non-edit mode");
 
-    cppcut_assert_equal(ssize_t(-1), reg->read_handler(buffer, sizeof(buffer)));
+    read_buffer_expect_failure(reg, buffer, sizeof(buffer), -1);
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[sizeof(buffer) - 1]);
 }
@@ -4318,7 +4370,7 @@ void test_set_simple_ascii_wlan_ssid()
 
     static constexpr char ssid[] = "MyNiceWLAN";
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(ssid), sizeof(ssid) - 1));
+    reg->write(reinterpret_cast<const uint8_t *>(ssid), sizeof(ssid) - 1);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
@@ -4378,7 +4430,7 @@ void test_set_binary_wlan_ssid()
 
     static constexpr char ssid_as_hex_string[] = "0008feff4142437f";
 
-    cppcut_assert_equal(0, reg->write_handler(ssid, sizeof(ssid)));
+    reg->write(ssid, sizeof(ssid));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
@@ -4435,7 +4487,7 @@ void test_set_empty_wlan_ssid_is_an_error()
         "Unexpected data length 0 (expected 1...32) (Invalid argument)");
 
     uint8_t dummy = UINT8_MAX;
-    cppcut_assert_equal(-1, reg->write_handler(&dummy, 0));
+    write_buffer_expect_failure(reg, &dummy, 0, -1);
 
     commit_ipv4_config(NWPREFSTECH_UNKNOWN);
 }
@@ -4494,9 +4546,9 @@ void test_get_wlan_ssid_in_normal_mode()
                                                 dcpregs_write_94_ssid);
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
 
-    const ssize_t ssid_length = reg->read_handler(dest, 32);
+    const size_t ssid_length = reg->read(dest, 32);
 
-    cppcut_assert_operator(ssize_t(0), <=, ssid_length);
+    cppcut_assert_operator(size_t(0), <=, ssid_length);
     cut_assert_equal_memory(assumed_ssid, ssize_t(sizeof(assumed_ssid)),
                             dest, ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -4553,10 +4605,10 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes()
                                                 dcpregs_write_94_ssid);
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
 
-    const ssize_t ssid_length = reg->read_handler(dest, 32);
+    const size_t ssid_length = reg->read(dest, 32);
 
-    cppcut_assert_operator(ssize_t(0), <=, ssid_length);
-    cut_assert_equal_memory(dest, ssize_t(sizeof(assumed_ssid)),
+    cppcut_assert_operator(size_t(0), <=, ssid_length);
+    cut_assert_equal_memory(dest, sizeof(assumed_ssid),
                             buffer + sizeof(redzone_content), ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
                             buffer, sizeof(redzone_content));
@@ -4593,15 +4645,15 @@ void test_get_wlan_ssid_in_edit_mode_after_change()
 
     cppcut_assert_equal(size_t(32), sizeof(ssid) + sizeof(redzone_content));
 
-    cppcut_assert_equal(0, reg->write_handler(ssid, sizeof(ssid)));
+    reg->write(ssid, sizeof(ssid));
 
     uint8_t buffer[32];
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
-    const ssize_t ssid_length = reg->read_handler(buffer, sizeof(buffer));
+    const size_t ssid_length = reg->read(buffer, sizeof(buffer));
 
-    cppcut_assert_operator(ssize_t(0), <=, ssid_length);
-    cut_assert_equal_memory(ssid, ssize_t(sizeof(ssid)),
+    cppcut_assert_operator(size_t(0), <=, ssid_length);
+    cut_assert_equal_memory(ssid, sizeof(ssid),
                             buffer, ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
                             buffer + ssid_length, sizeof(redzone_content));
@@ -4625,7 +4677,7 @@ void test_set_ibss_mode_adhoc_is_not_supported()
     mock_messages->expect_msg_error(EINVAL, LOG_NOTICE,
                                     "Cannot change IBSS mode to ad-hoc, "
                                     "always using infrastructure mode");
-    cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>("true"), 4));
+    write_buffer_expect_failure(reg, "true", 4, -1);
 }
 
 /*!\test
@@ -4644,7 +4696,7 @@ void test_set_ibss_mode_infrastructure_is_ignored()
 
     mock_messages->expect_msg_info("Ignoring IBSS infrastructure mode request "
                                    "(always using that mode)");
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("false"), 5));
+    reg->write(reinterpret_cast<const uint8_t *>("false"), 5);
 }
 
 /*!\test
@@ -4682,7 +4734,7 @@ void test_set_junk_ibss_mode_is_an_error()
     {
         mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                         "Got invalid IBSS mode request");
-        cppcut_assert_equal(-1, reg->write_handler(str.string_, str.length_));
+        write_buffer_expect_failure(reg, str.string_, str.length_, -1);
     }
 }
 
@@ -4698,7 +4750,7 @@ void test_get_ibss_mode_returns_infrastructure_mode()
                                                 dcpregs_write_93_ibss);
 
     uint8_t response[8];
-    cppcut_assert_equal(ssize_t(6), reg->read_handler(response, sizeof(response)));
+    cppcut_assert_equal(size_t(6), reg->read(response, sizeof(response)));
     cppcut_assert_equal("false", reinterpret_cast<const char *>(response));
 }
 
@@ -4717,16 +4769,16 @@ void test_set_wpa_cipher_is_ignored()
                                                 dcpregs_write_101_wpa_cipher);
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TKIP"), 4));
+    reg->write(reinterpret_cast<const uint8_t *>("TKIP"), 4);
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TKIP"), 5));
+    reg->write(reinterpret_cast<const uint8_t *>("TKIP"), 5);
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("AES"), 3));
+    reg->write(reinterpret_cast<const uint8_t *>("AES"), 3);
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("AES"), 4));
+    reg->write(reinterpret_cast<const uint8_t *>("AES"), 4);
 }
 
 /*!\test
@@ -4767,7 +4819,7 @@ void test_set_junk_wpa_cipher_is_an_error()
     {
         mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                         "Got invalid WPA cipher");
-        cppcut_assert_equal(-1, reg->write_handler(str.string_, str.length_));
+        write_buffer_expect_failure(reg, str.string_, str.length_, -1);
     }
 }
 
@@ -4783,7 +4835,7 @@ void test_get_wpa_cipher_returns_aes()
                                                 dcpregs_write_101_wpa_cipher);
 
     uint8_t response[8];
-    cppcut_assert_equal(ssize_t(4), reg->read_handler(response, sizeof(response)));
+    cppcut_assert_equal(size_t(4), reg->read(response, sizeof(response)));
     cppcut_assert_equal("AES", reinterpret_cast<const char *>(response));
 }
 
@@ -4805,7 +4857,7 @@ void test_configuration_update_is_blocked_after_shutdown()
     static const uint8_t zero = 0;
 
     mock_messages->expect_msg_info_formatted("Disable DHCP");
-    cppcut_assert_equal(0, reg->write_handler(&zero, 1));
+    reg->write(&zero, 1);
 
     /* ...but writing to file is blocked */
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
@@ -4840,7 +4892,7 @@ void test_start_wlan_site_survey()
     mock_connman->expect_connman_start_wlan_site_survey(
         true, survey_complete, CONNMAN_SITE_SCAN_OK);
     survey_complete_notification_data.expect();
-    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    reg->write(nullptr, 0);
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, succeeded (0)");
     survey_complete_notification_data();
@@ -4856,7 +4908,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
 
     auto *reg = lookup_register_expect_handlers(105,
                                                 dcpregs_read_105_wlan_site_survey_results,
-                                                NULL);
+                                                nullptr);
 
     static constexpr const std::array<const MockConnman::ServiceIterData, 5> services_data =
     {
@@ -4897,7 +4949,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
         "</bss>"
         "</bss_list>";
 
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     cppcut_assert_operator(size_t(0), <, buffer.pos);
     cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
@@ -4918,7 +4970,7 @@ void test_start_wlan_site_survey_command_has_no_data_bytes()
         "Unexpected data length 1 (expected 0) (Invalid argument)");
 
     static const uint8_t zero = 0;
-    cppcut_assert_equal(-1, reg->write_handler(&zero, 1));
+    write_buffer_expect_failure(reg, &zero, 1, -1);
 }
 
 /*!\test
@@ -4931,12 +4983,12 @@ void test_start_wlan_site_survey_has_no_effect_if_survey_is_active()
 
     mock_messages->expect_msg_info("WLAN site survey started");
     mock_connman->expect_connman_start_wlan_site_survey(true);
-    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    reg->write(nullptr, 0);
 
     /* no extra expectations to add here, this handler will simply return */
     mock_messages->expect_msg_error(0, LOG_NOTICE,
                                     "WLAN site survey already in progress---please hold the line");
-    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    reg->write(nullptr, 0);
 }
 
 /*!\test
@@ -4951,7 +5003,7 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
     mock_connman->expect_connman_start_wlan_site_survey(
         false, survey_complete, CONNMAN_SITE_SCAN_CONNMAN_ERROR);
     survey_complete_notification_data.expect();
-    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    reg->write(nullptr, 0);
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (1)");
     survey_complete_notification_data();
@@ -4959,12 +5011,12 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
 
     reg = lookup_register_expect_handlers(105,
                                           dcpregs_read_105_wlan_site_survey_results,
-                                          NULL);
+                                          nullptr);
 
     struct dynamic_buffer buffer;
     dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"network\"/>";
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     cppcut_assert_operator(size_t(0), <, buffer.pos);
     cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
@@ -4985,17 +5037,17 @@ void test_start_wlan_site_survey_fails_on_dbus_failure()
     mock_connman->expect_connman_start_wlan_site_survey(
         false, survey_complete, CONNMAN_SITE_SCAN_DBUS_ERROR);
     survey_complete_notification_data.expect(true);
-    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    reg->write(nullptr, 0);
     register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
                                           dcpregs_read_105_wlan_site_survey_results,
-                                          NULL);
+                                          nullptr);
 
     struct dynamic_buffer buffer;
     dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"internal\"/>";
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     cppcut_assert_operator(size_t(0), <, buffer.pos);
     cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
@@ -5017,17 +5069,17 @@ void test_start_wlan_site_survey_fails_if_no_hardware_available()
     mock_connman->expect_connman_start_wlan_site_survey(
         false, survey_complete, CONNMAN_SITE_SCAN_NO_HARDWARE);
     survey_complete_notification_data.expect(true);
-    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    reg->write(nullptr, 0);
     register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
                                           dcpregs_read_105_wlan_site_survey_results,
-                                          NULL);
+                                          nullptr);
 
     struct dynamic_buffer buffer;
     dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"hardware\"/>";
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     cppcut_assert_operator(size_t(0), <, buffer.pos);
     cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
@@ -5048,15 +5100,15 @@ void test_reading_out_ssids_without_scan_returns_empty_list()
 {
     auto *reg = lookup_register_expect_handlers(105,
                                                 dcpregs_read_105_wlan_site_survey_results,
-                                                NULL);
+                                                nullptr);
 
-    mock_connman->expect_connman_service_iterator_get(NULL);
-    mock_connman->expect_connman_service_iterator_free(NULL);
+    mock_connman->expect_connman_service_iterator_get(nullptr);
+    mock_connman->expect_connman_service_iterator_free(nullptr);
 
     struct dynamic_buffer buffer;
     dynamic_buffer_init(&buffer);
     static constexpr char expected_xml[] = "<bss_list count=\"0\"/>";
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     cppcut_assert_operator(size_t(0), <, buffer.pos);
     cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
@@ -5069,10 +5121,9 @@ static void expect_network_status(const std::array<uint8_t, 3> &expected_status)
 {
     auto *reg = lookup_register_expect_handlers(50,
                                                 dcpregs_read_50_network_status,
-                                                NULL);
+                                                nullptr);
     uint8_t status[expected_status.size()];
-    cppcut_assert_equal(ssize_t(sizeof(status)),
-                        reg->read_handler(status, sizeof(status)));
+    cppcut_assert_equal(sizeof(status), reg->read(status, sizeof(status)));
 
     cut_assert_equal_memory(expected_status.data(), expected_status.size(),
                             status, sizeof(status));
@@ -5253,13 +5304,13 @@ void cut_setup()
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
-    network_prefs_init(NULL, NULL);
-    register_init(NULL);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(nullptr);
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     os_write_buffer.clear();
@@ -5288,18 +5339,18 @@ void test_read_out_default_friendly_name()
     mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
 
     uint8_t buffer[64];
-    ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+    size_t bytes = reg->read(buffer, sizeof(buffer));
 
     static const char expected_name[] = "T+A Streaming Board";
 
-    cppcut_assert_equal(ssize_t(sizeof(expected_name) - 1), bytes);
+    cppcut_assert_equal(sizeof(expected_name) - 1, bytes);
     cut_assert_equal_memory(expected_name, sizeof(expected_name) - 1,
                             buffer, bytes);
 }
 
 static void write_and_read_name(const char *name,
                                 const char *expected_escaped_name,
-                                const struct dcp_register_t *reg,
+                                const Regs::Register *reg,
                                 bool send_zero_terminator = false,
                                 bool expect_meaningful_given_by_user_field = false,
                                 size_t sent_name_length = 0,
@@ -5333,7 +5384,7 @@ static void write_and_read_name(const char *name,
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)name, sent_name_length));
+    reg->write(reinterpret_cast<const uint8_t *>(name), sent_name_length);
 
     static const std::string key_fnoverride("FRIENDLY_NAME_OVERRIDE");
     static const std::string key_fngivenbyu("FRIENDLY_NAME_GIVEN_BY_USER");
@@ -5381,7 +5432,7 @@ static void write_and_read_name(const char *name,
     mock_os->expect_os_unmap_file(&config_file);
 
     uint8_t buffer[1024];
-    ssize_t bytes = reg->read_handler(buffer, sizeof(buffer));
+    size_t bytes = reg->read(buffer, sizeof(buffer));
 
     cut_assert_equal_memory(name, unescaped_name_length, buffer, bytes);
 }
@@ -5506,7 +5557,7 @@ void test_writing_different_friendly_name_restarts_flagpole_service()
                                                 dcpregs_write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("TheDevice"), 9));
+    reg->write(reinterpret_cast<const uint8_t *>("TheDevice"), 9);
 
     static const char expected_config_file[] =
         "FRIENDLY_NAME_OVERRIDE='TheDevice'\n"
@@ -5539,7 +5590,7 @@ void test_writing_same_name_does_not_change_files_nor_flagpole_service()
     mock_os->expect_os_unmap_file(&config_file);
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "UPnP name unchanged");
 
-    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)upnp_name, sizeof(upnp_name)));
+    reg->write(reinterpret_cast<const uint8_t *>(upnp_name), sizeof(upnp_name));
 }
 
 void test_writing_new_appliance_id_restarts_flagpole_service()
@@ -5779,7 +5830,7 @@ void test_set_all_upnp_variables()
                                                 dcpregs_read_88_upnp_friendly_name,
                                                 dcpregs_write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>("Unit test device"), 16));
+    reg->write(reinterpret_cast<const uint8_t *>("Unit test device"), 16);
 
     static char config_file_content_third[] =
         "FRIENDLY_NAME_OVERRIDE='Unit test device'\n"
@@ -5878,14 +5929,14 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(register_changed_callback);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(register_changed_callback);
     dcpregs_filetransfer_set_picture_provider(dcpregs_playstream_get_picture_provider());
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     register_changed_data->check();
@@ -5936,22 +5987,22 @@ void test_download_url_length_restrictions()
     url_buffer[3] = HCR_FILE_TRANSFER_ENCRYPTION_NONE;
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, 0));
+    reg->write(url_buffer, 0);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 1 (expected 9...1032) (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(url_buffer, 1));
+    write_buffer_expect_failure(reg, url_buffer, 1, -1);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 8 (expected 9...1032) (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(url_buffer, 8));
+    write_buffer_expect_failure(reg, url_buffer, 8, -1);
 
     mock_messages->expect_msg_info_formatted("Set URL \"x\"");
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, 9));
+    reg->write(url_buffer, 9);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Unexpected data length 1033 (expected 9...1032) (Invalid argument)");
-    cppcut_assert_equal(-1, reg->write_handler(url_buffer, sizeof(url_buffer)));
+    write_buffer_expect_failure(reg, url_buffer, sizeof(url_buffer), -1);
 
     mock_messages->expect_msg_info("Set URL \"%s\"");
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer) - 1));
+    reg->write(url_buffer, sizeof(url_buffer) - 1);
 }
 
 static void start_download(const std::string &url, uint32_t download_id)
@@ -5966,7 +6017,7 @@ static void start_download(const std::string &url, uint32_t download_id)
         lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
     mock_messages->expect_msg_info("Set URL \"%s\"");
 
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, 8 + url.length()));
+    reg->write(url_buffer, 8 + url.length());
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD };
@@ -5989,8 +6040,8 @@ static void start_download(const std::string &url, uint32_t download_id)
         expected_write_handler_retval = 0;
     }
 
-    cppcut_assert_equal(expected_write_handler_retval,
-                        reg->write_handler(hcr_command, sizeof(hcr_command)));
+    write_buffer_expect_failure(reg, hcr_command, sizeof(hcr_command),
+                                expected_write_handler_retval);
 }
 
 static void cancel_download(uint32_t download_id)
@@ -6002,7 +6053,7 @@ static void cancel_download(uint32_t download_id)
     mock_file_transfer_dbus->expect_tdbus_file_transfer_call_cancel_sync(
         TRUE, dbus_dcpd_file_transfer_iface_dummy, download_id);
 
-    cppcut_assert_equal(0, reg->write_handler(NULL, 0));
+    reg->write(nullptr, 0);
 
 }
 
@@ -6031,17 +6082,16 @@ void test_download_without_url_returns_error()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE,
                                               "Download URL not configured (Invalid argument)");
 
-    cppcut_assert_equal(-1, reg->write_handler(hcr_command, sizeof(hcr_command)));
+    write_buffer_expect_failure(reg, hcr_command, sizeof(hcr_command), -1);
 }
 
 static void get_download_status(uint8_t (&buffer)[2])
 {
     auto *reg =
         lookup_register_expect_handlers(41, dcpregs_read_41_download_status,
-                                        NULL);
+                                        nullptr);
 
-    cppcut_assert_equal(static_cast<ssize_t>(sizeof(buffer)),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -6153,7 +6203,7 @@ void test_download_status_after_failed_download_is_status_code()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL done report with error */
-    dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_NET_IO, NULL);
+    dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_NET_IO, nullptr);
     register_changed_data->check(41);
 
     /* No network connection status */
@@ -6213,7 +6263,7 @@ void test_send_reboot_request()
                                               "Shutdown requested via DCP command");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_reboot_sync(true, dbus_logind_manager_iface_dummy, false);
-    cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
+    reg->write(hcr_command, sizeof(hcr_command));
 }
 
 /*!\test
@@ -6230,7 +6280,7 @@ void test_send_reboot_request_during_update()
     mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
     mock_messages->expect_msg_error(0, LOG_ERR,
         "System reboot request ignored, we are in the middle of an update");
-    cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
+    reg->write(hcr_command, sizeof(hcr_command));
 }
 
 /*!\test
@@ -6274,7 +6324,7 @@ void test_download_empty_cover_art()
     mock_messages->expect_msg_info("Cover art: Send empty hash to SPI slave");
 
     uint8_t buffer[16];
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(0), reg->read(buffer, sizeof(buffer)));
 
     mock_messages->check();
 
@@ -6287,7 +6337,7 @@ void test_download_empty_cover_art()
     mock_messages->expect_msg_info("Download of cover art requested");
     mock_messages->expect_msg_info("No cover art available");
 
-    cppcut_assert_equal(0, reg->write_handler(hcr_command, sizeof(hcr_command)));
+    reg->write(hcr_command, sizeof(hcr_command));
 }
 
 /*!\test
@@ -6413,7 +6463,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
 
     auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
 
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+    reg->write(url_buffer, sizeof(url_buffer));
 
     /* the data passed to the register is always written straight to the
      * regular configuration file (unless the content wasn't changed), the
@@ -6517,7 +6567,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_UPDATE_FROM_INET, HCR_COMMAND_UPDATE_MAIN_SYSTEM };
 
-    cppcut_assert_equal(-1, reg->write_handler(hcr_command, sizeof(hcr_command)));
+    write_buffer_expect_failure(reg, hcr_command, sizeof(hcr_command), -1);
 }
 
 /*!\test
@@ -6651,7 +6701,7 @@ static void feed_configuration_file_is_created_on_system_update(bool have_overri
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_UPDATE_FROM_INET, HCR_COMMAND_UPDATE_MAIN_SYSTEM };
 
-    cppcut_assert_equal(-1, reg->write_handler(hcr_command, sizeof(hcr_command)));
+    write_buffer_expect_failure(reg, hcr_command, sizeof(hcr_command), -1);
 }
 
 /*!\test
@@ -6709,7 +6759,7 @@ void test_feed_configuration_file_is_created_on_config_if_does_not_exist()
 
     auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
 
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+    reg->write(url_buffer, sizeof(url_buffer));
 
     static char expected_config_file[] =
         "[global]\n"
@@ -6749,7 +6799,7 @@ void test_feed_configurations_with_trailing_zero_bytes_are_accepted()
 
     auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
 
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+    reg->write(url_buffer, sizeof(url_buffer));
 
     static char expected_config_file[] =
         "[global]\n"
@@ -6799,7 +6849,7 @@ void test_feed_configuration_file_remains_unchanged_if_passed_config_is_same()
 
     auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
 
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+    reg->write(url_buffer, sizeof(url_buffer));
 }
 
 /*!\test
@@ -6839,7 +6889,7 @@ void test_feed_configuration_with_more_than_two_fields_is_accepted()
 
     auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
 
-    cppcut_assert_equal(0, reg->write_handler(url_buffer, sizeof(url_buffer)));
+    reg->write(url_buffer, sizeof(url_buffer));
 }
 
 };
@@ -6929,13 +6979,13 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(register_changed_callback);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(register_changed_callback);
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     register_changed_data->check();
@@ -7031,9 +7081,9 @@ static void set_start_title(const std::string expected_artist,
     set_stream_meta_data_dump_expectations("First stream meta data (reg 78)",
                                            expected_artist, expected_album, expected_title);
 
-    const auto *const reg = register_lookup(78);
+    const auto *const reg = Regs::lookup(78);
 
-    cppcut_assert_equal(0, reg->write_handler(title, length));
+    reg->write(title, length);
 
     mock_dbus_iface->check();
     mock_audiopath_dbus->check();
@@ -7086,10 +7136,9 @@ static void set_next_title(const std::string title, bool is_in_app_mode)
         mock_messages->expect_msg_error(0, LOG_CRIT,
                                         "BUG: App sets next stream title while not in app mode");
 
-    const auto *const reg = register_lookup(238);
+    const auto *const reg = Regs::lookup(238);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(title.c_str()),
-                                              title.length()));
+    reg->write(reinterpret_cast<const uint8_t *>(title.c_str()), title.length());
 }
 
 static GVariantWrapper hash_to_variant(const MD5::Hash &hash)
@@ -7221,17 +7270,17 @@ static void set_start_url(const std::string expected_artist,
     if(expected_stream_key != nullptr)
         *expected_stream_key = std::move(hash_to_variant(hash));
 
-    const auto *const reg = register_lookup(79);
+    const auto *const reg = Regs::lookup(79);
 
     set_start_playing_expectations(expected_artist, expected_album,
                                    expected_title, expected_alttrack,
                                    url, stream_id, hash,
                                    flow_assumptions, system_assumptions);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(url.c_str()), url.length()));
+    reg->write(reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
 
     uint8_t buffer[8];
-    cppcut_assert_equal(ssize_t(0), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(0), reg->read(buffer, sizeof(buffer)));
 
     mock_dbus_iface->check();
     mock_dcpd_dbus->check();
@@ -7293,7 +7342,7 @@ static void set_next_url(const std::string title, const std::string url,
                          SetTitleAndURLSystemAssumptions system_assumptions,
                          GVariantWrapper *expected_stream_key)
 {
-    const auto *const reg = register_lookup(239);
+    const auto *const reg = Regs::lookup(239);
 
     switch(flow_assumptions)
     {
@@ -7349,7 +7398,7 @@ static void set_next_url(const std::string title, const std::string url,
         break;
     }
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(url.c_str()), url.length()));
+    reg->write(reinterpret_cast<const uint8_t *>(url.c_str()), url.length());
 
     mock_messages->check();
 }
@@ -7384,11 +7433,11 @@ static void set_next_title_and_url(const std::string title, const std::string ur
 
 static void expect_current_title(const std::string &expected_title)
 {
-    const auto *const reg = register_lookup(75);
+    const auto *const reg = Regs::lookup(75);
 
     char buffer[150];
-    const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
-    cppcut_assert_operator(ssize_t(sizeof(buffer)), >, len);
+    const size_t len = reg->read((uint8_t *)buffer, sizeof(buffer));
+    cppcut_assert_operator(sizeof(buffer), >, len);
     buffer[len] = '\0';
 
     cppcut_assert_equal(expected_title.c_str(), buffer);
@@ -7396,11 +7445,11 @@ static void expect_current_title(const std::string &expected_title)
 
 static void expect_current_url(const std::string &expected_url)
 {
-    const auto *const reg = register_lookup(76);
+    const auto *const reg = Regs::lookup(76);
 
     char buffer[600];
-    const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
-    cppcut_assert_operator(ssize_t(sizeof(buffer)), >, len);
+    const size_t len = reg->read((uint8_t *)buffer, sizeof(buffer));
+    cppcut_assert_operator(sizeof(buffer), >, len);
     buffer[len] = '\0';
 
     cppcut_assert_equal(expected_url.c_str(), buffer);
@@ -7415,12 +7464,12 @@ static void expect_current_title_and_url(const std::string &expected_title,
 
 static void expect_next_url_empty()
 {
-    const auto *const reg = register_lookup(239);
+    const auto *const reg = Regs::lookup(239);
 
     uint8_t buffer[16];
     memset(buffer, UINT8_MAX, sizeof(buffer));
-    const ssize_t len = reg->read_handler((uint8_t *)buffer, sizeof(buffer));
-    cppcut_assert_equal(ssize_t(0), len);
+    const size_t len = reg->read((uint8_t *)buffer, sizeof(buffer));
+    cppcut_assert_equal(size_t(0), len);
 
     uint8_t expected_url[sizeof(buffer)];
     memset(expected_url, UINT8_MAX, sizeof(expected_url));
@@ -7513,10 +7562,10 @@ static void send_title_and_url(const ID::Stream stream_id,
                                const char *expected_url,
                                bool expecting_direct_slave_notification)
 {
-    if(expected_title == NULL)
+    if(expected_title == nullptr)
         expected_title = "";
 
-    if(expected_url == NULL)
+    if(expected_url == nullptr)
         expected_url = "";
 
     char buffer[512];
@@ -7534,14 +7583,14 @@ static void send_title_and_url(const ID::Stream stream_id,
 
 static void stop_stream()
 {
-    const auto *const reg = register_lookup(79);
+    const auto *const reg = Regs::lookup(79);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "First stream URL (reg 79): <empty>");
     mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
 
     static const uint8_t zero = 0;
-    cppcut_assert_equal(0, reg->write_handler(&zero, sizeof(zero)));
+    reg->write(&zero, sizeof(zero));
 }
 
 /*!\test
@@ -8580,15 +8629,15 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(register_changed_callback);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(register_changed_callback);
 
     dcpregs_audiosources_set_unit_test_mode();
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     register_changed_data->check();
@@ -8635,7 +8684,7 @@ void test_read_out_empty_external_media_services()
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
     mock_credentials_dbus->expect_tdbus_credentials_read_call_get_known_categories_sync(TRUE, dbus_cred_read_iface_dummy, categories);
 
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     const std::string expected_answer = "<services count=\"0\"/>";
     cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
@@ -8656,7 +8705,7 @@ void test_read_out_external_media_services()
     /* survey */
     static const uint8_t dummy = 0;
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
-    cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
+    reg->write(&dummy, 0);
 
     register_changed_data->check(106);
 
@@ -8708,7 +8757,7 @@ void test_read_out_external_media_services()
         TRUE, dbus_cred_read_iface_dummy,
         accounts_funny, "Does not exist");
 
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     const std::string expected_answer =
         "<services count=\"4\">"
@@ -8743,7 +8792,7 @@ void test_read_out_unconfigured_external_media_services()
     /* survey */
     static const uint8_t dummy = 0;
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
-    cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
+    reg->write(&dummy, 0);
 
     register_changed_data->check(106);
 
@@ -8770,7 +8819,7 @@ void test_read_out_unconfigured_external_media_services()
         no_accounts, "");
 
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
-    cut_assert_true(reg->read_handler_dynamic(&buffer));
+    reg->read(buffer);
 
     const std::string expected_answer =
         "<services count=\"2\">"
@@ -8794,7 +8843,7 @@ void test_trigger_media_services_survey()
 
     static const uint8_t dummy = 0;
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
-    cppcut_assert_equal(0, reg->write_handler(&dummy, 0));
+    reg->write(&dummy, 0);
 
     register_changed_data->check(106);
 }
@@ -8829,7 +8878,7 @@ void test_set_service_credentials()
         TRUE, dbus_airable_iface_dummy,
         "tidal", "login email", TRUE, guchar(ACTOR_ID_LOCAL_UI));
 
-    cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
+    reg->write(data, sizeof(data) - 1);
 
     register_changed_data->check(80);
 }
@@ -8864,7 +8913,7 @@ void test_password_may_be_zero_terminated()
         TRUE, dbus_airable_iface_dummy,
         "deezer", "login", TRUE, guchar(ACTOR_ID_LOCAL_UI));
 
-    cppcut_assert_equal(0, reg->write_handler(data, sizeof(data) - 1));
+    reg->write(data, sizeof(data) - 1);
 
     register_changed_data->check(80);
 }
@@ -8883,7 +8932,7 @@ void test_set_service_credentials_requires_service_id()
     mock_messages->expect_msg_error(0, EINVAL, "Empty service ID sent to register 106");
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
-    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+    write_buffer_expect_failure(reg, data, sizeof(data) - 1, -1);
 }
 
 /*!\test
@@ -8900,7 +8949,7 @@ void test_set_service_credentials_requires_login_for_password()
     mock_messages->expect_msg_error(0, EINVAL, "Empty login sent to register 106");
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
-    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+    write_buffer_expect_failure(reg, data, sizeof(data) - 1, -1);
 }
 
 /*!\test
@@ -8917,7 +8966,7 @@ void test_set_service_credentials_requires_password_for_login()
     mock_messages->expect_msg_error(0, EINVAL, "Empty password sent to register 106");
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
-    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+    write_buffer_expect_failure(reg, data, sizeof(data) - 1, -1);
 }
 
 /*!\test
@@ -8934,7 +8983,7 @@ void test_no_junk_after_password_allowed()
     mock_messages->expect_msg_error(0, EINVAL, "Malformed data written to register 106");
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
 
-    cppcut_assert_equal(-1, reg->write_handler(data, sizeof(data) - 1));
+    write_buffer_expect_failure(reg, data, sizeof(data) - 1,-1);
 }
 
 };
@@ -8975,13 +9024,13 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(NULL);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(nullptr);
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     mock_messages->check();
@@ -9014,7 +9063,7 @@ void test_start_search_in_default_context()
 
     static const char query[] = "default";
 
-    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    reg->write(reinterpret_cast<const uint8_t *>(query), sizeof(query));
 }
 
 /*!\test
@@ -9036,7 +9085,7 @@ void test_search_single_string_in_default_context()
 
     static const char query[] = "default\0text0=Some search string";
 
-    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    reg->write(reinterpret_cast<const uint8_t *>(query), sizeof(query));
 }
 
 /*!\test
@@ -9068,7 +9117,7 @@ void test_search_with_multiple_parameters_in_usb_context()
         "text4=Third string\0"
         "select2=yes";
 
-    cppcut_assert_equal(0, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    reg->write(reinterpret_cast<const uint8_t *>(query), sizeof(query));
 }
 
 /*!\test
@@ -9082,7 +9131,7 @@ void test_search_parameter_value_must_not_be_empty()
 
     static const char query[] = "default\0text0=";
 
-    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
 /*!\test
@@ -9096,7 +9145,7 @@ void test_search_parameter_variable_must_not_be_empty()
 
     static const char query[] = "default\0=Some search string";
 
-    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
 /*!\test
@@ -9110,7 +9159,7 @@ void test_context_must_not_be_empty()
 
     static const char query[] = "\0text0=Some search string";
 
-    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
 /*!\test
@@ -9124,7 +9173,7 @@ void test_context_must_not_contain_equals_character()
 
     static const char query[] = "default=yes\0text0=Some search string";
 
-    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
 /*!\test
@@ -9138,7 +9187,7 @@ void test_search_parameter_specification_must_contain_equals_character()
 
     static const char query[] = "default\0text0 Some search string";
 
-    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
 /*!\test
@@ -9152,7 +9201,7 @@ void test_search_parameter_specification_must_not_be_empty()
 
     static const char query[] = "default\0";
 
-    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
 /*!\test
@@ -9166,7 +9215,7 @@ void test_embedded_search_parameter_specification_must_not_be_empty()
 
     static const char query[] = "default\0text0=My Query\0";
 
-    cppcut_assert_equal(-1, reg->write_handler((const uint8_t *)query, sizeof(query)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
 };
@@ -9228,13 +9277,13 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(register_changed_callback);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(register_changed_callback);
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     register_changed_data->check();
@@ -9268,12 +9317,12 @@ void cut_teardown()
  */
 void test_dcp_register_37_has_no_write_handler()
 {
-    const auto *reg = register_lookup(37);
+    const auto *reg = Regs::lookup(37);
 
     cppcut_assert_not_null(reg);
-    cppcut_assert_equal(37U, unsigned(reg->address));
-    cut_assert(reg->read_handler != NULL);
-    cut_assert(reg->write_handler == NULL);
+    cppcut_assert_equal(37U, unsigned(reg->address_));
+    cut_assert_false(reg->has_handler(static_cast<ssize_t (*)(uint8_t *, size_t)>(nullptr)));
+    cut_assert_true(reg->has_handler(static_cast<int (*)(const uint8_t *, size_t)>(nullptr)));
 }
 
 static void do_test_read_image_version(const os_mapped_file_data &config_file,
@@ -9294,7 +9343,7 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
     uint8_t buffer[sizeof(redzone_content) + dest_buffer_size + sizeof(redzone_content)];
     memset(buffer, 0xff, sizeof(buffer));
 
-    auto *reg = register_lookup(37);
+    auto *reg = Regs::lookup(37);
 
     mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
@@ -9302,9 +9351,9 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
     if(expected_warning != nullptr)
         mock_messages->expect_msg_error_formatted(0, LOG_NOTICE, expected_warning);
 
-    cppcut_assert_equal(ssize_t(expected_version_id_size),
-                        reg->read_handler(buffer + sizeof(redzone_content),
-                                          sizeof(buffer) - 2 * sizeof(redzone_content)));
+    cppcut_assert_equal(expected_version_id_size,
+                        reg->read(buffer + sizeof(redzone_content),
+                                  sizeof(buffer) - 2 * sizeof(redzone_content)));
 
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content), buffer,
                             sizeof(redzone_content));
@@ -9508,7 +9557,7 @@ void test_read_image_version_with_zero_size_buffer()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    do_test_read_image_version(config_file, 0, NULL, 0,
+    do_test_read_image_version(config_file, 0, nullptr, 0,
                                "Cannot copy version ID to zero length buffer");
 }
 
@@ -9517,10 +9566,9 @@ void test_read_image_version_with_zero_size_buffer()
  */
 void test_status_byte_without_ready_notification_is_all_zero()
 {
-    auto *reg = register_lookup(17);
+    auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
-    cppcut_assert_equal((ssize_t)sizeof(buffer),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
     static constexpr uint8_t expected_answer[2] = { 0x00, 0x00 };
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
@@ -9534,10 +9582,9 @@ void test_status_byte_after_ready_notification()
 {
     dcpregs_status_set_ready();
 
-    auto *reg = register_lookup(17);
+    auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
-    cppcut_assert_equal((ssize_t)sizeof(buffer),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
     static constexpr uint8_t expected_answer[2] = { 0x21, 0x00 };
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
@@ -9555,10 +9602,9 @@ void test_status_byte_after_shutdown_notification()
 {
     dcpregs_status_set_ready_to_shutdown();
 
-    auto *reg = register_lookup(17);
+    auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
-    cppcut_assert_equal((ssize_t)sizeof(buffer),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
     static constexpr uint8_t expected_answer[2] = { 0x21, 0x01 };
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
@@ -9575,10 +9621,9 @@ void test_status_byte_after_reboot_required_notification()
 {
     dcpregs_status_set_reboot_required();
 
-    auto *reg = register_lookup(17);
+    auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
-    cppcut_assert_equal((ssize_t)sizeof(buffer),
-                        reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
 
     static constexpr uint8_t expected_answer[2] = { 0x24, 0x00 };
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
@@ -9615,7 +9660,7 @@ void test_status_byte_updates_are_only_sent_if_changed()
 
 static void set_speed_factor_successful_cases(uint8_t subcommand)
 {
-    const struct dcp_register_t *reg =
+    const auto *reg =
         lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
     const double sign_mul = (subcommand == 0xc1) ? 1.0 : -1.0;
 
@@ -9624,51 +9669,47 @@ static void set_speed_factor_successful_cases(uint8_t subcommand)
                                                               sign_mul * 4.0);
 
     const uint8_t buffer_fraction_lower_boundary[] = { subcommand, 0x04, 0x00, };
-    cppcut_assert_equal(0, reg->write_handler(buffer_fraction_lower_boundary,
-                                              sizeof(buffer_fraction_lower_boundary)));
+    reg->write(buffer_fraction_lower_boundary, sizeof(buffer_fraction_lower_boundary));
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
                                                               sign_mul * 4.18);
 
     const uint8_t buffer_generic[] = { subcommand, 0x04, 0x12, };
-    cppcut_assert_equal(0, reg->write_handler(buffer_generic, sizeof(buffer_generic)));
+    reg->write(buffer_generic, sizeof(buffer_generic));
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
                                                               sign_mul * 4.99);
 
     const uint8_t buffer_fraction_upper_boundary[] = { subcommand, 0x04, 0x63, };
-    cppcut_assert_equal(0, reg->write_handler(buffer_fraction_upper_boundary,
-                                              sizeof(buffer_fraction_upper_boundary)));
+    reg->write(buffer_fraction_upper_boundary, sizeof(buffer_fraction_upper_boundary));
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
                                                               sign_mul * 0.01);
 
     const uint8_t buffer_absolute_minimum[] = { subcommand, 0x00, 0x01, };
-    cppcut_assert_equal(0, reg->write_handler(buffer_absolute_minimum,
-                                              sizeof(buffer_absolute_minimum)));
+    reg->write(buffer_absolute_minimum, sizeof(buffer_absolute_minimum));
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy,
                                                               sign_mul * 255.99);
 
     const uint8_t buffer_absolute_maximum[] = { subcommand, 0xff, 0x63, };
-    cppcut_assert_equal(0, reg->write_handler(buffer_absolute_maximum,
-                                              sizeof(buffer_absolute_maximum)));
+    reg->write(buffer_absolute_maximum, sizeof(buffer_absolute_maximum));
 }
 
 static void set_speed_factor_wrong_command_format(uint8_t subcommand)
 {
-    const struct dcp_register_t *reg =
+    const auto *reg =
         lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
 
     /* too long */
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
 
     const uint8_t buffer_too_long[] = { subcommand, 0x04, 0x00, 0x00 };
-    cppcut_assert_equal(-1, reg->write_handler(buffer_too_long, sizeof(buffer_too_long)));
+    write_buffer_expect_failure(reg, buffer_too_long, sizeof(buffer_too_long), -1);
 
     mock_messages->check();
 
@@ -9676,36 +9717,36 @@ static void set_speed_factor_wrong_command_format(uint8_t subcommand)
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
 
     const uint8_t buffer_too_short[] = { subcommand, 0x04 };
-    cppcut_assert_equal(-1, reg->write_handler(buffer_too_short, sizeof(buffer_too_short)));
+    write_buffer_expect_failure(reg, buffer_too_short, sizeof(buffer_too_short), -1);
 }
 
 static void set_speed_factor_invalid_factor(uint8_t subcommand)
 {
-    const struct dcp_register_t *reg =
+    const auto *reg =
         lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
 
     const uint8_t buffer_first_invalid[] = { subcommand, 0x04, 0x64, };
-    cppcut_assert_equal(-1, reg->write_handler(buffer_first_invalid, sizeof(buffer_first_invalid)));
+    write_buffer_expect_failure(reg, buffer_first_invalid, sizeof(buffer_first_invalid), -1);
 
     mock_messages->check();
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
 
     const uint8_t buffer_last_invalid[] = { subcommand, 0x04, 0xff, };
-    cppcut_assert_equal(-1, reg->write_handler(buffer_last_invalid, sizeof(buffer_last_invalid)));
+    write_buffer_expect_failure(reg, buffer_last_invalid, sizeof(buffer_last_invalid), -1);
 }
 
 static void set_speed_factor_zero(uint8_t subcommand)
 {
-    const struct dcp_register_t *reg =
+    const auto *reg =
         lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor too small (Invalid argument)");
 
     const uint8_t buffer[] = { subcommand, 0x00, 0x00, };
-    cppcut_assert_equal(-1, reg->write_handler(buffer, sizeof(buffer)));
+    write_buffer_expect_failure(reg, buffer, sizeof(buffer), -1);
 }
 
 /*!\test
@@ -9777,14 +9818,14 @@ void test_playback_set_speed_reverse_zero_factor_is_invalid()
  */
 void test_playback_regular_speed()
 {
-    const struct dcp_register_t *reg =
+    const auto *reg =
         lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy, 0.0);
 
     static const uint8_t buffer[] = { 0xc3 };
-    cppcut_assert_equal(0, reg->write_handler(buffer, sizeof(buffer)));
+    reg->write(buffer, sizeof(buffer));
 }
 
 /*!\test
@@ -9792,7 +9833,7 @@ void test_playback_regular_speed()
  */
 void test_playback_stream_seek()
 {
-    const struct dcp_register_t *reg =
+    const auto *reg =
         lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -9800,7 +9841,7 @@ void test_playback_stream_seek()
                                                          264781241, "ms");
 
     static const uint8_t buffer[] = { 0xc4, 0xb9, 0x3d, 0xc8, 0x0f };
-    cppcut_assert_equal(0, reg->write_handler(buffer, sizeof(buffer)));
+    reg->write(buffer, sizeof(buffer));
 }
 
 /*!\test
@@ -9808,7 +9849,7 @@ void test_playback_stream_seek()
  */
 void test_playback_stream_seek_boundaries()
 {
-    const struct dcp_register_t *reg =
+    const auto *reg =
         lookup_register_expect_handlers(73, dcpregs_write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -9816,14 +9857,14 @@ void test_playback_stream_seek_boundaries()
                                                          0, "ms");
 
     static const uint8_t buffer_min[] = { 0xc4, 0x00, 0x00, 0x00, 0x00 };
-    cppcut_assert_equal(0, reg->write_handler(buffer_min, sizeof(buffer_min)));
+    reg->write(buffer_min, sizeof(buffer_min));
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
                                                          UINT32_MAX, "ms");
 
     static const uint8_t buffer_max[] = { 0xc4, 0xff, 0xff, 0xff, 0xff };
-    cppcut_assert_equal(0, reg->write_handler(buffer_max, sizeof(buffer_max)));
+    reg->write(buffer_max, sizeof(buffer_max));
 }
 
 };
@@ -9963,15 +10004,15 @@ void cut_setup()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    network_prefs_init(NULL, NULL);
-    register_init(register_changed_callback);
+    network_prefs_init(nullptr, nullptr);
+    Regs::init(register_changed_callback);
 
     dcpregs_audiosources_set_unit_test_mode();
 }
 
 void cut_teardown()
 {
-    register_deinit();
+    Regs::deinit();
     network_prefs_deinit();
 
     register_changed_data->check();
@@ -10035,8 +10076,8 @@ static void make_source_available(const char *source_id, const char *player_id,
     uint8_t buffer[256];
     std::fill(buffer, buffer + sizeof(buffer), 0xe7);
 
-    cppcut_assert_equal(ssize_t(expected.size()),
-                        register_lookup(80)->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(expected.size(),
+                        Regs::lookup(80)->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(expected.data(), expected.size(),
                             buffer, expected.size());
     cppcut_assert_equal(uint16_t(0xe7), uint16_t(buffer[expected.size()]));
@@ -10053,7 +10094,7 @@ void test_read_out_all_audio_sources_after_initialization()
                                                 dcpregs_write_80_get_known_audio_sources);
 
     static const uint8_t subcommand = 0x00;
-    cppcut_assert_equal(0, reg->write_handler(&subcommand, sizeof(subcommand)));
+    reg->write(&subcommand, sizeof(subcommand));
     register_changed_data->check(80);
 
     std::vector<uint8_t> expected;
@@ -10067,7 +10108,7 @@ void test_read_out_all_audio_sources_after_initialization()
     uint8_t buffer[512];
     std::fill(buffer, buffer + sizeof(buffer), 0xe7);
 
-    cppcut_assert_equal(ssize_t(expected.size()), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(expected.size(), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(expected.data(), expected.size(),
                             buffer, expected.size());
     cppcut_assert_equal(uint16_t(0xe7), uint16_t(buffer[expected.size()]));
@@ -10089,7 +10130,7 @@ static void read_out_all_audio_sources_after_making_airable_available(bool is_on
     /* read out all audio source information after the audio paths have been
      * made available */
     static const uint8_t subcommand = 0x00;
-    cppcut_assert_equal(0, reg->write_handler(&subcommand, sizeof(subcommand)));
+    reg->write(&subcommand, sizeof(subcommand));
     register_changed_data->check(80);
 
     std::vector<uint8_t> expected;
@@ -10124,7 +10165,7 @@ static void read_out_all_audio_sources_after_making_airable_available(bool is_on
     uint8_t buffer[512];
     std::fill(buffer, buffer + sizeof(buffer), 0xe7);
 
-    cppcut_assert_equal(ssize_t(expected.size()), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(expected.size(), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(expected.data(), expected.size(),
                             buffer, expected.size());
     cppcut_assert_equal(uint16_t(0xe7), uint16_t(buffer[expected.size()]));
@@ -10149,7 +10190,7 @@ void test_current_audio_source_is_empty_after_initialization()
                                                 dcpregs_write_81_current_audio_source);
 
     uint8_t buffer[32] = {0xc7, 0xc8};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 }
@@ -10172,12 +10213,12 @@ void test_selection_of_known_alive_source_reports_selection_asynchronously()
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* source is still empty because successful switch is reported
      * asynchronously */
     uint8_t buffer[32] = {0xc7, 0xc8};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 }
@@ -10200,7 +10241,7 @@ void test_selection_of_known_alive_source_with_async_notification()
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
@@ -10209,7 +10250,7 @@ void test_selection_of_known_alive_source_with_async_notification()
 
     /* now the register contains our selected audio source ID */
     uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
 }
 
@@ -10226,13 +10267,13 @@ void test_selection_of_known_alive_source_is_done_when_possible()
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* source is still empty because (1) the audio path (thus the audio source)
      * is not usable yet, and (2) a successful switch of audio path is reported
      * asynchronously */
     uint8_t buffer[32] = {0xc7, 0xc8};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 
@@ -10247,7 +10288,7 @@ void test_selection_of_known_alive_source_is_done_when_possible()
                                       dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
                           });
 
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 
@@ -10256,7 +10297,7 @@ void test_selection_of_known_alive_source_is_done_when_possible()
     dcpregs_audiosources_selected_source(asrc, false);
     register_changed_data->check(81);
 
-    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
 }
 
@@ -10279,7 +10320,7 @@ void test_unrequested_change_of_known_audio_path_is_propagated_to_spi_slave()
 
     /* the register now contains some audio source ID */
     uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
 }
 
@@ -10302,7 +10343,7 @@ void test_unrequested_change_of_unknown_audio_path_is_propagated_to_spi_slave()
 
     /* the register now contains some audio source ID */
     uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
 }
 
@@ -10316,13 +10357,13 @@ void test_selection_of_known_unusable_source()
                                                 dcpregs_write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     dcpregs_audiosources_selected_source(asrc, false);
     register_changed_data->check(81);
 
     uint8_t buffer[32] = {0xc7};
-    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
 }
 
@@ -10368,7 +10409,7 @@ void test_quickly_selecting_audio_source_twice_switches_once()
                       std::placeholders::_5, std::placeholders::_6,
                       std::ref(result)));
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     cppcut_assert_not_null(std::get<0>(result));
     mock_dbus_iface->check();
@@ -10376,13 +10417,13 @@ void test_quickly_selecting_audio_source_twice_switches_once()
 
     /* the request for audio source has not finished yet, but here comes yet
      * another request for the same thing; nothing happens */
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* and a few more */
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* finally received the answer for the first request */
     MockAudiopathDBus::aupath_manager_request_source_result(std::get<0>(result),
@@ -10423,8 +10464,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
                       std::placeholders::_5, std::placeholders::_6,
                       std::ref(upnp_result)));
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_upnp),
-                                              sizeof(asrc_upnp)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc_upnp), sizeof(asrc_upnp));
 
     cppcut_assert_not_null(std::get<0>(upnp_result));
     mock_dbus_iface->check();
@@ -10443,8 +10483,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
                       std::placeholders::_5, std::placeholders::_6,
                       std::ref(usb_result)));
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_usb),
-                                              sizeof(asrc_usb)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc_usb), sizeof(asrc_usb));
 
     cppcut_assert_not_null(std::get<0>(usb_result));
     mock_dbus_iface->check();
@@ -10467,7 +10506,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
                                                             std::move(std::get<4>(usb_result)));
 
     uint8_t buffer[32] = {0xc7, 0xc8};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 
@@ -10475,7 +10514,7 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
     dcpregs_audiosources_selected_source(asrc_usb, false);
     register_changed_data->check(81);
 
-    cppcut_assert_equal(ssize_t(sizeof(asrc_usb)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc_usb), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc_usb, sizeof(asrc_usb), buffer, sizeof(asrc_usb));
 }
 
@@ -10491,10 +10530,10 @@ void test_selection_of_known_dead_source_yields_error()
     static const char asrc[] = "roon";
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Audio source \"roon\" is dead");
-    cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc), -1);
 
     uint8_t buffer[32] = {0xc7, 0xc8};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 }
@@ -10511,10 +10550,10 @@ void test_selection_of_unknown_source_yields_error()
     static const char asrc[] = "doesnotexist";
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
                                               "Audio source \"doesnotexist\" not known");
-    cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc), -1);
 
     uint8_t buffer[32] = {0xc7, 0xc8};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xc8), buffer[1]);
 }
@@ -10543,11 +10582,11 @@ void test_selection_of_idle_source()
             dbus_audiopath_manager_iface_dummy, true);
 
     const uint8_t empty = 0;
-    cppcut_assert_equal(0, reg->write_handler(&empty, sizeof(empty)));
+    reg->write(&empty, sizeof(empty));
 
     /* the register still contains the empty audio source */
     uint8_t buffer[2] = {0x82, 0xeb};
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xeb), buffer[1]);
 }
@@ -10570,7 +10609,7 @@ void test_selection_of_real_source_followed_by_idle_source()
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
@@ -10579,7 +10618,7 @@ void test_selection_of_real_source_followed_by_idle_source()
 
     /* now the register contains our selected audio source ID */
     uint8_t buffer[32] = {0x19};
-    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
 
     /* enter idle state */
@@ -10589,7 +10628,7 @@ void test_selection_of_real_source_followed_by_idle_source()
             dbus_audiopath_manager_iface_dummy, true);
 
     const uint8_t empty = 0;
-    cppcut_assert_equal(0, reg->write_handler(&empty, sizeof(empty)));
+    reg->write(&empty, sizeof(empty));
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
@@ -10599,7 +10638,7 @@ void test_selection_of_real_source_followed_by_idle_source()
     /* the register contains the empty audio source again */
     buffer[0] = 0xbc;
     buffer[1] = 0xf1;
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xf1), buffer[1]);
 }
@@ -10626,7 +10665,7 @@ void test_selection_of_inactive_state_for_suspend()
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc)));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
@@ -10635,7 +10674,7 @@ void test_selection_of_inactive_state_for_suspend()
 
     /* now the register contains our selected audio source ID */
     uint8_t buffer[32] = {0x19};
-    cppcut_assert_equal(ssize_t(sizeof(asrc)), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(sizeof(asrc), reg->read(buffer, sizeof(buffer)));
     cut_assert_equal_memory(asrc, sizeof(asrc), buffer, sizeof(asrc));
 
     /* enter idle state */
@@ -10651,8 +10690,7 @@ void test_selection_of_inactive_state_for_suspend()
             dbus_audiopath_manager_iface_dummy, true, std::move(request_data));
 
     const char suspend[] = ":suspend";
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(suspend),
-                                              sizeof(suspend)));
+    reg->write(reinterpret_cast<const uint8_t *>(suspend), sizeof(suspend));
 
     /* this function should be called from a D-Bus handler that monitors audio
      * path changes */
@@ -10662,7 +10700,7 @@ void test_selection_of_inactive_state_for_suspend()
     /* the register contains the empty audio source again */
     buffer[0] = 0xbc;
     buffer[1] = 0xf1;
-    cppcut_assert_equal(ssize_t(1), reg->read_handler(buffer, sizeof(buffer)));
+    cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
     cppcut_assert_equal(uint8_t(0x00), buffer[0]);
     cppcut_assert_equal(uint8_t(0xf1), buffer[1]);
 }
@@ -10724,8 +10762,7 @@ void test_audio_source_request_option_parser()
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false,
             std::move(request_data));
 
-    cppcut_assert_equal(0, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_with_options.c_str()),
-                                              asrc_with_options.length() + 1));
+    reg->write(reinterpret_cast<const uint8_t *>(asrc_with_options.c_str()), asrc_with_options.length() + 1);
 }
 
 /*!\test
@@ -10761,8 +10798,9 @@ void test_audio_source_request_option_parser_rejects_malformed_options()
         mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE,
                 "Invalid audio source options (Invalid argument)");
 
-        cppcut_assert_equal(-1, reg->write_handler(reinterpret_cast<const uint8_t *>(asrc_with_options.c_str()),
-                                                   asrc_with_options.length() + 1));
+        write_buffer_expect_failure(reg,
+                                    reinterpret_cast<const uint8_t *>(asrc_with_options.c_str()),
+                                    asrc_with_options.length() + 1, -1);
     }
 }
 
