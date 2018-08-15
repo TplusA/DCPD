@@ -179,7 +179,7 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
         uint16_t stream_id = g_variant_get_uint16(val);
         g_variant_unref(val);
 
-        dcpregs_playstream_start_notification(stream_id,
+        dcpregs_playstream_start_notification(ID::Stream::make_from_raw_id(stream_id),
                                               g_variant_get_child_value(parameters, 1));
     }
     else if(strcmp(signal_name, "Stopped") == 0 ||
@@ -205,7 +205,9 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     guint16 raw_stream_id,
                                     const gchar *title, const gchar *url)
 {
-    if((raw_stream_id & STREAM_ID_SOURCE_MASK) == STREAM_ID_SOURCE_INVALID)
+    auto id(ID::Stream::make_from_raw_id(raw_stream_id));
+
+    if(id.get_source() == STREAM_ID_SOURCE_INVALID)
     {
         g_dbus_method_invocation_return_error(invocation,
                                               G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
@@ -214,16 +216,12 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     }
 
     const bool clear_info =
-        ((raw_stream_id & STREAM_ID_COOKIE_MASK) == STREAM_ID_COOKIE_INVALID ||
-         url[0] == '\0');
+        (id.get_cookie() == STREAM_ID_COOKIE_INVALID || url[0] == '\0');
 
     if(clear_info)
-    {
-        raw_stream_id &= STREAM_ID_SOURCE_MASK;
-        raw_stream_id |= STREAM_ID_COOKIE_INVALID;
-    }
+        id = ID::Stream::make_complete(id.get_source(), STREAM_ID_COOKIE_INVALID);
 
-    dcpregs_playstream_set_title_and_url(raw_stream_id, title, url);
+    dcpregs_playstream_set_title_and_url(id, title, url);
 
     tdbus_dcpd_playback_complete_set_stream_info(object, invocation);
 
