@@ -6318,7 +6318,7 @@ void test_download_empty_cover_art()
 {
     /* no picture hash available */
     auto *reg =
-        lookup_register_expect_handlers(210, Regs::PlayStreamHandlers::read_210_current_cover_art_hash, nullptr);
+        lookup_register_expect_handlers(210, Regs::PlayStream::DCP::read_210_current_cover_art_hash, nullptr);
 
     mock_messages->expect_msg_info("Cover art: Send empty hash to SPI slave");
 
@@ -9660,7 +9660,7 @@ void test_status_byte_updates_are_only_sent_if_changed()
 static void set_speed_factor_successful_cases(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStream::DCP::write_73_seek_or_set_speed);
     const double sign_mul = (subcommand == 0xc1) ? 1.0 : -1.0;
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
@@ -9702,7 +9702,7 @@ static void set_speed_factor_successful_cases(uint8_t subcommand)
 static void set_speed_factor_wrong_command_format(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStream::DCP::write_73_seek_or_set_speed);
 
     /* too long */
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor length must be 2 (Invalid argument)");
@@ -9722,7 +9722,7 @@ static void set_speed_factor_wrong_command_format(uint8_t subcommand)
 static void set_speed_factor_invalid_factor(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStream::DCP::write_73_seek_or_set_speed);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor invalid fraction part (Invalid argument)");
 
@@ -9740,7 +9740,7 @@ static void set_speed_factor_invalid_factor(uint8_t subcommand)
 static void set_speed_factor_zero(uint8_t subcommand)
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStream::DCP::write_73_seek_or_set_speed);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Speed factor too small (Invalid argument)");
 
@@ -9818,7 +9818,7 @@ void test_playback_set_speed_reverse_zero_factor_is_invalid()
 void test_playback_regular_speed()
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStream::DCP::write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_set_speed(dbus_dcpd_playback_iface_dummy, 0.0);
@@ -9833,7 +9833,7 @@ void test_playback_regular_speed()
 void test_playback_stream_seek()
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStream::DCP::write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
@@ -9849,7 +9849,7 @@ void test_playback_stream_seek()
 void test_playback_stream_seek_boundaries()
 {
     const auto *reg =
-        lookup_register_expect_handlers(73, Regs::PlayStreamHandlers::write_73_seek_or_set_speed);
+        lookup_register_expect_handlers(73, Regs::PlayStream::DCP::write_73_seek_or_set_speed);
 
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_seek(dbus_dcpd_playback_iface_dummy,
@@ -10089,8 +10089,8 @@ static void make_source_available(const char *source_id, const char *player_id,
 void test_read_out_all_audio_sources_after_initialization()
 {
     auto *reg = lookup_register_expect_handlers(80,
-                                                Regs::AudioSourcesHandlers::read_80_get_known_audio_sources,
-                                                Regs::AudioSourcesHandlers::write_80_get_known_audio_sources);
+                                                Regs::AudioSources::DCP::read_80_get_known_audio_sources,
+                                                Regs::AudioSources::DCP::write_80_get_known_audio_sources);
 
     static const uint8_t subcommand = 0x00;
     reg->write(&subcommand, sizeof(subcommand));
@@ -10123,8 +10123,8 @@ static void read_out_all_audio_sources_after_making_airable_available(bool is_on
     make_source_available("airable.qobuz",  "p", "de.tahifi.Qobuz",   "dbus/qobuz",   0x44);
 
     auto *reg = lookup_register_expect_handlers(80,
-                        Regs::AudioSourcesHandlers::read_80_get_known_audio_sources,
-                        Regs::AudioSourcesHandlers::write_80_get_known_audio_sources);
+                        Regs::AudioSources::DCP::read_80_get_known_audio_sources,
+                        Regs::AudioSources::DCP::write_80_get_known_audio_sources);
 
     /* read out all audio source information after the audio paths have been
      * made available */
@@ -10185,8 +10185,8 @@ void test_read_out_all_audio_sources_after_making_some_sources_available_offline
 void test_current_audio_source_is_empty_after_initialization()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     uint8_t buffer[32] = {0xc7, 0xc8};
     cppcut_assert_equal(size_t(1), reg->read(buffer, sizeof(buffer)));
@@ -10200,8 +10200,8 @@ void test_current_audio_source_is_empty_after_initialization()
 void test_selection_of_known_alive_source_reports_selection_asynchronously()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
@@ -10228,8 +10228,8 @@ void test_selection_of_known_alive_source_reports_selection_asynchronously()
 void test_selection_of_known_alive_source_with_async_notification()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
@@ -10260,8 +10260,8 @@ void test_selection_of_known_alive_source_with_async_notification()
 void test_selection_of_known_alive_source_is_done_when_possible()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
@@ -10307,8 +10307,8 @@ void test_selection_of_known_alive_source_is_done_when_possible()
 void test_unrequested_change_of_known_audio_path_is_propagated_to_spi_slave()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "roon";
 
@@ -10330,8 +10330,8 @@ void test_unrequested_change_of_known_audio_path_is_propagated_to_spi_slave()
 void test_unrequested_change_of_unknown_audio_path_is_propagated_to_spi_slave()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "new_streaming_service";
 
@@ -10352,8 +10352,8 @@ void test_unrequested_change_of_unknown_audio_path_is_propagated_to_spi_slave()
 void test_selection_of_known_unusable_source()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
@@ -10394,8 +10394,8 @@ void test_quickly_selecting_audio_source_twice_switches_once()
     make_source_available(asrc, player, "usb_source", "/some/dbus/path", 0x62);
 
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     RequestSourceResultBundle result;
 
@@ -10448,8 +10448,8 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
     make_source_available(asrc_usb,  player_usb,  "de.tahifi.USB",  "/dbus/usb",  0x62);
 
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     /* request UPnP audio source */
     RequestSourceResultBundle upnp_result;
@@ -10523,8 +10523,8 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
 void test_selection_of_known_dead_source_yields_error()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "roon";
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
@@ -10543,8 +10543,8 @@ void test_selection_of_known_dead_source_yields_error()
 void test_selection_of_unknown_source_yields_error()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "doesnotexist";
     mock_messages->expect_msg_error_formatted(0, LOG_NOTICE,
@@ -10572,8 +10572,8 @@ void test_spurious_deselection_of_audio_source_emits_bug_message()
 void test_selection_of_idle_source()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     mock_messages->expect_msg_info("Inactive state requested");
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
@@ -10596,8 +10596,8 @@ void test_selection_of_idle_source()
 void test_selection_of_real_source_followed_by_idle_source()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";
@@ -10652,8 +10652,8 @@ void test_selection_of_real_source_followed_by_idle_source()
 void test_selection_of_inactive_state_for_suspend()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";
@@ -10710,8 +10710,8 @@ void test_selection_of_inactive_state_for_suspend()
 void test_audio_source_request_option_parser()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";
@@ -10770,8 +10770,8 @@ void test_audio_source_request_option_parser()
 void test_audio_source_request_option_parser_rejects_malformed_options()
 {
     auto *reg = lookup_register_expect_handlers(81,
-                        Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                        Regs::AudioSourcesHandlers::write_81_current_audio_source);
+                        Regs::AudioSources::DCP::read_81_current_audio_source,
+                        Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
     static const char player[] = "upnp_player";

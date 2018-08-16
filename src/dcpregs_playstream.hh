@@ -44,9 +44,8 @@ void set_title_and_url(ID::Stream stream_id, std::string &&title, std::string &&
 void start_notification(ID::Stream stream_id, void *stream_key_variant);
 void stop_notification();
 void cover_art_notification(void *stream_key_variant);
-}
 
-namespace PlayStreamHandlers
+namespace DCP
 {
 int write_73_seek_or_set_speed(const uint8_t *data, size_t length);
 ssize_t read_75_current_stream_title(uint8_t *response, size_t length);
@@ -58,6 +57,8 @@ ssize_t read_210_current_cover_art_hash(uint8_t *response, size_t length);
 int write_238_next_stream_title(const uint8_t *data, size_t length);
 int write_239_next_stream_url(const uint8_t *data, size_t length);
 ssize_t read_239_next_stream_url(uint8_t *response, size_t length);
+}
+
 }
 
 }

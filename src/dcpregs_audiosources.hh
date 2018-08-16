@@ -98,15 +98,16 @@ void set_login_state(const char *cred_category, bool is_logged_in);
  *      special code.
  */
 void set_unit_test_mode(void);
-}
 
-namespace AudioSourcesHandlers
+namespace DCP
 {
 ssize_t read_80_get_known_audio_sources(uint8_t *response, size_t length);
 int write_80_get_known_audio_sources(const uint8_t *data, size_t length);
 
 ssize_t read_81_current_audio_source(uint8_t *response, size_t length);
 int write_81_current_audio_source(const uint8_t *data, size_t length);
+}
+
 }
 
 }

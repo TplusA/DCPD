@@ -817,7 +817,7 @@ static bool parse_absolute_position_ms(const uint8_t *data, size_t length,
     return true;
 }
 
-int Regs::PlayStreamHandlers::write_73_seek_or_set_speed(const uint8_t *data, size_t length)
+int Regs::PlayStream::DCP::write_73_seek_or_set_speed(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 73 handler %p %zu", data, length);
 
@@ -871,7 +871,7 @@ int Regs::PlayStreamHandlers::write_73_seek_or_set_speed(const uint8_t *data, si
     return -1;
 }
 
-ssize_t Regs::PlayStreamHandlers::read_75_current_stream_title(uint8_t *response, size_t length)
+ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
 
@@ -880,7 +880,7 @@ ssize_t Regs::PlayStreamHandlers::read_75_current_stream_title(uint8_t *response
                                 (char *)response, length);
 }
 
-ssize_t Regs::PlayStreamHandlers::read_76_current_stream_url(uint8_t *response, size_t length)
+ssize_t Regs::PlayStream::DCP::read_76_current_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
 
@@ -909,7 +909,7 @@ static void dump_plainurl_register_url(const char *what,
     msg_vinfo(plainurl_register_dump_level, "%s: \"%s\"", what, info.url.c_str());
 }
 
-int Regs::PlayStreamHandlers::write_78_start_play_stream_title(const uint8_t *data, size_t length)
+int Regs::PlayStream::DCP::write_78_start_play_stream_title(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "First stream meta data (reg 78)";
 
@@ -935,7 +935,7 @@ int Regs::PlayStreamHandlers::write_78_start_play_stream_title(const uint8_t *da
     return 0;
 }
 
-int Regs::PlayStreamHandlers::write_79_start_play_stream_url(const uint8_t *data, size_t length)
+int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "First stream URL (reg 79)";
 
@@ -989,13 +989,13 @@ int Regs::PlayStreamHandlers::write_79_start_play_stream_url(const uint8_t *data
     return 0;
 }
 
-ssize_t Regs::PlayStreamHandlers::read_79_start_play_stream_url(uint8_t *response, size_t length)
+ssize_t Regs::PlayStream::DCP::read_79_start_play_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 79 handler %p %zu", response, length);
     return 0;
 }
 
-ssize_t Regs::PlayStreamHandlers::read_210_current_cover_art_hash(uint8_t *response, size_t length)
+ssize_t Regs::PlayStream::DCP::read_210_current_cover_art_hash(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
 
@@ -1020,7 +1020,7 @@ ssize_t Regs::PlayStreamHandlers::read_210_current_cover_art_hash(uint8_t *respo
     return len;
 }
 
-int Regs::PlayStreamHandlers::write_238_next_stream_title(const uint8_t *data, size_t length)
+int Regs::PlayStream::DCP::write_238_next_stream_title(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "Next stream meta data (reg 238)";
 
@@ -1042,7 +1042,7 @@ int Regs::PlayStreamHandlers::write_238_next_stream_title(const uint8_t *data, s
     return 0;
 }
 
-int Regs::PlayStreamHandlers::write_239_next_stream_url(const uint8_t *data, size_t length)
+int Regs::PlayStream::DCP::write_239_next_stream_url(const uint8_t *data, size_t length)
 {
     static const char register_description[] = "Next stream URL (reg 239)";
 
@@ -1081,7 +1081,7 @@ int Regs::PlayStreamHandlers::write_239_next_stream_url(const uint8_t *data, siz
     return 0;
 }
 
-ssize_t Regs::PlayStreamHandlers::read_239_next_stream_url(uint8_t *response, size_t length)
+ssize_t Regs::PlayStream::DCP::read_239_next_stream_url(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 239 handler %p %zu", response, length);
     return 0;

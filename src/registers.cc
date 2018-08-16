@@ -399,7 +399,7 @@ static const std::array<Regs::Register, 50> register_map
     Regs::Register("seek in stream or set speed", 73,
                    REGISTER_MK_VERSION(1, 0, 3),
                    5,
-                   Regs::PlayStreamHandlers::write_73_seek_or_set_speed),
+                   Regs::PlayStream::DCP::write_73_seek_or_set_speed),
 
     /* Search parameters */
     Regs::Register("search parameters", 74,
@@ -411,40 +411,40 @@ static const std::array<Regs::Register, 50> register_map
     Regs::Register("current stream title", 75,
                    REGISTER_MK_VERSION(1, 0, 0),
                    128,
-                   Regs::PlayStreamHandlers::read_75_current_stream_title),
+                   Regs::PlayStream::DCP::read_75_current_stream_title),
 
     /* URL of currently playing stream, if any. */
     Regs::Register("current stream URL", 76,
                    REGISTER_MK_VERSION(1, 0, 0),
                    2048,
-                   Regs::PlayStreamHandlers::read_76_current_stream_url),
+                   Regs::PlayStream::DCP::read_76_current_stream_url),
 
     /* Play stream with this title (fallback title) */
     Regs::Register("first plain stream title", 78,
                    REGISTER_MK_VERSION(1, 0, 0),
                    128,
-                   Regs::PlayStreamHandlers::write_78_start_play_stream_title),
+                   Regs::PlayStream::DCP::write_78_start_play_stream_title),
 
     /* Play stream found under this URL */
     Regs::Register("first plain stream URL", 79,
                    REGISTER_MK_VERSION(1, 0, 0),
                    2048,
-                   Regs::PlayStreamHandlers::read_79_start_play_stream_url,
-                   Regs::PlayStreamHandlers::write_79_start_play_stream_url),
+                   Regs::PlayStream::DCP::read_79_start_play_stream_url,
+                   Regs::PlayStream::DCP::write_79_start_play_stream_url),
 
     /* Read out list of audio sources */
     Regs::Register("list of audio sources", 80,
                    REGISTER_MK_VERSION(1, 0, 4),
                    1024,
-                   Regs::AudioSourcesHandlers::read_80_get_known_audio_sources,
-                   Regs::AudioSourcesHandlers::write_80_get_known_audio_sources),
+                   Regs::AudioSources::DCP::read_80_get_known_audio_sources,
+                   Regs::AudioSources::DCP::write_80_get_known_audio_sources),
 
     /* Switch audio source to given ID */
     Regs::Register("switch audio source", 81,
                    REGISTER_MK_VERSION(1, 0, 4),
                    32,
-                   Regs::AudioSourcesHandlers::read_81_current_audio_source,
-                   Regs::AudioSourcesHandlers::write_81_current_audio_source),
+                   Regs::AudioSources::DCP::read_81_current_audio_source,
+                   Regs::AudioSources::DCP::write_81_current_audio_source),
 
     /* Set appliance ID */
     Regs::Register("appliance ID", 87,
@@ -554,20 +554,20 @@ static const std::array<Regs::Register, 50> register_map
     Regs::Register("cover art hash", 210,
                    REGISTER_MK_VERSION(1, 0, 2),
                    16,
-                   Regs::PlayStreamHandlers::read_210_current_cover_art_hash),
+                   Regs::PlayStream::DCP::read_210_current_cover_art_hash),
 
     /* Continue playing, next stream has this title (fallback title) */
     Regs::Register("next plain stream title", 238,
                    REGISTER_MK_VERSION(1, 0, 0),
                    128,
-                   Regs::PlayStreamHandlers::write_238_next_stream_title),
+                   Regs::PlayStream::DCP::write_238_next_stream_title),
 
     /* Continue playing, next stream found under this URL */
     Regs::Register("next plain stream URL", 239,
                    REGISTER_MK_VERSION(1, 0, 0),
                    2048,
-                   Regs::PlayStreamHandlers::read_239_next_stream_url,
-                   Regs::PlayStreamHandlers::write_239_next_stream_url),
+                   Regs::PlayStream::DCP::read_239_next_stream_url,
+                   Regs::PlayStream::DCP::write_239_next_stream_url),
 };
 
 void Regs::init(void (*register_changed_callback)(uint8_t reg_number))

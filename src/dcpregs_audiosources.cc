@@ -1171,7 +1171,7 @@ static void write_audio_source_info(RegisterResponseWriter &out,
     out.push_back(status_byte);
 }
 
-ssize_t Regs::AudioSourcesHandlers::read_80_get_known_audio_sources(uint8_t *response, size_t length)
+ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 80 handler %p %zu", response, length);
 
@@ -1269,7 +1269,7 @@ static int queue_read_one_command(const uint8_t *data, size_t length)
     return 0;
 }
 
-int Regs::AudioSourcesHandlers::write_80_get_known_audio_sources(const uint8_t *data, size_t length)
+int Regs::AudioSources::DCP::write_80_get_known_audio_sources(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 80 handler %p %zu", data, length);
 
@@ -1308,7 +1308,7 @@ int Regs::AudioSourcesHandlers::write_80_get_known_audio_sources(const uint8_t *
     return result;
 }
 
-ssize_t Regs::AudioSourcesHandlers::read_81_current_audio_source(uint8_t *response, size_t length)
+ssize_t Regs::AudioSources::DCP::read_81_current_audio_source(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 81 handler %p %zu", response, length);
 
@@ -1399,7 +1399,7 @@ static bool set_request_options(GVariantDict &dict,
     return true;
 }
 
-int Regs::AudioSourcesHandlers::write_81_current_audio_source(const uint8_t *data, size_t length)
+int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 81 handler %p %zu", data, length);
 
