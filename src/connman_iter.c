@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,13 +20,12 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-//#include <string.h>
-
 #include "connman.h"
 #include "connman_common.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
+
+#include <stdlib.h>
 
 struct ConnmanServiceIterator
 {

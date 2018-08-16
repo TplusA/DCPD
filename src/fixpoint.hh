@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,7 +19,8 @@
 #ifndef FIXPOINT_HH
 #define FIXPOINT_HH
 
-#include <limits>
+#include <climits>
+#include <cmath>
 #include <iostream>
 
 /*!

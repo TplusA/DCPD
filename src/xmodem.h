@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,10 +19,9 @@
 #ifndef XMODEM_H
 #define XMODEM_H
 
-#include <stdint.h>
-#include <stdbool.h>
-
 #include "os.h"
+
+#include <stdint.h>
 
 enum XModemCommand
 {

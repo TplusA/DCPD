@@ -20,9 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <errno.h>
-
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_audiosources.hh"
 #include "registers_priv.hh"
@@ -32,6 +29,9 @@
 #include "dbus_iface_deep.h"
 #include "actor_id.h"
 #include "messages.h"
+
+#include <cstring>
+#include <cerrno>
 
 #define TRY_EMIT(BUF, FAILCODE, ...) \
     do \

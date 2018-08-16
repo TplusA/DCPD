@@ -20,14 +20,13 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include "connman_agent.h"
 #include "dbus_handlers_connman_agent.h"
+#include "connman_agent.h"
 #include "networkprefs.h"
 #include "messages.h"
+
+#include <string.h>
+#include <inttypes.h>
 
 #define NET_CONNMAN_AGENT_ERROR (net_connman_agent_error_quark())
 

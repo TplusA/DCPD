@@ -20,10 +20,9 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <sstream>
-#include <vector>
-
 #include "smartphone_app_send.hh"
+
+#include <sstream>
 
 template <typename ... Args>
 static void send_command(Applink::AppConnections &conn,

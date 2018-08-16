@@ -19,9 +19,9 @@
 #ifndef DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
 #define DBUS_HANDLERS_CONNMAN_MANAGER_GLUE_H
 
-#include <stdbool.h>
-
 #include "networkprefs.h"
+
+#include <stdbool.h>
 
 /*!
  * \addtogroup dbus_handlers

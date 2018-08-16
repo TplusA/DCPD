@@ -20,16 +20,17 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <memory>
-#include <map>
-
-#include <sys/socket.h>
-
 #include "dcpregs_tcptunnel.h"
 #include "registers_priv.hh"
 #include "network.h"
 #include "network_dispatcher.hh"
 #include "messages.h"
+
+#include <sys/socket.h>
+
+#include <memory>
+#include <map>
+#include <limits>
 
 class PeerID
 {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,11 +20,11 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <errno.h>
-
 #include "dynamic_buffer.h"
 #include "messages.h"
+
+#include <stdlib.h>
+#include <errno.h>
 
 void dynamic_buffer_init(struct dynamic_buffer *buffer)
 {

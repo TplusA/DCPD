@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,21 +20,16 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <fstream>
-#include <inttypes.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <errno.h>
-
-#include <glib.h>
-
 #include "networkprefs.h"
 #include "inifile.h"
-#include "dbus_iface_deep.h"
 #include "network_device_list.hh"
-#include "connman_service_list.hh"
 #include "messages.h"
+
+#include <dirent.h>
+
+#include <fstream>
+#include <cstring>
+#include <mutex>
 
 static const char service_prefix[] = "/net/connman/service/";
 
@@ -287,7 +282,10 @@ static struct
     const char *preferences_path;
     const char *preferences_filename;
 
-    GMutex lock;
+    /* TODO: There should be a std::unique_lock in #network_prefs_handle, and
+     *       the #network_prefs_handle should be allocated dynamically as a
+     *       proper object. */
+    std::mutex lock;
     bool is_writable;
     struct ini_file file;
 
@@ -308,21 +306,19 @@ network_prefs_get_technology_by_prefs(const struct network_prefs *prefs)
 void network_prefs_init(const char *network_config_path,
                         const char *network_config_file)
 {
-    memset(&networkprefs_data, 0, sizeof(networkprefs_data));
-
     networkprefs_data.preferences_path = network_config_path;
     networkprefs_data.preferences_filename = network_config_file;
+    networkprefs_data.is_writable = false;
+    memset(&networkprefs_data.file, 0, sizeof(networkprefs_data.file));
+    memset(&networkprefs_data.handle, 0, sizeof(networkprefs_data.handle));
+    memset(&networkprefs_data.network_ethernet_prefs, 0, sizeof(networkprefs_data.network_ethernet_prefs));
+    memset(&networkprefs_data.network_wlan_prefs, 0, sizeof(networkprefs_data.network_wlan_prefs));
 
     networkprefs_data.network_ethernet_prefs.technology = NWPREFSTECH_ETHERNET;
     networkprefs_data.network_wlan_prefs.technology = NWPREFSTECH_WLAN;
-
-    g_mutex_init(&networkprefs_data.lock);
 }
 
-void network_prefs_deinit(void)
-{
-    g_mutex_clear(&networkprefs_data.lock);
-}
+void network_prefs_deinit(void) {}
 
 static int find_nic_name(const char *path, unsigned char dtype, void *user_data)
 {
@@ -486,7 +482,7 @@ void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_pat
     }
 
     /* patch changed MAC addresses into the configuration file */
-    g_mutex_lock(&networkprefs_data.lock);
+    networkprefs_data.lock.lock();
 
     struct network_prefs *ethernet_prefs;
     struct network_prefs *wlan_prefs;
@@ -497,7 +493,7 @@ void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_pat
 
     if(prefs == nullptr)
     {
-        g_mutex_unlock(&networkprefs_data.lock);
+        networkprefs_data.lock.unlock();
         return;
     }
 
@@ -517,7 +513,7 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
                                                     struct network_prefs **ethernet,
                                                     struct network_prefs **wlan)
 {
-    g_mutex_lock(&networkprefs_data.lock);
+    networkprefs_data.lock.lock();
 
     bool dummy;
     auto *prefs =
@@ -526,7 +522,7 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
 
     if(prefs == nullptr)
     {
-        g_mutex_unlock(&networkprefs_data.lock);
+        networkprefs_data.lock.unlock();
         return nullptr;
     }
 
@@ -608,7 +604,7 @@ void network_prefs_close(struct network_prefs_handle *handle)
     networkprefs_data.network_ethernet_prefs.section = NULL;
     networkprefs_data.network_wlan_prefs.section = NULL;
 
-    g_mutex_unlock(&networkprefs_data.lock);
+    networkprefs_data.lock.unlock();
 }
 
 static inline void assert_writable_file(const struct network_prefs_handle *handle)

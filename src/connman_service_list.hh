@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,11 +19,10 @@
 #ifndef CONNMAN_SERVICE_LIST_HH
 #define CONNMAN_SERVICE_LIST_HH
 
-#include <map>
-#include <memory>
-#include <mutex>
-
 #include "connman_service.hh"
+
+#include <map>
+#include <mutex>
 
 namespace Connman
 {

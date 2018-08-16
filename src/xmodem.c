@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,10 +20,10 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-
 #include "xmodem.h"
 #include "crc16.h"
+
+#include <string.h>
 
 #define RETRIES 10
 

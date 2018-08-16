@@ -20,14 +20,10 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-#include <array>
-#include <algorithm>
-
 #include "registers.hh"
 #include "messages.h"
+#include "registers_priv.hh"
+#include "configproxy.h"
 
 #include "dcpdefs.h"
 #include "dcpregs_common.h"
@@ -46,8 +42,11 @@
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.h"
 #include "dcpregs_status.h"
-#include "registers_priv.hh"
-#include "configproxy.h"
+
+#include <cstring>
+#include <cinttypes>
+#include <array>
+#include <algorithm>
 
 #define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 6)
 

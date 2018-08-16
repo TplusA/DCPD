@@ -19,8 +19,6 @@
 #ifndef DCPREGS_WLANSURVEY_HH
 #define DCPREGS_WLANSURVEY_HH
 
-#include <inttypes.h>
-
 #include "dynamic_buffer.h"
 
 /*!

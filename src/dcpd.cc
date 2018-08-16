@@ -20,12 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <cstdio>
-#include <cstring>
-#include <csignal>
-#include <cerrno>
-#include <glib.h>
-
 #include "named_pipe.h"
 #include "dcp_over_tcp.h"
 #include "smartphone_app.hh"
@@ -51,8 +45,15 @@
 #include "networkprefs.h"
 #include "configproxy.h"
 #include "configuration_dcpd.hh"
+#include "configuration.hh"
 #include "os.h"
 #include "versioninfo.h"
+
+#include <cstdio>
+#include <cstring>
+#include <csignal>
+#include <cerrno>
+#include <glib.h>
 
 /* generic events */
 #define WAITEVENT_POLL_ERROR                            (1U << 0)

@@ -19,10 +19,10 @@
 #ifndef REGISTERS_HH
 #define REGISTERS_HH
 
+#include "dynamic_buffer.h"
+
 #include <string>
 #include <stdexcept>
-
-#include "dynamic_buffer.h"
 
 /*!
  * \addtogroup registers SPI registers definitions

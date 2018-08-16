@@ -19,9 +19,6 @@
 #ifndef DBUS_HANDLERS_H
 #define DBUS_HANDLERS_H
 
-#include <stdbool.h>
-#include <gio/gio.h>
-
 #include "dcpd_dbus.h"
 #include "audiopath_dbus.h"
 #include "mixer_dbus.h"

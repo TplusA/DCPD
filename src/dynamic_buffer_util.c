@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,12 +20,12 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include "dynamic_buffer_util.h"
+#include "messages.h"
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <errno.h>
-
-#include "dynamic_buffer_util.h"
-#include "messages.h"
 
 bool dynamic_buffer_fill_from_fd(struct dynamic_buffer *buffer, int in_fd,
                                  bool suppress_warning, const char *what)

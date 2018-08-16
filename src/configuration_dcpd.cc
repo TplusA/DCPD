@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,11 +20,9 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <algorithm>
-#include <glib.h>
-
 #include "configuration_dcpd.hh"
 #include "configuration_dcpd.h"
+#include "configuration.hh"
 #include "configproxy.h"
 #include "dbus_handlers.h"
 

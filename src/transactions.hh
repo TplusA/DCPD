@@ -19,7 +19,8 @@
 #ifndef TRANSACTIONS_H
 #define TRANSACTIONS_H
 
-#include <stdbool.h>
+#include <cinttypes>
+#include <cstdlib>
 
 /*!
  * \addtogroup dcp_transaction DCP transactions

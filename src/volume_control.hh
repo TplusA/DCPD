@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,11 +19,11 @@
 #ifndef DCPREGS_VOLUME_HH
 #define DCPREGS_VOLUME_HH
 
+#include "maybe.hh"
+
 #include <memory>
 #include <mutex>
 #include <vector>
-
-#include "maybe.hh"
 
 namespace Mixer
 {

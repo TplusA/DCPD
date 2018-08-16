@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,16 +20,15 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-
 #include "configproxy.h"
 #include "configuration_dcpd.h"
 #include "messages.h"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
+
+#include <string.h>
+#include <stdio.h>
+#include <ctype.h>
 
 #define MAX_OWNERS              ((size_t)5)
 #define MAX_ID_LENGTH           ((size_t)15)

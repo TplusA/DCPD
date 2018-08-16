@@ -20,8 +20,8 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <unistd.h>
+#include "network.h"
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -29,10 +29,8 @@
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#include <errno.h>
 
-#include "network.h"
-#include "messages.h"
+#include <errno.h>
 
 int network_create_socket(uint16_t port, int backlog)
 {

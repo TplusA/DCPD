@@ -20,12 +20,12 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <array>
-#include <map>
-
 #include "dcpregs_upnpname.h"
 #include "shutdown_guard.h"
 #include "messages.h"
+
+#include <array>
+#include <map>
 
 enum class Key
 {

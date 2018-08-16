@@ -20,8 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdio.h>
-
 #include "connman_common.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"

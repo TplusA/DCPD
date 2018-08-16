@@ -20,16 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string>
-#include <vector>
-#include <array>
-#include <map>
-#include <deque>
-#include <functional>
-#include <algorithm>
-#include <mutex>
-#include <sstream>
-
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_common.h"
 #include "connman_service_list.hh"
@@ -40,6 +30,14 @@
 #include "gvariantwrapper.hh"
 #include "maybe.hh"
 #include "messages.h"
+
+#include <string>
+#include <vector>
+#include <map>
+#include <deque>
+#include <functional>
+#include <algorithm>
+#include <mutex>
 
 enum class AudioSourceState
 {

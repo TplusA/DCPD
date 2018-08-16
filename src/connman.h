@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,6 +20,7 @@
 #define CONNMAN_H
 
 #include <stdbool.h>
+#include <unistd.h>
 
 /*!
  * WLAN site survey result.

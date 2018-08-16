@@ -20,11 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <algorithm>
-#include <functional>
-#include <cinttypes>
-#include <chrono>
-
 #include "dbus_handlers_connman_manager.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "dbus_iface_deep.h"
@@ -34,9 +29,9 @@
 #include "connman_common.h"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
-#include "networkprefs.h"
 #include "dbus_common.h"
-#include "messages.h"
+
+#include <cinttypes>
 
 /*!
  * Representation of WLAN connection attempts.

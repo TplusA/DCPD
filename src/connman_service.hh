@@ -19,11 +19,11 @@
 #ifndef CONNMAN_SERVICE_HH
 #define CONNMAN_SERVICE_HH
 
-#include <vector>
-#include <memory>
-
 #include "network_device.hh"
 #include "maybe.hh"
+
+#include <vector>
+#include <memory>
 
 namespace Connman
 {

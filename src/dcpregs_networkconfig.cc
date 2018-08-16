@@ -20,12 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <array>
-#include <cstring>
-#include <functional>
-#include <algorithm>
-#include <arpa/inet.h>
-
 #include "dcpregs_networkconfig.h"
 #include "dcpregs_networkconfig.hh"
 #include "dcpregs_common.h"
@@ -37,6 +31,11 @@
 #include "dbus_handlers_connman_manager_glue.h"
 #include "shutdown_guard.h"
 #include "messages.h"
+
+#include <arpa/inet.h>
+
+#include <array>
+#include <algorithm>
 
 #define REQ_DHCP_MODE_55                ((uint32_t)(1U << 0))
 #define REQ_IP_ADDRESS_56               ((uint32_t)(1U << 1))

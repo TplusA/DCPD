@@ -20,10 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <cmath>
-#include <string.h>
-#include <errno.h>
-
 #include "dbus_handlers.h"
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_appliance.h"
@@ -35,9 +31,11 @@
 #include "volume_control.hh"
 #include "smartphone_app_send.hh"
 #include "configproxy.h"
-#include "stream_id.h"
 #include "actor_id.h"
 #include "messages.h"
+
+#include <cstring>
+#include <cerrno>
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
                            const char *sender_name)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,13 +20,12 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <errno.h>
-
 #include "dcpregs_searchparameters.h"
 #include "dcpd_dbus.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
+
+#include <string.h>
 
 static size_t skip_string(const uint8_t *data, size_t length, size_t pos)
 {

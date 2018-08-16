@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,15 +20,14 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include "named_pipe.h"
+#include "messages.h"
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-
-#include "named_pipe.h"
-#include "messages.h"
-#include "os.h"
 
 int fifo_create_and_open(const char *devname, bool write_not_read)
 {

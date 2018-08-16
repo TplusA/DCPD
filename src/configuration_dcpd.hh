@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,13 +19,12 @@
 #ifndef CONFIGURATION_DCPD_HH
 #define CONFIGURATION_DCPD_HH
 
-#include <string>
-#include <functional>
-#include <algorithm>
+#include <glib.h>  /* must be first for #GVariantWrapper */
 
-#include "configuration.hh"
 #include "configuration_settings.hh"
 #include "dcpregs_upnpname.hh"
+
+#include <algorithm>
 
 namespace Configuration
 {

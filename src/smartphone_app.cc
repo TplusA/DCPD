@@ -20,18 +20,15 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <sstream>
-#include <array>
-#include <cstring>
-#include <sys/socket.h>
-
 #include "smartphone_app.hh"
-#include "applink.hh"
 #include "network_dispatcher.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "actor_id.h"
-#include "messages.h"
+
+#include <sys/socket.h>
+
+#include <sstream>
 
 void Applink::Peer::send_to_queue(int fd, std::string &&command)
 {

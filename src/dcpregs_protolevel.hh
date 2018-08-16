@@ -19,8 +19,8 @@
 #ifndef DCPREGS_PROTOLEVEL_H
 #define DCPREGS_PROTOLEVEL_H
 
-#include <stdint.h>
-#include <unistd.h>
+#include <cstdint>
+#include <cstdlib>
 
 /*!
  * \addtogroup registers

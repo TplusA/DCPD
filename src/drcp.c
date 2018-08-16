@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,14 +20,14 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include "drcp.h"
+#include "messages.h"
+#include "os.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 #include <errno.h>
-
-#include "drcp.h"
-#include "messages.h"
-#include "os.h"
 
 bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
                             size_t *expected_size, size_t *payload_offset)

@@ -19,8 +19,6 @@
 #ifndef DCPREGS_PLAYSTREAM_HH
 #define DCPREGS_PLAYSTREAM_HH
 
-#include <string>
-
 #include "stream_id.hh"
 #include "coverart.hh"
 

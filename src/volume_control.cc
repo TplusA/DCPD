@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,16 +20,14 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <cmath>
-#include <algorithm>
-#include <limits>
-
 #include "volume_control.hh"
 #include "dcpregs_volume.h"
 #include "registers_priv.hh"
 #include "dbus_iface_deep.h"
 #include "fixpoint.hh"
 #include "messages.h"
+
+#include <algorithm>
 
 enum class Subcommand
 {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -18,8 +18,6 @@
 
 #ifndef DYNAMIC_BUFFER_UTIL_H
 #define DYNAMIC_BUFFER_UTIL_H
-
-#include <stdbool.h>
 
 #include "dynamic_buffer.h"
 

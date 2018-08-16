@@ -19,10 +19,9 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#include <stdbool.h>
-#include <stdint.h>
-
 #include "messages.h"
+
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

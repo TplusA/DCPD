@@ -20,9 +20,7 @@
 #define APPLINK_VARIABLES_HH
 
 #include <array>
-
 #include <cstdint>
-#include <unistd.h>
 
 /*!
  * \addtogroup app_link

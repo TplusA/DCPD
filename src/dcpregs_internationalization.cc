@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,11 +20,11 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <array>
-
 #include "dcpregs_internationalization.h"
 #include "configproxy.h"
 #include "messages.h"
+
+#include <array>
 
 static const char system_language_code_key[]     = "@drcpd::i18n:language_code";
 static const char system_language_variant_key[]  = "@drcpd::i18n:country_code";

@@ -20,12 +20,12 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-
 #include "dcpregs_protolevel.hh"
 #include "registers.hh"
 #include "registers_priv.hh"
 #include "messages.h"
+
+#include <cstring>
 
 /*! Number of bytes needed to store a protocol level specification. */
 #define SIZE_OF_PROTOCOL_LEVEL_SPEC        3U

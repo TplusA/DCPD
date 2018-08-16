@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,10 +19,10 @@
 #ifndef CONNMAN_ADDRESS_HH
 #define CONNMAN_ADDRESS_HH
 
+#include "messages.h"
+
 #include <string>
 #include <cstring>
-
-#include "messages.h"
 
 namespace Connman
 {

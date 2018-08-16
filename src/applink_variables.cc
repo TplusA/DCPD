@@ -20,12 +20,11 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <cstdlib>
-#include <cstring>
-#include <cerrno>
-
 #include "applink_variables.hh"
 #include "messages.h"
+
+#include <cstring>
+#include <cerrno>
 
 static int compare_variable_name(const void *a, const void *b)
 {

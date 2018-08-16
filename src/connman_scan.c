@@ -20,13 +20,13 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-
 #include "connman.h"
 #include "connman_common.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
+
+#include <string.h>
 
 struct wifi_scan_data
 {

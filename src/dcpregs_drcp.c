@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,16 +20,13 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-
 #include "dcpregs_drcp.h"
 #include "drcp_command_codes.h"
-#include "dbus_iface.h"
 #include "dbus_iface_deep.h"
-#include "dynamic_buffer.h"
 #include "messages.h"
+
+#include <stdlib.h>
+#include <errno.h>
 
 static bool is_length_correct(size_t expected, size_t length)
 {

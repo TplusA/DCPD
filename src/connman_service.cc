@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,11 +20,9 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <array>
-#include <algorithm>
-#include <cstring>
-
 #include "connman_service.hh"
+
+#include <algorithm>
 
 template <typename ArrayType>
 static typename ArrayType::value_type::second_type

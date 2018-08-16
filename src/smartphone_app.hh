@@ -19,15 +19,13 @@
 #ifndef SMARTPHONE_APP_HH
 #define SMARTPHONE_APP_HH
 
+#include "network.h"
+#include "applink.hh"
+
 #include <string>
 #include <deque>
 #include <map>
 #include <mutex>
-#include <memory>
-#include <functional>
-
-#include "network.h"
-#include "applink.hh"
 
 namespace Applink
 {

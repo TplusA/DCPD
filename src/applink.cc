@@ -20,15 +20,11 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include "applink.hh"
+
 #include <algorithm>
 #include <sstream>
 #include <cstring>
-#include <cstdio>
-#include <cstdarg>
-#include <cerrno>
-
-#include "applink.hh"
-#include "messages.h"
 
 struct ParserContext
 {

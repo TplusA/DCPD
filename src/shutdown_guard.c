@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,12 +20,12 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include "shutdown_guard.h"
+#include "messages.h"
+
 #include <stdlib.h>
 
 #include <glib.h>
-
-#include "shutdown_guard.h"
-#include "messages.h"
 
 struct ShutdownGuard
 {

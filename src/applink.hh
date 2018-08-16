@@ -19,12 +19,12 @@
 #ifndef APPLINK_HH
 #define APPLINK_HH
 
+#include "applink_variables.hh"
+#include "messages.h"
+
 #include <array>
 #include <vector>
 #include <memory>
-
-#include "applink_variables.hh"
-#include "messages.h"
 
 /*!
  * \addtogroup app_link Connection with smartphone app.

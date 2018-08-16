@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,12 +19,11 @@
 #ifndef NETWORK_DEVICE_LIST_HH
 #define NETWORK_DEVICE_LIST_HH
 
-#include <string>
+#include "network_device.hh"
+
 #include <map>
 #include <memory>
 #include <mutex>
-
-#include "network_device.hh"
 
 namespace Connman
 {

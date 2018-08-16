@@ -20,26 +20,21 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-
-/* for mutex */
-#include <glib.h>
-
 #include "dcpregs_wlansurvey.hh"
 #include "registers_priv.hh"
 #include "connman.h"
 #include "dynamic_buffer_util.h"
 #include "messages.h"
 
+#include <cstring>
+#include <mutex>
+
 static struct
 {
     /* must be a recursive mutex because sometimes the survey-done callback is
      * called from our own context while we are holding the lock, sometimes
      * its called from another context */
-    GRecMutex lock;
+    std::recursive_mutex lock;
 
     bool survey_in_progress;
     enum ConnmanSiteScanResult last_result;
@@ -55,18 +50,16 @@ enum WifiServiceType
 
 void dcpregs_wlansurvey_init(void)
 {
-    memset(&nwwlan_survey_data, 0, sizeof(nwwlan_survey_data));
-    g_rec_mutex_init(&nwwlan_survey_data.lock);
+    nwwlan_survey_data.survey_in_progress = false;
+    nwwlan_survey_data.last_result = CONNMAN_SITE_SCAN_OK;
 }
 
-void dcpregs_wlansurvey_deinit(void)
-{
-    g_rec_mutex_clear(&nwwlan_survey_data.lock);
-}
+void dcpregs_wlansurvey_deinit(void) {}
 
 static void survey_done(enum ConnmanSiteScanResult result)
 {
-    g_rec_mutex_lock(&nwwlan_survey_data.lock);
+    {
+    std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
 
     if(!nwwlan_survey_data.survey_in_progress)
         BUG("Got WLAN survey done notification, but didn't start any");
@@ -77,8 +70,7 @@ static void survey_done(enum ConnmanSiteScanResult result)
 
     nwwlan_survey_data.survey_in_progress = false;
     nwwlan_survey_data.last_result = result;
-
-    g_rec_mutex_unlock(&nwwlan_survey_data.lock);
+    }
 
     registers_get_data()->register_changed_notification_fn(105);
 }
@@ -102,20 +94,19 @@ int dcpregs_write_104_start_wlan_site_survey(const uint8_t *data, size_t length)
     if(data_length_is_unexpected(length, 0))
         return -1;
 
-    g_rec_mutex_lock(&nwwlan_survey_data.lock);
+    std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
 
     if(nwwlan_survey_data.survey_in_progress)
+    {
         msg_error(0, LOG_NOTICE,
                   "WLAN site survey already in progress---please hold the line");
-    else
-    {
-        nwwlan_survey_data.survey_in_progress = true;
-
-        if(connman_start_wlan_site_survey(survey_done))
-            msg_info("WLAN site survey started");
+        return 0;
     }
 
-    g_rec_mutex_unlock(&nwwlan_survey_data.lock);
+    nwwlan_survey_data.survey_in_progress = true;
+
+    if(connman_start_wlan_site_survey(survey_done))
+        msg_info("WLAN site survey started");
 
     return 0;
 }
@@ -315,7 +306,7 @@ bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer)
 {
     log_assert(dynamic_buffer_is_empty(buffer));
 
-    g_rec_mutex_lock(&nwwlan_survey_data.lock);
+    std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
 
     bool retval = false;
 
@@ -323,10 +314,7 @@ bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer)
     {
       case CONNMAN_SITE_SCAN_OK:
         if(fill_buffer_with_services(buffer))
-        {
-            retval = true;
-            break;
-        }
+            return true;
 
         dynamic_buffer_clear(buffer);
         nwwlan_survey_data.last_result = CONNMAN_SITE_SCAN_OUT_OF_MEMORY;
@@ -348,8 +336,6 @@ bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer)
 
         break;
     }
-
-    g_rec_mutex_unlock(&nwwlan_survey_data.lock);
 
     return retval;
 }

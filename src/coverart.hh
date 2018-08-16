@@ -16,14 +16,14 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <cinttypes>
-#include <cstdlib>
-#include <iterator>
+#ifndef COVERART_HH
+#define COVERART_HH
 
 #include "gvariantwrapper.hh"
 
-#ifndef COVERART_HH
-#define COVERART_HH
+#include <cinttypes>
+#include <cstdlib>
+#include <iterator>
 
 namespace CoverArt
 {

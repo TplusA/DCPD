@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,21 +20,17 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-
-#include "messages.h"
-
 #include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
+#include "messages.h"
 #include "dbus_iface_deep.h"
 #include "registers_priv.hh"
 #include "xmodem.h"
 #include "inifile.h"
 #include "shutdown_guard.h"
+
+#include <cstring>
 
 /*! Sane limit on URL length to cap DC traffic. */
 #define MAXIMUM_URL_LENGTH 1024U

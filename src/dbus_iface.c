@@ -20,11 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string.h>
-#include <errno.h>
-
-#include <gio/gunixfdlist.h>
-
 #include "dbus_iface.h"
 #include "dbus_iface_deep.h"
 #include "dbus_handlers.h"
@@ -43,6 +38,11 @@
 #include "logind_dbus.h"
 #include "systemd_dbus.h"
 #include "messages.h"
+
+#include <string.h>
+#include <errno.h>
+
+#include <gio/gunixfdlist.h>
 
 struct dbus_data
 {

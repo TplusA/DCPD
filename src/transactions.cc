@@ -20,21 +20,15 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-
 #include "transactions.hh"
 #include "dynamic_buffer.h"
 #include "registers.hh"
-#include "named_pipe.h"
 #include "dcpdefs.h"
 #include "messages.h"
 #include "hexdump.h"
-#include "os.h"
+
+#include <cstddef>
+#include <cstring>
 
 enum transaction_state
 {

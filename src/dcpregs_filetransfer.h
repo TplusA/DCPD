@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,10 +19,10 @@
 #ifndef DCPREGS_FILETRANSFER_H
 #define DCPREGS_FILETRANSFER_H
 
+#include "de_tahifi_lists_errors.h"
+
 #include <stdint.h>
 #include <unistd.h>
-
-#include "de_tahifi_lists_errors.h"
 
 /*!
  * \addtogroup registers

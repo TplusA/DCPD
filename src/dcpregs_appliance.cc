@@ -20,12 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <string>
-#include <array>
-#include <algorithm>
-
 #include "dcpregs_appliance.h"
-#include "networkprefs.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "network_device_list.hh"
 #include "dcpregs_networkconfig.hh"
@@ -33,7 +28,6 @@
 #include "dbus_iface_deep.h"
 #include "maybe.hh"
 #include "registers_priv.hh"
-#include "messages.h"
 
 /*!
  * Predefined appliances.

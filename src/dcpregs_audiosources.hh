@@ -20,7 +20,7 @@
 #define DCPREGS_AUDIOSOURCES_HH
 
 #include <cinttypes>
-#include <unistd.h>
+#include <cstdlib>
 
 /*!
  * \addtogroup registers

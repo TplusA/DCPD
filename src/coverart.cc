@@ -20,13 +20,13 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <cstring>
-#include <algorithm>
-#include <glib.h>
+#include <glib.h>  /* must be first for #GVariantWrapper */
 
 #include "coverart.hh"
 #include "md5.hh"
 #include "messages.h"
+
+#include <cstring>
 
 static const uint8_t *extract_data(const GVariantWrapper &container,
                                    size_t expected_length)

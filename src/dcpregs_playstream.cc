@@ -20,21 +20,18 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <memory>
-#include <mutex>
-#include <algorithm>
-#include <glib.h>
+#include <glib.h>  /* must be first for #GVariantWrapper */
 
 #include "dcpregs_playstream.hh"
 #include "dcpregs_audiosources.hh"
 #include "registers_priv.hh"
-#include "coverart.hh"
-#include "streamplayer_dbus.h"
-#include "artcache_dbus.h"
 #include "de_tahifi_artcache_errors.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
+
+#include <mutex>
+#include <algorithm>
 
 constexpr const char *ArtCache::ReadError::names_[];
 

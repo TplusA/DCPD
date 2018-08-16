@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,10 +19,10 @@
 #ifndef DBUS_HANDLERS_CONNMAN_AGENT_H
 #define DBUS_HANDLERS_CONNMAN_AGENT_H
 
+#include "connman_dbus.h"
+
 #include <stdbool.h>
 #include <gio/gio.h>
-
-#include "connman_dbus.h"
 
 /*!
  * \addtogroup dbus_handlers

@@ -19,8 +19,6 @@
 #ifndef DCPREGS_MEDIASERVICES_H
 #define DCPREGS_MEDIASERVICES_H
 
-#include <inttypes.h>
-
 #include "dynamic_buffer.h"
 
 /*!
