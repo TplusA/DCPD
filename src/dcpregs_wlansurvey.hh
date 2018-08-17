@@ -26,19 +26,23 @@
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
-void dcpregs_wlansurvey_init(void);
-void dcpregs_wlansurvey_deinit(void);
+namespace WLANSurvey
+{
+void init();
+void deinit();
 
-int dcpregs_write_104_start_wlan_site_survey(const uint8_t *data, size_t length);
-bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer);
-
-#ifdef __cplusplus
+namespace DCP
+{
+int write_104_start_wlan_site_survey(const uint8_t *data, size_t length);
+bool read_105_wlan_site_survey_results(struct dynamic_buffer *buffer);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 

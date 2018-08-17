@@ -48,13 +48,13 @@ enum WifiServiceType
     WIFI_SERVICE_TYPE_HIDDEN,
 };
 
-void dcpregs_wlansurvey_init(void)
+void Regs::WLANSurvey::init()
 {
     nwwlan_survey_data.survey_in_progress = false;
     nwwlan_survey_data.last_result = CONNMAN_SITE_SCAN_OK;
 }
 
-void dcpregs_wlansurvey_deinit(void) {}
+void Regs::WLANSurvey::deinit() {}
 
 static void survey_done(enum ConnmanSiteScanResult result)
 {
@@ -72,7 +72,7 @@ static void survey_done(enum ConnmanSiteScanResult result)
     nwwlan_survey_data.last_result = result;
     }
 
-    registers_get_data()->register_changed_notification_fn(105);
+    Regs::get_data().register_changed_notification_fn(105);
 }
 
 /*!
@@ -89,7 +89,7 @@ static bool data_length_is_unexpected(size_t length, size_t expected)
     return true;
 }
 
-int dcpregs_write_104_start_wlan_site_survey(const uint8_t *data, size_t length)
+int Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey(const uint8_t *data, size_t length)
 {
     if(data_length_is_unexpected(length, 0))
         return -1;
@@ -302,7 +302,7 @@ static const char *survey_result_to_string(enum ConnmanSiteScanResult result)
         return "bug";
 }
 
-bool dcpregs_read_105_wlan_site_survey_results(struct dynamic_buffer *buffer)
+bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(struct dynamic_buffer *buffer)
 {
     log_assert(dynamic_buffer_is_empty(buffer));
 

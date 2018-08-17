@@ -19,34 +19,38 @@
 #ifndef DCPREGS_APPLIANCE_H
 #define DCPREGS_APPLIANCE_H
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <unistd.h>
+#include <cinttypes>
+#include <cstdlib>
 
 /*!
  * \addtogroup registers
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
-int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length);
-ssize_t dcpregs_read_19_appliance_control(uint8_t *response, size_t length);
-ssize_t dcpregs_read_87_appliance_id(uint8_t *response, size_t length);
-int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length);
+namespace Appliance
+{
 
-bool dcpregs_appliance_id_init(void);
-void dcpregs_appliance_id_configure(void);
+bool init();
+void configure();
 
-uint8_t dcpregs_appliance_get_standby_state_for_dbus(void);
-bool dcpregs_appliance_request_standby_state(uint8_t state, uint8_t *current_state,
-                                             bool *is_pending);
+uint8_t get_standby_state_for_dbus();
+bool request_standby_state(uint8_t state, uint8_t &current_state,
+                           bool &is_pending);
 
-#ifdef __cplusplus
+namespace DCP
+{
+int write_18_appliance_status(const uint8_t *data, size_t length);
+ssize_t read_19_appliance_control(uint8_t *response, size_t length);
+ssize_t read_87_appliance_id(uint8_t *response, size_t length);
+int write_87_appliance_id(const uint8_t *data, size_t length);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 

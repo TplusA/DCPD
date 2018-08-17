@@ -730,7 +730,7 @@ class SlavePushCommandQueue
     void push_and_notify(Item &&item)
     {
         queue_.emplace_back(std::move(item));
-        registers_get_data()->register_changed_notification_fn(80);
+        Regs::get_data().register_changed_notification_fn(80);
     }
 };
 
@@ -887,7 +887,7 @@ class AudioSourceData
                                             bool notify_register_change = true)
     {
         if(selected_.selected_notification(src, is_deferred) && notify_register_change)
-            registers_get_data()->register_changed_notification_fn(81);
+            Regs::get_data().register_changed_notification_fn(81);
     }
 
     bool audio_source_available_notification(AudioSource &src)
@@ -987,7 +987,7 @@ static AudioSourceData audio_source_data(
     AudioSource("",               "Inactive",                0),
 });
 
-void Regs::AudioSources::init(void)
+void Regs::AudioSources::init()
 {
     audio_source_data.for_each([] (AudioSource &src)
     {
@@ -1030,7 +1030,7 @@ static Maybe<bool> have_credentials_stored(const char *category)
     return result;
 }
 
-void Regs::AudioSources::fetch_audio_paths(void)
+void Regs::AudioSources::fetch_audio_paths()
 {
     GVariant *usable_variant = nullptr;
     GVariant *incomplete_variant = nullptr;
@@ -1075,7 +1075,7 @@ void Regs::AudioSources::check_external_service_credentials()
         audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
 }
 
-void Regs::AudioSources::deinit(void)
+void Regs::AudioSources::deinit()
 {
     auto lock(audio_source_data.lock());
     audio_source_data.reset({AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
@@ -1593,7 +1593,7 @@ void Regs::AudioSources::set_login_state(const char *cred_category,
     }
 }
 
-void Regs::AudioSources::set_unit_test_mode(void)
+void Regs::AudioSources::set_unit_test_mode()
 {
     audio_source_data.set_unit_test_mode();
 }

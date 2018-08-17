@@ -23,7 +23,7 @@
 #include "dbus_handlers_connman_manager.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "dbus_iface_deep.h"
-#include "dcpregs_networkconfig.h"
+#include "dcpregs_networkconfig.hh"
 #include "connman.h"
 #include "connman_agent.h"
 #include "connman_common.h"
@@ -485,8 +485,8 @@ class DBusSignalManagerData
 
     bool is_disabled;
 
-    void (*schedule_connect_to_wlan)(void);
-    void (*schedule_refresh_connman_services)(void);
+    void (*schedule_connect_to_wlan)();
+    void (*schedule_refresh_connman_services)();
 
     WLANConnectionState wlan_connection_state;
 
@@ -2005,7 +2005,7 @@ static void process_pending_changes(DBusSignalManagerData &data,
     if(handle != NULL)
         network_prefs_close(handle);
 
-    dcpregs_networkconfig_interfaces_changed();
+    Regs::NetworkConfig::interfaces_changed();
 
     schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection, data);
 }
@@ -2215,7 +2215,7 @@ static void scan_for_wps_done(enum ConnmanSiteScanResult result)
     }
 }
 
-void dbussignal_connman_manager_about_to_connect_signals(void)
+void dbussignal_connman_manager_about_to_connect_signals()
 {
     log_assert(!global_dbussignal_connman_manager_data.is_disabled);
 

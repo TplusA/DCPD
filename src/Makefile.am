@@ -31,11 +31,11 @@ dcpd_SOURCES = \
     transactions.hh dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
-    dcpregs_drcp.h dcpregs_networkconfig.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
-    dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.h dcpregs_playstream.hh dcpregs_status.h \
-    dcpregs_upnpname.h dcpregs_upnpname.hh dcpregs_audiosources.hh dcpregs_volume.h \
-    dcpregs_searchparameters.h dcpregs_appliance.h dcpregs_internationalization.h \
+    dcpregs_drcp.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
+    dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
+    dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_status.hh \
+    dcpregs_upnpname.hh dcpregs_audiosources.hh dcpregs_volume.hh \
+    dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
     connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
     connman_service.cc connman_service.hh connman_service_list.hh maybe.hh \
@@ -105,19 +105,19 @@ libregisters_la_SOURCES = \
     dcpregs_common.c dcpregs_common.h \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_protolevel.cc dcpregs_protolevel.hh \
-    dcpregs_appliance.cc dcpregs_appliance.h \
-    dcpregs_internationalization.cc dcpregs_internationalization.h \
-    dcpregs_networkconfig.cc dcpregs_networkconfig.h dcpregs_networkconfig.hh \
-    dcpregs_upnpname.cc dcpregs_upnpname.h dcpregs_upnpname.hh \
+    dcpregs_appliance.cc dcpregs_appliance.hh \
+    dcpregs_internationalization.cc dcpregs_internationalization.hh \
+    dcpregs_networkconfig.cc dcpregs_networkconfig.hh \
+    dcpregs_upnpname.cc dcpregs_upnpname.hh \
     dcpregs_wlansurvey.cc dcpregs_wlansurvey.hh \
-    dcpregs_filetransfer.cc dcpregs_filetransfer.h dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.cc dcpregs_tcptunnel.h \
+    dcpregs_filetransfer.cc dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
+    dcpregs_tcptunnel.cc dcpregs_tcptunnel.hh \
     dcpregs_audiosources.cc dcpregs_audiosources.hh \
     dcpregs_playstream.cc dcpregs_playstream.hh \
     dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
-    dcpregs_searchparameters.c dcpregs_searchparameters.h \
-    dcpregs_status.h \
-    volume_control.cc volume_control.hh dcpregs_volume.h \
+    dcpregs_searchparameters.cc dcpregs_searchparameters.hh \
+    dcpregs_status.hh \
+    volume_control.cc volume_control.hh dcpregs_volume.hh \
     dbus_handlers_connman_manager_glue.h networkprefs.h \
     connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
     network_device.hh network_device_list.hh \
@@ -168,14 +168,13 @@ libdbus_handlers_la_SOURCES = \
     networkprefs.h \
     connman_dbus.h \
     actor_id.h \
-    dcpregs_networkconfig.h \
     dcpregs_networkconfig.hh \
-    dcpregs_upnpname.h \
+    dcpregs_upnpname.hh \
     dcpregs_wlansurvey.hh \
-    dcpregs_filetransfer.h \
+    dcpregs_filetransfer.hh \
     dcpregs_audiosources.hh \
     dcpregs_playstream.hh \
-    dcpregs_status.h
+    dcpregs_status.hh
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 libdbus_handlers_la_CXXFLAGS = $(AM_CXXFLAGS)
 

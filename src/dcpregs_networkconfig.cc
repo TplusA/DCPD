@@ -20,7 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dcpregs_networkconfig.h"
 #include "dcpregs_networkconfig.hh"
 #include "dcpregs_common.h"
 #include "network_status_bits.h"
@@ -191,7 +190,7 @@ static struct
 }
 nwstatus_data;
 
-void dcpregs_networkconfig_init(void)
+void Regs::NetworkConfig::init()
 {
     nwconfig_write_data.selected_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
 
@@ -202,7 +201,7 @@ void dcpregs_networkconfig_init(void)
     nwstatus_data.previous_response[2] = UINT8_MAX;
 }
 
-void dcpregs_networkconfig_deinit(void)
+void Regs::NetworkConfig::deinit()
 {
     shutdown_guard_free(&nwstatus_data.shutdown_guard);
 }
@@ -241,7 +240,7 @@ static Connman::Technology map_network_technology(const NetworkPrefsTechnology t
     return Connman::Technology::UNKNOWN_TECHNOLOGY;
 }
 
-static bool in_edit_mode(void)
+static bool in_edit_mode()
 {
     return nwconfig_write_data.selected_technology != Connman::Technology::UNKNOWN_TECHNOLOGY;
 }
@@ -543,7 +542,7 @@ static bool is_valid_ip_address_string(const std::array<char, SIZE_OF_IPV4_ADDRE
     return false;
 }
 
-static int fill_in_missing_ipv4_config_requests(void)
+static int fill_in_missing_ipv4_config_requests()
 {
     log_assert(IS_REQUESTED(REQ_IP_ADDRESS_56 | REQ_NETMASK_57 | REQ_DEFAULT_GATEWAY_58));
 
@@ -590,7 +589,7 @@ static size_t copy_to_array(const std::string &src, char *dest, size_t dest_size
 /*!
  * Move secondary DNS to primary slot.
  */
-static void shift_dns_servers(void)
+static void shift_dns_servers()
 {
     nwconfig_write_data.ipv4_dns_server1 = nwconfig_write_data.ipv4_dns_server2;
     nwconfig_write_data.ipv4_dns_server2[0] = '\0';
@@ -599,7 +598,7 @@ static void shift_dns_servers(void)
 /*!
  * Move secondary DNS to primary slot in case the primary slot is empty.
  */
-static void shift_dns_servers_if_necessary(void)
+static void shift_dns_servers_if_necessary()
 {
     if(nwconfig_write_data.ipv4_dns_server1[0] == '\0')
         shift_dns_servers();
@@ -692,7 +691,7 @@ static uint8_t map_dhcp_method(const Connman::DHCPV4Method method)
     return NETWORK_STATUS_IPV4_NOT_CONFIGURED;
 }
 
-static bool query_dhcp_mode(void)
+static bool query_dhcp_mode()
 {
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
@@ -1165,7 +1164,7 @@ modify_network_configuration(
     return wps_mode;
 }
 
-static bool may_change_config(void)
+static bool may_change_config()
 {
     if(in_edit_mode())
         return true;
@@ -1310,7 +1309,7 @@ static bool auto_switch_to_wlan_if_necessary()
     return result;
 }
 
-int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 53 handler %p %zu", data, length);
 
@@ -1394,7 +1393,7 @@ int dcpregs_write_53_active_ip_profile(const uint8_t *data, size_t length)
     return -1;
 }
 
-int dcpregs_write_54_selected_ip_profile(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 54 handler %p %zu", data, length);
 
@@ -1493,7 +1492,7 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
     }
 }
 
-ssize_t dcpregs_read_50_network_status(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_50_network_status(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 50 handler %p %zu", response, length);
 
@@ -1515,7 +1514,7 @@ static size_t copy_locally_administered_mac(uint8_t *response)
     return sizeof(local_address);
 }
 
-ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_51_mac_address(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 51 handler %p %zu", response, length);
 
@@ -1547,7 +1546,7 @@ ssize_t dcpregs_read_51_mac_address(uint8_t *response, size_t length)
     return mac.get_string().length() + 1;
 }
 
-ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_55_dhcp_enabled(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 55 handler %p %zu", response, length);
 
@@ -1562,7 +1561,7 @@ ssize_t dcpregs_read_55_dhcp_enabled(uint8_t *response, size_t length)
     return length;
 }
 
-int dcpregs_write_55_dhcp_enabled(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_55_dhcp_enabled(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 55 handler %p %zu", data, length);
 
@@ -1663,7 +1662,7 @@ read_out_parameter(uint32_t requested_mask,
             : length);
 }
 
-ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_56_ipv4_address(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 56 handler %p %zu", response, length);
 
@@ -1681,7 +1680,7 @@ ssize_t dcpregs_read_56_ipv4_address(uint8_t *response, size_t length)
                 response, length);
 }
 
-ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_57_ipv4_netmask(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 57 handler %p %zu", response, length);
 
@@ -1699,7 +1698,7 @@ ssize_t dcpregs_read_57_ipv4_netmask(uint8_t *response, size_t length)
                 response, length);
 }
 
-ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_58_ipv4_gateway(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 58 handler %p %zu", response, length);
 
@@ -1717,7 +1716,7 @@ ssize_t dcpregs_read_58_ipv4_gateway(uint8_t *response, size_t length)
                 response, length);
 }
 
-ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_62_primary_dns(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 62 handler %p %zu", response, length);
 
@@ -1739,7 +1738,7 @@ ssize_t dcpregs_read_62_primary_dns(uint8_t *response, size_t length)
                 response, length);
 }
 
-ssize_t dcpregs_read_63_secondary_dns(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_63_secondary_dns(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 63 handler %p %zu", response, length);
 
@@ -1803,7 +1802,7 @@ static int copy_ipv4_address(std::array<char, SIZE_OF_IPV4_ADDRESS_STRING> &dest
     return 0;
 }
 
-int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_56_ipv4_address(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
                                           MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
@@ -1817,7 +1816,7 @@ int dcpregs_write_56_ipv4_address(const uint8_t *data, size_t length)
                              REQ_IP_ADDRESS_56, data, length, false);
 }
 
-int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_57_ipv4_netmask(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
                                           MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
@@ -1831,7 +1830,7 @@ int dcpregs_write_57_ipv4_netmask(const uint8_t *data, size_t length)
                              REQ_NETMASK_57, data, length, false);
 }
 
-int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_58_ipv4_gateway(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
                                           MINIMUM_IPV4_ADDRESS_STRING_LENGTH,
@@ -1845,7 +1844,7 @@ int dcpregs_write_58_ipv4_gateway(const uint8_t *data, size_t length)
                              REQ_DEFAULT_GATEWAY_58, data, length, false);
 }
 
-int dcpregs_write_62_primary_dns(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_62_primary_dns(const uint8_t *data, size_t length)
 {
     if(length > 0 &&
        data_length_is_in_unexpected_range(length,
@@ -1860,7 +1859,7 @@ int dcpregs_write_62_primary_dns(const uint8_t *data, size_t length)
                              REQ_DNS_SERVER1_62, data, length, true);
 }
 
-int dcpregs_write_63_secondary_dns(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_63_secondary_dns(const uint8_t *data, size_t length)
 {
     if(length > 0 &&
        data_length_is_in_unexpected_range(length,
@@ -1891,7 +1890,7 @@ get_wlan_tech_data(const Connman::ServiceBase &s)
     return nullptr;
 }
 
-ssize_t dcpregs_read_92_wlan_security(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_92_wlan_security(uint8_t *response, size_t length)
 {
     return read_out_parameter(REQ_WLAN_SECURITY_MODE_92,
                 nwconfig_write_data.wlan_security_mode, false,
@@ -1908,7 +1907,7 @@ ssize_t dcpregs_read_92_wlan_security(uint8_t *response, size_t length)
                 response, length);
 }
 
-int dcpregs_write_92_wlan_security(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_92_wlan_security(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
                                           3, SIZE_OF_WLAN_SECURITY_MODE))
@@ -1925,7 +1924,7 @@ int dcpregs_write_92_wlan_security(const uint8_t *data, size_t length)
     return 0;
 }
 
-ssize_t dcpregs_read_93_ibss(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_93_ibss(uint8_t *response, size_t length)
 {
     if(data_length_is_unexpectedly_small(length, 8))
         return -1;
@@ -1935,7 +1934,7 @@ ssize_t dcpregs_read_93_ibss(uint8_t *response, size_t length)
     return 6;
 }
 
-int dcpregs_write_93_ibss(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_93_ibss(const uint8_t *data, size_t length)
 {
     std::array<char, 9> buffer;
 
@@ -1959,7 +1958,7 @@ int dcpregs_write_93_ibss(const uint8_t *data, size_t length)
     return -1;
 }
 
-ssize_t dcpregs_read_94_ssid(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_94_ssid(uint8_t *response, size_t length)
 {
     ssize_t result =
         read_out_parameter(REQ_WLAN_SSID_94,
@@ -2000,7 +1999,7 @@ ssize_t dcpregs_read_94_ssid(uint8_t *response, size_t length)
     return result >= 0 ? result : -1;
 }
 
-int dcpregs_write_94_ssid(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_94_ssid(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length, 1, 32))
         return -1;
@@ -2016,7 +2015,7 @@ int dcpregs_write_94_ssid(const uint8_t *data, size_t length)
     return 0;
 }
 
-ssize_t dcpregs_read_101_wpa_cipher(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_101_wpa_cipher(uint8_t *response, size_t length)
 {
     if(data_length_is_unexpectedly_small(length, 8))
         return -1;
@@ -2026,7 +2025,7 @@ ssize_t dcpregs_read_101_wpa_cipher(uint8_t *response, size_t length)
     return 4;
 }
 
-int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_101_wpa_cipher(const uint8_t *data, size_t length)
 {
     std::array<char, 9> buffer;
 
@@ -2047,7 +2046,7 @@ int dcpregs_write_101_wpa_cipher(const uint8_t *data, size_t length)
     return -1;
 }
 
-ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
+ssize_t Regs::NetworkConfig::DCP::read_102_passphrase(uint8_t *response, size_t length)
 {
     if(data_length_is_unexpectedly_small(length, nwconfig_write_data.wlan_wpa_passphrase.size() - 1))
         return -1;
@@ -2088,7 +2087,7 @@ ssize_t dcpregs_read_102_passphrase(uint8_t *response, size_t length)
     return copied_bytes;
 }
 
-int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
+int Regs::NetworkConfig::DCP::write_102_passphrase(const uint8_t *data, size_t length)
 {
     if(data_length_is_in_unexpected_range(length,
                                           0,
@@ -2154,7 +2153,7 @@ int dcpregs_write_102_passphrase(const uint8_t *data, size_t length)
     return 0;
 }
 
-void dcpregs_networkconfig_interfaces_changed(void)
+void Regs::NetworkConfig::interfaces_changed()
 {
     std::array<uint8_t, nwstatus_data.previous_response.size()> response;
 
@@ -2162,15 +2161,15 @@ void dcpregs_networkconfig_interfaces_changed(void)
     fill_network_status_register_response(response);
 
     if(nwstatus_data.previous_response != response)
-        registers_get_data()->register_changed_notification_fn(50);
+        Regs::get_data().register_changed_notification_fn(50);
 }
 
-void dcpregs_networkconfig_prepare_for_shutdown(void)
+void Regs::NetworkConfig::prepare_for_shutdown()
 {
     (void)shutdown_guard_down(nwstatus_data.shutdown_guard);
 }
 
-void dcpregs_networkconfig_set_primary_technology(Connman::Technology tech)
+void Regs::NetworkConfig::set_primary_technology(Connman::Technology tech)
 {
     nwstatus_data.fallback_technology = tech;
 }

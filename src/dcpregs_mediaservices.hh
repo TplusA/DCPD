@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_MEDIASERVICES_H
-#define DCPREGS_MEDIASERVICES_H
+#ifndef DCPREGS_MEDIASERVICES_HH
+#define DCPREGS_MEDIASERVICES_HH
 
 #include "dynamic_buffer.h"
 
@@ -26,17 +26,22 @@
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
-int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length);
-bool dcpregs_read_106_media_service_list(struct dynamic_buffer *buffer);
+namespace MediaServices
+{
 
-#ifdef __cplusplus
+namespace DCP
+{
+int write_106_media_service_list(const uint8_t *data, size_t length);
+bool read_106_media_service_list(struct dynamic_buffer *buffer);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_MEDIASERVICES_H */
+#endif /* !DCPREGS_MEDIASERVICES_HH */

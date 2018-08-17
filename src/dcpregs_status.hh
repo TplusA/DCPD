@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,26 +16,28 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_STATUS_H
-#define DCPREGS_STATUS_H
+#ifndef DCPREGS_STATUS_HH
+#define DCPREGS_STATUS_HH
 
 /*!
  * \addtogroup registers
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
-void dcpregs_status_set_ready(void);
-void dcpregs_status_set_ready_to_shutdown(void);
-void dcpregs_status_set_reboot_required(void);
+namespace StrBoStatus
+{
 
-#ifdef __cplusplus
+void set_ready();
+void set_ready_to_shutdown();
+void set_reboot_required();
+
 }
-#endif
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_STATUS_H */
+#endif /* !DCPREGS_STATUS_HH */

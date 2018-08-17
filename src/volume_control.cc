@@ -21,7 +21,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "volume_control.hh"
-#include "dcpregs_volume.h"
+#include "dcpregs_volume.hh"
 #include "registers_priv.hh"
 #include "dbus_iface_deep.h"
 #include "fixpoint.hh"
@@ -52,7 +52,7 @@ static double clamp(const Mixer::VolumeControlProperties &properties,
         return volume;
 }
 
-int dcpregs_write_64_volume_control(const uint8_t *data, size_t length)
+int Regs::ApplianceVolumeControl::DCP::write_64_volume_control(const uint8_t *data, size_t length)
 {
     if(length == 0)
         return -1;
@@ -163,7 +163,7 @@ int dcpregs_write_64_volume_control(const uint8_t *data, size_t length)
     return -1;
 }
 
-ssize_t dcpregs_read_64_volume_control(uint8_t *response, size_t length)
+ssize_t Regs::ApplianceVolumeControl::DCP::read_64_volume_control(uint8_t *response, size_t length)
 {
     if(length < 2)
         return -1;
@@ -246,7 +246,7 @@ bool Mixer::VolumeControl::set_request(double volume, bool is_muted)
     requested_.volume_ = clamp(*control_properties_, volume);
     requested_.is_muted_ = is_muted;
 
-    registers_get_data()->register_changed_notification_fn(64);
+    Regs::get_data().register_changed_notification_fn(64);
 
     return true;
 }

@@ -20,7 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dcpregs_upnpname.h"
+#include "dcpregs_upnpname.hh"
 #include "shutdown_guard.h"
 #include "messages.h"
 
@@ -316,7 +316,7 @@ struct UPnPNameData
 
 static UPnPNameData upnpname_private_data;
 
-void dcpregs_upnpname_init(void)
+void Regs::UPnPName::init()
 {
     if(upnpname_private_data.is_initialized)
         return;
@@ -332,7 +332,7 @@ void dcpregs_upnpname_init(void)
     upnpname_private_data.is_initialized = true;
 }
 
-void dcpregs_upnpname_deinit(void)
+void Regs::UPnPName::deinit()
 {
     shutdown_guard_free(&upnpname_private_data.shutdown_guard);
     upnpname_private_data.clear();
@@ -351,7 +351,7 @@ void dcpregs_upnpname_deinit(void)
  *      approach would be D-Bus only, not messing with configuration files and
  *      restarting systemd services. We did this to save some time.
  */
-ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length)
+ssize_t Regs::UPnPName::DCP::read_88_upnp_friendly_name(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 88 handler %p %zu", response, length);
 
@@ -386,7 +386,7 @@ ssize_t dcpregs_read_88_upnp_friendly_name(uint8_t *response, size_t length)
  * The Flagpole service is not restarted if the name is the same as already
  * configured.
  */
-int dcpregs_write_88_upnp_friendly_name__v1_0_1(const uint8_t *data, size_t length)
+int Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 88 handler v1.0.1 %p %zu", data, length);
 
@@ -427,7 +427,7 @@ int dcpregs_write_88_upnp_friendly_name__v1_0_1(const uint8_t *data, size_t leng
  * The Flagpole service is not restarted if the name is the same as already
  * configured.
  */
-int dcpregs_write_88_upnp_friendly_name__v1_0_6(const uint8_t *data, size_t length)
+int Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 88 handler v1.0.6 %p %zu", data, length);
 
@@ -489,7 +489,7 @@ static void set_variable(const Key key, const std::string &value)
         os_system(true, "/bin/systemctl restart flagpole");
 }
 
-void dcpregs_upnpname_set_appliance_id(const std::string &appliance)
+void Regs::UPnPName::set_appliance_id(const std::string &appliance)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE,
               "Set UPnP appliance ID \"%s\"", appliance.c_str());
@@ -497,7 +497,7 @@ void dcpregs_upnpname_set_appliance_id(const std::string &appliance)
     set_variable(Key::APPLIANCE_ID, appliance);
 }
 
-void dcpregs_upnpname_set_device_uuid(const std::string &uuid)
+void Regs::UPnPName::set_device_uuid(const std::string &uuid)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE,
               "Set UPnP device UUID \"%s\"", uuid.c_str());
@@ -505,7 +505,7 @@ void dcpregs_upnpname_set_device_uuid(const std::string &uuid)
     set_variable(Key::DEVICE_UUID, uuid);
 }
 
-void dcpregs_upnpname_prepare_for_shutdown(void)
+void Regs::UPnPName::prepare_for_shutdown()
 {
     (void)shutdown_guard_down(upnpname_private_data.shutdown_guard);
 }

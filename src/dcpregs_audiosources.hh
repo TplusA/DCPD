@@ -33,8 +33,8 @@ namespace Regs
 namespace AudioSources
 {
 
-void init(void);
-void deinit(void);
+void init();
+void deinit();
 
 /*!
  * Retrieve audio paths from audio path manager for first initialization.
@@ -45,7 +45,7 @@ void deinit(void);
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void fetch_audio_paths(void);
+void fetch_audio_paths();
 
 /*!
  * Retrieve availability of credentials for external media services.
@@ -57,7 +57,7 @@ void fetch_audio_paths(void);
  * \attention
  *     Called from D-Bus thread, not main context.
  */
-void check_external_service_credentials(void);
+void check_external_service_credentials();
 
 /*!
  * Report availability of an audio source as part of a usable audio path.
@@ -97,7 +97,7 @@ void set_login_state(const char *cred_category, bool is_logged_in);
  *      type cast from \c GObject to #tdbusaupathManager works without any
  *      special code.
  */
-void set_unit_test_mode(void);
+void set_unit_test_mode();
 
 namespace DCP
 {

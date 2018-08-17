@@ -20,7 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dcpregs_tcptunnel.h"
+#include "dcpregs_tcptunnel.hh"
 #include "registers_priv.hh"
 #include "network.h"
 #include "network_dispatcher.hh"
@@ -278,7 +278,7 @@ static bool queue_read_from_peer_event(TcpTunnel *tunnel, int peer_fd)
     if(!register_status.set(tunnel->port_, tunnel->get_peer_id(peer_fd)))
         return false;
 
-    registers_get_data()->register_changed_notification_fn(120);
+    Regs::get_data().register_changed_notification_fn(120);
 
     return true;
 }
@@ -452,7 +452,7 @@ static int open_tunnel(uint16_t port)
     return 0;
 }
 
-int dcpregs_write_119_tcp_tunnel_control(const uint8_t *data, size_t length)
+int Regs::TCPTunnel::DCP::write_119_tcp_tunnel_control(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 119 handler %p %zu", data, length);
 
@@ -487,7 +487,7 @@ int dcpregs_write_119_tcp_tunnel_control(const uint8_t *data, size_t length)
         return close_tunnel(requested_port);
 }
 
-ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length)
+ssize_t Regs::TCPTunnel::DCP::read_120_tcp_tunnel_read(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 120 handler %p %zu", response, length);
 
@@ -575,7 +575,7 @@ ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length)
     return len + 3;
 }
 
-int dcpregs_write_121_tcp_tunnel_write(const uint8_t *data, size_t length)
+int Regs::TCPTunnel::DCP::write_121_tcp_tunnel_write(const uint8_t *data, size_t length)
 {
     static const char what_error[] = "Write to";
 

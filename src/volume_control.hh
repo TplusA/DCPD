@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_VOLUME_HH
-#define DCPREGS_VOLUME_HH
+#ifndef VOLUME_CONTROL_HH
+#define VOLUME_CONTROL_HH
 
 #include "maybe.hh"
 
@@ -191,4 +191,4 @@ class VolumeControls
 
 };
 
-#endif /* !DCPREGS_VOLUME_HH */
+#endif /* !VOLUME_CONTROL_HH */

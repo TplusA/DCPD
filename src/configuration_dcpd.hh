@@ -128,7 +128,7 @@ class UpdateSettings<ApplianceValues>
             settings_.update<ApplianceValues::KeyID::APPLIANCE_NAME,
                              UpdateTraits<ApplianceValues::KeyID::APPLIANCE_NAME>>(name);
 
-        dcpregs_upnpname_set_appliance_id(name);
+        Regs::UPnPName::set_appliance_id(name);
 
         return ret;
     }
@@ -144,7 +144,7 @@ class UpdateSettings<ApplianceValues>
         std::copy_if(id.begin(), id.end(), std::back_inserter(temp),
                      [] (const char &ch) { return ch != ':'; });
 
-        dcpregs_upnpname_set_device_uuid(temp);
+        Regs::UPnPName::set_device_uuid(temp);
 
         return ret;
     }

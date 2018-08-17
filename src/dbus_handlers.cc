@@ -22,12 +22,12 @@
 
 #include "dbus_handlers.h"
 #include "dcpregs_audiosources.hh"
-#include "dcpregs_appliance.h"
-#include "dcpregs_networkconfig.h"
-#include "dcpregs_upnpname.h"
-#include "dcpregs_filetransfer.h"
+#include "dcpregs_appliance.hh"
+#include "dcpregs_networkconfig.hh"
+#include "dcpregs_upnpname.hh"
+#include "dcpregs_filetransfer.hh"
 #include "dcpregs_playstream.hh"
-#include "dcpregs_status.h"
+#include "dcpregs_status.hh"
 #include "volume_control.hh"
 #include "smartphone_app_send.hh"
 #include "configproxy.h"
@@ -75,22 +75,22 @@ void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
             msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                       "Shutting down, but having no inhibit lock");
 
-        dcpregs_filetransfer_prepare_for_shutdown();
-        dcpregs_networkconfig_prepare_for_shutdown();
-        dcpregs_upnpname_prepare_for_shutdown();
+        Regs::FileTransfer::prepare_for_shutdown();
+        Regs::NetworkConfig::prepare_for_shutdown();
+        Regs::UPnPName::prepare_for_shutdown();
 
         if(!is_active)
         {
             msg_error(0, LOG_NOTICE,
                       "Funny PrepareForShutdown message, asking for restart");
-            dcpregs_status_set_reboot_required();
+            Regs::StrBoStatus::set_reboot_required();
         }
 
         /*
          * Tell the slave that we are about to shut down now. It will wait for
          * a few seconds before really cutting the power.
          */
-        dcpregs_status_set_ready_to_shutdown();
+        Regs::StrBoStatus::set_ready_to_shutdown();
 
         /*
          * This must be last because the D-Bus inhibit lock is going to be
@@ -129,7 +129,7 @@ void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
         uint32_t total_ticks = g_variant_get_uint32(val);
         g_variant_unref(val);
 
-        dcpregs_filetransfer_progress_notification(xfer_id, tick, total_ticks);
+        Regs::FileTransfer::progress_notification(xfer_id, tick, total_ticks);
     }
     else if(strcmp(signal_name, "Done") == 0)
     {
@@ -152,8 +152,8 @@ void dbussignal_file_transfer(GDBusProxy *proxy, const gchar *sender_name,
              ? (enum DBusListsErrorCode)error_code_raw
              : LIST_ERROR_INTERNAL);
 
-        dcpregs_filetransfer_done_notification(xfer_id, error_code,
-                                               path_length > 0 ? path : NULL);
+        Regs::FileTransfer::done_notification(xfer_id, error_code,
+                                              path_length > 0 ? path : NULL);
 
         g_variant_unref(val);
     }
@@ -421,7 +421,7 @@ gboolean dbusmethod_appliance_request_power_state_change(tdbusappliancePower *ob
     uint8_t current_state;
     bool is_request_pending;
 
-    if(dcpregs_appliance_request_standby_state(state, &current_state, &is_request_pending))
+    if(Regs::Appliance::request_standby_state(state, current_state, is_request_pending))
         tdbus_appliance_power_complete_request_state(object, invocation,
                                                      current_state, is_request_pending);
     else
@@ -438,7 +438,7 @@ gboolean dbusmethod_appliance_get_power_state(tdbusappliancePower *object,
                                               gpointer user_data)
 {
     tdbus_appliance_power_complete_get_state(object, invocation,
-                                             dcpregs_appliance_get_standby_state_for_dbus());
+                                             Regs::Appliance::get_standby_state_for_dbus());
     return TRUE;
 }
 

@@ -20,7 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
 #include "messages.h"
@@ -319,7 +318,7 @@ static int handle_dbus_error(GError **error)
  *     Must be called with the lock for #FileTransferData::download_status
  *     held.
  */
-static void request_cancel_transfer_if_necessary(void)
+static void request_cancel_transfer_if_necessary()
 {
     if(!filetransfer_data.download_status.is_in_progress)
         return;
@@ -342,7 +341,7 @@ static void request_cancel_transfer_if_necessary(void)
     (void)handle_dbus_error(&error);
 }
 
-static void cleanup_transfer(void)
+static void cleanup_transfer()
 {
     g_mutex_lock(&filetransfer_data.download_status.lock);
     request_cancel_transfer_if_necessary();
@@ -478,7 +477,7 @@ static bool data_length_is_in_unexpected_range(size_t length,
     return true;
 }
 
-static int try_start_download_file(void)
+static int try_start_download_file()
 {
     if(filetransfer_data.url[0] == '\0')
     {
@@ -516,7 +515,7 @@ static int try_start_download_file(void)
     return handle_dbus_error(&error);
 }
 
-static int try_start_download_cover_art(void)
+static int try_start_download_cover_art()
 {
     msg_info("Download of cover art requested");
 
@@ -526,7 +525,7 @@ static int try_start_download_cover_art(void)
     return 0;
 }
 
-static int try_start_xmodem(void)
+static int try_start_xmodem()
 {
     cleanup_transfer();
 
@@ -565,7 +564,7 @@ static int try_start_xmodem(void)
     return ret;
 }
 
-int dcpregs_hcr_send_shutdown_request(bool via_dcp_command)
+int Regs::FileTransfer::hcr_send_shutdown_request(bool via_dcp_command)
 {
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutdown requested%s",
               via_dcp_command ? " via DCP command" : "");
@@ -687,7 +686,7 @@ error_exit:
     return -1;
 }
 
-static int generate_opkg_feed_files_if_necessary(void)
+static int generate_opkg_feed_files_if_necessary()
 {
     int have_feeds =
         os_foreach_in_path(opkg_configuration_path,
@@ -799,7 +798,7 @@ static int generate_opkg_feed_files_if_necessary(void)
 
 static const char update_shell_script_file[] = "/tmp/do_update.sh";
 
-bool dcpregs_hcr_is_system_update_in_progress(void)
+bool Regs::FileTransfer::hcr_is_system_update_in_progress()
 {
     switch(os_path_get_type(update_shell_script_file))
     {
@@ -818,7 +817,7 @@ bool dcpregs_hcr_is_system_update_in_progress(void)
     return false;
 }
 
-static int try_start_system_update(void)
+static int try_start_system_update()
 {
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Attempting to START SYSTEM UPDATE");
 
@@ -827,7 +826,7 @@ static int try_start_system_update(void)
 
     int fd = -1;
 
-    if(dcpregs_hcr_is_system_update_in_progress())
+    if(Regs::FileTransfer::hcr_is_system_update_in_progress())
         msg_info("Update in progress, not starting again");
     else
     {
@@ -885,7 +884,7 @@ static int do_write_download_control(const uint8_t *data)
         {
             /* report 0% progress */
             filetransfer_data.xmodem_status.progress_rate_limit = XMODEM_PROGRESS_RATE_LIMIT;
-            registers_get_data()->register_changed_notification_fn(41);
+            Regs::get_data().register_changed_notification_fn(41);
         }
         else if(ret > 0)
             ret = 0;
@@ -908,14 +907,14 @@ static int do_write_download_control(const uint8_t *data)
          */
         if(data[1] == HCR_COMMAND_REBOOT_SYSTEM)
         {
-            if(dcpregs_hcr_is_system_update_in_progress())
+            if(Regs::FileTransfer::hcr_is_system_update_in_progress())
             {
                 msg_error(0, LOG_ERR,
                           "System reboot request ignored, we are in the middle of an update");
                 return 0;
             }
             else
-                return dcpregs_hcr_send_shutdown_request(true);
+                return Regs::FileTransfer::hcr_send_shutdown_request(true);
         }
         else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
             BUG("Restore to factory defaults not implemented");
@@ -931,7 +930,7 @@ static int do_write_download_control(const uint8_t *data)
     return -1;
 }
 
-int dcpregs_write_40_download_control(const uint8_t *data, size_t length)
+int Regs::FileTransfer::DCP::write_40_download_control(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 40 handler %p %zu", data, length);
 
@@ -990,7 +989,7 @@ static void fill_download_status_from_xmodem(uint8_t *response)
     }
 }
 
-ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length)
+ssize_t Regs::FileTransfer::DCP::read_41_download_status(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 41 handler %p %zu", response, length);
 
@@ -1016,7 +1015,7 @@ ssize_t dcpregs_read_41_download_status(uint8_t *response, size_t length)
     return length;
 }
 
-ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
+ssize_t Regs::FileTransfer::DCP::read_44_xmodem_data(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 44 handler %p %zu", response, length);
 
@@ -1053,7 +1052,7 @@ ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
                 if(--filetransfer_data.xmodem_status.progress_rate_limit <= 0)
                 {
                     filetransfer_data.xmodem_status.progress_rate_limit = XMODEM_PROGRESS_RATE_LIMIT;
-                    registers_get_data()->register_changed_notification_fn(41);
+                    Regs::get_data().register_changed_notification_fn(41);
                 }
             }
             else
@@ -1063,7 +1062,7 @@ ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
 
                 /* report 100% progress */
                 filetransfer_data.xmodem_status.progress_rate_limit = 0;
-                registers_get_data()->register_changed_notification_fn(41);
+                Regs::get_data().register_changed_notification_fn(41);
             }
         }
     }
@@ -1080,7 +1079,7 @@ ssize_t dcpregs_read_44_xmodem_data(uint8_t *response, size_t length)
     return length;
 }
 
-int dcpregs_write_45_xmodem_command(const uint8_t *data, size_t length)
+int Regs::FileTransfer::DCP::write_45_xmodem_command(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 45 handler %p %zu", data, length);
 
@@ -1116,7 +1115,7 @@ int dcpregs_write_45_xmodem_command(const uint8_t *data, size_t length)
                                        ? "last XMODEM block"
                                        : "EOT")));
             was_successful = true;
-            registers_get_data()->register_changed_notification_fn(44);
+            Regs::get_data().register_changed_notification_fn(44);
             break;
 
           case XMODEM_RESULT_CLOSED:
@@ -1361,7 +1360,7 @@ try_update_repository_feeds(const uint8_t *data, size_t length)
     return retval;
 }
 
-int dcpregs_write_209_download_url(const uint8_t *data, size_t length)
+int Regs::FileTransfer::DCP::write_209_download_url(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 209 handler %p %zu", data, length);
 
@@ -1420,9 +1419,9 @@ int dcpregs_write_209_download_url(const uint8_t *data, size_t length)
     return 0;
 }
 
-void dcpregs_filetransfer_progress_notification(uint32_t xfer_id,
-                                                uint32_t tick,
-                                                uint32_t total_ticks)
+void Regs::FileTransfer::progress_notification(uint32_t xfer_id,
+                                               uint32_t tick,
+                                               uint32_t total_ticks)
 {
     bool changed = false;
     const uint8_t percent = total_ticks > 0
@@ -1444,12 +1443,12 @@ void dcpregs_filetransfer_progress_notification(uint32_t xfer_id,
     g_mutex_unlock(&filetransfer_data.download_status.lock);
 
     if(changed)
-        registers_get_data()->register_changed_notification_fn(41);
+        Regs::get_data().register_changed_notification_fn(41);
 }
 
-void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
-                                            enum DBusListsErrorCode error,
-                                            const char *path)
+void Regs::FileTransfer::done_notification(uint32_t xfer_id,
+                                           enum DBusListsErrorCode error,
+                                           const char *path)
 {
     bool changed = false;
 
@@ -1537,18 +1536,18 @@ void dcpregs_filetransfer_done_notification(uint32_t xfer_id,
     g_mutex_unlock(&filetransfer_data.download_status.lock);
 
     if(changed)
-        registers_get_data()->register_changed_notification_fn(41);
+        Regs::get_data().register_changed_notification_fn(41);
 
     reset_xmodem_state_for_dbusdl(path, true);
 }
 
-void dcpregs_filetransfer_prepare_for_shutdown(void)
+void Regs::FileTransfer::prepare_for_shutdown()
 {
     if(shutdown_guard_down(filetransfer_data.shutdown_guard))
-        dcpregs_write_209_download_url(NULL, 0);
+        DCP::write_209_download_url(NULL, 0);
 }
 
-void dcpregs_filetransfer_init(void)
+void Regs::FileTransfer::init()
 {
     memset(&filetransfer_data, 0, sizeof(filetransfer_data));
     g_mutex_init(&filetransfer_data.download_status.lock);
@@ -1559,12 +1558,12 @@ void dcpregs_filetransfer_init(void)
     filetransfer_data.shutdown_guard = shutdown_guard_alloc("filetransfer");
 }
 
-void dcpregs_filetransfer_set_picture_provider(const CoverArt::PictureProviderIface &provider)
+void Regs::FileTransfer::set_picture_provider(const CoverArt::PictureProviderIface &provider)
 {
     filetransfer_data.picture_provider = &provider;
 }
 
-void dcpregs_filetransfer_deinit(void)
+void Regs::FileTransfer::deinit()
 {
     g_mutex_clear(&filetransfer_data.download_status.lock);
     g_mutex_clear(&filetransfer_data.xmodem_status.lock);

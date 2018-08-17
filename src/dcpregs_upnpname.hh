@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,7 +21,33 @@
 
 #include <string>
 
-void dcpregs_upnpname_set_appliance_id(const std::string &appliance);
-void dcpregs_upnpname_set_device_uuid(const std::string &uuid);
+/*!
+ * \addtogroup registers
+ */
+/*!@{*/
+
+namespace Regs
+{
+
+namespace UPnPName
+{
+void init();
+void deinit();
+void prepare_for_shutdown();
+void set_appliance_id(const std::string &appliance);
+void set_device_uuid(const std::string &uuid);
+
+namespace DCP
+{
+ssize_t read_88_upnp_friendly_name(uint8_t *response, size_t length);
+int write_88_upnp_friendly_name__v1_0_1(const uint8_t *data, size_t length);
+int write_88_upnp_friendly_name__v1_0_6(const uint8_t *data, size_t length);
+}
+
+}
+
+}
+
+/*!@}*/
 
 #endif /* !DCPREGS_UPNPNAME_HH */

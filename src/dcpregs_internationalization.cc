@@ -20,7 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dcpregs_internationalization.h"
+#include "dcpregs_internationalization.hh"
 #include "configproxy.h"
 #include "messages.h"
 
@@ -31,7 +31,8 @@ static const char system_language_variant_key[]  = "@drcpd::i18n:country_code";
 static const char airable_language_code_key[]    = "@airable::i18n:language_code";
 static const char airable_language_variant_key[] = "@airable::i18n:country_code";
 
-ssize_t dcpregs_read_47_language_settings(uint8_t *response, size_t length)
+ssize_t Regs::I18n::DCP::read_47_language_settings(uint8_t *response,
+                                                   size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 47 handler %p %zu", response, length);
 
@@ -151,7 +152,8 @@ static void fixup_empty_airable_language_code(std::string &airable_lc,
     airable_lc = "en";
 }
 
-int dcpregs_write_47_language_settings(const uint8_t *data, size_t length)
+int Regs::I18n::DCP::write_47_language_settings(const uint8_t *data,
+                                                size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 47 handler %p %zu", data, length);
 

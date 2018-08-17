@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,21 +16,25 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_TCPTUNNEL_H
-#define DCPREGS_TCPTUNNEL_H
+#ifndef DCPREGS_TCPTUNNEL_HH
+#define DCPREGS_TCPTUNNEL_HH
 
-#include <stdint.h>
-#include <unistd.h>
+#include <cinttypes>
+#include <cstdlib>
 
 /*!
  * \addtogroup registers
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
+namespace TCPTunnel
+{
+
+namespace DCP
+{
 /*!
  * Open or close TCP tunnel.
  *
@@ -45,7 +49,7 @@ extern "C" {
  * A port number of 0 is considered invalid (though it actually isn't,
  * technically) and is rejected.
  */
-int dcpregs_write_119_tcp_tunnel_control(const uint8_t *data, size_t length);
+int write_119_tcp_tunnel_control(const uint8_t *data, size_t length);
 
 /*!
  * Receive data from a networked device over the TCP tunnel.
@@ -55,7 +59,7 @@ int dcpregs_write_119_tcp_tunnel_control(const uint8_t *data, size_t length);
  * port number of the TCP tunnel the peer has connected to (LSB first), and the
  * third byte is a peer ID to be used when sending data through register 121.
  */
-ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length);
+ssize_t read_120_tcp_tunnel_read(uint8_t *response, size_t length);
 
 /*!
  * Send data to a networked device over the TCP tunnel.
@@ -65,12 +69,13 @@ ssize_t dcpregs_read_120_tcp_tunnel_read(uint8_t *response, size_t length);
  * port number of an open TCP tunnel (LSB first), and the third byte is the
  * peer ID as received from register 120.
  */
-int dcpregs_write_121_tcp_tunnel_write(const uint8_t *data, size_t length);
-
-#ifdef __cplusplus
+int write_121_tcp_tunnel_write(const uint8_t *data, size_t length);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_TCPTUNNEL_H */
+#endif /* !DCPREGS_TCPTUNNEL_HH */

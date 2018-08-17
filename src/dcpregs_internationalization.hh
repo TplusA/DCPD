@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,22 +16,26 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_INTERNATIONALIZATION_H
-#define DCPREGS_INTERNATIONALIZATION_H
+#ifndef DCPREGS_INTERNATIONALIZATION_HH
+#define DCPREGS_INTERNATIONALIZATION_HH
 
-#include <stdint.h>
-#include <unistd.h>
+#include <cinttypes>
+#include <cstdlib>
 
 /*!
  * \addtogroup registers
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
-ssize_t dcpregs_read_47_language_settings(uint8_t *response, size_t length);
+namespace I18n
+{
+
+namespace DCP
+{
+ssize_t read_47_language_settings(uint8_t *response, size_t length);
 
 /*!
  * Configure language and country configuration.
@@ -71,12 +75,13 @@ ssize_t dcpregs_read_47_language_settings(uint8_t *response, size_t length);
  * Airable. This corresponds to "en\0US\0en\0DE\0" (or "en\0US\0\0DE\0" if
  * relying on defaults).
  */
-int dcpregs_write_47_language_settings(const uint8_t *data, size_t length);
-
-#ifdef __cplusplus
+int write_47_language_settings(const uint8_t *data, size_t length);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_INTERNATIONALIZATION_H */
+#endif /* !DCPREGS_INTERNATIONALIZATION_HH */

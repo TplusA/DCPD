@@ -20,7 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dcpregs_appliance.h"
+#include "dcpregs_appliance.hh"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "network_device_list.hh"
 #include "dcpregs_networkconfig.hh"
@@ -35,7 +35,7 @@
  * \attention
  *     This enumeration must be kept in sync with #map_appliance_id().
  */
-enum class Appliance
+enum class ApplianceID
 {
     R1000E,
     MP1000E,
@@ -89,51 +89,51 @@ static void set_device_id_none()
  *       schema. Thus, no code changes will be required to support new
  *       appliances in the future.
  */
-static void setup_primary_network_devices_for_appliance(Appliance appliance,
+static void setup_primary_network_devices_for_appliance(ApplianceID appliance,
                                                         bool is_reconfiguration)
 {
     switch(appliance)
     {
-      case Appliance::R1000E:
-      case Appliance::MP1000E:
-      case Appliance::MP2000R:
-      case Appliance::MP2500R:
-      case Appliance::MP3100HV:
-      case Appliance::CALA_CDR:
-      case Appliance::CALA_SR:
-      case Appliance::FALLBACK:
-        dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+      case ApplianceID::R1000E:
+      case ApplianceID::MP1000E:
+      case ApplianceID::MP2000R:
+      case ApplianceID::MP2500R:
+      case ApplianceID::MP3100HV:
+      case ApplianceID::CALA_CDR:
+      case ApplianceID::CALA_SR:
+      case ApplianceID::FALLBACK:
+        Regs::NetworkConfig::set_primary_technology(Connman::Technology::ETHERNET);
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
                                                      "/sys/bus/usb/devices/1-1.2:1.0",
                                                      is_reconfiguration);
         set_device_id_by_mac(Connman::Technology::ETHERNET);
         break;
 
-      case Appliance::MP8:
-        dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+      case ApplianceID::MP8:
+        Regs::NetworkConfig::set_primary_technology(Connman::Technology::ETHERNET);
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
                                                      "/sys/bus/usb/devices/1-1.4:1.0",
                                                      is_reconfiguration);
         set_device_id_by_mac(Connman::Technology::ETHERNET);
         break;
 
-      case Appliance::CALA_BERBEL:
-        dcpregs_networkconfig_set_primary_technology(Connman::Technology::WLAN);
+      case ApplianceID::CALA_BERBEL:
+        Regs::NetworkConfig::set_primary_technology(Connman::Technology::WLAN);
         network_prefs_update_primary_network_devices(nullptr,
                                                      "/sys/bus/usb/devices/1-1:1.0",
                                                      is_reconfiguration);
         set_device_id_by_mac(Connman::Technology::WLAN);
         break;
 
-      case Appliance::LINUX_PC:
-        dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+      case ApplianceID::LINUX_PC:
+        Regs::NetworkConfig::set_primary_technology(Connman::Technology::ETHERNET);
         network_prefs_update_primary_network_devices(nullptr, nullptr,
                                                      is_reconfiguration);
         set_device_id_for_testing();
         break;
 
-      case Appliance::UNDEFINED:
-        dcpregs_networkconfig_set_primary_technology(Connman::Technology::UNKNOWN_TECHNOLOGY);
+      case ApplianceID::UNDEFINED:
+        Regs::NetworkConfig::set_primary_technology(Connman::Technology::UNKNOWN_TECHNOLOGY);
         network_prefs_update_primary_network_devices(nullptr, nullptr,
                                                      is_reconfiguration);
         set_device_id_none();
@@ -146,28 +146,28 @@ static void setup_primary_network_devices_for_appliance(Appliance appliance,
  *
  * \attention
  *     The array defined inside this function must be kept in sync with the
- *     #Appliance enumeration.
+ *     #ApplianceID enumeration.
  */
-static Appliance map_appliance_id(const char *name)
+static ApplianceID map_appliance_id(const char *name)
 {
-    static const std::array<std::pair<const std::string, const Appliance>,
-                            size_t(Appliance::LAST_APPLIANCE) + 1> names
+    static const std::array<std::pair<const std::string, const ApplianceID>,
+                            size_t(ApplianceID::LAST_APPLIANCE) + 1> names
     {
-        std::move(std::make_pair("R1000E",     Appliance::R1000E)),
-        std::move(std::make_pair("MP1000E",    Appliance::MP1000E)),
-        std::move(std::make_pair("MP2000R",    Appliance::MP2000R)),
-        std::move(std::make_pair("MP2500R",    Appliance::MP2500R)),
-        std::move(std::make_pair("MP3100HV",   Appliance::MP3100HV)),
-        std::move(std::make_pair("MP8",        Appliance::MP8)),
-        std::move(std::make_pair("CalaCDR",    Appliance::CALA_CDR)),
-        std::move(std::make_pair("CalaSR",     Appliance::CALA_SR)),
-        std::move(std::make_pair("CalaBerbel", Appliance::CALA_BERBEL)),
-        std::move(std::make_pair("LinuxPC",    Appliance::LINUX_PC)),
-        std::move(std::make_pair("!unknown!",  Appliance::FALLBACK)),
+        std::move(std::make_pair("R1000E",     ApplianceID::R1000E)),
+        std::move(std::make_pair("MP1000E",    ApplianceID::MP1000E)),
+        std::move(std::make_pair("MP2000R",    ApplianceID::MP2000R)),
+        std::move(std::make_pair("MP2500R",    ApplianceID::MP2500R)),
+        std::move(std::make_pair("MP3100HV",   ApplianceID::MP3100HV)),
+        std::move(std::make_pair("MP8",        ApplianceID::MP8)),
+        std::move(std::make_pair("CalaCDR",    ApplianceID::CALA_CDR)),
+        std::move(std::make_pair("CalaSR",     ApplianceID::CALA_SR)),
+        std::move(std::make_pair("CalaBerbel", ApplianceID::CALA_BERBEL)),
+        std::move(std::make_pair("LinuxPC",    ApplianceID::LINUX_PC)),
+        std::move(std::make_pair("!unknown!",  ApplianceID::FALLBACK)),
     };
 
     if(name == nullptr || name[0] == '\0')
-        return Appliance::UNDEFINED;
+        return ApplianceID::UNDEFINED;
 
     for(const auto &a : names)
         if(a.first == name)
@@ -176,13 +176,13 @@ static Appliance map_appliance_id(const char *name)
     msg_error(0, LOG_ERR, "Appliance ID \"%s\" is NOT SUPPORTED, "
               "using generic fallback configuration", name);
 
-    return Appliance::FALLBACK;
+    return ApplianceID::FALLBACK;
 }
 
 struct ApplianceData
 {
     bool is_initialized;
-    Appliance id;
+    ApplianceID id;
 
     std::mutex lock;
     Maybe<bool> cached_standby_state;
@@ -195,7 +195,7 @@ struct ApplianceData
 
     explicit ApplianceData():
         is_initialized(false),
-        id(Appliance::UNDEFINED),
+        id(ApplianceID::UNDEFINED),
         request_control_mask(0),
         request_control_bits(0)
     {}
@@ -203,7 +203,7 @@ struct ApplianceData
 
 static ApplianceData global_appliance_data;
 
-bool dcpregs_appliance_id_init()
+bool Regs::Appliance::init()
 {
     std::lock_guard<std::mutex> lock(global_appliance_data.lock);
 
@@ -217,7 +217,7 @@ bool dcpregs_appliance_id_init()
     else
     {
         BUG("Have no appliance ID, system may not work");
-        global_appliance_data.id = Appliance::UNDEFINED;
+        global_appliance_data.id = ApplianceID::UNDEFINED;
     }
 
     const bool changed = global_appliance_data.id != prev_id;
@@ -234,19 +234,19 @@ bool dcpregs_appliance_id_init()
     return changed;
 }
 
-void dcpregs_appliance_id_configure()
+void Regs::Appliance::configure()
 {
     dbussignal_connman_manager_refresh_services(true);
 }
 
-ssize_t dcpregs_read_87_appliance_id(uint8_t *response, size_t length)
+ssize_t Regs::Appliance::DCP::read_87_appliance_id(uint8_t *response, size_t length)
 {
     return configproxy_get_value_as_string(appliance_id_key,
                                            (char *)response, length,
                                            nullptr);
 }
 
-int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length)
+int Regs::Appliance::DCP::write_87_appliance_id(const uint8_t *data, size_t length)
 {
     if(length == 0 || data[0] == '\0')
         return -1;
@@ -269,8 +269,8 @@ int dcpregs_write_87_appliance_id(const uint8_t *data, size_t length)
         configproxy_set_string(nullptr, appliance_id_key, buffer);
     }
 
-    if(dcpregs_appliance_id_init())
-        dcpregs_appliance_id_configure();
+    if(init())
+        configure();
 
     return 0;
 }
@@ -297,7 +297,7 @@ static AppliancePowerState standby_state_flag_to_dbus_value(const Maybe<bool> &s
         : AppliancePowerState::UNKNOWN;
 }
 
-int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length)
+int Regs::Appliance::DCP::write_18_appliance_status(const uint8_t *data, size_t length)
 {
     if(length < 2)
     {
@@ -342,7 +342,7 @@ int dcpregs_write_18_appliance_status(const uint8_t *data, size_t length)
     return 0;
 }
 
-ssize_t dcpregs_read_19_appliance_control(uint8_t *response, size_t length)
+ssize_t Regs::Appliance::DCP::read_19_appliance_control(uint8_t *response, size_t length)
 {
     static constexpr size_t register_size =
         sizeof(global_appliance_data.request_control_mask) +
@@ -376,17 +376,17 @@ ssize_t dcpregs_read_19_appliance_control(uint8_t *response, size_t length)
     return register_size;
 }
 
-uint8_t dcpregs_appliance_get_standby_state_for_dbus()
+uint8_t Regs::Appliance::get_standby_state_for_dbus()
 {
     std::lock_guard<std::mutex> lock(global_appliance_data.lock);
     return uint8_t(standby_state_flag_to_dbus_value(global_appliance_data.cached_standby_state));
 }
 
-bool dcpregs_appliance_request_standby_state(uint8_t state, uint8_t *current_state,
-                                             bool *is_pending)
+bool Regs::Appliance::request_standby_state(uint8_t state, uint8_t &current_state,
+                                            bool &is_pending)
 {
-    *current_state = dcpregs_appliance_get_standby_state_for_dbus();
-    *is_pending = false;
+    current_state = get_standby_state_for_dbus();
+    is_pending = false;
 
     if(state > uint8_t(AppliancePowerState::MAX_VALUE))
         return false;
@@ -400,9 +400,9 @@ bool dcpregs_appliance_request_standby_state(uint8_t state, uint8_t *current_sta
 
       case AppliancePowerState::STANDBY:
       case AppliancePowerState::UP_AND_RUNNING:
-        *is_pending = state != *current_state;
+        is_pending = state != current_state;
 
-        if(!*is_pending)
+        if(!is_pending)
             return true;
 
         std::lock_guard<std::mutex> lock(global_appliance_data.lock);
@@ -412,7 +412,7 @@ bool dcpregs_appliance_request_standby_state(uint8_t state, uint8_t *current_sta
         global_appliance_data.request_control_bits |= APPLIANCE_STATUS_BIT_IS_IN_STANDBY;
 
         if(is_notification_needed)
-            registers_get_data()->register_changed_notification_fn(19);
+            Regs::get_data().register_changed_notification_fn(19);
 
         return true;
     }

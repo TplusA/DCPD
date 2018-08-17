@@ -33,14 +33,13 @@
 #include "dbus_iface.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "registers.hh"
-#include "dcpregs_appliance.h"
-#include "dcpregs_status.h"
-#include "dcpregs_filetransfer.h"
+#include "dcpregs_appliance.hh"
+#include "dcpregs_status.hh"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_playstream.hh"
-#include "dcpregs_upnpname.h"
+#include "dcpregs_upnpname.hh"
 #include "connman.h"
 #include "networkprefs.h"
 #include "configproxy.h"
@@ -155,7 +154,7 @@ static int register_changed_write_fd;
  */
 static int primitive_command_queue_write_fd;
 
-static void show_version_info(void)
+static void show_version_info()
 {
     printf("%s\n"
            "Revision %s%s\n"
@@ -165,7 +164,7 @@ static void show_version_info(void)
            VCS_TAG, VCS_TICK, VCS_DATE);
 }
 
-static void log_version_info(void)
+static void log_version_info()
 {
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Rev %s%s, %s+%d, %s",
               VCS_FULL_HASH, VCS_WC_MODIFIED ? " (tainted)" : "",
@@ -664,13 +663,13 @@ static void process_smartphone_outgoing_queue(int fd)
                          "processing smartphone queue");
 }
 
-static void try_connect_to_managed_wlan(void)
+static void try_connect_to_managed_wlan()
 {
     primitive_queue_send(PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
                          "connecting to WLAN");
 }
 
-static void deferred_connman_refresh(void)
+static void deferred_connman_refresh()
 {
     primitive_queue_send(PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES,
                          "refreshing ConnMan service list");
@@ -782,7 +781,7 @@ static void main_loop(struct files *files,
                           TRANSACTION_CHANNEL_INET, true);
     dynamic_buffer_init(&state.drcp_buffer);
 
-    dcpregs_status_set_ready();
+    Regs::StrBoStatus::set_ready();
 
     msg_info("Ready for accepting traffic");
 
@@ -928,7 +927,7 @@ static bool main_loop_init(const struct parameters *parameters,
                            struct DBusSignalManagerData **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
-    dcpregs_upnpname_init();
+    Regs::UPnPName::init();
     configproxy_init();
 
     Configuration::register_configuration_manager(config_manager);
@@ -946,13 +945,13 @@ static bool main_loop_init(const struct parameters *parameters,
 
     network_prefs_init(network_preferences_dir, network_preferences_full_file);
 
-    dcpregs_appliance_id_init();
+    Regs::Appliance::init();
 
     if(!is_upgrading)
         network_prefs_migrate_old_network_configuration_files(connman_config_dir);
 
     Regs::init(push_register_to_slave);
-    dcpregs_filetransfer_set_picture_provider(Regs::PlayStream::get_picture_provider());
+    Regs::FileTransfer::set_picture_provider(Regs::PlayStream::get_picture_provider());
 
     transaction_init_allocator();
 
@@ -1066,7 +1065,7 @@ error_dcpspi_fifo_in:
 /*!
  * Check whether or not opkg state is consistent, trigger update if not.
  */
-static bool is_system_update_required(void)
+static bool is_system_update_required()
 {
     if(os_path_get_type("/tmp/dcpd_avoid_update_check.stamp") == OS_PATH_TYPE_FILE)
     {
@@ -1102,8 +1101,8 @@ static int trigger_system_upgrade(bool is_enforced)
         HCR_COMMAND_UPDATE_MAIN_SYSTEM,
     };
 
-    if(dcpregs_write_40_download_control(update_command,
-                                         sizeof(update_command)) != 0)
+    if(Regs::FileTransfer::DCP::write_40_download_control(update_command,
+                                                          sizeof(update_command)) != 0)
         return EXIT_FAILURE;
 
     sleep(60);
@@ -1332,7 +1331,7 @@ static void *update_watchdog_main(void *user_data)
      * to make any progress. Also, no one has terminated us. Pull the emergency
      * brake and restart.
      */
-    dcpregs_hcr_send_shutdown_request(false);
+    Regs::FileTransfer::hcr_send_shutdown_request(false);
 
     return NULL;
 }
@@ -1378,7 +1377,7 @@ int main(int argc, char *argv[])
     if(setup(&parameters, &files, &primitive_queue_fd, &register_changed_fd) < 0)
         parameters.is_fixing_broken_update_state = true;
 
-    const bool is_upgrading = dcpregs_hcr_is_system_update_in_progress();
+    const bool is_upgrading = Regs::FileTransfer::hcr_is_system_update_in_progress();
 
     if(is_upgrading)
     {
@@ -1463,7 +1462,7 @@ int main(int argc, char *argv[])
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 
-    dcpregs_appliance_id_configure();
+    Regs::Appliance::configure();
 
     main_loop(&files, &dot, appconn, connman,
               primitive_queue_fd, register_changed_fd);

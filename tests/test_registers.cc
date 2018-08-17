@@ -31,18 +31,16 @@
 #include "network_status_bits.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.hh"
-#include "dcpregs_networkconfig.h"
+#include "dcpregs_networkconfig.hh"
 #include "dcpregs_wlansurvey.hh"
-#include "dcpregs_upnpname.h"
 #include "dcpregs_upnpname.hh"
-#include "dcpregs_filetransfer.h"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_mediaservices.hh"
-#include "dcpregs_searchparameters.h"
-#include "dcpregs_status.h"
+#include "dcpregs_searchparameters.hh"
+#include "dcpregs_status.hh"
 #include "drcp_command_codes.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "connman_service_list.hh"
@@ -603,7 +601,7 @@ void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
 }
 
 /* And another quick replacement. Should write a mock, right? */
-void dbussignal_connman_manager_cancel_wps(void)
+void dbussignal_connman_manager_cancel_wps()
 {
     cancel_wps_data.called();
 }
@@ -1766,7 +1764,7 @@ void cut_setup()
 
     register_changed_data->init();
 
-    dcpregs_protocol_level_init();
+    Regs::DCPVersion::init();
 
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
@@ -1801,8 +1799,8 @@ void cut_teardown()
 void test_read_out_protocol_level()
 {
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     uint8_t redzone_content[10];
     memset(redzone_content, 0xff, sizeof(redzone_content));
@@ -1827,8 +1825,8 @@ void test_protocol_level_negotiation_does_not_set_protocol_level()
     static const uint8_t range[] = { 1, 0, 2, 1, 0, 2, };
 
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     reg->write(range, sizeof(range));
     register_changed_data->check(1);
@@ -1852,8 +1850,8 @@ void test_protocol_level_negotiation_does_not_set_protocol_level()
 void test_protocol_level_can_be_changed()
 {
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     uint8_t buffer[3] = {0};
     cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
@@ -1927,8 +1925,8 @@ void test_negotiate_protocol_level_single_range_with_match()
     };
 
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
@@ -1977,8 +1975,8 @@ void test_negotiate_protocol_level_multiple_ranges_with_match()
     cppcut_assert_equal(sizeof(match_in_first_range), sizeof(match_in_last_range));
 
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
@@ -2018,8 +2016,8 @@ void test_negotiate_protocol_level_single_range_with_mismatch()
     };
 
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     for(size_t i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
     {
@@ -2042,8 +2040,8 @@ void test_negotiate_protocol_level_multiple_ranges_with_mismatch()
     };
 
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     reg->write(mismatch, sizeof(mismatch));
     register_changed_data->check(1);
@@ -2058,8 +2056,8 @@ static void choose_maximum_level_of_overlapping_ranges(const uint8_t *const over
                                                        const uint8_t *const expected)
 {
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     reg->write(overlapping, overlapping_size);
     register_changed_data->check(1);
@@ -2137,8 +2135,8 @@ void test_broken_ranges_are_ignored()
     };
 
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     for(size_t i = 0; i < sizeof(broken) / sizeof(broken[0]); ++i)
     {
@@ -2156,8 +2154,8 @@ void test_negotiation_requires_at_least_one_range()
     static const uint8_t too_short[5] = {0, 0, 0, UINT8_MAX, UINT8_MAX, };
 
     auto *reg = lookup_register_expect_handlers(1,
-                                                dcpregs_read_1_protocol_level,
-                                                dcpregs_write_1_protocol_level);
+                                                Regs::DCPVersion::DCP::read_1_protocol_level,
+                                                Regs::DCPVersion::DCP::write_1_protocol_level);
 
     reg->write(too_short, sizeof(too_short));
     register_changed_data->check(1);
@@ -2514,7 +2512,7 @@ void cut_teardown()
 void test_read_mac_address()
 {
     auto *reg = lookup_register_expect_handlers(51,
-                                                dcpregs_read_51_mac_address,
+                                                Regs::NetworkConfig::DCP::read_51_mac_address,
                                                 nullptr);
     uint8_t redzone_content[10];
     memset(redzone_content, 0xff, sizeof(redzone_content));
@@ -2556,7 +2554,7 @@ void test_read_mac_address_default()
     Regs::init(nullptr);
 
     auto *reg = lookup_register_expect_handlers(51,
-                                                dcpregs_read_51_mac_address,
+                                                Regs::NetworkConfig::DCP::read_51_mac_address,
                                                 nullptr);
     uint8_t buffer[18];
     cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
@@ -2568,7 +2566,7 @@ void test_read_mac_address_default()
 static void start_ipv4_config(Connman::Technology expected_technology)
 {
     auto *reg = lookup_register_expect_handlers(54,
-                                                dcpregs_write_54_selected_ip_profile);
+                                                Regs::NetworkConfig::DCP::write_54_selected_ip_profile);
 
     switch(expected_technology)
     {
@@ -2598,7 +2596,7 @@ static void commit_ipv4_config(enum NetworkPrefsTechnology tech,
                                bool force_expect_wps_canceled = false)
 {
     auto *reg = lookup_register_expect_handlers(53,
-                                                dcpregs_write_53_active_ip_profile);
+                                                Regs::NetworkConfig::DCP::write_53_active_ip_profile);
 
     if(tech == NWPREFSTECH_UNKNOWN)
     {
@@ -2693,22 +2691,22 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(56,
-                                                dcpregs_read_56_ipv4_address,
-                                                dcpregs_write_56_ipv4_address);
+                                                Regs::NetworkConfig::DCP::read_56_ipv4_address,
+                                                Regs::NetworkConfig::DCP::write_56_ipv4_address);
 
     reg->write(reinterpret_cast<const uint8_t *>(standard_ipv4_address),
                sizeof(standard_ipv4_address));
 
     reg = lookup_register_expect_handlers(57,
-                                          dcpregs_read_57_ipv4_netmask,
-                                          dcpregs_write_57_ipv4_netmask);
+                                          Regs::NetworkConfig::DCP::read_57_ipv4_netmask,
+                                          Regs::NetworkConfig::DCP::write_57_ipv4_netmask);
 
     reg->write(reinterpret_cast<const uint8_t *>(standard_ipv4_netmask),
                sizeof(standard_ipv4_netmask));
 
     reg = lookup_register_expect_handlers(58,
-                                          dcpregs_read_58_ipv4_gateway,
-                                          dcpregs_write_58_ipv4_gateway);
+                                          Regs::NetworkConfig::DCP::read_58_ipv4_gateway,
+                                          Regs::NetworkConfig::DCP::write_58_ipv4_gateway);
 
     reg->write(reinterpret_cast<const uint8_t *>(standard_ipv4_gateway),
                sizeof(standard_ipv4_gateway));
@@ -2773,8 +2771,8 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
 
     mock_messages->expect_msg_info_formatted("Enable DHCP");
     static const uint8_t one = 1;
@@ -2834,8 +2832,8 @@ void test_leading_zeros_are_removed_from_ipv4_addresses()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(56,
-                                                dcpregs_read_56_ipv4_address,
-                                                dcpregs_write_56_ipv4_address);
+                                                Regs::NetworkConfig::DCP::read_56_ipv4_address,
+                                                Regs::NetworkConfig::DCP::write_56_ipv4_address);
 
     static const std::array<std::pair<const char *, const char *>, 3> addresses_with_zeros =
     {
@@ -2917,8 +2915,8 @@ void test_dhcp_parameter_boundaries()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
 
     uint8_t buffer = 2;
 
@@ -2960,8 +2958,8 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
 
     static const uint8_t zero = 0;
 
@@ -3026,8 +3024,8 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
         });
 
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(size_t(1), reg->read(&buffer, 1));
@@ -3052,8 +3050,8 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
         nullptr);
 
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(size_t(1), reg->read(&buffer, 1));
@@ -3070,8 +3068,8 @@ void test_read_dhcp_mode_in_edit_mode_before_any_changes()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
 
     uint8_t buffer = UINT8_MAX;
     cppcut_assert_equal(size_t(1), reg->read(&buffer, 1));
@@ -3088,8 +3086,8 @@ void test_read_dhcp_mode_in_edit_mode_after_change()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
 
     mock_messages->expect_msg_info_formatted("Enable DHCP");
     static const uint8_t one = 1;
@@ -3107,40 +3105,40 @@ struct RegisterTraits;
 template <>
 struct RegisterTraits<56U>
 {
-    static constexpr auto expected_read_handler = &dcpregs_read_56_ipv4_address;
-    static constexpr auto expected_write_handler = &dcpregs_write_56_ipv4_address;
+    static constexpr auto expected_read_handler = &Regs::NetworkConfig::DCP::read_56_ipv4_address;
+    static constexpr auto expected_write_handler = &Regs::NetworkConfig::DCP::write_56_ipv4_address;
     static constexpr auto &expected_address = standard_ipv4_address;
 };
 
 template <>
 struct RegisterTraits<57U>
 {
-    static constexpr auto expected_read_handler = &dcpregs_read_57_ipv4_netmask;
-    static constexpr auto expected_write_handler = &dcpregs_write_57_ipv4_netmask;
+    static constexpr auto expected_read_handler = &Regs::NetworkConfig::DCP::read_57_ipv4_netmask;
+    static constexpr auto expected_write_handler = &Regs::NetworkConfig::DCP::write_57_ipv4_netmask;
     static constexpr auto &expected_address = standard_ipv4_netmask;
 };
 
 template <>
 struct RegisterTraits<58U>
 {
-    static constexpr auto expected_read_handler = &dcpregs_read_58_ipv4_gateway;
-    static constexpr auto expected_write_handler = &dcpregs_write_58_ipv4_gateway;
+    static constexpr auto expected_read_handler = &Regs::NetworkConfig::DCP::read_58_ipv4_gateway;
+    static constexpr auto expected_write_handler = &Regs::NetworkConfig::DCP::write_58_ipv4_gateway;
     static constexpr auto &expected_address = standard_ipv4_gateway;
 };
 
 template <>
 struct RegisterTraits<62U>
 {
-    static constexpr auto expected_read_handler = &dcpregs_read_62_primary_dns;
-    static constexpr auto expected_write_handler = &dcpregs_write_62_primary_dns;
+    static constexpr auto expected_read_handler = &Regs::NetworkConfig::DCP::read_62_primary_dns;
+    static constexpr auto expected_write_handler = &Regs::NetworkConfig::DCP::write_62_primary_dns;
     static constexpr auto &expected_address = standard_dns1_address;
 };
 
 template <>
 struct RegisterTraits<63U>
 {
-    static constexpr auto expected_read_handler = &dcpregs_read_63_secondary_dns;
-    static constexpr auto expected_write_handler = &dcpregs_write_63_secondary_dns;
+    static constexpr auto expected_read_handler = &Regs::NetworkConfig::DCP::read_63_secondary_dns;
+    static constexpr auto expected_write_handler = &Regs::NetworkConfig::DCP::write_63_secondary_dns;
     static constexpr auto &expected_address = standard_dns2_address;
 };
 
@@ -3395,14 +3393,14 @@ void test_set_both_dns_servers()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(62,
-                                                dcpregs_read_62_primary_dns,
-                                                dcpregs_write_62_primary_dns);
+                                                Regs::NetworkConfig::DCP::read_62_primary_dns,
+                                                Regs::NetworkConfig::DCP::write_62_primary_dns);
     reg->write(reinterpret_cast<const uint8_t *>(standard_dns1_address),
                sizeof(standard_dns1_address));
 
     reg = lookup_register_expect_handlers(63,
-                                          dcpregs_read_63_secondary_dns,
-                                          dcpregs_write_63_secondary_dns);
+                                          Regs::NetworkConfig::DCP::read_63_secondary_dns,
+                                          Regs::NetworkConfig::DCP::write_63_secondary_dns);
     reg->write(reinterpret_cast<const uint8_t *>(standard_dns2_address),
                sizeof(standard_dns2_address));
 
@@ -3454,8 +3452,8 @@ void test_read_primary_dns_in_edit_mode_before_any_changes()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(62,
-                                                dcpregs_read_62_primary_dns,
-                                                dcpregs_write_62_primary_dns);
+                                                Regs::NetworkConfig::DCP::read_62_primary_dns,
+                                                Regs::NetworkConfig::DCP::write_62_primary_dns);
 
     char buffer[128];
 
@@ -3476,8 +3474,8 @@ void test_read_secondary_dns_in_edit_mode_before_any_changes()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(63,
-                                                dcpregs_read_63_secondary_dns,
-                                                dcpregs_write_63_secondary_dns);
+                                                Regs::NetworkConfig::DCP::read_63_secondary_dns,
+                                                Regs::NetworkConfig::DCP::write_63_secondary_dns);
 
     char buffer[128];
 
@@ -3499,8 +3497,8 @@ void test_replace_primary_dns_server_of_two_servers()
     static constexpr char new_primary_dns[] = "50.60.117.208";
 
     auto *reg = lookup_register_expect_handlers(62,
-                                                dcpregs_read_62_primary_dns,
-                                                dcpregs_write_62_primary_dns);
+                                                Regs::NetworkConfig::DCP::read_62_primary_dns,
+                                                Regs::NetworkConfig::DCP::write_62_primary_dns);
 
     reg->write(reinterpret_cast<const uint8_t *>(new_primary_dns),
                sizeof(new_primary_dns));
@@ -3556,8 +3554,8 @@ void test_replace_secondary_dns_server_of_two_servers()
     static constexpr char new_secondary_dns[] = "50.60.117.209";
 
     auto *reg = lookup_register_expect_handlers(63,
-                                                dcpregs_read_63_secondary_dns,
-                                                dcpregs_write_63_secondary_dns);
+                                                Regs::NetworkConfig::DCP::read_63_secondary_dns,
+                                                Regs::NetworkConfig::DCP::write_63_secondary_dns);
 
     reg->write(reinterpret_cast<const uint8_t *>(new_secondary_dns),
                sizeof(new_secondary_dns));
@@ -3620,8 +3618,8 @@ void test_add_secondary_dns_server_to_primary_server()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(63,
-                                                dcpregs_read_63_secondary_dns,
-                                                dcpregs_write_63_secondary_dns);
+                                                Regs::NetworkConfig::DCP::read_63_secondary_dns,
+                                                Regs::NetworkConfig::DCP::write_63_secondary_dns);
 
     reg->write(reinterpret_cast<const uint8_t *>(standard_dns2_address),
                sizeof(standard_dns2_address));
@@ -3675,8 +3673,8 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
     start_ipv4_config(Connman::Technology::ETHERNET);
 
     auto *reg = lookup_register_expect_handlers(92,
-                                                dcpregs_read_92_wlan_security,
-                                                dcpregs_write_92_wlan_security);
+                                                Regs::NetworkConfig::DCP::read_92_wlan_security,
+                                                Regs::NetworkConfig::DCP::write_92_wlan_security);
     reg->write(reinterpret_cast<const uint8_t *>("none"), 4);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
@@ -3711,8 +3709,8 @@ void test_get_wlan_security_mode_for_ethernet_returns_error()
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
     auto *reg = lookup_register_expect_handlers(92,
-                                                dcpregs_read_92_wlan_security,
-                                                dcpregs_write_92_wlan_security);
+                                                Regs::NetworkConfig::DCP::read_92_wlan_security,
+                                                Regs::NetworkConfig::DCP::write_92_wlan_security);
 
     read_buffer_expect_failure(reg, buffer, sizeof(buffer), -1);
     cppcut_assert_equal(uint8_t(0), buffer[0]);
@@ -3724,8 +3722,8 @@ static void set_wlan_name(const char *wps_name)
     cppcut_assert_not_null(wps_name);
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
 
     reg->write(reinterpret_cast<const uint8_t *>(wps_name), strlen(wps_name));
 }
@@ -3735,8 +3733,8 @@ static void set_wlan_name(const std::vector<uint8_t> &wps_ssid)
     cut_assert_false(wps_ssid.empty());
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
 
     reg->write(wps_ssid.data(), wps_ssid.size());
 }
@@ -3753,8 +3751,8 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
-                                                dcpregs_read_92_wlan_security,
-                                                dcpregs_write_92_wlan_security);
+                                                Regs::NetworkConfig::DCP::read_92_wlan_security,
+                                                Regs::NetworkConfig::DCP::write_92_wlan_security);
     reg->write(reinterpret_cast<const uint8_t *>(requested_security_mode),
                strlen(requested_security_mode));
 
@@ -3877,8 +3875,8 @@ void test_set_wlan_security_mode_wep()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
-                                                dcpregs_read_92_wlan_security,
-                                                dcpregs_write_92_wlan_security);
+                                                Regs::NetworkConfig::DCP::read_92_wlan_security,
+                                                Regs::NetworkConfig::DCP::write_92_wlan_security);
     reg->write(reinterpret_cast<const uint8_t *>("wep"), 3);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
@@ -3912,8 +3910,8 @@ void test_set_invalid_wlan_security_mode()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(92,
-                                                dcpregs_read_92_wlan_security,
-                                                dcpregs_write_92_wlan_security);
+                                                Regs::NetworkConfig::DCP::read_92_wlan_security,
+                                                Regs::NetworkConfig::DCP::write_92_wlan_security);
     reg->write(reinterpret_cast<const uint8_t *>("foo"), 3);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
@@ -3958,8 +3956,8 @@ static void get_wlan_security_mode(const char *assumed_connman_security_mode,
     static constexpr const size_t read_size = sizeof(buffer) - 2 * sizeof(redzone_content);
 
     auto *reg = lookup_register_expect_handlers(92,
-                                                dcpregs_read_92_wlan_security,
-                                                dcpregs_write_92_wlan_security);
+                                                Regs::NetworkConfig::DCP::read_92_wlan_security,
+                                                Regs::NetworkConfig::DCP::write_92_wlan_security);
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
 
     if(expected_error_message != nullptr)
@@ -4031,13 +4029,13 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(102,
-                                                dcpregs_read_102_passphrase,
-                                                dcpregs_write_102_passphrase);
+                                                Regs::NetworkConfig::DCP::read_102_passphrase,
+                                                Regs::NetworkConfig::DCP::write_102_passphrase);
     reg->write(reinterpret_cast<const uint8_t *>(passphrase), passphrase_size);
 
     reg = lookup_register_expect_handlers(92,
-                                          dcpregs_read_92_wlan_security,
-                                          dcpregs_write_92_wlan_security);
+                                          Regs::NetworkConfig::DCP::read_92_wlan_security,
+                                          Regs::NetworkConfig::DCP::write_92_wlan_security);
     reg->write(reinterpret_cast<const uint8_t *>(connman_security_mode), strlen(connman_security_mode));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
@@ -4137,8 +4135,8 @@ void test_ascii_passphrase_minimum_and_maximum_length()
     static auto *passphrase_arg = reinterpret_cast<const uint8_t *>(passphrase);
 
     auto *reg = lookup_register_expect_handlers(102,
-                                                dcpregs_read_102_passphrase,
-                                                dcpregs_write_102_passphrase);
+                                                Regs::NetworkConfig::DCP::read_102_passphrase,
+                                                Regs::NetworkConfig::DCP::write_102_passphrase);
 
     reg->write(passphrase_arg, 0);
     reg->write(passphrase_arg, 1);
@@ -4180,8 +4178,8 @@ void test_ascii_passphrase_character_set()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(102,
-                                                dcpregs_read_102_passphrase,
-                                                dcpregs_write_102_passphrase);
+                                                Regs::NetworkConfig::DCP::read_102_passphrase,
+                                                Regs::NetworkConfig::DCP::write_102_passphrase);
 
     static const std::array<StringWithLength, 7> non_ascii_passphrases =
     {
@@ -4238,8 +4236,8 @@ void test_set_passphrase_without_security_mode_does_not_work()
 
     static constexpr char passphrase[] = "SuperSecret";
     auto *reg = lookup_register_expect_handlers(102,
-                                                dcpregs_read_102_passphrase,
-                                                dcpregs_write_102_passphrase);
+                                                Regs::NetworkConfig::DCP::read_102_passphrase,
+                                                Regs::NetworkConfig::DCP::write_102_passphrase);
     reg->write(reinterpret_cast<const uint8_t *>(passphrase), sizeof(passphrase) - 1);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
@@ -4278,8 +4276,8 @@ void test_get_wlan_passphrase_in_edit_mode()
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
     auto *reg = lookup_register_expect_handlers(102,
-                                                dcpregs_read_102_passphrase,
-                                                dcpregs_write_102_passphrase);
+                                                Regs::NetworkConfig::DCP::read_102_passphrase,
+                                                Regs::NetworkConfig::DCP::write_102_passphrase);
 
     mock_messages->expect_msg_info("No passphrase set yet");
 
@@ -4335,8 +4333,8 @@ void test_get_wlan_passphrase_in_regular_mode()
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
     auto *reg = lookup_register_expect_handlers(102,
-                                                dcpregs_read_102_passphrase,
-                                                dcpregs_write_102_passphrase);
+                                                Regs::NetworkConfig::DCP::read_102_passphrase,
+                                                Regs::NetworkConfig::DCP::write_102_passphrase);
 
     mock_messages->expect_msg_error(0, LOG_NOTICE,
                                     "Passphrase cannot be read out while in non-edit mode");
@@ -4364,8 +4362,8 @@ void test_set_simple_ascii_wlan_ssid()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
 
     static constexpr char ssid[] = "MyNiceWLAN";
 
@@ -4419,8 +4417,8 @@ void test_set_binary_wlan_ssid()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
 
     static constexpr uint8_t ssid[] =
     {
@@ -4479,8 +4477,8 @@ void test_set_empty_wlan_ssid_is_an_error()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Unexpected data length 0 (expected 1...32) (Invalid argument)");
@@ -4541,8 +4539,8 @@ void test_get_wlan_ssid_in_normal_mode()
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
 
     const size_t ssid_length = reg->read(dest, 32);
@@ -4600,8 +4598,8 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes()
     memset(buffer, UINT8_MAX, sizeof(buffer));
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
     uint8_t *const dest = &buffer[sizeof(redzone_content)];
 
     const size_t ssid_length = reg->read(dest, 32);
@@ -4626,8 +4624,8 @@ void test_get_wlan_ssid_in_edit_mode_after_change()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(94,
-                                                dcpregs_read_94_ssid,
-                                                dcpregs_write_94_ssid);
+                                                Regs::NetworkConfig::DCP::read_94_ssid,
+                                                Regs::NetworkConfig::DCP::write_94_ssid);
 
     static constexpr uint8_t ssid[] =
     {
@@ -4670,8 +4668,8 @@ void test_set_ibss_mode_adhoc_is_not_supported()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(93,
-                                                dcpregs_read_93_ibss,
-                                                dcpregs_write_93_ibss);
+                                                Regs::NetworkConfig::DCP::read_93_ibss,
+                                                Regs::NetworkConfig::DCP::write_93_ibss);
 
     mock_messages->expect_msg_error(EINVAL, LOG_NOTICE,
                                     "Cannot change IBSS mode to ad-hoc, "
@@ -4690,8 +4688,8 @@ void test_set_ibss_mode_infrastructure_is_ignored()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(93,
-                                                dcpregs_read_93_ibss,
-                                                dcpregs_write_93_ibss);
+                                                Regs::NetworkConfig::DCP::read_93_ibss,
+                                                Regs::NetworkConfig::DCP::write_93_ibss);
 
     mock_messages->expect_msg_info("Ignoring IBSS infrastructure mode request "
                                    "(always using that mode)");
@@ -4726,8 +4724,8 @@ void test_set_junk_ibss_mode_is_an_error()
     };
 
     auto *reg = lookup_register_expect_handlers(93,
-                                                dcpregs_read_93_ibss,
-                                                dcpregs_write_93_ibss);
+                                                Regs::NetworkConfig::DCP::read_93_ibss,
+                                                Regs::NetworkConfig::DCP::write_93_ibss);
 
     for(const auto &str : junk_requests)
     {
@@ -4745,8 +4743,8 @@ void test_get_ibss_mode_returns_infrastructure_mode()
     assume_wlan_interface_is_active();
 
     auto *reg = lookup_register_expect_handlers(93,
-                                                dcpregs_read_93_ibss,
-                                                dcpregs_write_93_ibss);
+                                                Regs::NetworkConfig::DCP::read_93_ibss,
+                                                Regs::NetworkConfig::DCP::write_93_ibss);
 
     uint8_t response[8];
     cppcut_assert_equal(size_t(6), reg->read(response, sizeof(response)));
@@ -4764,8 +4762,8 @@ void test_set_wpa_cipher_is_ignored()
     start_ipv4_config(Connman::Technology::WLAN);
 
     auto *reg = lookup_register_expect_handlers(101,
-                                                dcpregs_read_101_wpa_cipher,
-                                                dcpregs_write_101_wpa_cipher);
+                                                Regs::NetworkConfig::DCP::read_101_wpa_cipher,
+                                                Regs::NetworkConfig::DCP::write_101_wpa_cipher);
 
     mock_messages->expect_msg_info("Ignoring setting WPA cipher (automatic, AES preferred)");
     reg->write(reinterpret_cast<const uint8_t *>("TKIP"), 4);
@@ -4811,8 +4809,8 @@ void test_set_junk_wpa_cipher_is_an_error()
     };
 
     auto *reg = lookup_register_expect_handlers(101,
-                                                dcpregs_read_101_wpa_cipher,
-                                                dcpregs_write_101_wpa_cipher);
+                                                Regs::NetworkConfig::DCP::read_101_wpa_cipher,
+                                                Regs::NetworkConfig::DCP::write_101_wpa_cipher);
 
     for(const auto &str : junk_requests)
     {
@@ -4830,8 +4828,8 @@ void test_get_wpa_cipher_returns_aes()
     assume_wlan_interface_is_active();
 
     auto *reg = lookup_register_expect_handlers(101,
-                                                dcpregs_read_101_wpa_cipher,
-                                                dcpregs_write_101_wpa_cipher);
+                                                Regs::NetworkConfig::DCP::read_101_wpa_cipher,
+                                                Regs::NetworkConfig::DCP::write_101_wpa_cipher);
 
     uint8_t response[8];
     cppcut_assert_equal(size_t(4), reg->read(response, sizeof(response)));
@@ -4847,12 +4845,12 @@ void test_configuration_update_is_blocked_after_shutdown()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"networkconfig\" down");
-    dcpregs_networkconfig_prepare_for_shutdown();
+    Regs::NetworkConfig::prepare_for_shutdown();
 
     /* in-memory edits are still working... */
     auto *reg = lookup_register_expect_handlers(55,
-                                                dcpregs_read_55_dhcp_enabled,
-                                                dcpregs_write_55_dhcp_enabled);
+                                                Regs::NetworkConfig::DCP::read_55_dhcp_enabled,
+                                                Regs::NetworkConfig::DCP::write_55_dhcp_enabled);
     static const uint8_t zero = 0;
 
     mock_messages->expect_msg_info_formatted("Disable DHCP");
@@ -4872,11 +4870,11 @@ void test_shutdown_can_be_called_only_once()
 {
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"networkconfig\" down");
-    dcpregs_networkconfig_prepare_for_shutdown();
+    Regs::NetworkConfig::prepare_for_shutdown();
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"networkconfig\" down");
-    dcpregs_networkconfig_prepare_for_shutdown();
+    Regs::NetworkConfig::prepare_for_shutdown();
 }
 
 /*!\test
@@ -4885,7 +4883,7 @@ void test_shutdown_can_be_called_only_once()
 void test_start_wlan_site_survey()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                dcpregs_write_104_start_wlan_site_survey);
+                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info("WLAN site survey started");
     mock_connman->expect_connman_start_wlan_site_survey(
@@ -4906,7 +4904,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
     test_start_wlan_site_survey();
 
     auto *reg = lookup_register_expect_handlers(105,
-                                                dcpregs_read_105_wlan_site_survey_results,
+                                                Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
                                                 nullptr);
 
     static constexpr const std::array<const MockConnman::ServiceIterData, 5> services_data =
@@ -4963,7 +4961,7 @@ void test_wlan_site_survey_returns_list_of_wlan_networks()
 void test_start_wlan_site_survey_command_has_no_data_bytes()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                dcpregs_write_104_start_wlan_site_survey);
+                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
         "Unexpected data length 1 (expected 0) (Invalid argument)");
@@ -4978,7 +4976,7 @@ void test_start_wlan_site_survey_command_has_no_data_bytes()
 void test_start_wlan_site_survey_has_no_effect_if_survey_is_active()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                dcpregs_write_104_start_wlan_site_survey);
+                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info("WLAN site survey started");
     mock_connman->expect_connman_start_wlan_site_survey(true);
@@ -4997,7 +4995,7 @@ void test_start_wlan_site_survey_has_no_effect_if_survey_is_active()
 void test_start_wlan_site_survey_fails_on_connman_failure()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                dcpregs_write_104_start_wlan_site_survey);
+                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
 
     mock_connman->expect_connman_start_wlan_site_survey(
         false, survey_complete, CONNMAN_SITE_SCAN_CONNMAN_ERROR);
@@ -5009,7 +5007,7 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
     register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
-                                          dcpregs_read_105_wlan_site_survey_results,
+                                          Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
                                           nullptr);
 
     struct dynamic_buffer buffer;
@@ -5030,7 +5028,7 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
 void test_start_wlan_site_survey_fails_on_dbus_failure()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                dcpregs_write_104_start_wlan_site_survey);
+                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (2)");
     mock_connman->expect_connman_start_wlan_site_survey(
@@ -5040,7 +5038,7 @@ void test_start_wlan_site_survey_fails_on_dbus_failure()
     register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
-                                          dcpregs_read_105_wlan_site_survey_results,
+                                          Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
                                           nullptr);
 
     struct dynamic_buffer buffer;
@@ -5062,7 +5060,7 @@ void test_start_wlan_site_survey_fails_on_dbus_failure()
 void test_start_wlan_site_survey_fails_if_no_hardware_available()
 {
     auto *reg = lookup_register_expect_handlers(104,
-                                                dcpregs_write_104_start_wlan_site_survey);
+                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (4)");
     mock_connman->expect_connman_start_wlan_site_survey(
@@ -5072,7 +5070,7 @@ void test_start_wlan_site_survey_fails_if_no_hardware_available()
     register_changed_data->check(105);
 
     reg = lookup_register_expect_handlers(105,
-                                          dcpregs_read_105_wlan_site_survey_results,
+                                          Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
                                           nullptr);
 
     struct dynamic_buffer buffer;
@@ -5098,7 +5096,7 @@ void test_start_wlan_site_survey_fails_if_no_hardware_available()
 void test_reading_out_ssids_without_scan_returns_empty_list()
 {
     auto *reg = lookup_register_expect_handlers(105,
-                                                dcpregs_read_105_wlan_site_survey_results,
+                                                Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
                                                 nullptr);
 
     mock_connman->expect_connman_service_iterator_get(nullptr);
@@ -5119,7 +5117,7 @@ void test_reading_out_ssids_without_scan_returns_empty_list()
 static void expect_network_status(const std::array<uint8_t, 3> &expected_status)
 {
     auto *reg = lookup_register_expect_handlers(50,
-                                                dcpregs_read_50_network_status,
+                                                Regs::NetworkConfig::DCP::read_50_network_status,
                                                 nullptr);
     uint8_t status[expected_status.size()];
     cppcut_assert_equal(sizeof(status), reg->read(status, sizeof(status)));
@@ -5331,8 +5329,8 @@ void cut_teardown()
 void test_read_out_default_friendly_name()
 {
     auto *reg = lookup_register_expect_handlers(88,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6);
     cppcut_assert_not_null(reg);
 
     mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
@@ -5440,8 +5438,8 @@ void test_write_and_read_out_simple_friendly_name__v1_0_1()
 {
     static const char simple_name[] = "UPnP name in unit test";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1);
 
     write_and_read_name(simple_name, simple_name, reg);
 }
@@ -5450,8 +5448,8 @@ void test_write_and_read_out_simple_friendly_name_trailing_junk_is_accepted__v1_
 {
     static const char simple_name[] = "UPnP name in unit test\x01\x02\x03";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1);
 
     write_and_read_name(simple_name, simple_name, reg);
 }
@@ -5460,8 +5458,8 @@ void test_write_and_read_out_simple_friendly_name_does_not_interpret_trailing_ze
 {
     static const char simple_name[] = "UPnP name in unit test";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1);
 
     write_and_read_name(simple_name, simple_name, reg, true);
 }
@@ -5470,8 +5468,8 @@ void test_write_and_read_out_simple_friendly_name_trailing_junk_with_embedded_an
 {
     static const char simple_name[] = "UPnP name in unit test\0\x01\x02\x03";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1);
 
     write_and_read_name(simple_name, simple_name, reg, true, false,
                         sizeof(simple_name) - 1, sizeof(simple_name) - 1);
@@ -5481,8 +5479,8 @@ void test_write_and_read_out_simple_friendly_name()
 {
     static const char simple_name[] = "UPnP name in unit test";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6);
 
     write_and_read_name(simple_name, simple_name, reg, false, true);
 }
@@ -5491,8 +5489,8 @@ void test_write_and_read_out_simple_friendly_name_trailing_zero_is_interpreted()
 {
     static const char simple_name[] = "UPnP name in unit test";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6);
 
     write_and_read_name(simple_name, simple_name, reg, true, true);
 }
@@ -5501,8 +5499,8 @@ void test_write_and_read_out_simple_friendly_name_trailing_junk_is_accepted()
 {
     static const char simple_name[] = "UPnP name in unit test\x01\x02\x03";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6);
 
     write_and_read_name(simple_name, simple_name, reg, false, true);
 }
@@ -5511,8 +5509,8 @@ void test_write_and_read_out_simple_friendly_name_trailing_junk_including_zero_i
 {
     static const char simple_name[] = "UPnP name in unit test\0\x01\x02\x03";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6);
 
     write_and_read_name(simple_name, simple_name, reg, false, true,
                         sizeof(simple_name) - 1, sizeof(simple_name) - 1);
@@ -5523,8 +5521,8 @@ void test_write_and_read_out_friendly_name_with_special_characters()
     static const char evil_name[] = "a'b#c<d>e\"f&g%%h*i(j)k\\l/m.n^o''''p";
     static const char escaped[]   = "a'\\''b#c<d>e\"f&g%%h*i(j)k\\l/m.n^o'\\'''\\'''\\'''\\''p";
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 6,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_6);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6);
 
     write_and_read_name(evil_name, escaped, reg, false, true);
 }
@@ -5552,8 +5550,8 @@ void test_writing_different_friendly_name_restarts_flagpole_service()
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
 
     reg->write(reinterpret_cast<const uint8_t *>("TheDevice"), 9);
@@ -5570,8 +5568,8 @@ void test_writing_different_friendly_name_restarts_flagpole_service()
 void test_writing_same_name_does_not_change_files_nor_flagpole_service()
 {
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
 
     static char config_file_content[] = "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n";
@@ -5601,7 +5599,7 @@ void test_writing_new_appliance_id_restarts_flagpole_service()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    dcpregs_upnpname_set_appliance_id("MY_APPLIANCE");
+    Regs::UPnPName::set_appliance_id("MY_APPLIANCE");
 
     static const char expected_config_file[] = "APPLIANCE_ID='MY_APPLIANCE'\n";
 
@@ -5632,7 +5630,7 @@ void test_writing_new_appliance_id_leaves_other_values_untouched()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    dcpregs_upnpname_set_appliance_id("MyAppliance");
+    Regs::UPnPName::set_appliance_id("MyAppliance");
 
     static const char expected_config_file[] =
         "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
@@ -5657,7 +5655,7 @@ void test_writing_same_appliance_id_does_not_change_files_nor_flagpole_service()
     mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
     mock_os->expect_os_unmap_file(&config_file);
 
-    dcpregs_upnpname_set_appliance_id("UnitTestAppliance");
+    Regs::UPnPName::set_appliance_id("UnitTestAppliance");
 }
 
 void test_writing_new_different_appliance_id_restarts_flagpole_service()
@@ -5682,7 +5680,7 @@ void test_writing_new_different_appliance_id_restarts_flagpole_service()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    dcpregs_upnpname_set_appliance_id("X 9000");
+    Regs::UPnPName::set_appliance_id("X 9000");
 
     static const char expected_config_file[] =
         "APPLIANCE_ID='X 9000'\n"
@@ -5701,7 +5699,7 @@ void test_writing_new_device_uuid_restarts_flagpole_service()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    dcpregs_upnpname_set_device_uuid("09AB7C8F0013");
+    Regs::UPnPName::set_device_uuid("09AB7C8F0013");
 
     static const char expected_config_file[] = "UUID='09AB7C8F0013'\n";
 
@@ -5733,7 +5731,7 @@ void test_writing_new_device_uuid_leaves_other_values_untouched()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    dcpregs_upnpname_set_device_uuid("30f9e75521bb60ec05bcc4b2dc414924");
+    Regs::UPnPName::set_device_uuid("30f9e75521bb60ec05bcc4b2dc414924");
 
     static const char expected_config_file[] =
         "FRIENDLY_NAME_OVERRIDE='My UPnP Device'\n"
@@ -5759,7 +5757,7 @@ void test_writing_same_device_uuid_does_not_change_files_nor_flagpole_service()
     mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
     mock_os->expect_os_unmap_file(&config_file);
 
-    dcpregs_upnpname_set_device_uuid("UnitTestUUID");
+    Regs::UPnPName::set_device_uuid("UnitTestUUID");
 }
 
 void test_set_all_upnp_variables()
@@ -5772,7 +5770,7 @@ void test_set_all_upnp_variables()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    dcpregs_upnpname_set_device_uuid("09AB7C8F0013");
+    Regs::UPnPName::set_device_uuid("09AB7C8F0013");
 
     static char config_file_content_first[] =
         "UUID='09AB7C8F0013'\n"
@@ -5798,7 +5796,7 @@ void test_set_all_upnp_variables()
     mock_os->expect_os_sync_dir(expected_rc_path);
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
-    dcpregs_upnpname_set_appliance_id("MY_APPLIANCE");
+    Regs::UPnPName::set_appliance_id("MY_APPLIANCE");
 
     static char config_file_content_second[] =
         "APPLIANCE_ID='MY_APPLIANCE'\n"
@@ -5826,8 +5824,8 @@ void test_set_all_upnp_variables()
     mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
 
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
-                                                dcpregs_read_88_upnp_friendly_name,
-                                                dcpregs_write_88_upnp_friendly_name__v1_0_1);
+                                                Regs::UPnPName::DCP::read_88_upnp_friendly_name,
+                                                Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_1);
     cppcut_assert_not_null(reg);
     reg->write(reinterpret_cast<const uint8_t *>("Unit test device"), 16);
 
@@ -5930,7 +5928,7 @@ void cut_setup()
 
     network_prefs_init(nullptr, nullptr);
     Regs::init(register_changed_callback);
-    dcpregs_filetransfer_set_picture_provider(Regs::PlayStream::get_picture_provider());
+    Regs::FileTransfer::set_picture_provider(Regs::PlayStream::get_picture_provider());
 }
 
 void cut_teardown()
@@ -5977,7 +5975,7 @@ void cut_teardown()
 void test_download_url_length_restrictions()
 {
     auto *reg =
-        lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+        lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
     uint8_t url_buffer[8 + 1024 + 1];
 
@@ -6013,7 +6011,7 @@ static void start_download(const std::string &url, uint32_t download_id)
     memcpy(url_buffer + 8, url.c_str(), url.length());
 
     auto *reg =
-        lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+        lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
     mock_messages->expect_msg_info("Set URL \"%s\"");
 
     reg->write(url_buffer, 8 + url.length());
@@ -6021,7 +6019,7 @@ static void start_download(const std::string &url, uint32_t download_id)
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_DOWNLOAD };
 
-    reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+    reg = lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
     int expected_write_handler_retval;
 
@@ -6046,7 +6044,7 @@ static void start_download(const std::string &url, uint32_t download_id)
 static void cancel_download(uint32_t download_id)
 {
     auto *reg =
-        lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+        lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
     mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
     mock_file_transfer_dbus->expect_tdbus_file_transfer_call_cancel_sync(
@@ -6076,7 +6074,7 @@ void test_download_without_url_returns_error()
     };
 
     auto *reg =
-        lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+        lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE,
                                               "Download URL not configured (Invalid argument)");
@@ -6087,7 +6085,7 @@ void test_download_without_url_returns_error()
 static void get_download_status(uint8_t (&buffer)[2])
 {
     auto *reg =
-        lookup_register_expect_handlers(41, dcpregs_read_41_download_status,
+        lookup_register_expect_handlers(41, Regs::FileTransfer::DCP::read_41_download_status,
                                         nullptr);
 
     cppcut_assert_equal(sizeof(buffer), reg->read(buffer, sizeof(buffer)));
@@ -6125,7 +6123,7 @@ void test_download_status_during_download_is_percentage()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL progress report */
-    dcpregs_filetransfer_progress_notification(xfer_id, 10, 20);
+    Regs::FileTransfer::progress_notification(xfer_id, 10, 20);
     register_changed_data->check(41);
 
     get_download_status(buffer);
@@ -6154,7 +6152,7 @@ void test_download_status_after_successful_download_is_status_code()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL progress report */
-    dcpregs_filetransfer_progress_notification(xfer_id, 100, 100);
+    Regs::FileTransfer::progress_notification(xfer_id, 100, 100);
     register_changed_data->check(41);
 
     /* progress 100% */
@@ -6166,8 +6164,8 @@ void test_download_status_after_successful_download_is_status_code()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL done report */
-    dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_OK,
-                                           "/some/path/0000000007.dbusdl");
+    Regs::FileTransfer::done_notification(xfer_id, LIST_ERROR_OK,
+                                          "/some/path/0000000007.dbusdl");
     register_changed_data->check(41);
 
     /* Download OK status */
@@ -6202,7 +6200,7 @@ void test_download_status_after_failed_download_is_status_code()
                             buffer, sizeof(buffer));
 
     /* simulate D-Bus DL done report with error */
-    dcpregs_filetransfer_done_notification(xfer_id, LIST_ERROR_NET_IO, nullptr);
+    Regs::FileTransfer::done_notification(xfer_id, LIST_ERROR_NET_IO, nullptr);
     register_changed_data->check(41);
 
     /* No network connection status */
@@ -6252,7 +6250,7 @@ void test_cancel_download_resets_download_status()
 void test_send_reboot_request()
 {
     auto *reg =
-        lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+        lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
@@ -6271,7 +6269,7 @@ void test_send_reboot_request()
 void test_send_reboot_request_during_update()
 {
     auto *reg =
-        lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+        lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
@@ -6295,7 +6293,7 @@ void test_transfer_is_interrupted_on_shutdown()
     mock_dbus_iface->expect_dbus_get_file_transfer_iface(dbus_dcpd_file_transfer_iface_dummy);
     mock_file_transfer_dbus->expect_tdbus_file_transfer_call_cancel_sync(
         TRUE, dbus_dcpd_file_transfer_iface_dummy, 99);
-    dcpregs_filetransfer_prepare_for_shutdown();
+    Regs::FileTransfer::prepare_for_shutdown();
 }
 
 /*!\test
@@ -6306,7 +6304,7 @@ void test_new_transfer_is_blocked_after_shutdown()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"filetransfer\" down");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
-    dcpregs_filetransfer_prepare_for_shutdown();
+    Regs::FileTransfer::prepare_for_shutdown();
 
     start_download("http://this.is.a.test.com/releases/image_v1.0.bin", 0);
 }
@@ -6331,7 +6329,7 @@ void test_download_empty_cover_art()
         { HCR_COMMAND_CATEGORY_LOAD_TO_DEVICE, HCR_COMMAND_LOAD_TO_DEVICE_COVER_ART };
 
     /* no picture available */
-    reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+    reg = lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
     mock_messages->expect_msg_info("Download of cover art requested");
     mock_messages->expect_msg_info("No cover art available");
@@ -6347,11 +6345,11 @@ void test_shutdown_can_be_called_only_once()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"filetransfer\" down");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
-    dcpregs_filetransfer_prepare_for_shutdown();
+    Regs::FileTransfer::prepare_for_shutdown();
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Shutdown guard \"filetransfer\" down");
-    dcpregs_filetransfer_prepare_for_shutdown();
+    Regs::FileTransfer::prepare_for_shutdown();
 }
 
 static int write_feed_conf_from_buffer_callback(const void *src, size_t count, int fd,
@@ -6460,7 +6458,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(feed_config_path);
 
-    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+    auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
     reg->write(url_buffer, sizeof(url_buffer));
 
@@ -6561,7 +6559,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
     mock_messages->expect_msg_info("Update in progress, not starting again");
     mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
 
-    reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+    reg = lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_UPDATE_FROM_INET, HCR_COMMAND_UPDATE_MAIN_SYSTEM };
@@ -6695,7 +6693,7 @@ static void feed_configuration_file_is_created_on_system_update(bool have_overri
     mock_messages->expect_msg_info("Update in progress, not starting again");
     mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
 
-    auto *reg = lookup_register_expect_handlers(40, dcpregs_write_40_download_control);
+    auto *reg = lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_UPDATE_FROM_INET, HCR_COMMAND_UPDATE_MAIN_SYSTEM };
@@ -6756,7 +6754,7 @@ void test_feed_configuration_file_is_created_on_config_if_does_not_exist()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(feed_config_path);
 
-    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+    auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
     reg->write(url_buffer, sizeof(url_buffer));
 
@@ -6796,7 +6794,7 @@ void test_feed_configurations_with_trailing_zero_bytes_are_accepted()
     mock_os->expect_os_file_close(expected_os_write_fd);
     mock_os->expect_os_sync_dir(feed_config_path);
 
-    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+    auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
     reg->write(url_buffer, sizeof(url_buffer));
 
@@ -6846,7 +6844,7 @@ void test_feed_configuration_file_remains_unchanged_if_passed_config_is_same()
     mock_os->expect_os_map_file_to_memory(&config_file, feed_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
 
-    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+    auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
     reg->write(url_buffer, sizeof(url_buffer));
 }
@@ -6886,7 +6884,7 @@ void test_feed_configuration_with_more_than_two_fields_is_accepted()
     mock_os->expect_os_map_file_to_memory(&config_file, feed_config_filename);
     mock_os->expect_os_unmap_file(&config_file);
 
-    auto *reg = lookup_register_expect_handlers(209, dcpregs_write_209_download_url);
+    auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
     reg->write(url_buffer, sizeof(url_buffer));
 }
@@ -8671,8 +8669,8 @@ void cut_teardown()
 void test_read_out_empty_external_media_services()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     struct dynamic_buffer buffer;
     dynamic_buffer_init(&buffer);
@@ -8698,8 +8696,8 @@ void test_read_out_empty_external_media_services()
 void test_read_out_external_media_services()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     /* survey */
     static const uint8_t dummy = 0;
@@ -8785,8 +8783,8 @@ void test_read_out_external_media_services()
 void test_read_out_unconfigured_external_media_services()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     /* survey */
     static const uint8_t dummy = 0;
@@ -8837,8 +8835,8 @@ void test_read_out_unconfigured_external_media_services()
 void test_trigger_media_services_survey()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     static const uint8_t dummy = 0;
     mock_dbus_iface->expect_dbus_get_credentials_write_iface(dbus_cred_write_iface_dummy);
@@ -8853,8 +8851,8 @@ void test_trigger_media_services_survey()
 void test_set_service_credentials()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     static const uint8_t data[] = "tidal\0login email\0my password";
 
@@ -8888,8 +8886,8 @@ void test_set_service_credentials()
 void test_password_may_be_zero_terminated()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     static const uint8_t data[] = "deezer\0login\0password\0";
 
@@ -8923,8 +8921,8 @@ void test_password_may_be_zero_terminated()
 void test_set_service_credentials_requires_service_id()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     static const uint8_t data[] = "\0login email\0my password";
 
@@ -8940,8 +8938,8 @@ void test_set_service_credentials_requires_service_id()
 void test_set_service_credentials_requires_login_for_password()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     static const uint8_t data[] = "tidal\0\0my password";
 
@@ -8957,8 +8955,8 @@ void test_set_service_credentials_requires_login_for_password()
 void test_set_service_credentials_requires_password_for_login()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     static const uint8_t data[] = "tidal\0login\0";
 
@@ -8974,8 +8972,8 @@ void test_set_service_credentials_requires_password_for_login()
 void test_no_junk_after_password_allowed()
 {
     auto *reg = lookup_register_expect_handlers(106,
-                                                dcpregs_read_106_media_service_list,
-                                                dcpregs_write_106_media_service_list);
+                                                Regs::MediaServices::DCP::read_106_media_service_list,
+                                                Regs::MediaServices::DCP::write_106_media_service_list);
 
     static const uint8_t data[] = "tidal\0login\0password\0\0";
 
@@ -9054,7 +9052,7 @@ void cut_teardown()
 void test_start_search_in_default_context()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
@@ -9076,7 +9074,7 @@ void test_search_single_string_in_default_context()
     };
 
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
@@ -9102,7 +9100,7 @@ void test_search_with_multiple_parameters_in_usb_context()
     };
 
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_search_parameters(
@@ -9124,7 +9122,7 @@ void test_search_with_multiple_parameters_in_usb_context()
 void test_search_parameter_value_must_not_be_empty()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing value in query");
 
@@ -9138,7 +9136,7 @@ void test_search_parameter_value_must_not_be_empty()
 void test_search_parameter_variable_must_not_be_empty()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing ID in query");
 
@@ -9152,7 +9150,7 @@ void test_search_parameter_variable_must_not_be_empty()
 void test_context_must_not_be_empty()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "No search context defined");
 
@@ -9166,7 +9164,7 @@ void test_context_must_not_be_empty()
 void test_context_must_not_contain_equals_character()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Invalid characters in search context");
 
@@ -9180,7 +9178,7 @@ void test_context_must_not_contain_equals_character()
 void test_search_parameter_specification_must_contain_equals_character()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Missing assignment in query");
 
@@ -9194,7 +9192,7 @@ void test_search_parameter_specification_must_contain_equals_character()
 void test_search_parameter_specification_must_not_be_empty()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Empty query");
 
@@ -9208,7 +9206,7 @@ void test_search_parameter_specification_must_not_be_empty()
 void test_embedded_search_parameter_specification_must_not_be_empty()
 {
     auto *reg = lookup_register_expect_handlers(74,
-                                                dcpregs_write_74_search_parameters);
+                                                Regs::SearchParams::DCP::write_74_search_parameters);
 
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "Empty query");
 
@@ -9579,7 +9577,7 @@ void test_status_byte_without_ready_notification_is_all_zero()
  */
 void test_status_byte_after_ready_notification()
 {
-    dcpregs_status_set_ready();
+    Regs::StrBoStatus::set_ready();
 
     auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
@@ -9599,7 +9597,7 @@ void test_status_byte_after_ready_notification()
  */
 void test_status_byte_after_shutdown_notification()
 {
-    dcpregs_status_set_ready_to_shutdown();
+    Regs::StrBoStatus::set_ready_to_shutdown();
 
     auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
@@ -9618,7 +9616,7 @@ void test_status_byte_after_shutdown_notification()
  */
 void test_status_byte_after_reboot_required_notification()
 {
-    dcpregs_status_set_reboot_required();
+    Regs::StrBoStatus::set_reboot_required();
 
     auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
@@ -9637,23 +9635,23 @@ void test_status_byte_after_reboot_required_notification()
  */
 void test_status_byte_updates_are_only_sent_if_changed()
 {
-    dcpregs_status_set_ready();
+    Regs::StrBoStatus::set_ready();
     static constexpr std::array<uint8_t, 2> expected_regs_for_ready = { 17, 50 };
     register_changed_data->check(expected_regs_for_ready);
 
-    dcpregs_status_set_ready();
+    Regs::StrBoStatus::set_ready();
     register_changed_data->check();
 
-    dcpregs_status_set_ready_to_shutdown();
+    Regs::StrBoStatus::set_ready_to_shutdown();
     register_changed_data->check(17);
 
-    dcpregs_status_set_ready_to_shutdown();
+    Regs::StrBoStatus::set_ready_to_shutdown();
     register_changed_data->check();
 
-    dcpregs_status_set_reboot_required();
+    Regs::StrBoStatus::set_reboot_required();
     register_changed_data->check(17);
 
-    dcpregs_status_set_reboot_required();
+    Regs::StrBoStatus::set_reboot_required();
     register_changed_data->check();
 }
 

@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_PROTOLEVEL_H
-#define DCPREGS_PROTOLEVEL_H
+#ifndef DCPREGS_PROTOLEVEL_HH
+#define DCPREGS_PROTOLEVEL_HH
 
 #include <cstdint>
 #include <cstdlib>
@@ -27,22 +27,26 @@
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
+namespace DCPVersion
+{
 /*!
  * Function required by unit tests for initializing static data.
  */
-void dcpregs_protocol_level_init(void);
+void init();
 
-ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length);
-int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length);
-
-#ifdef __cplusplus
+namespace DCP
+{
+ssize_t read_1_protocol_level(uint8_t *response, size_t length);
+int write_1_protocol_level(const uint8_t *data, size_t length);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_PROTOLEVEL_H */
+#endif /* !DCPREGS_PROTOLEVEL_HH */

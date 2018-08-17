@@ -268,7 +268,7 @@ void init(void (*register_changed_callback)(uint8_t reg_number));
  * \note
  *     This function also calls the \c dcpregs_*_deinit() functions.
  */
-void deinit(void);
+void deinit();
 
 /*!
  * Set explicit protocol version.
@@ -280,7 +280,7 @@ bool set_protocol_level(uint8_t major, uint8_t minor, uint8_t micro);
 /*!
  * Get the currently configured protocol version.
  */
-const ProtocolLevel get_protocol_level(void);
+const ProtocolLevel get_protocol_level();
 
 /*!
  * Get all ranges of supported protocol levels.

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,27 +16,32 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_SEARCHPARAMETERS_H
-#define DCPREGS_SEARCHPARAMETERS_H
+#ifndef DCPREGS_SEARCHPARAMETERS_HH
+#define DCPREGS_SEARCHPARAMETERS_HH
 
-#include <stdint.h>
-#include <unistd.h>
+#include <cinttypes>
+#include <cstdlib>
 
 /*!
  * \addtogroup registers
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
-int dcpregs_write_74_search_parameters(const uint8_t *data, size_t length);
+namespace SearchParams
+{
 
-#ifdef __cplusplus
+namespace DCP
+{
+int write_74_search_parameters(const uint8_t *data, size_t length);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_SEARCHPARAMETERS_H */
+#endif /* !DCPREGS_SEARCHPARAMETERS_HH */

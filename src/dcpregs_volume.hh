@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_VOLUME_H
-#define DCPREGS_VOLUME_H
+#ifndef DCPREGS_VOLUME_HH
+#define DCPREGS_VOLUME_HH
 
 #include "dynamic_buffer.h"
 
@@ -26,10 +26,14 @@
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace Regs
+{
 
+namespace ApplianceVolumeControl
+{
+
+namespace DCP
+{
 /*!
  * Configure volume control properties or set volume level.
  *
@@ -63,7 +67,7 @@ extern "C" {
  * - Clear volume control properties (0x02). This subcommand does not expect
  *   any parameters.
  */
-int dcpregs_write_64_volume_control(const uint8_t *data, size_t length);
+int write_64_volume_control(const uint8_t *data, size_t length);
 
 /*!
  * Read out volume level and mute state request.
@@ -82,12 +86,13 @@ int dcpregs_write_64_volume_control(const uint8_t *data, size_t length);
  * In case the appliance chooses to ignore the request, it doesn't have to do
  * anything.
  */
-ssize_t dcpregs_read_64_volume_control(uint8_t *response, size_t length);
-
-#ifdef __cplusplus
+ssize_t read_64_volume_control(uint8_t *response, size_t length);
 }
-#endif
+
+}
+
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_VOLUME_H */
+#endif /* !DCPREGS_VOLUME_HH */

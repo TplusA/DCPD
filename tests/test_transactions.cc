@@ -1220,7 +1220,7 @@ void test_register_write_request_transaction()
                         transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
                                             TRANSACTION_DUMP_SENT_NONE, &e));
 
-    dcpregs_networkconfig_set_primary_technology(Connman::Technology::ETHERNET);
+    Regs::NetworkConfig::set_primary_technology(Connman::Technology::ETHERNET);
     mock_messages->expect_msg_info("Could not determine active network technology, trying fallback");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54 [start network configuration], 1 bytes");

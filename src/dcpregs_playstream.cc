@@ -388,12 +388,12 @@ clear_stream_info(SimplifiedStreamInfo &info)
 
 static inline void notify_app_playback_stopped()
 {
-    registers_get_data()->register_changed_notification_fn(79);
+    Regs::get_data().register_changed_notification_fn(79);
 }
 
 static inline void notify_ready_for_next_stream_from_slave()
 {
-    registers_get_data()->register_changed_notification_fn(239);
+    Regs::get_data().register_changed_notification_fn(239);
 }
 
 static void do_notify_stream_info(PlayAnyStreamData &data,
@@ -438,13 +438,13 @@ static void do_notify_stream_info(PlayAnyStreamData &data,
 
       case SendStreamUpdate::URL_AND_TITLE:
         msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-        registers_get_data()->register_changed_notification_fn(75);
-        registers_get_data()->register_changed_notification_fn(76);
+        Regs::get_data().register_changed_notification_fn(75);
+        Regs::get_data().register_changed_notification_fn(76);
         break;
 
       case SendStreamUpdate::TITLE:
         msg_vinfo(MESSAGE_LEVEL_DIAG, "Send only new title to SPI slave");
-        registers_get_data()->register_changed_notification_fn(75);
+        Regs::get_data().register_changed_notification_fn(75);
         break;
     }
 }
@@ -749,13 +749,13 @@ play_stream_data;
 
 static const char app_audio_source_id[] = "strbo.plainurl";
 
-void Regs::PlayStream::init(void)
+void Regs::PlayStream::init()
 {
     play_stream_data.app.reset();
     play_stream_data.other.reset();
 }
 
-void Regs::PlayStream::late_init(void)
+void Regs::PlayStream::late_init()
 {
     tdbus_aupath_manager_call_register_source(dbus_audiopath_get_manager_iface(),
                                               app_audio_source_id,
@@ -766,7 +766,7 @@ void Regs::PlayStream::late_init(void)
                                               registered_audio_source, &play_stream_data);
 }
 
-void Regs::PlayStream::deinit(void)
+void Regs::PlayStream::deinit()
 {
     std::lock_guard<std::mutex> lk(play_stream_data.lock);
     play_stream_data.other.tracked_stream_key.clear();
@@ -1296,7 +1296,7 @@ static bool try_retrieve_cover_art(GVariant *stream_key,
 
 static inline void notify_cover_art_changed()
 {
-    registers_get_data()->register_changed_notification_fn(210);
+    Regs::get_data().register_changed_notification_fn(210);
 }
 
 /*!

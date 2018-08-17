@@ -20,7 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dcpregs_searchparameters.h"
+#include "dcpregs_searchparameters.hh"
 #include "dcpd_dbus.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
@@ -74,7 +74,7 @@ static size_t check_and_skip_context_id(const uint8_t *data, size_t length)
  * - Initiate search in current context from current location: "here\0"
  * - Search for "My Query" in Internet radios: "radios\0text0=My Query\0"
  * - Search for "Rock" in albums on Tidal: "tidal\0text0=Rock\0select0=3\0"
-*/
+ */
 static int add_string_pairs_to_variant(GVariantBuilder *builder,
                                        const uint8_t *data, size_t length,
                                        size_t pos)
@@ -135,7 +135,8 @@ static int add_string_pairs_to_variant(GVariantBuilder *builder,
     return 0;
 }
 
-int dcpregs_write_74_search_parameters(const uint8_t *data, size_t length)
+int Regs::SearchParams::DCP::write_74_search_parameters(const uint8_t *data,
+                                                        size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 74 handler %p %zu", data, length);
 

@@ -126,7 +126,8 @@ static int set_credentials(const char *service_id,
     return ret;
 }
 
-int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
+int Regs::MediaServices::DCP::write_106_media_service_list(const uint8_t *data,
+                                                           size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 106 handler %p %zu", data, length);
 
@@ -139,7 +140,7 @@ int dcpregs_write_106_media_service_list(const uint8_t *data, size_t length)
 
     if(length == 0)
     {
-        registers_get_data()->register_changed_notification_fn(106);
+        Regs::get_data().register_changed_notification_fn(106);
         return 0;
     }
 
@@ -363,7 +364,7 @@ static bool fill_buffer_with_services(struct dynamic_buffer *buffer,
     return retval;
 }
 
-bool dcpregs_read_106_media_service_list(struct dynamic_buffer *buffer)
+bool Regs::MediaServices::DCP::read_106_media_service_list(struct dynamic_buffer *buffer)
 {
     log_assert(dynamic_buffer_is_empty(buffer));
 

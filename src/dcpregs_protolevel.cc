@@ -101,12 +101,12 @@ static size_t copy_protocol_level_to_response(uint8_t *response,
 
 static struct NegotiationStateData global_negotiation_data;
 
-void dcpregs_protocol_level_init(void)
+void Regs::DCPVersion::init()
 {
     memset(&global_negotiation_data, 0, sizeof(global_negotiation_data));
 }
 
-ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length)
+ssize_t Regs::DCPVersion::DCP::read_1_protocol_level(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 1 handler %p %zu", response, length);
 
@@ -140,7 +140,7 @@ ssize_t dcpregs_read_1_protocol_level(uint8_t *response, size_t length)
     return ret;
 }
 
-int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length)
+int Regs::DCPVersion::DCP::write_1_protocol_level(const uint8_t *data, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 1 handler %p %zu", data, length);
 
@@ -160,7 +160,7 @@ int dcpregs_write_1_protocol_level(const uint8_t *data, size_t length)
     else
         global_negotiation_data.state = NEGOTIATION_FAILED;
 
-    registers_get_data()->register_changed_notification_fn(1);
+    Regs::get_data().register_changed_notification_fn(1);
 
     return 0;
 }
