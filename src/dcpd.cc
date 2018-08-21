@@ -85,27 +85,27 @@ enum PrimitiveQueueCommand
 /*!
  * Global state of the DCP machinery.
  */
-struct state
+struct DCPDState
 {
     /*!
      * The transaction that is currently going on between dcpspi and dcpd.
      *
-     * If this pointer is NULL, then there is no transaction going on, meaning
-     * that the DCP is in idle state.
+     * If this pointer is nullptr, then there is no transaction going on,
+     * meaning that the DCP is in idle state.
      */
-    struct transaction *active_transaction;
+    std::unique_ptr<TransactionQueue::Transaction> active_transaction;
 
     /*!
      * A queue of transactions initiated by the master.
      */
-    struct transaction *master_transaction_queue;
+    TransactionQueue::Queue master_transaction_queue;
 
     /*!
      * Dynamically growing buffer for holding XML data from drcpd.
      *
      * This buffer is filled while receiving XML data from drcpd. As soon as
      * drcpd is finished, one or more transactions are constructed and queued
-     * in the #state::master_transaction_queue queue.
+     * in the #DCPDState::master_transaction_queue queue.
      */
     struct dynamic_buffer drcp_buffer;
 
@@ -116,12 +116,14 @@ struct state
      * that there is always space for the single slave transaction that may be
      * active at a time.
      */
-    struct transaction *preallocated_spi_slave_transaction;
+    std::unique_ptr<TransactionQueue::Transaction> preallocated_spi_slave_transaction;
+    TransactionQueue::Transaction *preallocated_spi_slave_transaction_raw_pointer;
 
     /*!
      * Pointer to an immortal network slave transaction object.
      */
-    struct transaction *preallocated_inet_slave_transaction;
+    std::unique_ptr<TransactionQueue::Transaction> preallocated_inet_slave_transaction;
+    TransactionQueue::Transaction *preallocated_inet_slave_transaction_raw_pointer;
 };
 
 ssize_t (*os_read)(int fd, void *dest, size_t count) = read;
@@ -171,47 +173,48 @@ static void log_version_info()
               VCS_TAG, VCS_TICK, VCS_DATE);
 }
 
-static void schedule_transaction(struct state *state, struct transaction *t)
+static void schedule_transaction(DCPDState &state, std::unique_ptr<TransactionQueue::Transaction> t)
 {
-    log_assert(state->active_transaction == NULL);
+    log_assert(state.active_transaction == nullptr);
 
-    if(t != NULL)
-        state->active_transaction = t;
+    if(t != nullptr)
+        state.active_transaction = std::move(t);
 }
 
-static void try_dequeue_next_transaction(struct state *state)
+static void try_dequeue_next_transaction(DCPDState &state)
 {
-    if(state->active_transaction != NULL)
+    if(state.active_transaction != nullptr)
         return;
 
-    if(state->master_transaction_queue != NULL)
-        schedule_transaction(state,
-                             transaction_queue_remove(&state->master_transaction_queue));
+    if(!state.master_transaction_queue.empty())
+        schedule_transaction(state, state.master_transaction_queue.pop());
 }
 
-static unsigned int try_schedule_slave_transaction(struct state *state,
-                                                   struct transaction *t,
+static unsigned int try_schedule_slave_transaction(DCPDState &state,
+                                                   std::unique_ptr<TransactionQueue::Transaction> &t,
                                                    unsigned int retcode)
 {
-    if(state->active_transaction != NULL)
+    if(state.active_transaction != nullptr)
         return retcode;
 
-    transaction_reset_for_slave(t);
+    log_assert(t != nullptr);
+
+    t->reset_for_slave();
 
     /* bypass queue because slave requests always have priority */
-    schedule_transaction(state, t);
+    schedule_transaction(state, std::move(t));
 
     return retcode;
 }
 
 static unsigned int handle_dcp_fifo_in_events(int fd, short revents,
-                                              struct state *state)
+                                              DCPDState &state)
 {
     unsigned int result = 0;
 
     if(revents & POLLIN)
         result |= try_schedule_slave_transaction(state,
-                                                 state->preallocated_spi_slave_transaction,
+                                                 state.preallocated_spi_slave_transaction,
                                                  WAITEVENT_CAN_READ_DCP);
 
     if(revents & POLLHUP)
@@ -280,13 +283,13 @@ static unsigned int handle_dcp_server_events(int fd, short revents)
 }
 
 static unsigned int handle_dcp_peer_events(int fd, short revents,
-                                           struct state *state)
+                                           DCPDState &state)
 {
     unsigned int result = 0;
 
     if((revents & POLLIN) && network_have_data(fd))
         result |= try_schedule_slave_transaction(state,
-                                                 state->preallocated_inet_slave_transaction,
+                                                 state.preallocated_inet_slave_transaction,
                                                  WAITEVENT_CAN_READ_DCP_FROM_PEER_SOCKET);
 
     if(revents & (POLLHUP | POLLERR))
@@ -362,7 +365,7 @@ static unsigned int handle_primqueue_events(int fd, short revents)
     return result;
 }
 
-static unsigned int wait_for_events(struct state *state,
+static unsigned int wait_for_events(DCPDState &state,
                                     const int drcp_fifo_in_fd,
                                     const int dcpspi_fifo_in_fd,
                                     const int dcp_server_socket_fd,
@@ -457,7 +460,7 @@ static bool try_preallocate_buffer(struct dynamic_buffer *buffer,
          * the expected number of bytes to read from the pipe, and if there is
          * any error, the buffer will be freed regardless of the size field.
          * Even in case the size is 0, the buffer will be freed because free()
-         * is going to be called for a non-NULL pointer.
+         * is going to be called for a non-nullptr pointer.
          */
         buffer->size = expected_size;
     }
@@ -479,10 +482,10 @@ struct files
     const char *dcpspi_fifo_out_name;
 };
 
-static bool process_drcp_input(struct state *state,
-                               enum transaction_channel channel)
+static bool process_drcp_input(DCPDState &state,
+                               TransactionQueue::Channel channel)
 {
-    const struct dynamic_buffer *buffer = &state->drcp_buffer;
+    const struct dynamic_buffer *buffer = &state.drcp_buffer;
 
     if(dynamic_buffer_is_empty(buffer))
     {
@@ -490,14 +493,10 @@ static bool process_drcp_input(struct state *state,
         return false;
     }
 
-    struct transaction *head =
-        transaction_fragments_from_data(buffer->data, buffer->pos, 71, channel);
-    if(head == NULL)
-        return false;
-
-    transaction_queue_add(&state->master_transaction_queue, head);
-
-    return true;
+    auto fragments(TransactionQueue::fragments_from_data(state.master_transaction_queue,
+                                                         buffer->data, buffer->pos,
+                                                         71, channel));
+    return state.master_transaction_queue.append(std::move(fragments));
 }
 
 static bool try_reopen(int *fd, const char *devname, const char *errorname)
@@ -512,37 +511,47 @@ static bool try_reopen(int *fd, const char *devname, const char *errorname)
     return false;
 }
 
-static void terminate_active_transaction(struct state *state,
+static void terminate_active_transaction(DCPDState &state,
                                          struct dcp_over_tcp_data *dot)
 {
-    switch(transaction_get_channel(state->active_transaction))
+    switch(state.active_transaction->get_channel())
     {
-      case TRANSACTION_CHANNEL_SPI:
+      case TransactionQueue::Channel::SPI:
         break;
 
-      case TRANSACTION_CHANNEL_INET:
+      case TransactionQueue::Channel::INET:
         if(!network_have_data(dot->peer_fd))
             dot_close_peer(dot);
 
         break;
     }
 
-    if(!transaction_is_pinned(state->active_transaction))
-        transaction_free(&state->active_transaction);
-
-    state->active_transaction = NULL;
+    if(!state.active_transaction->is_pinned())
+        state.active_transaction = nullptr;
+    else
+    {
+        if(state.active_transaction.get() == state.preallocated_spi_slave_transaction_raw_pointer)
+            state.preallocated_spi_slave_transaction = std::move(state.active_transaction);
+        else if(state.active_transaction.get() == state.preallocated_inet_slave_transaction_raw_pointer)
+            state.preallocated_inet_slave_transaction = std::move(state.active_transaction);
+        else
+        {
+            BUG("Unknown pinned active transaction %p", state.active_transaction.get());
+            state.active_transaction = nullptr;
+        }
+    }
 }
 
 static bool handle_reopen_connections(unsigned int wait_result,
                                       struct files *files,
                                       struct dcp_over_tcp_data *dot,
-                                      struct state *state)
+                                      DCPDState &state)
 {
     if((wait_result & (WAITEVENT_DRCP_CONNECTION_DIED |
                        WAITEVENT_DCP_CONNECTION_DIED)) == 0)
         return true;
 
-    if(state->active_transaction != NULL)
+    if(state.active_transaction != nullptr)
         terminate_active_transaction(state, dot);
 
     if((wait_result & WAITEVENT_DRCP_CONNECTION_DIED) != 0 &&
@@ -559,7 +568,7 @@ static bool handle_reopen_connections(unsigned int wait_result,
 }
 
 static void handle_register_change(unsigned int wait_result, int fd,
-                                   struct state *state)
+                                   DCPDState &state)
 {
     if((wait_result & WAITEVENT_REGISTER_CHANGED) == 0)
         return;
@@ -577,8 +586,9 @@ static void handle_register_change(unsigned int wait_result, int fd,
                   "Read %zd bytes instead of 1 while trying to dequeue register number",
                   ret);
     else
-        transaction_push_register_to_slave(&state->master_transaction_queue,
-                                           reg_number, TRANSACTION_CHANNEL_SPI);
+        TransactionQueue::push_register_to_slave(state.master_transaction_queue,
+                                                 reg_number,
+                                                 TransactionQueue::Channel::SPI);
 }
 
 static void handle_connman_manager_events(unsigned int wait_result,
@@ -681,83 +691,82 @@ static void deferred_connman_refresh()
  * This function moves the active transaction to the front of our pending
  * queue. Then, the passed transaction is made the active one.
  */
-static void replace_active_transaction(struct state *const state,
-                                       struct transaction *new_active)
+static void replace_active_transaction(DCPDState &state,
+                                       std::unique_ptr<TransactionQueue::Transaction> new_active)
 {
-    transaction_queue_add(&state->master_transaction_queue,
-                          state->active_transaction);
-    state->master_transaction_queue = state->active_transaction;
-
-    state->active_transaction = new_active;
+    state.master_transaction_queue.prepend(std::move(state.active_transaction));
+    state.active_transaction = std::move(new_active);
 }
 
 /*!
  * Possibly replace active transaction by some other transaction.
  */
-static void handle_transaction_exception(struct state *const state,
-                                         const struct transaction_exception *const e)
+static void handle_transaction_exception(DCPDState &state,
+                                         TransactionQueue::ProtocolException &&e)
 {
-    log_assert(state->active_transaction != NULL);
+    log_assert(state.active_transaction != nullptr);
 
-    struct transaction *t = NULL;
-    enum transaction_process_status result = TRANSACTION_EXCEPTION;
+    std::unique_ptr<TransactionQueue::Transaction> t(nullptr);
+    auto result = TransactionQueue::ProcessResult::ERROR;
 
-    switch(e->exception_code)
+    if(auto *collision = dynamic_cast<TransactionQueue::CollisionException *>(&e))
     {
-      case TRANSACTION_EXCEPTION_COLLISION:
         /* colliding slave transaction must be processed next because there
          * might be more data in the pipe buffer that belongs to the
          * transaction */
-        log_assert(e->d.collision.t != NULL);
-        log_assert(e->d.collision.t != state->active_transaction);
+        log_assert(collision->transaction_ != nullptr);
+        log_assert(collision->transaction_ != state.active_transaction);
 
-        replace_active_transaction(state, e->d.collision.t);
+        replace_active_transaction(state, std::move(collision->transaction_));
+    }
+    else if(auto *oooack = dynamic_cast<TransactionQueue::OOOAckException *>(&e))
+    {
+        bool applied = false;
+        result = state.master_transaction_queue.apply_to_dcpsync_serial(
+                        oooack->serial_,
+                        [oooack, &applied]
+                        (TransactionQueue::Transaction &tr)
+                        {
+                            applied = true;
+                            return tr.process_out_of_order_ack(*oooack);
+                        });
 
-        break;
-
-      case TRANSACTION_EXCEPTION_OUT_OF_ORDER_ACK:
-        t = transaction_queue_find_by_serial(state->master_transaction_queue,
-                                             e->d.ack.serial);
-
-        if(t == NULL)
+        if(!applied)
         {
             BUG("Packet serial 0x%04x unknown, dropping out-of-order ACK",
-                e->d.ack.serial);
-            break;
+                oooack->serial_);
+            result = TransactionQueue::ProcessResult::ERROR;
         }
+    }
+    else if(auto *ooonack = dynamic_cast<TransactionQueue::OOONackException *>(&e))
+    {
+        bool applied = false;
+        result = state.master_transaction_queue.apply_to_dcpsync_serial(
+                        ooonack->serial_,
+                        [ooonack, &applied]
+                        (TransactionQueue::Transaction &tr)
+                        {
+                            applied = true;
+                            return tr.process_out_of_order_nack(*ooonack);
+                        });
 
-        result = transaction_process_out_of_order_ack(t, &e->d.ack);
-
-        break;
-
-      case TRANSACTION_EXCEPTION_OUT_OF_ORDER_NACK:
-        t = transaction_queue_find_by_serial(state->master_transaction_queue,
-                                             e->d.nack.serial);
-
-        if(t == NULL)
+        if(!applied)
         {
             BUG("Packet serial 0x%04x unknown, dropping out-of-order NACK",
-                e->d.nack.serial);
-            break;
+                ooonack->serial_);
+            result = TransactionQueue::ProcessResult::ERROR;
         }
-
-        result = transaction_process_out_of_order_nack(t, &e->d.nack);
-
-        break;
     }
 
     switch(result)
     {
-      case TRANSACTION_IN_PROGRESS:
+      case TransactionQueue::ProcessResult::IN_PROGRESS:
         break;
 
-      case TRANSACTION_PUSH_BACK:
-      case TRANSACTION_FINISHED:
-      case TRANSACTION_ERROR:
+      case TransactionQueue::ProcessResult::PUSH_BACK:
+      case TransactionQueue::ProcessResult::FINISHED:
+      case TransactionQueue::ProcessResult::ERROR:
         BUG("Unimplemented outcome of transaction exception handling");
-        break;
-
-      case TRANSACTION_EXCEPTION:
         break;
     }
 }
@@ -771,14 +780,20 @@ static void main_loop(struct files *files,
                       struct DBusSignalManagerData *connman,
                       int primitive_queue_fd, int register_changed_fd)
 {
-    static struct state state;
+    static struct DCPDState state;
 
     state.preallocated_spi_slave_transaction =
-        transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                          TRANSACTION_CHANNEL_SPI, true);
+        TransactionQueue::Transaction::new_for_queue(state.master_transaction_queue,
+                                                     TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                                                     TransactionQueue::Channel::SPI, true);
+    state.preallocated_spi_slave_transaction_raw_pointer = state.preallocated_spi_slave_transaction.get();
+
     state.preallocated_inet_slave_transaction =
-        transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                          TRANSACTION_CHANNEL_INET, true);
+        TransactionQueue::Transaction::new_for_queue(state.master_transaction_queue,
+                                                     TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                                                     TransactionQueue::Channel::INET, true);
+    state.preallocated_inet_slave_transaction_raw_pointer = state.preallocated_inet_slave_transaction.get();
+
     dynamic_buffer_init(&state.drcp_buffer);
 
     Regs::StrBoStatus::set_ready();
@@ -788,11 +803,12 @@ static void main_loop(struct files *files,
     while(keep_running)
     {
         const unsigned int wait_result =
-            wait_for_events(&state,
+            wait_for_events(state,
                             files->drcp_fifo.in_fd, files->dcpspi_fifo.in_fd,
                             dot->server_fd, dot->peer_fd,
                             primitive_queue_fd, register_changed_fd,
-                            transaction_is_input_required(state.active_transaction));
+                            state.active_transaction == nullptr ||
+                            state.active_transaction->is_input_required());
 
         if((wait_result & WAITEVENT_POLL_ERROR) != 0)
             continue;
@@ -806,8 +822,8 @@ static void main_loop(struct files *files,
             {
                 if(state.drcp_buffer.pos >= state.drcp_buffer.size)
                 {
-                    drcp_finish_request(process_drcp_input(&state,
-                                                           TRANSACTION_CHANNEL_SPI),
+                    drcp_finish_request(process_drcp_input(state,
+                                                           TransactionQueue::Channel::SPI),
                                         files->drcp_fifo.out_fd);
                     dynamic_buffer_free(&state.drcp_buffer);
                 }
@@ -819,13 +835,13 @@ static void main_loop(struct files *files,
             }
         }
 
-        if(!handle_reopen_connections(wait_result, files, dot, &state))
+        if(!handle_reopen_connections(wait_result, files, dot, state))
         {
             keep_running = false;
             continue;
         }
 
-        handle_register_change(wait_result, register_changed_fd, &state);
+        handle_register_change(wait_result, register_changed_fd, state);
 
         handle_connman_manager_events(wait_result, connman);
 
@@ -839,61 +855,62 @@ static void main_loop(struct files *files,
         if((wait_result & WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS) != 0)
             appconn.process_out_queue();
 
-        try_dequeue_next_transaction(&state);
+        try_dequeue_next_transaction(state);
 
-        if(state.active_transaction == NULL)
+        if(state.active_transaction == nullptr)
             continue;
 
         int in_fd = -1;
         int out_fd = -1;
         enum MessageVerboseLevel dump_sent_data_verbose_level = MESSAGE_LEVEL_TRACE;
 
-        switch(transaction_get_channel(state.active_transaction))
+        switch(state.active_transaction->get_channel())
         {
-          case TRANSACTION_CHANNEL_SPI:
+          case TransactionQueue::Channel::SPI:
             in_fd = files->dcpspi_fifo.in_fd;
             out_fd = files->dcpspi_fifo.out_fd;
             break;
 
-          case TRANSACTION_CHANNEL_INET:
+          case TransactionQueue::Channel::INET:
             in_fd = dot->peer_fd;
             out_fd = dot->peer_fd;
             dump_sent_data_verbose_level = MESSAGE_LEVEL_NORMAL;
             break;
         }
 
-        struct transaction_exception e;
-        switch(transaction_process(state.active_transaction, in_fd, out_fd,
-                                   msg_is_verbose(dump_sent_data_verbose_level)
-                                   ? (TRANSACTION_DUMP_SENT_DCP_HEADER |
-                                      TRANSACTION_DUMP_SENT_DCP_PAYLOAD |
-                                      TRANSACTION_DUMP_SENT_MERGE_ALL)
-                                   : TRANSACTION_DUMP_SENT_NONE, &e))
+        try
         {
-          case TRANSACTION_IN_PROGRESS:
-            break;
+            switch(state.active_transaction->process(
+                        in_fd, out_fd,
+                        msg_is_verbose(dump_sent_data_verbose_level)
+                        ? (TransactionQueue::DUMP_SENT_DCP_HEADER |
+                        TransactionQueue::DUMP_SENT_DCP_PAYLOAD |
+                        TransactionQueue::DUMP_SENT_MERGE_ALL)
+                        : TransactionQueue::DUMP_SENT_NONE))
+            {
+              case TransactionQueue::ProcessResult::IN_PROGRESS:
+                break;
 
-          case TRANSACTION_PUSH_BACK:
-            transaction_queue_add(&state.master_transaction_queue,
-                                  state.active_transaction);
-            state.active_transaction = NULL;
-            try_dequeue_next_transaction(&state);
-            break;
+              case TransactionQueue::ProcessResult::PUSH_BACK:
+                state.master_transaction_queue.append(std::move(state.active_transaction));
+                try_dequeue_next_transaction(state);
+                break;
 
-          case TRANSACTION_FINISHED:
-          case TRANSACTION_ERROR:
-            terminate_active_transaction(&state, dot);
-            try_dequeue_next_transaction(&state);
-            break;
-
-          case TRANSACTION_EXCEPTION:
-            handle_transaction_exception(&state, &e);
-            break;
+              case TransactionQueue::ProcessResult::FINISHED:
+              case TransactionQueue::ProcessResult::ERROR:
+                terminate_active_transaction(state, dot);
+                try_dequeue_next_transaction(state);
+                break;
+            }
+        }
+        catch(TransactionQueue::ProtocolException &e)
+        {
+            handle_transaction_exception(state, std::move(e));
         }
     }
 
-    transaction_free(&state.preallocated_spi_slave_transaction);
-    transaction_free(&state.preallocated_inet_slave_transaction);
+    state.preallocated_spi_slave_transaction = nullptr;
+    state.preallocated_inet_slave_transaction = nullptr;
 }
 
 static void register_own_config_keys(Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager)
@@ -952,8 +969,6 @@ static bool main_loop_init(const struct parameters *parameters,
 
     Regs::init(push_register_to_slave);
     Regs::FileTransfer::set_picture_provider(Regs::PlayStream::get_picture_provider());
-
-    transaction_init_allocator();
 
     *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan,
                                                deferred_connman_refresh,
@@ -1192,7 +1207,7 @@ static int process_command_line(int argc, char *argv[],
 
                 const char *const *names = msg_get_verbose_level_names();
 
-                for(const char *name = *names; name != NULL; name = *++names)
+                for(const char *name = *names; name != nullptr; name = *++names)
                     fprintf(stderr, "    %s\n", name);
 
                 return -1;
@@ -1277,7 +1292,7 @@ static void *update_watchdog_main(void *user_data)
     sigset_t sigset;
 
     sigfillset(&sigset);
-    pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+    pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
 
     bool is_opkg_running = true;
 
@@ -1323,7 +1338,7 @@ static void *update_watchdog_main(void *user_data)
     {
         /* we've been killed */
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "UPDOG: Killed, shutting down");
-        return NULL;
+        return nullptr;
     }
 
     /*
@@ -1333,7 +1348,7 @@ static void *update_watchdog_main(void *user_data)
      */
     Regs::FileTransfer::hcr_send_shutdown_request(false);
 
-    return NULL;
+    return nullptr;
 }
 
 int main(int argc, char *argv[])
@@ -1403,7 +1418,7 @@ int main(int argc, char *argv[])
 
         static pthread_t th;
 
-        if(pthread_create(&th, NULL, update_watchdog_main, NULL) != 0)
+        if(pthread_create(&th, nullptr, update_watchdog_main, nullptr) != 0)
             msg_error(errno, LOG_ERR,
                       "Failed creating update script watchdog thread");
         else
@@ -1454,8 +1469,8 @@ int main(int argc, char *argv[])
     action.sa_flags = SA_SIGINFO | SA_RESETHAND;
 
     sigemptyset(&action.sa_mask);
-    sigaction(SIGINT, &action, NULL);
-    sigaction(SIGTERM, &action, NULL);
+    sigaction(SIGINT, &action, nullptr);
+    sigaction(SIGTERM, &action, nullptr);
 
     if(parameters.with_connman)
         connman_wlan_power_on();

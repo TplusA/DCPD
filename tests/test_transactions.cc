@@ -23,6 +23,7 @@
 #include <cppcutter.h>
 #include <array>
 #include <algorithm>
+#include <sstream>
 #include <glib.h>
 
 #include "transactions.hh"
@@ -112,6 +113,8 @@ GVariant *configuration_get_key(const char *key)
 namespace dcp_transaction_tests_queue
 {
 
+static TransactionQueue::Queue *queue;
+
 static MockMessages *mock_messages;
 
 void cut_setup()
@@ -126,17 +129,22 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
+    queue = new TransactionQueue::Queue;
+    cppcut_assert_not_null(queue);
+
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     Regs::register_zero_for_unit_tests = nullptr;
-    transaction_init_allocator();
 }
 
 void cut_teardown()
 {
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
+
+    delete queue;
+    queue = nullptr;
 
     mock_messages->check();
     mock_messages_singleton = nullptr;
@@ -149,14 +157,15 @@ void cut_teardown()
  */
 void test_allocation_and_deallocation_of_single_transaction_object_spi()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
-    cppcut_assert_equal(TRANSACTION_CHANNEL_SPI, transaction_get_channel(t));
-    cut_assert_false(transaction_is_pinned(t));
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
+    cut_assert(TransactionQueue::Channel::SPI == t->get_channel());
+    cut_assert_false(t->is_pinned());
 
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    t.reset();
 }
 
 /*!\test
@@ -164,10 +173,12 @@ void test_allocation_and_deallocation_of_single_transaction_object_spi()
  */
 void test_pinned_transaction_object()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                              TRANSACTION_CHANNEL_SPI, true);
-    cppcut_assert_not_null(t);
-    cut_assert_true(transaction_is_pinned(t));
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
+                TransactionQueue::Channel::SPI, true);
+    cppcut_assert_not_null(t.get());
+    cut_assert_true(t->is_pinned());
 }
 
 /*!\test
@@ -175,13 +186,14 @@ void test_pinned_transaction_object()
  */
 void test_allocation_and_deallocation_of_single_transaction_object_inet()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                              TRANSACTION_CHANNEL_INET, false);
-    cppcut_assert_not_null(t);
-    cppcut_assert_equal(TRANSACTION_CHANNEL_INET, transaction_get_channel(t));
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
+                TransactionQueue::Channel::INET, false);
+    cppcut_assert_not_null(t.get());
+    cut_assert(TransactionQueue::Channel::INET == t->get_channel());
 
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    t.reset();
 }
 
 /*!\test
@@ -204,139 +216,13 @@ void test_deallocation_frees_payload_buffer()
 
     Regs::init(nullptr);
 
-    struct transaction *t =
-        transaction_fragments_from_data(payload_data, sizeof(payload_data),
-                                        71, TRANSACTION_CHANNEL_SPI);
-    cppcut_assert_not_null(t);
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    auto frags(TransactionQueue::fragments_from_data(*queue,
+                                                     payload_data, sizeof(payload_data),
+                                                     71, TransactionQueue::Channel::SPI));
+    cut_assert_false(frags.empty());
+    frags.clear();
 
     Regs::deinit();
-}
-
-/*!
- * Protect ourselves against infinite loop in case of broken SUT code.
- */
-static constexpr size_t max_allocs = 1000;
-
-/*!
- * Use up all transaction objects.
- */
-static size_t allocate_all_transactions(std::array<struct transaction *, max_allocs> &dest)
-{
-    size_t count = 0;
-
-    for(size_t i = 0; i < dest.size(); ++i)
-    {
-        dest[i] = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                    TRANSACTION_CHANNEL_SPI, false);
-
-        if(dest[i] == nullptr)
-            break;
-
-        ++count;
-    }
-
-    cppcut_assert_operator(size_t(0), <, count);
-    cppcut_assert_operator(max_allocs, >, count);
-
-    return count;
-}
-
-/*!
- * Queue up first \p count transactions in passed array.
- */
-static struct transaction *
-queue_up_all_transactions(std::array<struct transaction *, max_allocs> &objects,
-                          size_t count)
-{
-    struct transaction *head = nullptr;
-
-    for(size_t i = 0; i < count; ++i)
-    {
-        cppcut_assert_not_null(objects[i]);
-        transaction_queue_add(&head, objects[i]);
-        cppcut_assert_equal(objects[0], head);
-    }
-
-    return head;
-}
-
-/*!\test
- * Allocate all transaction objects, free them, allocate them again.
- */
-void test_allocation_and_deallocation_of_all_transaction_objects()
-{
-    std::array<struct transaction *, max_allocs> objects;
-    const size_t count = allocate_all_transactions(objects);
-
-    for(size_t i = 0; i < count; ++i)
-    {
-        cppcut_assert_not_null(objects[i]);
-        transaction_free(&objects[i]);
-    }
-
-    const size_t count_second_time = allocate_all_transactions(objects);
-    cppcut_assert_equal(count, count_second_time);
-}
-
-
-/*!\test
- * Allocate all transaction objects, free one in the middle, allocate it again.
- */
-void test_allocation_of_all_transaction_objects_reallocate_one()
-{
-    std::array<struct transaction *, max_allocs> objects;
-    const size_t count = allocate_all_transactions(objects);
-
-    const size_t reused_index = count / 4;
-    struct transaction *const reused = objects[reused_index];
-    cppcut_assert_not_null(reused);
-    transaction_free(&objects[reused_index]);
-
-    cppcut_assert_equal(reused, transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                                  TRANSACTION_CHANNEL_SPI, false));
-    cppcut_assert_null(transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                         TRANSACTION_CHANNEL_SPI, false));
-}
-
-/*!\test
- * Allocate all transaction objects, queue them up, deallocate by freeing head.
- */
-void test_deallocation_of_linked_list()
-{
-    std::array<struct transaction *, max_allocs> objects;
-    const size_t count = allocate_all_transactions(objects);
-    struct transaction *head = queue_up_all_transactions(objects, count);
-
-    transaction_free(&head);
-    cppcut_assert_null(head);
-
-    const size_t count_second_time = allocate_all_transactions(objects);
-    cppcut_assert_equal(count, count_second_time);
-}
-
-/*!\test
- * Allocate all transaction objects, queue them up, dequeue one in the middle.
- */
-void test_dequeue_from_middle_of_linked_list()
-{
-    std::array<struct transaction *, max_allocs> objects;
-    const size_t count = allocate_all_transactions(objects);
-    struct transaction *head = queue_up_all_transactions(objects, count);
-
-    const size_t removed_index = count / 3;
-    struct transaction *const removed = objects[removed_index];
-    cppcut_assert_not_null(removed);
-
-    cppcut_assert_equal(removed, transaction_queue_remove(&objects[removed_index]));
-    cppcut_assert_equal(objects[removed_index + 1], objects[removed_index]);
-
-    transaction_free(&head);
-
-    const size_t count_second_time = allocate_all_transactions(objects);
-    cppcut_assert_equal(count - 1, count_second_time);
 }
 
 /*!\test
@@ -344,144 +230,102 @@ void test_dequeue_from_middle_of_linked_list()
  */
 void test_dequeue_from_list_of_length_one()
 {
-    struct transaction *const head = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                                       TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(head);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                    *queue,
+                    TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
+                    TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
+    auto *const raw_ptr = t.get();
 
-    struct transaction *head_ptr = head;
-    cppcut_assert_equal(head, transaction_queue_remove(&head_ptr));
-    cppcut_assert_null(head_ptr);
+    cut_assert_true(queue->empty());
+    cut_assert_true(queue->append(std::move(t)));
+    cut_assert_false(queue->empty());
+
+    auto p(queue->pop());
+
+    cppcut_assert_not_null(p.get());
+    cppcut_assert_equal(raw_ptr, p.get());
+    cut_assert_true(queue->empty());
 }
 
-static struct transaction *
-make_short_queue(std::array<struct transaction *, max_allocs> &objects,
-                 const size_t count)
+static void make_short_queue(TransactionQueue::Queue &q,
+                             std::vector<TransactionQueue::Transaction *> &raw_pointers,
+                             const size_t count)
 {
     for(size_t i = 0; i < count; ++i)
     {
-        objects[i] = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                       TRANSACTION_CHANNEL_SPI, false);
-        cppcut_assert_not_null(objects[i]);
+        auto t = TransactionQueue::Transaction::new_for_queue(
+                        q,
+                        TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
+                        TransactionQueue::Channel::SPI, false);
+        cppcut_assert_not_null(t.get());
+        raw_pointers.push_back(t.get());
+        q.append(std::move(t));
     }
 
-    struct transaction *const head = queue_up_all_transactions(objects, count);
-    cppcut_assert_not_null(head);
-
-    return head;
+    cut_assert_false(q.empty());
 }
 
 void test_find_transaction_by_existing_serial()
 {
     static constexpr size_t count = 4;
-    std::array<struct transaction *, max_allocs> objects;
-    struct transaction *head = make_short_queue(objects, count);
+    std::vector<TransactionQueue::Transaction *> objects;
+
+    make_short_queue(*queue, objects, count);
 
     for(size_t i = 0; i < count; ++i)
-        cppcut_assert_equal(objects[i],
-                            transaction_queue_find_by_serial(head, DCPSYNC_MASTER_SERIAL_MIN + i));
-
-    transaction_free(&head);
-    cppcut_assert_null(head);
+    {
+        bool found = false;
+        auto result =
+            queue->apply_to_dcpsync_serial(DCPSYNC_MASTER_SERIAL_MIN + i,
+                        [&found, &objects, i]
+                        (const TransactionQueue::Transaction &t)
+                        {
+                            found = true;
+                            cppcut_assert_equal(objects[i], &t);
+                            return TransactionQueue::ProcessResult::FINISHED;
+                        });
+        cut_assert(TransactionQueue::ProcessResult::FINISHED == result);
+    }
 }
 
 void test_find_transaction_by_nonexistent_serial()
 {
     static constexpr size_t count = 4;
-    std::array<struct transaction *, max_allocs> objects;
-    struct transaction *head = make_short_queue(objects, count);
+    std::vector<TransactionQueue::Transaction *> objects;
 
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_MASTER_SERIAL_MIN + count));
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_MASTER_SERIAL_MAX));
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_MASTER_SERIAL_MAX - 1));
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_SLAVE_SERIAL_MIN));
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_SLAVE_SERIAL_MAX));
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_SLAVE_SERIAL_MIN + 1));
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_SLAVE_SERIAL_MAX - 1));
+    make_short_queue(*queue, objects, count);
+
+    const auto fn =
+        []
+        (const TransactionQueue::Transaction &t) -> TransactionQueue::ProcessResult
+        {
+            return TransactionQueue::ProcessResult::FINISHED;
+        };
+
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_MASTER_SERIAL_MIN + count, fn));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_MASTER_SERIAL_MAX, fn));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_MASTER_SERIAL_MAX - 1, fn));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_MIN, fn));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_MAX, fn));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_MIN + 1, fn));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_MAX - 1, fn));
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Tried to find transaction with invalid serial 0x8000");
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_MASTER_SERIAL_INVALID));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_MASTER_SERIAL_INVALID, fn));
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Tried to find transaction with invalid serial 0x0000");
-    cppcut_assert_null(transaction_queue_find_by_serial(head, DCPSYNC_SLAVE_SERIAL_INVALID));
-
-    transaction_free(&head);
-    cppcut_assert_null(head);
-}
-
-static void run_cut_transaction_from_queue_test(const size_t count, const size_t removed)
-{
-    cppcut_assert_operator(count, >, size_t(1));
-    cppcut_assert_operator(count, >, removed);
-
-    std::array<struct transaction *, max_allocs> objects;
-    struct transaction *head = make_short_queue(objects, count);
-
-    struct transaction *next = transaction_queue_cut_element(objects[removed]);
-    cppcut_assert_not_null(next);
-
-    if(removed < count - 1)
-        cppcut_assert_equal(objects[removed + 1], next);
-    else
-        cppcut_assert_equal(objects[0], next);
-
-    /* need to fix up head pointer if head was cut */
-    if(removed == 0)
-        head = next;
-
-    for(size_t i = 0; i < count; ++i)
-    {
-        const uint16_t serial = DCPSYNC_MASTER_SERIAL_MIN + i;
-
-        if(i != removed)
-        {
-            cppcut_assert_equal(objects[i],
-                                transaction_queue_find_by_serial(head, serial));
-            cppcut_assert_null(transaction_queue_find_by_serial(objects[removed], serial));
-        }
-        else
-        {
-            cppcut_assert_null(transaction_queue_find_by_serial(head, serial));
-            cppcut_assert_equal(objects[i],
-                                transaction_queue_find_by_serial(objects[removed], serial));
-        }
-    }
-
-    transaction_free(&objects[removed]);
-    transaction_free(&head);
-    cppcut_assert_null(head);
-}
-
-void test_cut_transaction_from_queue()
-{
-    run_cut_transaction_from_queue_test(5, 2);
-}
-
-void test_cut_head_from_queue()
-{
-    run_cut_transaction_from_queue_test(5, 0);
-}
-
-void test_cut_tail_from_queue()
-{
-    run_cut_transaction_from_queue_test(5, 4);
-}
-
-void test_cut_transaction_from_itself()
-{
-    struct transaction *head =
-        transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                          TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(head);
-
-    struct transaction *next = transaction_queue_cut_element(head);
-    cppcut_assert_equal(head, next);
-
-    cppcut_assert_equal(next,
-                        transaction_queue_find_by_serial(next, DCPSYNC_MASTER_SERIAL_MIN));
-
-    transaction_free(&head);
-    cppcut_assert_null(head);
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_INVALID, fn));
 }
 
 };
@@ -516,6 +360,8 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
     cut_fail("write");
     return -1;
 }
+
+static TransactionQueue::Queue *queue;
 
 static MockMessages *mock_messages;
 static MockOs *mock_os;
@@ -553,7 +399,8 @@ void cut_setup()
 
     answer_written_to_fifo = new std::vector<uint8_t>;
 
-    transaction_init_allocator();
+    queue = new TransactionQueue::Queue;
+    cppcut_assert_not_null(queue);
 
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
@@ -561,6 +408,9 @@ void cut_setup()
 
 void cut_teardown()
 {
+    delete queue;
+    queue = nullptr;
+
     mock_messages->check();
     mock_os->check();
 
@@ -580,35 +430,35 @@ void cut_teardown()
     answer_written_to_fifo = nullptr;
 }
 
-static void send_dcpsync_ack(uint16_t serial, struct transaction *t,
-                             enum transaction_process_status last_status = TRANSACTION_FINISHED,
-                             bool process_only_once = false,
-                             struct transaction_exception *exception = nullptr)
+static std::unique_ptr<TransactionQueue::Transaction>
+send_dcpsync_ack(uint16_t serial, std::unique_ptr<TransactionQueue::Transaction> t,
+                 TransactionQueue::ProcessResult last_status = TransactionQueue::ProcessResult::FINISHED,
+                 bool process_only_once = false)
 {
-    cppcut_assert_not_null(t);
-
-    const uint8_t dcpsync_ack[DCPSYNC_HEADER_SIZE] =
+    const std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_ack =
     {
         'a', 0x00,
         uint8_t(serial >> 8), uint8_t(serial & UINT8_MAX),
         0x00, 0x00,
     };
 
-    read_data->set(dcpsync_ack);
-
-    struct transaction_exception e;
-
-    if(exception == nullptr)
-        exception = &e;
+    read_data->set(dcpsync_ack.data(), dcpsync_ack.size());
 
     if(!process_only_once)
-        cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                                TRANSACTION_DUMP_SENT_NONE, exception));
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   t->process(expected_from_slave_fd, expected_to_slave_fd,
+                              TransactionQueue::DUMP_SENT_NONE));
 
-    cppcut_assert_equal(last_status,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, exception));
+    cut_assert(last_status ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
+
+    cut_assert_false(t->is_input_required());
+
+    if(last_status == TransactionQueue::ProcessResult::FINISHED)
+        t.reset();
+
+    return t;
 }
 
 /*!\test
@@ -627,9 +477,11 @@ void test_register_read_request_size_1_transaction()
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     Regs::init(nullptr);
 
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
     {
@@ -643,24 +495,23 @@ void test_register_read_request_size_1_transaction()
     read_data->set(dcpsync_header);
     read_data->set(read_reg_55_read_dhcp_mode);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::PUSH_BACK ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 55 [DHCP control], 1 bytes");
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     static const uint8_t expected_answer[] =
     {
@@ -676,10 +527,7 @@ void test_register_read_request_size_1_transaction()
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t));
 
     Regs::deinit();
     network_prefs_deinit();
@@ -727,9 +575,11 @@ void test_register_read_request_size_16_transaction()
     Regs::init(nullptr);
     setup_network_config("11:23:34:45:56:67");
 
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
     {
@@ -743,24 +593,23 @@ void test_register_read_request_size_16_transaction()
     read_data->set(dcpsync_header);
     read_data->set(read_reg_56_read_ipv4_address);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::PUSH_BACK ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 56 [IPv4 address], 16 bytes");
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     static const uint8_t expected_answer[] =
     {
@@ -777,10 +626,7 @@ void test_register_read_request_size_16_transaction()
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t));
 
     Regs::deinit();
     network_prefs_deinit();
@@ -802,9 +648,11 @@ void test_register_multi_step_read_request_transaction()
     Regs::init(nullptr);
     setup_network_config("11:34:56:78:9A:BC");
 
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
     {
@@ -818,24 +666,23 @@ void test_register_multi_step_read_request_transaction()
     read_data->set(dcpsync_header);
     read_data->set(read_reg_51_mac_address);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::PUSH_BACK ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 51 [MAC address], 18 bytes");
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     static const uint8_t expected_answer[] =
     {
@@ -853,10 +700,7 @@ void test_register_multi_step_read_request_transaction()
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t));
 
     Regs::deinit();
     network_prefs_deinit();
@@ -902,18 +746,21 @@ void test_big_data_is_sent_to_slave_in_fragments()
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
     Regs::init(nullptr);
 
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
-
-    struct transaction *head = t;
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
+    cut_assert_true(queue->append(std::move(t)));
 
     /* append another transaction to the end to check if the fragmentation code
      * accidently cuts off the end of the queue */
-    struct transaction *tail = transaction_alloc(TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-                                                 TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(tail);
-    transaction_queue_add(&head, tail);
+    t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
+    cut_assert_true(queue->append(std::move(t)));
 
     static const Regs::Register big_register("big register (unit tests)", 0,
                                              REGISTER_MK_VERSION(1, 0, 0),
@@ -934,22 +781,20 @@ void test_big_data_is_sent_to_slave_in_fragments()
     read_data->set(dcpsync_header);
     read_data->set(read_test_register);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    t = queue->pop();
+    cppcut_assert_not_null(t.get());
+    cut_assert_false(queue->empty());
+
+    cut_assert(TransactionQueue::ProcessResult::PUSH_BACK ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     /* this is our \c #big_register defined above */
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 0 [big register (unit tests)], 683 bytes");
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(head, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
-
-    /* the big transaction has been scattered over multiple transactions, head
-     * element has been reused so that it contains the first fragment now */
-    cppcut_assert_equal(head, t);
-    cppcut_assert_not_equal(head, tail);
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     uint16_t master_serial = DCPSYNC_MASTER_SERIAL_MIN + 1;
     size_t bytes_left = sizeof(big_data);
@@ -962,10 +807,9 @@ void test_big_data_is_sent_to_slave_in_fragments()
         mock_os->expect_os_write_from_buffer_callback(read_answer);
         mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-        const enum transaction_process_status status =
-            transaction_process(head, expected_from_slave_fd, expected_to_slave_fd,
-                                TRANSACTION_DUMP_SENT_NONE, &e);
-        cppcut_assert_equal(TRANSACTION_IN_PROGRESS, status);
+        const auto status = t->process(expected_from_slave_fd, expected_to_slave_fd,
+                                       TransactionQueue::DUMP_SENT_NONE);
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS == status);
 
         const size_t expected_data_size = (bytes_left <= DCP_PACKET_MAX_PAYLOAD_SIZE
                                            ? bytes_left
@@ -996,27 +840,23 @@ void test_big_data_is_sent_to_slave_in_fragments()
 
         if(expected_data_size < DCP_PACKET_MAX_PAYLOAD_SIZE)
         {
-            send_dcpsync_ack(master_serial, t);
-
-            t = transaction_queue_remove(&head);
-            cppcut_assert_not_null(t);
-            cppcut_assert_not_null(head);
-            cppcut_assert_not_equal(t, tail);
-            transaction_free(&t);
+            send_dcpsync_ack(master_serial, std::move(t));
+            cppcut_assert_equal(expected_data_size, bytes_left);
         }
         else
-            send_dcpsync_ack(master_serial, t, TRANSACTION_IN_PROGRESS);
+        {
+            t = send_dcpsync_ack(master_serial, std::move(t),
+                                 TransactionQueue::ProcessResult::IN_PROGRESS);
+            cppcut_assert_not_null(t.get());
+        }
 
         bytes_left -= expected_data_size;
         ++master_serial;
     }
 
-    cppcut_assert_equal(head, tail);
-
-    t = transaction_queue_remove(&head);
-    cppcut_assert_null(head);
-    cppcut_assert_equal(t, tail);
-    transaction_free(&t);
+    t = queue->pop();
+    cppcut_assert_not_null(t.get());
+    cut_assert_true(queue->empty());
 
     Regs::deinit();
     network_prefs_deinit();
@@ -1055,6 +895,8 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
     return -1;
 }
 
+static TransactionQueue::Queue *queue;
+
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 
@@ -1091,7 +933,8 @@ void cut_setup()
 
     answer_written_to_fifo = new std::vector<uint8_t>;
 
-    transaction_init_allocator();
+    queue = new TransactionQueue::Queue;
+    cppcut_assert_not_null(queue);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"networkconfig\"");
@@ -1115,6 +958,9 @@ void cut_teardown()
     Connman::ServiceList::get_singleton_for_update().first.clear();
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
+    delete queue;
+    queue = nullptr;
+
     mock_messages->check();
     mock_os->check();
 
@@ -1134,61 +980,44 @@ void cut_teardown()
     answer_written_to_fifo = nullptr;
 }
 
-static void send_dcpsync_ack(uint16_t serial, struct transaction *t,
-                             enum transaction_process_status last_status = TRANSACTION_FINISHED,
-                             bool process_only_once = false,
-                             struct transaction_exception *exception = nullptr)
+static void send_dcpsync_ack(uint16_t serial, std::unique_ptr<TransactionQueue::Transaction> t,
+                             TransactionQueue::ProcessResult last_status = TransactionQueue::ProcessResult::FINISHED,
+                             bool process_only_once = false)
 {
-    cppcut_assert_not_null(t);
-
-    const uint8_t dcpsync_ack[DCPSYNC_HEADER_SIZE] =
+    const std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_ack =
     {
         'a', 0x00,
         uint8_t(serial >> 8), uint8_t(serial & UINT8_MAX),
         0x00, 0x00,
     };
 
-    read_data->set(dcpsync_ack);
-
-    struct transaction_exception e;
-
-    if(exception == nullptr)
-        exception = &e;
+    read_data->set(dcpsync_ack.data(), dcpsync_ack.size());
 
     if(!process_only_once)
-        cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                                TRANSACTION_DUMP_SENT_NONE, exception));
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   t->process(expected_from_slave_fd, expected_to_slave_fd,
+                              TransactionQueue::DUMP_SENT_NONE));
 
-    cppcut_assert_equal(last_status,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, exception));
+    cut_assert(last_status ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 }
 
-static void send_dcpsync_nack(uint16_t serial, uint8_t ttl,
-                              struct transaction *t,
-                              enum transaction_process_status expected_status = TRANSACTION_IN_PROGRESS,
-                              struct transaction_exception *exception = nullptr)
+static void send_dcpsync_nack(uint16_t serial, uint8_t ttl, TransactionQueue::Transaction &t,
+                              TransactionQueue::ProcessResult expected_status = TransactionQueue::ProcessResult::IN_PROGRESS)
 {
-    cppcut_assert_not_null(t);
-
-    const uint8_t dcpsync_nack[DCPSYNC_HEADER_SIZE] =
+    const std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_nack =
     {
         'n', ttl,
         uint8_t(serial >> 8), uint8_t(serial & UINT8_MAX),
         0x00, 0x00,
     };
 
-    read_data->set(dcpsync_nack, DCPSYNC_HEADER_SIZE);
+    read_data->set(dcpsync_nack.data(), dcpsync_nack.size());
 
-    struct transaction_exception e;
-
-    if(exception == nullptr)
-        exception = &e;
-
-    cppcut_assert_equal(expected_status,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, exception));
+    cut_assert(expected_status ==
+               t.process(expected_from_slave_fd, expected_to_slave_fd,
+                         TransactionQueue::DUMP_SENT_NONE));
 }
 
 /*!\test
@@ -1197,9 +1026,11 @@ static void send_dcpsync_nack(uint16_t serial, uint8_t ttl,
  */
 void test_register_write_request_transaction()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
     {
@@ -1215,26 +1046,22 @@ void test_register_write_request_transaction()
     read_data->set(write_reg_54_selected_ip_profile + DCP_HEADER_SIZE,
                    sizeof(write_reg_54_selected_ip_profile) - DCP_HEADER_SIZE);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     Regs::NetworkConfig::set_primary_technology(Connman::Technology::ETHERNET);
     mock_messages->expect_msg_info("Could not determine active network technology, trying fallback");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "Modify Ethernet configuration");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO W: 54 [start network configuration], 1 bytes");
 
-    cut_assert_false(transaction_is_input_required(t));
+    cut_assert_false(t->is_input_required());
 
-    cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::FINISHED ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_false(transaction_is_input_required(t));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    cut_assert_false(t->is_input_required());
 }
 
 /*!\test
@@ -1244,9 +1071,11 @@ void test_register_write_request_transaction()
  */
 void test_register_simple_write_not_supported()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
     {
@@ -1263,13 +1092,9 @@ void test_register_simple_write_not_supported()
     mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Simple write command not supported");
     mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 }
 
 /*!\test
@@ -1279,9 +1104,11 @@ void test_register_simple_write_not_supported()
  */
 void test_register_multi_read_not_supported()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
     {
@@ -1298,13 +1125,9 @@ void test_register_multi_read_not_supported()
     mock_messages->expect_msg_error(EINVAL, LOG_ERR, "Multiple read command not supported");
     mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 }
 
 /*!\test
@@ -1312,9 +1135,11 @@ void test_register_multi_read_not_supported()
  */
 void test_junk_bytes_are_ignored()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] = { 'c', 0x00, 0x66, 0x08, 0x00, DCP_HEADER_SIZE, };
     static const uint8_t junk_bytes[] = { 0x67, 0xac, 0x00, 0x20, };
@@ -1325,13 +1150,9 @@ void test_junk_bytes_are_ignored()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Invalid DCP header 0x67 0xac 0x00 0x20 (Invalid argument)");
     mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 }
 
 /*!\test
@@ -1346,28 +1167,29 @@ void test_small_master_transaction()
 {
     static const uint8_t xml_data[] =
         "<view name=\"welcome\"><icon id=\"welcome\" text=\"Profile 1\">welcome</icon></view>";
-    struct transaction *head =
-        transaction_fragments_from_data(xml_data, sizeof(xml_data) - 1U, 71,
-                                        TRANSACTION_CHANNEL_SPI);
-    cppcut_assert_not_null(head);
+    auto frags(TransactionQueue::fragments_from_data(*queue,
+                                                     xml_data, sizeof(xml_data) - 1U,
+                                                     71, TransactionQueue::Channel::SPI));
+    cut_assert_false(frags.empty());
 
-    const size_t max_data_size = transaction_get_max_data_size(head);
+    const size_t max_data_size = frags.front()->get_max_data_size();
     cppcut_assert_operator(sizeof(xml_data) - 1U, <, max_data_size);
 
-    struct transaction *t = transaction_queue_remove(&head);
-    cppcut_assert_null(head);
-    cppcut_assert_not_null(t);
+    cut_assert_true(queue->append(std::move(frags)));
+
+    auto t = queue->pop();
+    cut_assert_true(queue->empty());
+    cppcut_assert_not_null(t.get());
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
 
     /* check emitted DCP data */
     static const uint8_t expected_headers[] =
@@ -1385,8 +1207,8 @@ void test_small_master_transaction()
         0x00,
     };
 
-    cppcut_assert_equal(sizeof(expected_headers) + sizeof(xml_data) - 1U,
-                        answer_written_to_fifo->size());
+    cut_assert(sizeof(expected_headers) + sizeof(xml_data) - 1U ==
+               answer_written_to_fifo->size());
 
     cut_assert_equal_memory(expected_headers, sizeof(expected_headers),
                             answer_written_to_fifo->data(), sizeof(expected_headers));
@@ -1394,12 +1216,7 @@ void test_small_master_transaction()
                             answer_written_to_fifo->data() + sizeof(expected_headers),
                             sizeof(xml_data) - 1U);
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
-
-    cut_assert_false(transaction_is_input_required(t));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t));
 }
 
 /*!\test
@@ -1411,29 +1228,30 @@ void test_master_transaction_retry_on_nack()
 
     static const uint8_t xml_data[] =
         "<view name=\"welcome\"><icon id=\"welcome\" text=\"Profile 1\">welcome</icon></view>";
-    struct transaction *head =
-        transaction_fragments_from_data(xml_data, sizeof(xml_data) - 1U, 71,
-                                        TRANSACTION_CHANNEL_SPI);
-    cppcut_assert_not_null(head);
+    auto frags(TransactionQueue::fragments_from_data(*queue,
+                                                     xml_data, sizeof(xml_data) - 1U,
+                                                     71, TransactionQueue::Channel::SPI));
+    cut_assert_false(frags.empty());
 
-    const size_t max_data_size = transaction_get_max_data_size(head);
+    const size_t max_data_size = frags.front()->get_max_data_size();
     cppcut_assert_operator(sizeof(xml_data) - 1U, <, max_data_size);
 
-    struct transaction *t = transaction_queue_remove(&head);
-    cppcut_assert_null(head);
-    cppcut_assert_not_null(t);
+    cut_assert_true(queue->append(std::move(frags)));
+
+    auto t = queue->pop();
+    cut_assert_true(queue->empty());
+    cppcut_assert_not_null(t.get());
 
     /* first try */
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
 
     /* data for first try */
     static const uint8_t expected_headers_first[] =
@@ -1451,8 +1269,8 @@ void test_master_transaction_retry_on_nack()
         0x00,
     };
 
-    cppcut_assert_equal(sizeof(expected_headers_first) + sizeof(xml_data) - 1U,
-                        answer_written_to_fifo->size());
+    cut_assert(sizeof(expected_headers_first) + sizeof(xml_data) - 1U ==
+               answer_written_to_fifo->size());
 
     cut_assert_equal_memory(expected_headers_first, sizeof(expected_headers_first),
                             answer_written_to_fifo->data(), sizeof(expected_headers_first));
@@ -1465,20 +1283,20 @@ void test_master_transaction_retry_on_nack()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001, resending packet as 0x8002");
 
-    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, t);
+    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, *t);
 
-    cut_assert_false(transaction_is_input_required(t));
+    cut_assert_false(t->is_input_required());
 
     /* second try */
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
 
     /* data for second try */
     static const uint8_t expected_headers_second[] =
@@ -1496,8 +1314,8 @@ void test_master_transaction_retry_on_nack()
         0x00,
     };
 
-    cppcut_assert_equal(sizeof(expected_headers_second) + sizeof(xml_data) - 1U,
-                        answer_written_to_fifo->size());
+    cut_assert(sizeof(expected_headers_second) + sizeof(xml_data) - 1U ==
+               answer_written_to_fifo->size());
 
     cut_assert_equal_memory(expected_headers_second, sizeof(expected_headers_second),
                             answer_written_to_fifo->data(), sizeof(expected_headers_second));
@@ -1505,23 +1323,15 @@ void test_master_transaction_retry_on_nack()
                             answer_written_to_fifo->data() + sizeof(expected_headers_second),
                             sizeof(xml_data) - 1U);
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 1, t);
-
-    cut_assert_false(transaction_is_input_required(t));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 1, std::move(t));
 }
 
 static void do_big_master_transaction(const uint8_t *const xml_data,
                                       const size_t xml_size,
-                                      struct transaction **head,
+                                      const size_t max_data_size,
                                       const unsigned int expected_number_of_transactions)
 {
-    cppcut_assert_not_null(head);
-    cppcut_assert_not_null(*head);
-
-    const size_t max_data_size = transaction_get_max_data_size(*head);
+    cut_assert_false(queue->empty());
     cppcut_assert_operator(1U, <, expected_number_of_transactions);
 
     const uint8_t *xml_data_ptr = xml_data;
@@ -1532,8 +1342,8 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
     do
     {
         /* take next transaction of fragmented DRCP packet */
-        struct transaction *t = transaction_queue_remove(head);
-        cppcut_assert_not_null(t);
+        auto t = queue->pop();
+        cppcut_assert_not_null(t.get());
 
         mock_os->expect_os_write_from_buffer_callback(read_answer);
         mock_os->expect_os_write_from_buffer_callback(read_answer);
@@ -1541,10 +1351,9 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
 
         answer_written_to_fifo->clear();
 
-        struct transaction_exception e;
-        cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                                TRANSACTION_DUMP_SENT_NONE, &e));
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   t->process(expected_from_slave_fd, expected_to_slave_fd,
+                              TransactionQueue::DUMP_SENT_NONE));
 
         /* check emitted DCP data */
         const size_t expected_data_size = std::min(bytes_left, max_data_size);
@@ -1563,7 +1372,7 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
             static_cast<uint8_t>(expected_data_size >> 8)
         };
 
-        if(*head == nullptr && (xml_size % DCP_PACKET_MAX_PAYLOAD_SIZE) == 0)
+        if(queue->empty() && (xml_size % DCP_PACKET_MAX_PAYLOAD_SIZE) == 0)
         {
             /* this particular last packet must be empty */
             cppcut_assert_equal(size_t(DCPSYNC_HEADER_SIZE + DCP_HEADER_SIZE),
@@ -1581,17 +1390,14 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
                                 answer_written_to_fifo->data() + sizeof(expected_headers),
                                 expected_data_size);
 
-        send_dcpsync_ack(expected_serial, t);
-
-        transaction_free(&t);
-        cppcut_assert_null(t);
+        send_dcpsync_ack(expected_serial, std::move(t));
 
         bytes_left -= expected_data_size;
         xml_data_ptr += expected_data_size;
         ++number_of_transactions;
         ++expected_serial;
     }
-    while(*head != nullptr && number_of_transactions < expected_number_of_transactions);
+    while(!queue->empty() && number_of_transactions < expected_number_of_transactions);
 
     cppcut_assert_equal(expected_number_of_transactions, number_of_transactions);
 }
@@ -1625,12 +1431,18 @@ void test_big_master_transaction()
 
     cppcut_assert_not_equal(size_t(0), xfer_size % DCP_PACKET_MAX_PAYLOAD_SIZE);
 
-    struct transaction *head =
-        transaction_fragments_from_data(xml_data, xfer_size, 71,
-                                        TRANSACTION_CHANNEL_SPI);
-    do_big_master_transaction(xml_data, xfer_size, &head, 3);
+    auto frags(TransactionQueue::fragments_from_data(*queue,
+                                                     xml_data, xfer_size, 71,
+                                                     TransactionQueue::Channel::SPI));
+    cut_assert_false(frags.empty());
 
-    cppcut_assert_null(head);
+    cut_assert_true(queue->empty());
+    const size_t max_data_size = frags.front()->get_max_data_size();
+    cut_assert_true(queue->append(std::move(frags)));
+
+    do_big_master_transaction(xml_data, xfer_size, max_data_size, 3);
+
+    cut_assert_true(queue->empty());
 }
 
 /*!\test
@@ -1659,12 +1471,18 @@ void test_big_master_transaction_with_size_of_multiple_of_256()
 
     cppcut_assert_equal(size_t(0), xfer_size % DCP_PACKET_MAX_PAYLOAD_SIZE);
 
-    struct transaction *head =
-        transaction_fragments_from_data(xml_data, xfer_size, 71,
-                                        TRANSACTION_CHANNEL_SPI);
-    do_big_master_transaction(xml_data, xfer_size, &head, 3);
+    auto frags(TransactionQueue::fragments_from_data(*queue,
+                                                     xml_data, xfer_size, 71,
+                                                     TransactionQueue::Channel::SPI));
+    cut_assert_false(frags.empty());
 
-    cppcut_assert_null(head);
+    cut_assert_true(queue->empty());
+    const size_t max_data_size = frags.front()->get_max_data_size();
+    cut_assert_true(queue->append(std::move(frags)));
+
+    do_big_master_transaction(xml_data, xfer_size, max_data_size, 3);
+
+    cut_assert_true(queue->empty());
 }
 
 static size_t big_write_calls_count;
@@ -1701,9 +1519,11 @@ void test_big_slave_transaction()
 
     std::vector<uint8_t> expected_data;
 
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_header { 'c', UINT8_MAX, 0x31, 0xc5, };
     std::array<uint8_t, DCP_HEADER_SIZE + DCP_PACKET_MAX_PAYLOAD_SIZE> reg_0_fragment;
@@ -1730,12 +1550,11 @@ void test_big_slave_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "RegIO W: 0 [big write (unit tests)], 256 bytes (incomplete)");
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
     mock_messages->check();
 
     /* second fragment */
@@ -1746,11 +1565,11 @@ void test_big_slave_transaction()
     read_data->set(dcpsync_header);
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
 
     read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE,
                    reg_0_fragment.size() - DCP_HEADER_SIZE);
@@ -1761,11 +1580,11 @@ void test_big_slave_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "RegIO W: 0 [big write (unit tests)], 512 bytes (continued)");
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
     mock_messages->check();
 
     /* third and last fragment, much smaller */
@@ -1780,22 +1599,22 @@ void test_big_slave_transaction()
     read_data->set(dcpsync_header);
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
 
     read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE, reg_0_fragment[2]);
     std::copy(reg_0_fragment.data() + DCP_HEADER_SIZE,
               reg_0_fragment.data() + DCP_HEADER_SIZE + reg_0_fragment[2],
               std::back_inserter(expected_data));
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_false(transaction_is_input_required(t));
+    cut_assert_false(t->is_input_required());
     mock_messages->check();
 
     /* and we are done */
@@ -1806,19 +1625,16 @@ void test_big_slave_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "RegIO W: 0 [big write (unit tests)], 518 bytes (complete)");
 
-    cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::FINISHED ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_false(transaction_is_input_required(t));
+    cut_assert_false(t->is_input_required());
     cppcut_assert_equal(big_write_calls_expected, big_write_calls_count);
     cut_assert_equal_memory(expected_data.data(), expected_data.size(),
                             big_write_data.data(), big_write_data.size());
 
     big_write_data.clear();
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
 }
 
 /*!\test
@@ -1838,9 +1654,11 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
 
     std::vector<uint8_t> expected_data;
 
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_header { 'c', UINT8_MAX, 0x31, 0xc5, };
     std::array<uint8_t, DCP_HEADER_SIZE + DCP_PACKET_MAX_PAYLOAD_SIZE> reg_0_fragment;
@@ -1867,12 +1685,11 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "RegIO W: 0 [big write (unit tests)], 256 bytes (incomplete)");
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
     mock_messages->check();
 
     /* second fragment */
@@ -1883,11 +1700,11 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     read_data->set(dcpsync_header);
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
 
     read_data->set(reg_0_fragment.data() + DCP_HEADER_SIZE,
                    reg_0_fragment.size() - DCP_HEADER_SIZE);
@@ -1898,11 +1715,11 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "RegIO W: 0 [big write (unit tests)], 512 bytes (continued)");
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
     mock_messages->check();
 
     /* third and last fragment, empty */
@@ -1917,11 +1734,11 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     read_data->set(dcpsync_header);
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_false(transaction_is_input_required(t));
+    cut_assert_false(t->is_input_required());
     mock_messages->check();
 
     /* and we are done */
@@ -1932,19 +1749,16 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "RegIO W: 0 [big write (unit tests)], 512 bytes (complete)");
 
-    cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::FINISHED ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_false(transaction_is_input_required(t));
+    cut_assert_false(t->is_input_required());
     cppcut_assert_equal(big_write_calls_expected, big_write_calls_count);
     cut_assert_equal_memory(expected_data.data(), expected_data.size(),
                             big_write_data.data(), big_write_data.size());
 
     big_write_data.clear();
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
 }
 
 /*!\test
@@ -1953,9 +1767,11 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
  */
 void test_bad_register_addresses_are_handled_in_slave_write_transactions()
 {
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     static const uint8_t write_unknown_data[] =
     {
@@ -1991,14 +1807,13 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     read_data->set(write_unknown_data, internal_skip_command_size);
     read_data->set(write_unknown_data, sizeof(write_unknown_data) - internal_skip_command_size);
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_ERROR,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::ERROR ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     /* next transaction from slave is processed, indicating that the data from
      * the previously rejected command has indeed been skipped */
-    transaction_reset_for_slave(t);
+    t->reset_for_slave();
 
     static const uint8_t dcpsync_header[] = { 'c', 0x00, 0x4b, 0xd4, 0x00, DCP_HEADER_SIZE, };
     static const uint8_t read_device_status[] = { DCP_COMMAND_READ_REGISTER, 0x11, 0x00, 0x00, };
@@ -2006,23 +1821,23 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     read_data->set(dcpsync_header);
     read_data->set(read_device_status);
 
-    cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::PUSH_BACK ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17 [device status], 2 bytes");
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     static const uint8_t expected_answer[] =
     {
@@ -2038,10 +1853,7 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t));
 }
 
 /*!\test
@@ -2049,29 +1861,31 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
  */
 void test_register_push_transaction()
 {
-    struct transaction *t = nullptr;
+    cut_assert_true(TransactionQueue::push_register_to_slave(*queue, 17,
+                                                             TransactionQueue::Channel::SPI));
+    cut_assert_false(queue->empty());
 
-    cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
-    cppcut_assert_not_null(t);
+    auto t = queue->pop();
+    cppcut_assert_not_null(t.get());
+    cut_assert_true(queue->empty());
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17 [device status], 2 bytes");
 
-    struct transaction_exception e;
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_false(transaction_is_input_required(t));
+    cut_assert_false(t->is_input_required());
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
-    cut_assert_true(transaction_is_input_required(t));
+    cut_assert_true(t->is_input_required());
 
     static const uint8_t expected_answer[] =
     {
@@ -2087,32 +1901,29 @@ void test_register_push_transaction()
     cut_assert_equal_memory(expected_answer, sizeof(expected_answer),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t);
-
-    cut_assert_false(transaction_is_input_required(t));
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t));
 }
 
-static struct transaction *create_master_transaction_that_waits_for_ack(struct transaction *t,
-                                                                        uint16_t expected_serial,
-                                                                        uint8_t expected_ttl)
+static std::unique_ptr<TransactionQueue::Transaction>
+create_master_transaction_that_waits_for_ack(std::unique_ptr<TransactionQueue::Transaction> t,
+                                             uint16_t expected_serial, uint8_t expected_ttl)
 {
-    struct transaction_exception e;
-
     if(t == nullptr)
     {
-        cut_assert_true(transaction_push_register_to_slave(&t, 17, TRANSACTION_CHANNEL_SPI));
-        cppcut_assert_not_null(t);
+        cut_assert_true(TransactionQueue::push_register_to_slave(*queue, 17,
+                                                                 TransactionQueue::Channel::SPI));
+        cut_assert_false(queue->empty());
+
+        t = queue->pop();
+        cppcut_assert_not_null(t.get());
 
         mock_messages->expect_msg_vinfo_if_not_ignored(MESSAGE_LEVEL_TRACE,
                                                        "read 17 handler %p %zu");
         mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 17 [device status], 2 bytes");
 
-        cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                            transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                                TRANSACTION_DUMP_SENT_NONE, &e));
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   t->process(expected_from_slave_fd, expected_to_slave_fd,
+                              TransactionQueue::DUMP_SENT_NONE));
     }
     else
     {
@@ -2123,9 +1934,9 @@ static struct transaction *create_master_transaction_that_waits_for_ack(struct t
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     mock_os->check();
 
@@ -2160,29 +1971,30 @@ void test_register_push_transaction_can_be_rejected()
     mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
 
     /* first try fails */
-    struct transaction *t =
+    auto t =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
+    cppcut_assert_not_null(t.get());
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001, resending packet as 0x8002");
 
-    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, t);
+    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, *t);
 
     /* second try fails */
-    create_master_transaction_that_waits_for_ack(t, DCPSYNC_MASTER_SERIAL_MIN + 1, 9);
+    t = create_master_transaction_that_waits_for_ack(std::move(t), DCPSYNC_MASTER_SERIAL_MIN + 1, 9);
+    cppcut_assert_not_null(t.get());
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[8] for 0x8002, resending packet as 0x8003");
 
-    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN + 1, 8, t);
+    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN + 1, 8, *t);
 
     /* third try succeeds */
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    struct transaction_exception e = {};
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t->process(expected_from_slave_fd, expected_to_slave_fd,
+                          TransactionQueue::DUMP_SENT_NONE));
 
     static const uint8_t expected_answer_second[] =
     {
@@ -2198,10 +2010,7 @@ void test_register_push_transaction_can_be_rejected()
     cut_assert_equal_memory(expected_answer_second, sizeof(expected_answer_second),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 2, t);
-
-    transaction_free(&t);
-    cppcut_assert_null(t);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 2, std::move(t));
 }
 
 /*!\test
@@ -2210,13 +2019,12 @@ void test_register_push_transaction_can_be_rejected()
  */
 void test_bad_register_addresses_are_handled_in_push_transactions()
 {
-    struct transaction *t = nullptr;
-
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");
 
-    cut_assert_false(transaction_push_register_to_slave(&t, 42, TRANSACTION_CHANNEL_SPI));
-    cppcut_assert_null(t);
+    cut_assert_false(TransactionQueue::push_register_to_slave(*queue, 42,
+                                                              TransactionQueue::Channel::SPI));
+    cut_assert_true(queue->empty());
 }
 
 /*!\test
@@ -2229,96 +2037,115 @@ void test_bad_register_addresses_are_handled_in_fragmented_transactions()
                                               "BUG: Master requested register 0x2a, but is not implemented");
 
     static const uint8_t dummy = 23U;
-    cppcut_assert_null(transaction_fragments_from_data(&dummy, sizeof(dummy), 42,
-                                                       TRANSACTION_CHANNEL_SPI));
+    auto frags(TransactionQueue::fragments_from_data(*queue,
+                                                     &dummy, sizeof(dummy),
+                                                     42, TransactionQueue::Channel::SPI));
+    cut_assert_true(frags.empty());
 }
 
 /*!\test
  * While waiting for a new command, the slave sends an ACK packet.
  *
  * Caller must handle this situation and call
- * #transaction_process_out_of_order_ack() for the transaction.
+ * #TransactionQueue::Transaction::process_out_of_order_ack() for the
+ * transaction.
  */
 void test_waiting_for_command_interrupted_by_ack()
 {
     mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
 
-    struct transaction *to_be_acked =
+    auto to_be_acked =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got ACK for 0x8001 while waiting for new command packet");
 
-    struct transaction_exception e = {};
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t, TRANSACTION_EXCEPTION, true, &e);
+    try
+    {
+        send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t),
+                         TransactionQueue::ProcessResult::ERROR, true);
+        cut_fail("Missing exception");
+    }
+    catch(const TransactionQueue::OOOAckException &e)
+    {
+        cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.serial_);
 
-    cppcut_assert_equal(TRANSACTION_EXCEPTION_OUT_OF_ORDER_ACK, e.exception_code);
-    cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.d.ack.serial);
+        /* caller must handle this ACK by finding the transaction for the given
+         * serial and processing it */
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   to_be_acked->process_out_of_order_ack(e));
+    }
+    catch(...)
+    {
+        cut_fail("Wrong exception");
+    }
 
-    /* caller must handle this ACK by finding the transaction for the given
-     * serial and processing it */
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process_out_of_order_ack(to_be_acked, &e.d.ack));
-
-    cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(to_be_acked, expected_from_slave_fd,
-                                            expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
-
-    transaction_free(&to_be_acked);
-    cppcut_assert_null(to_be_acked);
+    cut_assert(TransactionQueue::ProcessResult::FINISHED ==
+               to_be_acked->process(expected_from_slave_fd,
+                                    expected_to_slave_fd,
+                                    TransactionQueue::DUMP_SENT_NONE));
 
     /* now we could go on processing the interrupted transaction */
-    transaction_free(&t);
-    cppcut_assert_null(t);
 }
 
 /*!\test
  * While waiting for a new command, the slave sends an NACK packet.
  *
  * Caller must handle this situation and call
- * #transaction_process_out_of_order_nack() for the transaction.
+ * #TransactionQueue::Transaction::process_out_of_order_nack() for the
+ * transaction.
  */
 void test_waiting_for_command_interrupted_by_nack()
 {
     mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
 
-    struct transaction *to_be_acked =
+    auto to_be_acked =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
-    struct transaction *t = transaction_alloc(TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-                                              TRANSACTION_CHANNEL_SPI, false);
-    cppcut_assert_not_null(t);
+    auto t = TransactionQueue::Transaction::new_for_queue(
+                *queue,
+                TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+                TransactionQueue::Channel::SPI, false);
+    cppcut_assert_not_null(t.get());
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001 while waiting for new command packet");
 
-    struct transaction_exception e = {};
-    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, t, TRANSACTION_EXCEPTION, &e);
+    try
+    {
+        send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9,
+                          *t, TransactionQueue::ProcessResult::ERROR);
+        cut_fail("Missing exception");
+    }
+    catch(const TransactionQueue::OOONackException &e)
+    {
+        cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.serial_);
+        cppcut_assert_equal(uint8_t(9), e.ttl_);
 
-    cppcut_assert_equal(TRANSACTION_EXCEPTION_OUT_OF_ORDER_NACK, e.exception_code);
-    cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.d.nack.serial);
-    cppcut_assert_equal(uint8_t(9), e.d.nack.ttl);
+        /* caller must handle this NACK by finding the transaction for the given
+         * serial and processing it */
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
+                                                  "Got NACK[9] for 0x8001, resending packet as 0x8002");
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   to_be_acked->process_out_of_order_nack(e));
 
-    /* caller must handle this NACK by finding the transaction for the given
-     * serial and processing it */
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
-        "Got NACK[9] for 0x8001, resending packet as 0x8002");
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process_out_of_order_nack(to_be_acked, &e.d.nack));
+    }
+    catch(...)
+    {
+        cut_fail("Wrong exception");
+    }
 
     /* resend and succeed by receiving the ACK */
-    create_master_transaction_that_waits_for_ack(to_be_acked, DCPSYNC_MASTER_SERIAL_MIN + 1, 9);
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 1, to_be_acked);
-
-    transaction_free(&to_be_acked);
-    cppcut_assert_null(to_be_acked);
+    to_be_acked =
+        create_master_transaction_that_waits_for_ack(std::move(to_be_acked),
+                                                     DCPSYNC_MASTER_SERIAL_MIN + 1, 9);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 1, std::move(to_be_acked));
 
     /* now we could go on processing the interrupted transaction */
-    transaction_free(&t);
-    cppcut_assert_null(t);
 }
 
 /*!\test
@@ -2326,37 +2153,42 @@ void test_waiting_for_command_interrupted_by_nack()
  * transaction.
  *
  * Caller must handle this situation and call
- * #transaction_process_out_of_order_ack() for the transaction.
+ * #TransactionQueue::Transaction::process_out_of_order_ack() for the
+ * transaction.
  */
 void test_waiting_for_master_ack_interrupted_by_ack_for_other_transaction()
 {
-    struct transaction *to_be_acked =
+    auto to_be_acked =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
-    struct transaction *t =
+    auto t =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN + 1, UINT8_MAX);
 
-    struct transaction_exception e = {};
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t, TRANSACTION_EXCEPTION, true, &e);
+    try
+    {
+        send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t),
+                         TransactionQueue::ProcessResult::ERROR, true);
+        cut_fail("Missing exception");
+    }
+    catch(const TransactionQueue::OOOAckException &e)
+    {
+        cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.serial_);
 
-    cppcut_assert_equal(TRANSACTION_EXCEPTION_OUT_OF_ORDER_ACK, e.exception_code);
-    cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.d.ack.serial);
+        /* caller must handle this ACK by finding the transaction for the given
+         * serial and processing it */
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   to_be_acked->process_out_of_order_ack(e));
+    }
+    catch(...)
+    {
+        cut_fail("Wrong exception");
+    }
 
-    /* caller must handle this ACK by finding the transaction for the given
-     * serial and processing it */
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process_out_of_order_ack(to_be_acked, &e.d.ack));
-
-    cppcut_assert_equal(TRANSACTION_FINISHED,
-                        transaction_process(to_be_acked, expected_from_slave_fd,
-                                            expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
-
-    transaction_free(&to_be_acked);
-    cppcut_assert_null(to_be_acked);
+    cut_assert(TransactionQueue::ProcessResult::FINISHED ==
+               to_be_acked->process(expected_from_slave_fd,
+                                    expected_to_slave_fd,
+                                    TransactionQueue::DUMP_SENT_NONE));
 
     /* now we could go on processing the interrupted transaction */
-    transaction_free(&t);
-    cppcut_assert_null(t);
 }
 
 /*!\test
@@ -2364,44 +2196,50 @@ void test_waiting_for_master_ack_interrupted_by_ack_for_other_transaction()
  * transaction.
  *
  * Caller must handle this situation and call
- * #transaction_process_out_of_order_nack() for the transaction.
+ * #TransactionQueue::Transaction::process_out_of_order_nack() for the
+ * transaction.
  */
 void test_waiting_for_master_ack_interrupted_by_nack_for_other_transaction()
 {
     mock_messages->ignore_messages_above(MESSAGE_LEVEL_MAX);
 
-    struct transaction *to_be_acked =
+    auto to_be_acked =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
-    struct transaction *t =
+    auto t =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN + 1, UINT8_MAX);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
         "Got NACK[9] for 0x8001 while waiting for 0x8002 ACK");
 
-    struct transaction_exception e = {};
-    send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, t, TRANSACTION_EXCEPTION, &e);
+    try
+    {
+        send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN, 9, *t, TransactionQueue::ProcessResult::ERROR);
+        cut_fail("Missing exception");
+    }
+    catch(const TransactionQueue::OOONackException &e)
+    {
+        cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.serial_);
+        cppcut_assert_equal(uint8_t(9), e.ttl_);
 
-    cppcut_assert_equal(TRANSACTION_EXCEPTION_OUT_OF_ORDER_NACK, e.exception_code);
-    cppcut_assert_equal(uint16_t(DCPSYNC_MASTER_SERIAL_MIN), e.d.nack.serial);
-    cppcut_assert_equal(uint8_t(9), e.d.nack.ttl);
-
-    /* caller must handle this NACK by finding the transaction for the given
-     * serial and processing it */
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
-        "Got NACK[9] for 0x8001, resending packet as 0x8003");
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process_out_of_order_nack(to_be_acked, &e.d.nack));
+        /* caller must handle this NACK by finding the transaction for the given
+         * serial and processing it */
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
+                                                  "Got NACK[9] for 0x8001, resending packet as 0x8003");
+        cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+                   to_be_acked->process_out_of_order_nack(e));
+    }
+    catch(...)
+    {
+        cut_fail("Wrong exception");
+    }
 
     /* resend and succeed by receiving the ACK */
-    create_master_transaction_that_waits_for_ack(to_be_acked, DCPSYNC_MASTER_SERIAL_MIN + 2, 9);
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 2, to_be_acked);
-
-    transaction_free(&to_be_acked);
-    cppcut_assert_null(to_be_acked);
+    to_be_acked =
+        create_master_transaction_that_waits_for_ack(std::move(to_be_acked),
+                                                     DCPSYNC_MASTER_SERIAL_MIN + 2, 9);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 2, std::move(to_be_acked));
 
     /* now we could go on processing the interrupted transaction */
-    transaction_free(&t);
-    cppcut_assert_null(t);
 }
 
 /*!\test
@@ -2424,8 +2262,7 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
                                               "Registered 1 local key for \"dcpd\"");
     configproxy_register_local_configuration_owner("dcpd", keys);
 
-    struct transaction_exception e;
-    struct transaction *t_push =
+    auto t_push =
         create_master_transaction_that_waits_for_ack(nullptr, DCPSYNC_MASTER_SERIAL_MIN, UINT8_MAX);
 
     /* colliding slave read transaction */
@@ -2438,34 +2275,44 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
         "Collision: New packet 0x60c7 while waiting for 0x8001 ACK");
 
-    cppcut_assert_equal(TRANSACTION_EXCEPTION,
-                        transaction_process(t_push, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    std::unique_ptr<TransactionQueue::Transaction> t_slave;
 
-    cppcut_assert_equal(TRANSACTION_EXCEPTION_COLLISION, e.exception_code);
-    cppcut_assert_not_null(e.d.collision.t);
+    try
+    {
+        t_push->process(expected_from_slave_fd, expected_to_slave_fd,
+                        TransactionQueue::DUMP_SENT_NONE);
+        cut_fail("Missing exception");
+    }
+    catch(TransactionQueue::CollisionException &e)
+    {
+        t_slave = std::move(e.transaction_);
+    }
+    catch(...)
+    {
+        cut_fail("Wrong exception");
+    }
 
-    struct transaction *t_slave = e.d.collision.t;
+    cppcut_assert_not_null(t_slave.get());
 
     /* the push transaction is moved to some other place for deferred
      * processing, a new transaction has been allocated for the newly detected
      * slave transaction; now continue processing that one */
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "RegIO R: 87 [appliance ID], 5 bytes");
 
-    cppcut_assert_equal(TRANSACTION_PUSH_BACK,
-                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::PUSH_BACK ==
+               t_slave->process(expected_from_slave_fd, expected_to_slave_fd,
+                                         TransactionQueue::DUMP_SENT_NONE));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t_slave->process(expected_from_slave_fd, expected_to_slave_fd,
+                                TransactionQueue::DUMP_SENT_NONE));
 
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
     mock_os->expect_os_write_from_buffer_callback(read_answer);
 
-    cppcut_assert_equal(TRANSACTION_IN_PROGRESS,
-                        transaction_process(t_slave, expected_from_slave_fd, expected_to_slave_fd,
-                                            TRANSACTION_DUMP_SENT_NONE, &e));
+    cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
+               t_slave->process(expected_from_slave_fd, expected_to_slave_fd,
+                                TransactionQueue::DUMP_SENT_NONE));
 
     mock_os->check();
 
@@ -2484,18 +2331,12 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
                             sizeof(expected_answer_to_collision),
                             answer_written_to_fifo->data(), answer_written_to_fifo->size());
 
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 1, t_slave);
-
-    transaction_free(&t_slave);
-    cppcut_assert_null(t_slave);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN + 1, std::move(t_slave));
 
     /* continue with our push transaction, no resend because there was no NACK,
      * just an interspersed communication; this time we get the ACK and no
      * interruption occurs */
-    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, t_push);
-
-    transaction_free(&t_push);
-    cppcut_assert_null(t_push);
+    send_dcpsync_ack(DCPSYNC_MASTER_SERIAL_MIN, std::move(t_push));
 
     configproxy_deinit();
 }

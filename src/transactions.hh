@@ -19,6 +19,12 @@
 #ifndef TRANSACTIONS_H
 #define TRANSACTIONS_H
 
+#include "dcpdefs.h"
+#include "registers.hh"
+
+#include <memory>
+#include <queue>
+#include <stdexcept>
 #include <cinttypes>
 #include <cstdlib>
 
@@ -27,240 +33,411 @@
  */
 /*!@{*/
 
-enum transaction_alloc_type
+namespace TransactionQueue
 {
-    TRANSACTION_ALLOC_MASTER_FOR_DRCPD_DATA,
-    TRANSACTION_ALLOC_MASTER_FOR_REGISTER,
-    TRANSACTION_ALLOC_SLAVE_BY_SLAVE,
-};
-
-enum transaction_process_status
-{
-    TRANSACTION_IN_PROGRESS,
-    TRANSACTION_PUSH_BACK,
-    TRANSACTION_FINISHED,
-    TRANSACTION_ERROR,
-    TRANSACTION_EXCEPTION,
-};
-
-enum transaction_exception_code
-{
-    TRANSACTION_EXCEPTION_COLLISION,
-    TRANSACTION_EXCEPTION_OUT_OF_ORDER_ACK,
-    TRANSACTION_EXCEPTION_OUT_OF_ORDER_NACK,
-};
-
-enum transaction_channel
-{
-    TRANSACTION_CHANNEL_SPI,
-    TRANSACTION_CHANNEL_INET,
-};
-
-#define TRANSACTION_DUMP_SENT_MASK          (7U << 0)
-#define TRANSACTION_DUMP_SENT_DCPSYNC       (1U << 0)
-#define TRANSACTION_DUMP_SENT_DCP_HEADER    (1U << 1)
-#define TRANSACTION_DUMP_SENT_DCP_PAYLOAD   (1U << 2)
-#define TRANSACTION_DUMP_SENT_NONE          0U
-
-#define TRANSACTION_DUMP_SENT_MERGE_MASK    (3U << 4)
-#define TRANSACTION_DUMP_SENT_MERGE_NONE    (0U << 4)
-#define TRANSACTION_DUMP_SENT_MERGE_DCP     (1U << 4)
-#define TRANSACTION_DUMP_SENT_MERGE_ALL     (2U << 4)
 
 /*!
- * Opaque transaction structure.
+ * What kind of transaction to construct.
  */
-struct transaction;
-
-struct transaction_exception_collision_data
+enum class InitialType
 {
-    struct transaction *t;
-};
-
-struct transaction_exception_ack_data
-{
-    uint16_t serial;
-};
-
-struct transaction_exception_nack_data
-{
-    uint8_t ttl;
-    uint16_t serial;
+    MASTER_FOR_DRCPD_DATA,
+    MASTER_FOR_REGISTER,
+    SLAVE_BY_SLAVE,
 };
 
 /*!
- * Pseudo exception for exceptional situations in transaction processing.
+ * Result of a transaction processing step.
  */
-struct transaction_exception
+enum class ProcessResult
 {
-    enum transaction_exception_code exception_code;
+    IN_PROGRESS,
+    PUSH_BACK,
+    FINISHED,
+    ERROR,
+};
 
-    union
+/*!
+ * Communication channel identifier.
+ */
+enum class Channel
+{
+    SPI,
+    INET,
+};
+
+using DumpFlags = unsigned int;
+
+static constexpr DumpFlags DUMP_SENT_MASK        = (7U << 0);
+static constexpr DumpFlags DUMP_SENT_DCPSYNC     = (1U << 0);
+static constexpr DumpFlags DUMP_SENT_DCP_HEADER  = (1U << 1);
+static constexpr DumpFlags DUMP_SENT_DCP_PAYLOAD = (1U << 2);
+static constexpr DumpFlags DUMP_SENT_NONE =         0U;
+
+static constexpr DumpFlags DUMP_SENT_MERGE_MASK  = (3U << 4);
+static constexpr DumpFlags DUMP_SENT_MERGE_NONE  = (0U << 4);
+static constexpr DumpFlags DUMP_SENT_MERGE_DCP   = (1U << 4);
+static constexpr DumpFlags DUMP_SENT_MERGE_ALL   = (2U << 4);
+
+class Queue;
+class Transaction;
+
+/*!
+ * Synchronization data for DCPSYNC encapsulation.
+ */
+class TXSync
+{
+  private:
+    bool is_enabled_;
+    uint8_t original_command_;
+    uint8_t ttl_;
+    uint16_t serial_;
+    uint16_t remaining_payload_size_;
+
+  public:
+    TXSync(const TXSync &) = delete;
+    TXSync &operator=(const TXSync &) = delete;
+    TXSync &operator=(TXSync &&) = default;
+
+    explicit TXSync() { disable(); }
+    explicit TXSync(Queue &queue, InitialType init_type, uint8_t command, Channel channel);
+
+    bool is_enabled() const { return is_enabled_; }
+    uint8_t get_command() const { return original_command_; }
+    uint8_t get_ttl() const { return ttl_; }
+    uint16_t get_serial() const { return serial_; }
+    uint16_t get_remaining_payload_size() const { return remaining_payload_size_; }
+    bool consumed_payload(size_t n);
+    void drop_payload() { remaining_payload_size_ = 0; }
+    void process_nack();
+    void process_nack(uint16_t serial, uint8_t ttl);
+
+    enum class SizeCheckResult
     {
-        struct transaction_exception_collision_data collision;
-        struct transaction_exception_ack_data ack;
-        struct transaction_exception_nack_data nack;
-    }
-    d;
+        NOT_ENABLED,
+        MATCH,
+        TRAILING_JUNK,
+        TRUNCATED,
+    };
+
+    SizeCheckResult does_dcp_packet_size_match(uint16_t n) const;
+
+    void disable();
+    void enable(uint8_t ttl, uint16_t serial);
+    void enable(uint8_t command, uint8_t ttl, uint16_t serial, uint16_t payload_size);
+    void refresh(uint16_t serial);
+    void enter_exception();
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/*!
+ * Base class for exceptions thrown for exceptional situations in transaction
+ * processing.
+ */
+class ProtocolException: public std::runtime_error
+{
+  protected:
+    explicit ProtocolException(const char *m): std::runtime_error(m) {}
+
+  public:
+    virtual ~ProtocolException() {}
+};
 
 /*!
- * Initialize transaction container.
- *
- * Must be called once before calling any other functions declared in this
- * header file.
+ * Exception: Packet collision.
  */
-void transaction_init_allocator(void);
+class CollisionException: public ProtocolException
+{
+  public:
+    std::unique_ptr<Transaction> transaction_;
+
+    explicit CollisionException(std::unique_ptr<Transaction> t):
+        ProtocolException("DCP collision"),
+        transaction_(std::move(t))
+    {}
+};
 
 /*!
- * Allocate a new transaction object.
- *
- * \returns A pointer to a transaction, or NULL on error.
+ * Exception: Out-ouf-order ACK processing.
  */
-struct transaction *transaction_alloc(enum transaction_alloc_type alloc_type,
-                                      enum transaction_channel channel,
-                                      bool is_pinned);
+class OOOAckException: public ProtocolException
+{
+  public:
+    const uint16_t serial_;
+
+    explicit OOOAckException(uint16_t serial):
+        ProtocolException("out-of-order ACK"),
+        serial_(serial)
+    {}
+};
 
 /*!
- * Free a transaction queue.
- *
- * \param head Pointer to pointer of transaction queue to free. The pointer
- *     that is pointed to will be set to NULL.
+ * Exception: Out-ouf-order NACK processing.
  */
-void transaction_free(struct transaction **head);
+class OOONackException: public ProtocolException
+{
+  public:
+    const uint8_t ttl_;
+    const uint16_t serial_;
+
+    explicit OOONackException(uint16_t serial, uint8_t ttl):
+        ProtocolException("out-of-order NACK"),
+        ttl_(ttl),
+        serial_(serial)
+    {}
+};
 
 /*!
- * Free payload and reinitialize structure.
+ * A single DCP transaction.
  */
-void transaction_reset_for_slave(struct transaction *t);
+class Transaction
+{
+  private:
+    enum class State
+    {
+        ERROR,                /*!< Error state, cannot process */
+        SLAVE_PREPARE__INIT,  /*!< Read command from slave */
+        PUSH_TO_SLAVE__INIT,  /*!< Prepare answer buffer */
+        MASTER_PREPARE__INIT, /*!< Filling command buffer */
+        SLAVE_READ_DATA,      /*!< Read data from slave */
+        SLAVE_PREPARE_APPEND, /*!< Read next fragment */
+        SLAVE_READ_APPEND,    /*!< Read more data from slave (big
+                               *   chunk in multiple packets) */
+        SLAVE_PREPARE_ANSWER, /*!< Fill answer buffer */
+        SLAVE_PROCESS_WRITE,  /*!< Process data written by slave */
+        SEND_TO_SLAVE,        /*!< Send (any) data to slave */
+        SEND_TO_SLAVE_ACKED,  /*!< Data was acknowledged by slave */
+        SEND_TO_SLAVE_FAILED, /*!< Final NACK received, abort */
+        DCPSYNC_WAIT_FOR_ACK, /*!< Wait for DCPSYNC ack from slave */
+    };
+
+    enum class LogWrite
+    {
+        SINGLE,
+        INCOMPLETE,
+        CONTINUED,
+        COMPLETED,
+    };
+
+    const bool is_pinned_;
+    const Channel channel_;
+
+    State state_;
+
+    TXSync tx_sync_;
+
+    std::array<uint8_t, DCP_HEADER_SIZE> request_header_;
+    uint8_t command_;
+
+    const Regs::Register *reg_;
+
+    struct dynamic_buffer payload_;
+    size_t current_fragment_offset_;
+
+    Queue &queue_;
+
+  public:
+    Transaction(const Transaction &) = delete;
+    Transaction &operator=(const Transaction &) = delete;
+
+  private:
+    explicit Transaction(Queue &queue, InitialType init_type,
+                         Channel channel, bool mark_as_pinned);
+    explicit Transaction(Queue &queue, const Regs::Register &reg,
+                         bool is_register_push, Channel channel);
+
+  public:
+    ~Transaction();
+
+    static std::unique_ptr<Transaction>
+    new_for_queue(Queue &queue, InitialType init_type, Channel channel, bool mark_as_pinned)
+    {
+        return std::unique_ptr<Transaction>(new Transaction(queue, init_type,
+                                                            channel, mark_as_pinned));
+    }
+
+    static std::unique_ptr<Transaction>
+    new_for_queue(Queue &queue, const Regs::Register &reg,
+                  bool is_register_push, Channel channel)
+    {
+        return std::unique_ptr<Transaction>(new Transaction(queue, reg,
+                                                            is_register_push, channel));
+    }
+
+    /*!
+     * Free payload and reinitialize structure.
+     */
+    void reset_for_slave();
+
+    /*!
+     * Whether or not to free the transaction object.
+     *
+     * This flag is only advisory and is used by client code for managing
+     * pre-allocated objects.
+     */
+    bool is_pinned() const { return is_pinned_; }
+
+    /*!
+     * Return communication channel used by this transaction.
+     */
+    Channel get_channel() const { return channel_; }
+
+    /*!
+     * Return DCPSYNC serial number for this transaction.
+     */
+    uint16_t get_dcpsync_serial() const { return tx_sync_.get_serial(); }
+
+    /*!
+     * Process the transaction.
+     *
+     * This function can throw exceptions of type
+     * #TransactionQueue::ProtocolException, which must be handled by the
+     * caller. This mechnism is required because this function only operates on
+     * a single transaction, not a queue of transactions.
+     *
+     * In case of a collision, a new transaction will have been created and
+     * passed as data with the exception object. That new transaction takes
+     * priority over the current transaction and must be processed next;
+     * processing of this transaction must be deferred until after the new
+     * transaction has finished.
+     *
+     * \param from_slave_fd
+     *     Where to read data sent by slave from.
+     * \param to_slave_fd
+     *     Where to write data to be sent to slave to.
+     * \param dump_sent_data_flags
+     *     Whether or not to log DCP data sent to slave, and how.
+     *     See \c TransactionQueue::DUMP_SENT_ flag definitions (e.g.,
+     *     #TransactionQueue::DUMP_SENT_DCP_HEADER).
+     *
+     * \retval #TransactionQueue::ProcessResult::IN_PROGRESS
+     *     The transaction needs more processing,
+     *     #TransactionQueue::Transaction::process() must be called again.
+     *     Check the result of
+     *     #TransactionQueue::Transaction::is_input_required() before actually
+     *     doing this.
+     * \retval #TransactionQueue::ProcessResult::PUSH_BACK
+     *     The transaction has been recycled (ACK received, answer to read
+     *     command should be sent) and should be reinserted at the end of the
+     *     queue.
+     * \retval #TransactionQueue::ProcessResult::FINISHED
+     *     The transaction has been processed without any errors and may be
+     *     freed.
+     * \retval #TransactionQueue::ProcessResult::ERROR
+     *     The transaction has finished with an error and may be freed.
+     * \throw CollisionException
+     *     Collision detected.
+     * \throw OOOAckException
+     *     Out-of-order ACK received.
+     * \throw OOONackException
+     *     Out-of-order NACK received.
+     */
+    ProcessResult process(int from_slave_fd, int to_slave_fd, DumpFlags dump_sent_data_flags);
+
+    /*!
+     * Inject ACK into transaction.
+     *
+     * For out-of-order ACK handling.
+     */
+    ProcessResult process_out_of_order_ack(const OOOAckException &e);
+
+    /*!
+     * Inject NACK into transaction.
+     *
+     * For out-of-order NACK handling.
+     */
+    ProcessResult process_out_of_order_nack(const OOONackException &e);
+
+    /*!
+     * Whether or not further input is required, depending on current state.
+     */
+    bool is_input_required() const;
+
+    /*!\internal
+     * \brief
+     * Return maximum size of data for the register bound to this transaction.
+     *
+     * Note that it is a programming error to call this function if there is no
+     * register bound yet or if the register has unbounded, dynamic size.
+     *
+     * \note
+     *     Used internally by TransactionQueue::fragments_from_data().
+     */
+    uint16_t get_max_data_size() const;
+
+    /*!\internal
+     * \brief
+     * Copy given data to this transaction's payload buffer.
+     *
+     * \note
+     *     Used internally by TransactionQueue::fragments_from_data().
+     */
+    bool set_payload(const uint8_t *src, size_t length);
+
+  private:
+    void init(InitialType init_type, const Regs::Register *reg, bool is_reinit);
+    void bind_to_register(const Regs::Register &reg, uint8_t command);
+    void refresh_as_master_transaction();
+    bool allocate_payload_buffer();
+    bool fill_request_header(const int fd);
+    bool fill_payload_buffer(const int fd, bool append);
+    bool do_read_register();
+    size_t get_current_fragment_size() const;
+    size_t get_remaining_fragment_size() const { return payload_.pos - current_fragment_offset_; }
+    bool is_last_fragment() const { return get_remaining_fragment_size() <= DCP_PACKET_MAX_PAYLOAD_SIZE; }
+    void skip_transaction_payload(const int fd);
+
+    bool process_ack(uint16_t serial);
+    bool process_nack(uint16_t serial, uint8_t ttl);
+
+    void log_register_write(LogWrite what) const;
+    void log_dcp_data(DumpFlags flags, const uint8_t *sync_header, const size_t fragsize) const;
+};
 
 /*!
- * Add queue \p t to end of given queue.
- *
- * \param head Pointer to a pointer of the first element of a queue. If it
- *     points to a NULL pointer, it will be changed to point to \p t, otherwise
- *     it will remain untouched.
- * \param t The queue to add to the queue.
+ * A queue of #TransactionQueue::Transaction objects.
  */
-void transaction_queue_add(struct transaction **head, struct transaction *t);
+class Queue
+{
+  private:
+    std::deque<std::unique_ptr<Transaction>> transactions_;
+    uint16_t next_dcpsync_serial_;
 
-/*!
- * Remove first element from queue.
- *
- * \param head Pointer to a pointer of the first element of a queue. The head
- *     pointer will be moved to the next element in the queue, if any; if there
- *     is only one element in the queue, then the head pointer is set to NULL.
- *
- * \returns Pointer that \p head was pointing to.
- */
-struct transaction *transaction_queue_remove(struct transaction **head);
+  public:
+    Queue(const Queue &) = delete;
+    Queue &operator=(const Queue &) = delete;
 
-/*!
- * Find transaction given a DCPSYNC serial.
- */
-struct transaction *transaction_queue_find_by_serial(struct transaction *head,
-                                                     uint16_t serial);
+    explicit Queue():
+        next_dcpsync_serial_(0)
+    {}
 
-/*!
- * Remove transaction from queue, making it a queue of its own.
- *
- * \returns
- *     The element that followed \p t before it was removed from its queue.
- */
-struct transaction *transaction_queue_cut_element(struct transaction *t);
+    uint16_t mk_dcpsync_serial();
 
-/*!
- * Return communication channel used by the given transaction.
- */
-enum transaction_channel transaction_get_channel(const struct transaction *t);
+    bool empty() const { return transactions_.empty(); }
 
-/*!
- * Whether or not to free the transaction object.
- *
- * This flag is only advisory and used by client code. Calling
- * #transaction_free() for a pinned transaction still frees the object and
- * returns it to the pool of unused transaction objects.
- */
-bool transaction_is_pinned(const struct transaction *t);
+    bool append(std::unique_ptr<Transaction> t);
+    bool append(std::deque<std::unique_ptr<Transaction>> &&ts);
+    bool prepend(std::unique_ptr<Transaction> t);
 
-/*!
- * Process the transaction.
- *
- * \param[in] t
- *     Transaction to process.
- * \param[in] from_slave_fd
- *     Where to read data sent by slave from.
- * \param[in] to_slave_fd
- *     Where to write data to be sent to slave to.
- * \param[in] dump_sent_data_flags
- *     Whether or not to log DCP data sent to slave, and how.
- *     See \c TRANSACTION_DUMP_SENT_ flag definitions.
- * \param[out] e
- *     New transaction that was created while processing \p t as a result of a
- *     collision. This new transaction takes priority over \p tc and must be
- *     processed next, processing of \p t must be deferred until after \p tc
- *     has finished.
- *
- * \retval #TRANSACTION_IN_PROGRESS
- *     The transaction needs more processing, #transaction_process() must be
- *     called again. Check result of #transaction_is_input_required() before
- *     actually doing it.
- * \retval #TRANSACTION_PUSH_BACK
- *     The transaction has been recycled (ACK received, answer to read command
- *     should be sent) and should be reinserted at the end of the queue.
- * \retval #TRANSACTION_FINISHED
- *     The transaction has been processed without any errors and may be freed.
- * \retval #TRANSACTION_ERROR
- *     The transaction has finished with an error and may be freed.
- * \retval #TRANSACTION_EXCEPTION
- *     There was an exception (see #transaction_exception_code) which must be
- *     handled by the caller. This mechnism is required because this function
- *     only operates on a single transaction, not a queue of transactions.
- */
-enum transaction_process_status transaction_process(struct transaction *t,
-                                                    int from_slave_fd,
-                                                    int to_slave_fd,
-                                                    unsigned int dump_sent_data_flags,
-                                                    struct transaction_exception *e);
+    /*!
+     * Remove first element from queue.
+     */
+    std::unique_ptr<Transaction> pop();
 
-/*!
- * Inject ACK into transaction.
- *
- * For out-of-order ACK handling.
- */
-enum transaction_process_status
-transaction_process_out_of_order_ack(struct transaction *t,
-                                     const struct transaction_exception_ack_data *d);
+    /*!
+     * Apply function to transaction matching the given DCPSYNC serial.
+     */
+    ProcessResult apply_to_dcpsync_serial(uint16_t serial,
+                                          const std::function<ProcessResult(Transaction &)> &fn);
+};
 
-/*!
- * Inject NACK into transaction.
- *
- * For out-of-order NACK handling.
- */
-enum transaction_process_status
-transaction_process_out_of_order_nack(struct transaction *t,
-                                      const struct transaction_exception_nack_data *d);
+std::deque<std::unique_ptr<Transaction>>
+fragments_from_data(Queue &queue, const uint8_t *data, size_t length,
+                    uint8_t register_address, Channel channel);
 
-bool transaction_is_input_required(const struct transaction *t);
+bool push_register_to_slave(Queue &queue, uint8_t register_address,
+                            Channel channel);
 
-uint16_t transaction_get_max_data_size(const struct transaction *t);
-
-struct transaction *
-transaction_fragments_from_data(const uint8_t *data, size_t length,
-                                uint8_t register_address,
-                                enum transaction_channel channel);
-
-bool transaction_push_register_to_slave(struct transaction **head,
-                                        uint8_t register_address,
-                                        enum transaction_channel channel);
-
-#ifdef __cplusplus
 }
-#endif
 
 /*!@}*/
 
