@@ -318,7 +318,7 @@ void network_prefs_init(const char *network_config_path,
     networkprefs_data.network_wlan_prefs.technology = NWPREFSTECH_WLAN;
 }
 
-void network_prefs_deinit(void) {}
+void network_prefs_deinit() {}
 
 static int find_nic_name(const char *path, unsigned char dtype, void *user_data)
 {

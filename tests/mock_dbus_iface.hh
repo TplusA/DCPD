@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -41,7 +41,7 @@ class MockDBusIface
     void check() const;
 
     void expect_dbus_setup(int ret, bool connect_to_session_bus, bool with_connman);
-    void expect_dbus_shutdown(void);
+    void expect_dbus_shutdown();
 
     void expect_dbus_get_playback_iface(tdbusdcpdPlayback *);
     void expect_dbus_get_views_iface(tdbusdcpdViews *);

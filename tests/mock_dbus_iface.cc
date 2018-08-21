@@ -289,7 +289,7 @@ void MockDBusIface::expect_dbus_setup(int ret, bool connect_to_session_bus, bool
     expectations_->add(Expectation(DBusIfaceFn::setup, ret, connect_to_session_bus, with_connman));
 }
 
-void MockDBusIface::expect_dbus_shutdown(void)
+void MockDBusIface::expect_dbus_shutdown()
 {
     expectations_->add(Expectation(DBusIfaceFn::shutdown));
 }
@@ -373,14 +373,14 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman)
     return expect.ret_code_;
 }
 
-void dbus_shutdown(void)
+void dbus_shutdown()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.function_id_, DBusIfaceFn::shutdown);
 }
 
-tdbusdcpdPlayback *dbus_get_playback_iface(void)
+tdbusdcpdPlayback *dbus_get_playback_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -388,7 +388,7 @@ tdbusdcpdPlayback *dbus_get_playback_iface(void)
     return static_cast<tdbusdcpdPlayback *>(expect.ret_dbus_object_);
 }
 
-tdbusdcpdViews *dbus_get_views_iface(void)
+tdbusdcpdViews *dbus_get_views_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -396,7 +396,7 @@ tdbusdcpdViews *dbus_get_views_iface(void)
     return static_cast<tdbusdcpdViews *>(expect.ret_dbus_object_);
 }
 
-tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void)
+tdbusdcpdListNavigation *dbus_get_list_navigation_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -404,7 +404,7 @@ tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void)
     return static_cast<tdbusdcpdListNavigation *>(expect.ret_dbus_object_);
 }
 
-tdbusdcpdListItem *dbus_get_list_item_iface(void)
+tdbusdcpdListItem *dbus_get_list_item_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -412,7 +412,7 @@ tdbusdcpdListItem *dbus_get_list_item_iface(void)
     return static_cast<tdbusdcpdListItem *>(expect.ret_dbus_object_);
 }
 
-tdbusaupathManager *dbus_audiopath_get_manager_iface(void)
+tdbusaupathManager *dbus_audiopath_get_manager_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -420,7 +420,7 @@ tdbusaupathManager *dbus_audiopath_get_manager_iface(void)
     return static_cast<tdbusaupathManager *>(expect.ret_dbus_object_);
 }
 
-tdbusFileTransfer *dbus_get_file_transfer_iface(void)
+tdbusFileTransfer *dbus_get_file_transfer_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -428,7 +428,7 @@ tdbusFileTransfer *dbus_get_file_transfer_iface(void)
     return static_cast<tdbusFileTransfer *>(expect.ret_dbus_object_);
 }
 
-tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void)
+tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -436,7 +436,7 @@ tdbussplayURLFIFO *dbus_get_streamplayer_urlfifo_iface(void)
     return static_cast<tdbussplayURLFIFO *>(expect.ret_dbus_object_);
 }
 
-tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void)
+tdbussplayPlayback *dbus_get_streamplayer_playback_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -444,7 +444,7 @@ tdbussplayPlayback *dbus_get_streamplayer_playback_iface(void)
     return static_cast<tdbussplayPlayback *>(expect.ret_dbus_object_);
 }
 
-tdbusAirable *dbus_get_airable_sec_iface(void)
+tdbusAirable *dbus_get_airable_sec_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -452,7 +452,7 @@ tdbusAirable *dbus_get_airable_sec_iface(void)
     return static_cast<tdbusAirable *>(expect.ret_dbus_object_);
 }
 
-tdbusartcacheRead *dbus_get_artcache_read_iface(void)
+tdbusartcacheRead *dbus_get_artcache_read_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -460,7 +460,7 @@ tdbusartcacheRead *dbus_get_artcache_read_iface(void)
     return static_cast<tdbusartcacheRead *>(expect.ret_dbus_object_);
 }
 
-tdbuscredentialsRead *dbus_get_credentials_read_iface(void)
+tdbuscredentialsRead *dbus_get_credentials_read_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -468,7 +468,7 @@ tdbuscredentialsRead *dbus_get_credentials_read_iface(void)
     return static_cast<tdbuscredentialsRead *>(expect.ret_dbus_object_);
 }
 
-tdbuscredentialsWrite *dbus_get_credentials_write_iface(void)
+tdbuscredentialsWrite *dbus_get_credentials_write_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 
@@ -476,7 +476,7 @@ tdbuscredentialsWrite *dbus_get_credentials_write_iface(void)
     return static_cast<tdbuscredentialsWrite *>(expect.ret_dbus_object_);
 }
 
-tdbuslogindManager *dbus_get_logind_manager_iface(void)
+tdbuslogindManager *dbus_get_logind_manager_iface()
 {
     const auto &expect(mock_dbus_iface_singleton->expectations_->get_next_expectation(__func__));
 

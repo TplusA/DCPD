@@ -438,7 +438,7 @@ const MockConnman::SecurityIterData MockConnman::sec_none("none");
 
 const MockConnman::SecurityIterData MockConnman::sec_psk("psk");
 
-struct ConnmanServiceIterator *connman_service_iterator_get(void)
+struct ConnmanServiceIterator *connman_service_iterator_get()
 {
     if(mock_connman_singleton->have_iter_data())
         return mock_connman_singleton->do_service_iterator_get();
