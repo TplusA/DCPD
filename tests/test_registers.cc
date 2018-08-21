@@ -9956,19 +9956,20 @@ class ExpectedSourceData
     }
 };
 
-static const std::array<ExpectedSourceData, 11> predefined_sources
+static const std::array<ExpectedSourceData, 12> predefined_sources
 {
-    ExpectedSourceData("strbo.usb",      "USB devices",             true),
-    ExpectedSourceData("strbo.upnpcm",   "UPnP media servers",      true),
-    ExpectedSourceData("strbo.plainurl", "TA Control",              false),
-    ExpectedSourceData("airable",        "Airable",                 true),
-    ExpectedSourceData("airable.radios", "Airable Internet Radios", true),
-    ExpectedSourceData("airable.feeds",  "Airable Podcasts",        true),
-    ExpectedSourceData("airable.tidal",  "TIDAL",                   true),
-    ExpectedSourceData("airable.deezer", "Deezer",                  true),
-    ExpectedSourceData("airable.qobuz",  "Qobuz",                   true),
-    ExpectedSourceData("roon",           "Roon Ready",              false, true),
-    ExpectedSourceData("",               "Inactive",                false),
+    ExpectedSourceData("strbo.usb",            "USB devices",             true),
+    ExpectedSourceData("strbo.upnpcm",         "UPnP media servers",      true),
+    ExpectedSourceData("strbo.plainurl",       "TA Control",              false),
+    ExpectedSourceData("airable",              "Airable",                 true),
+    ExpectedSourceData("airable.radios",       "Airable Internet Radios", true),
+    ExpectedSourceData("airable.feeds",        "Airable Podcasts",        true),
+    ExpectedSourceData("airable.tidal",        "TIDAL",                   true),
+    ExpectedSourceData("airable.deezer",       "Deezer",                  true),
+    ExpectedSourceData("airable.qobuz",        "Qobuz",                   true),
+    ExpectedSourceData("airable.highresaudio", "HIGHRESAUDIO",            true),
+    ExpectedSourceData("roon",                 "Roon Ready",              false, true),
+    ExpectedSourceData("",                     "Inactive",                false),
 };
 
 void cut_setup()
@@ -10113,12 +10114,13 @@ void test_read_out_all_audio_sources_after_initialization()
 
 static void read_out_all_audio_sources_after_making_airable_available(bool is_online)
 {
-    make_source_available("airable",        "p", "de.tahifi.Airable", "dbus/airable", 0x42);
-    make_source_available("airable.radios", "p", "de.tahifi.Radios",  "dbus/radios",  0x42);
-    make_source_available("airable.feeds",  "p", "de.tahifi.Feeds",   "dbus/feeds",   0x42);
-    make_source_available("airable.tidal",  "p", "de.tahifi.Tidal",   "dbus/tidal",   0x44);
-    make_source_available("airable.deezer", "p", "de.tahifi.Deezer",  "dbus/deezer",  0x44);
-    make_source_available("airable.qobuz",  "p", "de.tahifi.Qobuz",   "dbus/qobuz",   0x44);
+    make_source_available("airable",              "p", "de.tahifi.Airable", "dbus/airable", 0x42);
+    make_source_available("airable.radios",       "p", "de.tahifi.Radios",  "dbus/radios",  0x42);
+    make_source_available("airable.feeds",        "p", "de.tahifi.Feeds",   "dbus/feeds",   0x42);
+    make_source_available("airable.tidal",        "p", "de.tahifi.Tidal",   "dbus/tidal",   0x44);
+    make_source_available("airable.deezer",       "p", "de.tahifi.Deezer",  "dbus/deezer",  0x44);
+    make_source_available("airable.qobuz",        "p", "de.tahifi.Qobuz",   "dbus/qobuz",   0x44);
+    make_source_available("airable.highresaudio", "p", "de.tahifi.HRAudio", "dbus/hraudio", 0x44);
 
     auto *reg = lookup_register_expect_handlers(80,
                         Regs::AudioSources::DCP::read_80_get_known_audio_sources,

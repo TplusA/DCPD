@@ -737,7 +737,7 @@ class SlavePushCommandQueue
 class AudioSourceData
 {
   public:
-    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 11;
+    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 12;
 
   private:
     std::mutex lock_;
@@ -985,6 +985,9 @@ void Regs::AudioSources::init()
                     AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
                     is_service_unlocked),
         AudioSource("airable.qobuz",  "Qobuz",
+                    AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
+                    is_service_unlocked),
+        AudioSource("airable.highresaudio", "HIGHRESAUDIO",
                     AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
                     is_service_unlocked),
         AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN,
