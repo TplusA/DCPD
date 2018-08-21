@@ -930,8 +930,6 @@ class AudioSourceData
     }
 };
 
-static SlavePushCommandQueue push_80_command_queue;
-
 static bool try_invoke_roon(const AudioSource &src, bool summon)
 {
     if(!summon)
@@ -947,61 +945,73 @@ static bool try_invoke_roon(const AudioSource &src, bool summon)
     return true;
 }
 
-static ExternalServiceState global_external_service_state;
+static std::unique_ptr<SlavePushCommandQueue> push_80_command_queue;
+static std::unique_ptr<ExternalServiceState> global_external_service_state;
+static std::unique_ptr<AudioSourceData> audio_source_data;
 
 static AudioSourceState is_service_unlocked(const AudioSource &src)
 {
     const auto logged_in =
-        global_external_service_state.is_logged_in(
+        global_external_service_state->is_logged_in(
             ExternalServiceState::airable_source_id_to_credentials_category(src.id_));
 
     if(logged_in.is_known())
         return logged_in.get() ? AudioSourceState::ALIVE : AudioSourceState::LOCKED;
 
-    if(global_external_service_state.have_credentials(
+    if(global_external_service_state->have_credentials(
             ExternalServiceState::airable_source_id_to_credentials_category(src.id_)) == false)
         return AudioSourceState::LOCKED;
     else
         return AudioSourceState::ALIVE_OR_LOCKED;
 }
 
-static AudioSourceData audio_source_data(
-{
-    AudioSource("strbo.usb",      "USB devices",             AudioSource::IS_BROWSABLE),
-    AudioSource("strbo.upnpcm",   "UPnP media servers",      AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_LAN),
-    AudioSource("strbo.plainurl", "TA Control",              AudioSource::REQUIRES_LAN),
-    AudioSource("airable",        "Airable",                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
-    AudioSource("airable.radios", "Airable Internet Radios", AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
-    AudioSource("airable.feeds",  "Airable Podcasts",        AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
-    AudioSource("airable.tidal",  "TIDAL",
-                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
-                is_service_unlocked),
-    AudioSource("airable.deezer", "Deezer",
-                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
-                is_service_unlocked),
-    AudioSource("airable.qobuz",  "Qobuz",
-                AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
-                is_service_unlocked),
-    AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN,
-                nullptr, try_invoke_roon, true),
-    AudioSource("",               "Inactive",                0),
-});
 
 void Regs::AudioSources::init()
 {
-    audio_source_data.for_each([] (AudioSource &src)
+    push_80_command_queue.reset(new SlavePushCommandQueue);
+    global_external_service_state.reset(new ExternalServiceState);
+    audio_source_data.reset(new AudioSourceData(
+    {
+        AudioSource("strbo.usb",      "USB devices",             AudioSource::IS_BROWSABLE),
+        AudioSource("strbo.upnpcm",   "UPnP media servers",      AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_LAN),
+        AudioSource("strbo.plainurl", "TA Control",              AudioSource::REQUIRES_LAN),
+        AudioSource("airable",        "Airable",                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
+        AudioSource("airable.radios", "Airable Internet Radios", AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
+        AudioSource("airable.feeds",  "Airable Podcasts",        AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
+        AudioSource("airable.tidal",  "TIDAL",
+                    AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
+                    is_service_unlocked),
+        AudioSource("airable.deezer", "Deezer",
+                    AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
+                    is_service_unlocked),
+        AudioSource("airable.qobuz",  "Qobuz",
+                    AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET | AudioSource::CAN_BE_LOCKED,
+                    is_service_unlocked),
+        AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN,
+                    nullptr, try_invoke_roon, true),
+        AudioSource("",               "Inactive",                0),
+    }));
+
+    audio_source_data->for_each([] (AudioSource &src)
     {
         if(src.check_any_flag(AudioSource::CAN_BE_LOCKED))
-            global_external_service_state.add_category(
+            global_external_service_state->add_category(
                 ExternalServiceState::airable_source_id_to_credentials_category(src.id_),
                 src);
     });
 
     /* preselect placeholder audio source for inactive state */
-    const auto *inactive_src = audio_source_data.lookup_predefined("");
+    const auto *inactive_src = audio_source_data->lookup_predefined("");
     if(inactive_src != nullptr)
-        audio_source_data.selected_audio_source_notification(*inactive_src,
-                                                             false, false);
+        audio_source_data->selected_audio_source_notification(*inactive_src,
+                                                              false, false);
+}
+
+void Regs::AudioSources::deinit()
+{
+    audio_source_data = nullptr;
+    global_external_service_state = nullptr;
+    push_80_command_queue = nullptr;
 }
 
 static Maybe<bool> have_credentials_stored(const char *category)
@@ -1060,11 +1070,11 @@ void Regs::AudioSources::check_external_service_credentials()
 {
     bool changed = false;
 
-    for(auto it = global_external_service_state.begin();
-        it != global_external_service_state.end();
+    for(auto it = global_external_service_state->begin();
+        it != global_external_service_state->end();
         ++it)
     {
-        if(global_external_service_state.set_credentials_state(
+        if(global_external_service_state->set_credentials_state(
                 std::move(ExternalServiceState::MapType::iterator(it)),
                 have_credentials_stored(it->first.c_str()),
                 ExternalServiceState::SetStateServiceUpdateMode::ON_CHANGE))
@@ -1072,18 +1082,7 @@ void Regs::AudioSources::check_external_service_credentials()
     };
 
     if(changed)
-        audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
-}
-
-void Regs::AudioSources::deinit()
-{
-    auto lock(audio_source_data.lock());
-    audio_source_data.reset({AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
-                             AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
-                             AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
-                             AudioSourceState::UNAVAILABLE, AudioSourceState::UNAVAILABLE,
-                             AudioSourceState::UNAVAILABLE, AudioSourceState::DEAD});
-    push_80_command_queue.reset();
+        audio_source_data->audio_sources_changed_lock_state_notification(*push_80_command_queue);
 }
 
 static bool check_network_requirements(const AudioSource &asrc)
@@ -1175,8 +1174,8 @@ ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *respon
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 80 handler %p %zu", response, length);
 
-    auto lock(audio_source_data.lock());
-    const auto queue_item(push_80_command_queue.take());
+    auto lock(audio_source_data->lock());
+    const auto queue_item(push_80_command_queue->take());
     const GetAudioSourcesCommand &command(queue_item.first);
 
     RegisterResponseWriter out(response, length);
@@ -1186,9 +1185,9 @@ ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *respon
     switch(command)
     {
       case GetAudioSourcesCommand::READ_ALL:
-        out.push_back(uint8_t(audio_source_data.NUMBER_OF_DEFAULT_SOURCES));
+        out.push_back(uint8_t(audio_source_data->NUMBER_OF_DEFAULT_SOURCES));
 
-        audio_source_data.for_each([&out] (const AudioSource &asrc)
+        audio_source_data->for_each([&out] (const AudioSource &asrc)
         {
             write_audio_source_info(out, asrc, true);
         });
@@ -1198,7 +1197,7 @@ ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *respon
       case GetAudioSourcesCommand::READ_ONE:
         {
             const AudioSource *asrc =
-                audio_source_data.lookup_predefined(queue_item.second);
+                audio_source_data->lookup_predefined(queue_item.second);
 
             if(asrc != nullptr)
                 write_audio_source_info(out, *asrc, true);
@@ -1214,7 +1213,7 @@ ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *respon
 
       case GetAudioSourcesCommand::SOURCES_CHANGED:
         size_t number_of_changes = 0;
-        audio_source_data.for_each([&number_of_changes] (const AudioSource &asrc)
+        audio_source_data->for_each([&number_of_changes] (const AudioSource &asrc)
         {
             if(asrc.has_changed())
                 ++number_of_changes;
@@ -1228,7 +1227,7 @@ ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *respon
 
         out.push_back(uint8_t(number_of_changes));
 
-        audio_source_data.for_each([&out] (AudioSource &asrc)
+        audio_source_data->for_each([&out] (AudioSource &asrc)
         {
             if(asrc.has_changed())
             {
@@ -1263,8 +1262,8 @@ static int queue_read_one_command(const uint8_t *data, size_t length)
         return -1;
     }
 
-    push_80_command_queue.add(GetAudioSourcesCommand::READ_ONE,
-                              std::move(std::string(reinterpret_cast<const char *>(data))));
+    push_80_command_queue->add(GetAudioSourcesCommand::READ_ONE,
+                               std::move(std::string(reinterpret_cast<const char *>(data))));
 
     return 0;
 }
@@ -1289,7 +1288,7 @@ int Regs::AudioSources::DCP::write_80_get_known_audio_sources(const uint8_t *dat
         switch(command)
         {
           case GetAudioSourcesCommand::READ_ALL:
-            push_80_command_queue.add(GetAudioSourcesCommand(data[0]));
+            push_80_command_queue->add(GetAudioSourcesCommand(data[0]));
             result = 0;
             break;
 
@@ -1312,9 +1311,9 @@ ssize_t Regs::AudioSources::DCP::read_81_current_audio_source(uint8_t *response,
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 81 handler %p %zu", response, length);
 
-    auto lock(audio_source_data.lock());
+    auto lock(audio_source_data->lock());
 
-    const AudioSource *src =audio_source_data.get_selected().get_half_or_full();
+    const AudioSource *src =audio_source_data->get_selected().get_half_or_full();
 
     if(src == nullptr)
         return 0;
@@ -1464,10 +1463,10 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
                                                   ? AudioSourceEnableRequest::KEEP_AS_IS
                                                   : parse_enable_request(data[i + 1]));
 
-    auto lock(audio_source_data.lock());
+    auto lock(audio_source_data->lock());
 
     const AudioSource *src =
-        audio_source_data.lookup_predefined(audio_source_name);
+        audio_source_data->lookup_predefined(audio_source_name);
 
     if(src == nullptr)
     {
@@ -1506,11 +1505,11 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
       case AudioSourceState::ALIVE:
       case AudioSourceState::LOCKED:
       case AudioSourceState::ALIVE_OR_LOCKED:
-        audio_source_data.request_audio_source(*src, std::move(request_data), true);
+        audio_source_data->request_audio_source(*src, std::move(request_data), true);
         break;
 
       case AudioSourceState::UNAVAILABLE:
-        audio_source_data.request_audio_source(*src, std::move(request_data), false);
+        audio_source_data->request_audio_source(*src, std::move(request_data), false);
         break;
 
       case AudioSourceState::DEAD:
@@ -1526,31 +1525,31 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
 
 void Regs::AudioSources::source_available(const char *source_id)
 {
-    auto lock(audio_source_data.lock());
+    auto lock(audio_source_data->lock());
 
-    AudioSource *src = audio_source_data.lookup(source_id);
+    AudioSource *src = audio_source_data->lookup(source_id);
 
     if(src == nullptr)
         return;
 
-    if(audio_source_data.audio_source_available_notification(*src))
-        push_80_command_queue.add(GetAudioSourcesCommand::SOURCES_CHANGED);
+    if(audio_source_data->audio_source_available_notification(*src))
+        push_80_command_queue->add(GetAudioSourcesCommand::SOURCES_CHANGED);
 }
 
 void Regs::AudioSources::selected_source(const char *source_id,
                                          bool is_deferred)
 {
-    auto lock(audio_source_data.lock());
+    auto lock(audio_source_data->lock());
 
-    AudioSource *src = audio_source_data.lookup(source_id);
+    AudioSource *src = audio_source_data->lookup(source_id);
 
     if(src == nullptr)
-        src = audio_source_data.insert_extra(source_id);
+        src = audio_source_data->insert_extra(source_id);
     else
     {
         bool is_half_selected;
 
-        if(src == audio_source_data.get_selected().get(is_half_selected))
+        if(src == audio_source_data->get_selected().get(is_half_selected))
         {
             if(!is_half_selected)
             {
@@ -1567,33 +1566,33 @@ void Regs::AudioSources::selected_source(const char *source_id,
     }
 
     log_assert(src != nullptr);
-    audio_source_data.selected_audio_source_notification(*src, is_deferred);
+    audio_source_data->selected_audio_source_notification(*src, is_deferred);
 }
 
 void Regs::AudioSources::set_have_credentials(const char *cred_category,
                                               bool have_credentials)
 {
-    if(global_external_service_state.set_credentials_state(
+    if(global_external_service_state->set_credentials_state(
             cred_category, Maybe<bool>(have_credentials),
             ExternalServiceState::SetStateServiceUpdateMode::ON_CHANGE))
-        audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
+        audio_source_data->audio_sources_changed_lock_state_notification(*push_80_command_queue);
 }
 
 void Regs::AudioSources::set_login_state(const char *cred_category,
                                          bool is_logged_in)
 {
-    if(global_external_service_state.set_login_state(
+    if(global_external_service_state->set_login_state(
             cred_category, Maybe<bool>(is_logged_in),
             ExternalServiceState::SetStateServiceUpdateMode::NO_UPDATE))
     {
-        global_external_service_state.set_credentials_state(
+        global_external_service_state->set_credentials_state(
             cred_category, have_credentials_stored(cred_category),
             ExternalServiceState::SetStateServiceUpdateMode::FORCED);
-        audio_source_data.audio_sources_changed_lock_state_notification(push_80_command_queue);
+        audio_source_data->audio_sources_changed_lock_state_notification(*push_80_command_queue);
     }
 }
 
 void Regs::AudioSources::set_unit_test_mode()
 {
-    audio_source_data.set_unit_test_mode();
+    audio_source_data->set_unit_test_mode();
 }
