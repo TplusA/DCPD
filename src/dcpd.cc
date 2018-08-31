@@ -718,6 +718,9 @@ static void handle_transaction_exception(DCPDState &state,
         log_assert(collision->transaction_ != state.active_transaction);
 
         replace_active_transaction(state, std::move(collision->transaction_));
+
+        /* avoid false BUG message */
+        result = TransactionQueue::ProcessResult::IN_PROGRESS;
     }
     else if(auto *oooack = dynamic_cast<TransactionQueue::OOOAckException *>(&e))
     {
