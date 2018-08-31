@@ -1,0 +1,135 @@
+seqdiag "User Configures Network Settings over App"
+{
+
+shadow_style = 'none';
+
+User;
+
+group
+{
+    label = 'User interface';
+    color = "#ddffdd";
+    App;
+}
+
+group
+{
+    label = 'Streaming Board'
+    color = "#ffffdd";
+    REST [label = 'StrBo REST API'];
+    StrBo [label = 'StrBo DCPD'];
+    APMan [label = 'StrBo APMan'];
+    ConnMan;
+}
+
+group
+{
+    label = 'Appliance';
+    color = "#ddddff";
+    ARM;
+}
+
+User -> User [note = 'Network configuration over StrBo WLAN access point.\nPrecondition: StrBo access point is up and running', label = 'Configure phone or\ntablet to use StrBo\'s\nWLAN access point'];
+User -> ConnMan [label = 'Connect to StrBo WLAN'];
+User <<-- ConnMan [label = 'Connected'];
+
+... User's device connects to Streaming Board ...
+
+User -> App [label = 'Pick T+A device'];
+User <<-- App;
+
+User -> App [label = 'Want to configure network'];
+App -> REST [label = 'Get network configurations', note = 'GET /v1/network'];
+REST -> ConnMan [label = 'Get network configurations']
+REST <<-- ConnMan [label = 'Settings for all interfaces\n(includes SSIDs)'];
+REST -> StrBo [label = 'Get network configurations']
+REST <<-- StrBo [label = 'Internal additions'];
+App <<-- REST [label = 'JSON: Configurations'];
+User <<-- App;
+
+User -> App [label = 'Select network device'];
+User <<-- App;
+
+alt
+{
+User -> App [label = 'Select SSID from list', note = 'For WLAN network interface'];
+
+alt
+{
+App -> App [label = 'Pick one of the SSIDs\nalready known', note = 'Desired WLAN was already sent with request above'];
+}
+
+alt
+{
+App -> REST [label = 'Scan WLAN SSIDs', note = 'Active WLAN survery with disconnect'];
+REST -> StrBo [label = 'Scan WLAN SSIDs'];
+StrBo ->> APMan [label = 'Shut down access point'];
+App <<-- REST <<-- StrBo [label = 'See you later'];
+
+APMan -> StrBo [label = 'Notification: about to\nshut down access point'];
+StrBo ->> ARM [label = 'SPI register 50 (network status)'];
+StrBo <<-- ARM;
+APMan -> ConnMan [label = 'Shut down access point'];
+APMan <<-- StrBo;
+ConnMan -> ConnMan [label = 'Configure network'];
+
+APMan <<-- ConnMan [label = 'Closed access point,\nno network connection'];
+
+APMan ->> StrBo [label = 'Notification: access point closed'];
+StrBo <<-- APMan [leftnote = 'ATTENTION:\nNo network connection available anymore'];
+StrBo ->> ARM [label = 'SPI register 50 (network status)'];
+StrBo <<-- ARM;
+
+StrBo ->> ConnMan [label = 'WLAN survery'];
+StrBo <<-- ConnMan [label = 'List of WLAN networks'];
+StrBo -> StrBo [label = 'Update cached\nWLAN information\nin RAM'];
+StrBo -> APMan [label = 'Spawn', note = 'Request starting access point mode.\n\nSee use case "User Starts Access Point at Appliance"\nfor details.'];
+APMan <<-- StrBo;
+
+StrBo <<-- APMan [leftnote = 'Network connection available again\n(Streaming Board access point)'];
+
+}
+
+User <<-- App;
+}
+
+User -> App [label = 'Enter or modify\nnetwork configuration'];
+App -> REST -> StrBo [label = 'Set interface configuration'];
+StrBo -> StrBo [label = 'Sanity check'];
+StrBo -> StrBo [label = 'Store network\nconfiguration on file'];
+StrBo ->> APMan [label = 'Shut down access point'];
+User <<-- App <<-- REST <<-- StrBo [label = 'OK'];
+
+APMan -> StrBo ->> REST ->> App [label = 'Notification: about to\nshut down access point'];
+StrBo ->> ARM [label = 'SPI register 50 (network status)'];
+StrBo <<-- ARM;
+APMan -> ConnMan [label = 'Shut down access point'];
+App ->> User [label = 'Information'];
+APMan <<-- StrBo <<-- REST <<-- App <<-- User;
+
+User -> User [label = 'Configure phone or\ntablet to make use of\nregular network'];
+
+ConnMan -> ConnMan [label = 'Configure network'];
+
+=== App disconnect due to lost WLAN access point ===
+
+APMan <<-- ConnMan [label = 'Closed access point'];
+
+APMan ->> StrBo [label = 'Notification: access point closed'];
+StrBo <<-- APMan;
+StrBo ->> ARM [label = 'SPI register 50 (network status)'];
+StrBo <<-- ARM;
+
+StrBo ->> ConnMan [label = 'Set network interface configuration and activate interface'];
+ConnMan -> ConnMan [label = 'Configure network'];
+StrBo <<-- ConnMan [label = 'Network ready'];
+
+=== App may connect using the new network connection ===
+
+StrBo ->> ARM [label = 'SPI register 50 (network status)'];
+StrBo <<-- ARM;
+
+User -> ConnMan [label = 'Connect over regular network'];
+User <<-- ConnMan;
+
+}

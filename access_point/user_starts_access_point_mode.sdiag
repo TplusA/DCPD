@@ -1,0 +1,48 @@
+seqdiag "User Starts Access Point at Appliance"
+{
+
+shadow_style = 'none';
+
+User;
+
+group
+{
+    label = 'Appliance';
+    color = "#ddddff";
+    ARM;
+}
+
+group
+{
+    label = 'Streaming Board'
+    color = "#ffffdd";
+    StrBo [label = 'StrBo DCPD'];
+    APMan [label = 'StrBo APMan'];
+    ConnMan;
+}
+
+User -> ARM [label = 'Initiate network configuration'];
+ARM ->> StrBo [leftnote = 'WLAN survey', label = 'SPI register 104\n(WLAN site survey start)'];
+StrBo ->> ConnMan [label = 'WLAN site survey'];
+StrBo <<-- ConnMan [label = 'WLAN SSIDs'];
+StrBo -> StrBo [label = 'Update cached\nWLAN information\nin RAM'];
+StrBo ->> ARM [label = 'SPI register 105\n(WLAN site survey results)'];
+ARM <<-- StrBo <<-- ARM;
+ARM ->> StrBo [leftnote = 'Spawn access point', label = 'SPI register xx'];
+StrBo ->> APMan [label = 'Spawn'];
+User <<-- ARM <<-- StrBo;
+
+APMan -> StrBo [rightnote = 'Starting access point mode', label = 'Status: starting'];
+StrBo ->> ARM [label = 'SPI register 50 (network status)'];
+APMan <<-- StrBo <<-- ARM;
+
+APMan -> ConnMan [label = 'Shut down network'];
+APMan <<-- ConnMan [label = 'OK'];
+APMan -> ConnMan [label = 'Start access point'];
+APMan <<-- ConnMan [label = 'OK'];
+
+APMan -> StrBo [rightnote = 'Access point is up\nand running,\naccepting connections', label = 'Status: active'];
+StrBo ->> ARM [label = 'SPI register 50 (network status)'];
+APMan <<-- StrBo <<-- ARM;
+
+}
