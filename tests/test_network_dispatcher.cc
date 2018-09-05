@@ -229,7 +229,7 @@ void test_unregister_single_registered_fd()
 {
     cut_assert_true(nwdispatcher.add_connection(5, dispatch_fd));
 
-    mock_os->expect_os_file_close(5);
+    mock_os->expect_os_file_close(0, 5);
     cut_assert_true(nwdispatcher.remove_connection(5));
 
     struct pollfd dummy { 0 };
@@ -246,7 +246,7 @@ void test_unregister_first_registered_fd()
     cut_assert_true(nwdispatcher.add_connection(101, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(102, dispatch_fd));
 
-    mock_os->expect_os_file_close(100);
+    mock_os->expect_os_file_close(0, 100);
     cut_assert_true(nwdispatcher.remove_connection(100));
 
     struct pollfd fds[4] { 0 };
@@ -266,7 +266,7 @@ void test_unregister_last_registered_fd()
     cut_assert_true(nwdispatcher.add_connection(101, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(102, dispatch_fd));
 
-    mock_os->expect_os_file_close(102);
+    mock_os->expect_os_file_close(0, 102);
     cut_assert_true(nwdispatcher.remove_connection(102));
 
     struct pollfd fds[4] { 0 };
@@ -291,7 +291,7 @@ void test_unregister_from_center_of_full_fd_registry()
     cut_assert_true(nwdispatcher.add_connection(55, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(65, dispatch_fd));
 
-    mock_os->expect_os_file_close(35);
+    mock_os->expect_os_file_close(0, 35);
     cut_assert_true(nwdispatcher.remove_connection(35));
 
     struct pollfd fds[8] { 0 };
@@ -419,17 +419,17 @@ void test_registered_callbacks_are_called_after_reg_unreg()
     cut_assert_true(nwdispatcher.add_connection(230, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(240, dispatch_fd));
 
-    mock_os->expect_os_file_close(240);
+    mock_os->expect_os_file_close(0, 240);
     cut_assert_true(nwdispatcher.remove_connection(240));
     cut_assert_true(nwdispatcher.add_connection(100, dispatch_fd));
 
-    mock_os->expect_os_file_close(210);
+    mock_os->expect_os_file_close(0, 210);
     cut_assert_true(nwdispatcher.remove_connection(210));
-    mock_os->expect_os_file_close(230);
+    mock_os->expect_os_file_close(0, 230);
     cut_assert_true(nwdispatcher.remove_connection(230));
     cut_assert_true(nwdispatcher.add_connection(80, dispatch_fd));
 
-    mock_os->expect_os_file_close(200);
+    mock_os->expect_os_file_close(0, 200);
     cut_assert_true(nwdispatcher.remove_connection(200));
 
     struct pollfd fds[10] = { 0 };

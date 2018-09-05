@@ -505,9 +505,9 @@ void test_register_read_request_size_1_transaction()
                t->process(expected_from_slave_fd, expected_to_slave_fd,
                           TransactionQueue::DUMP_SENT_NONE));
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -603,9 +603,9 @@ void test_register_read_request_size_16_transaction()
                t->process(expected_from_slave_fd, expected_to_slave_fd,
                           TransactionQueue::DUMP_SENT_NONE));
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -676,9 +676,9 @@ void test_register_multi_step_read_request_transaction()
                t->process(expected_from_slave_fd, expected_to_slave_fd,
                           TransactionQueue::DUMP_SENT_NONE));
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -803,9 +803,9 @@ void test_big_data_is_sent_to_slave_in_fragments()
     while(bytes_left > 0)
     {
         answer_written_to_fifo->clear();
-        mock_os->expect_os_write_from_buffer_callback(read_answer);
-        mock_os->expect_os_write_from_buffer_callback(read_answer);
-        mock_os->expect_os_write_from_buffer_callback(read_answer);
+        mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+        mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+        mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
         const auto status = t->process(expected_from_slave_fd, expected_to_slave_fd,
                                        TransactionQueue::DUMP_SENT_NONE);
@@ -1181,9 +1181,9 @@ void test_small_master_transaction()
     cut_assert_true(queue->empty());
     cppcut_assert_not_null(t.get());
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -1243,9 +1243,9 @@ void test_master_transaction_retry_on_nack()
     cppcut_assert_not_null(t.get());
 
     /* first try */
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -1288,9 +1288,9 @@ void test_master_transaction_retry_on_nack()
     cut_assert_false(t->is_input_required());
 
     /* second try */
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -1345,9 +1345,9 @@ static void do_big_master_transaction(const uint8_t *const xml_data,
         auto t = queue->pop();
         cppcut_assert_not_null(t.get());
 
-        mock_os->expect_os_write_from_buffer_callback(read_answer);
-        mock_os->expect_os_write_from_buffer_callback(read_answer);
-        mock_os->expect_os_write_from_buffer_callback(read_answer);
+        mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+        mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+        mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
         answer_written_to_fifo->clear();
 
@@ -1831,9 +1831,9 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
                t->process(expected_from_slave_fd, expected_to_slave_fd,
                           TransactionQueue::DUMP_SENT_NONE));
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -1877,9 +1877,9 @@ void test_register_push_transaction()
 
     cut_assert_false(t->is_input_required());
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -1930,9 +1930,9 @@ create_master_transaction_that_waits_for_ack(std::unique_ptr<TransactionQueue::T
         /* as part of NACK handling, send data for \p t again below */
     }
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -1988,9 +1988,9 @@ void test_register_push_transaction_can_be_rejected()
     send_dcpsync_nack(DCPSYNC_MASTER_SERIAL_MIN + 1, 8, *t);
 
     /* third try succeeds */
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t->process(expected_from_slave_fd, expected_to_slave_fd,
@@ -2306,9 +2306,9 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
                t_slave->process(expected_from_slave_fd, expected_to_slave_fd,
                                 TransactionQueue::DUMP_SENT_NONE));
 
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
-    mock_os->expect_os_write_from_buffer_callback(read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
+    mock_os->expect_os_write_from_buffer_callback(0, read_answer);
 
     cut_assert(TransactionQueue::ProcessResult::IN_PROGRESS ==
                t_slave->process(expected_from_slave_fd, expected_to_slave_fd,

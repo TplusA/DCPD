@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -167,7 +167,7 @@ static int fill_buffer_second_try(void *dest, size_t count,
 void test_read_drcp_size_header()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     static const char input_string[] = "Size: 731\n";
     fill_buffer_data->set(input_string, 0, 1, true);
@@ -191,9 +191,9 @@ void test_read_drcp_size_header()
 void test_read_drcp_size_header_from_empty_input()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     mock_os->expect_os_sched_yield();
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_second_try);
 
     fill_buffer_data->set("", 0, 0, true);
     fill_buffer_data_second_try.reset(new FillBufferData("Size: 15\n", 0, 0, true));
@@ -220,9 +220,9 @@ void test_read_drcp_size_header_from_empty_input()
 void test_read_drcp_size_header_with_incomplete_size_token()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     mock_os->expect_os_sched_yield();
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_second_try);
 
     fill_buffer_data->set("Si", 0, 0, true);
     fill_buffer_data_second_try.reset(new FillBufferData("ze: 4\n", 0, 0, true));
@@ -252,9 +252,9 @@ void test_read_drcp_size_header_with_incomplete_size_token()
 void test_read_drcp_size_header_with_incomplete_size_value()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     mock_os->expect_os_sched_yield();
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer_second_try);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_second_try);
 
     static const char input_string[] = "Size: 5";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -276,7 +276,7 @@ void test_read_drcp_size_header_with_incomplete_size_value()
 void test_read_drcp_size_header_with_trailing_byte()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     static const char input_string[] = "Size: 123F\n";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -296,7 +296,7 @@ void test_read_drcp_size_header_with_trailing_byte()
 void test_read_drcp_size_header_with_negative_size()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     static const char input_string[] = "Size: -5\n";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -316,7 +316,7 @@ void test_read_drcp_size_header_with_negative_size()
 void test_read_drcp_size_header_with_huge_size()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     static const char input_string[] = "Size: 65536\n";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -336,7 +336,7 @@ void test_read_drcp_size_header_with_huge_size()
 void test_read_drcp_size_header_with_overflow_size()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     static const char input_string[] = "Size: 18446744073709551616\n";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -360,7 +360,7 @@ void test_read_drcp_size_header_with_overflow_size()
 void test_read_faulty_drcp_size_header()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     static const char input_string[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     fill_buffer_data->set(input_string, 0, 1, true);
@@ -384,7 +384,7 @@ void test_read_faulty_drcp_size_header()
 void test_read_drcp_size_header_from_broken_file_descriptor()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     fill_buffer_data->set("", EBADF, -1, true);
 
@@ -404,7 +404,7 @@ void test_read_drcp_size_header_from_broken_file_descriptor()
 void test_read_drcp_data()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     static const char input_string[] =
         "Here is some test data\nread straight from the guts of\na MOCK!";
@@ -432,7 +432,7 @@ void test_read_drcp_data_from_infinite_size_input()
     fill_buffer_data->set(input_string, 0, 1);
 
     for(size_t i = 0; i < buffer.size / (sizeof(input_string) - 1); ++i)
-        mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+        mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     cut_assert_true(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
                                                 false, "test data"));
@@ -453,7 +453,7 @@ void test_read_drcp_data_from_infinite_size_input()
 void test_read_drcp_data_from_broken_file_descriptor()
 {
     dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
 
     fill_buffer_data->set("", EBADF, -1);
 
@@ -483,7 +483,7 @@ static int receive_buffer(const void *src, size_t count, int fd)
  */
 void test_write_drcp_result_successful()
 {
-    mock_os->expect_os_write_from_buffer_callback(receive_buffer);
+    mock_os->expect_os_write_from_buffer_callback(0, receive_buffer);
 
     drcp_finish_request(true, fds.out_fd);
     cut_assert_equal_memory("OK\n", 3, buffer.data, buffer.pos);
@@ -494,7 +494,7 @@ void test_write_drcp_result_successful()
  */
 void test_write_drcp_result_failed()
 {
-    mock_os->expect_os_write_from_buffer_callback(receive_buffer);
+    mock_os->expect_os_write_from_buffer_callback(0, receive_buffer);
 
     drcp_finish_request(false, fds.out_fd);
     cut_assert_equal_memory("FF\n", 3, buffer.data, buffer.pos);

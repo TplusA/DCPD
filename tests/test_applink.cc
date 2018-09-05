@@ -152,7 +152,7 @@ static void check_expected_answer(const Applink::Command &command,
 
 static void expect_read_but_return_nothing()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("", 0, 0);
 }
 
@@ -189,7 +189,7 @@ void test_read_nothing()
  */
 void test_read_empty_lines()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("\n   \n \n\n", 0, 0);
 
     Applink::ParserResult result;
@@ -203,7 +203,7 @@ void test_read_empty_lines()
  */
 void test_read_single_variable_request()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("GET AIRABLE_PASSWORD test\\ token test\\ password\n", 0, 0);
 
     Applink::ParserResult result;
@@ -231,7 +231,7 @@ void test_read_single_variable_request()
  */
 void test_read_single_variable_request_after_empty_lines()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("\n\n     \n  GET AIRABLE_PASSWORD some\\ token password\n", 0, 0);
 
     Applink::ParserResult result;
@@ -265,32 +265,32 @@ void test_read_single_variable_request_after_empty_lines()
  */
 void test_read_scattered_variable_request()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("GET A", 0, 0);
     Applink::ParserResult result;
     auto cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
     cppcut_assert_null(cmd.get());
 
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("IRABLE_PASS", 0, 0);
     cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
     cppcut_assert_null(cmd.get());
 
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("WORD token passwor", 0, 0);
     cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
     cppcut_assert_null(cmd.get());
 
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("d", 0, 0);
     cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
     cppcut_assert_null(cmd.get());
 
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("\n", 0, 0);
     cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
@@ -322,14 +322,14 @@ void test_read_scattered_variable_request()
  */
 void test_read_two_scattered_variable_requests()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("GET AIRABLE_PASS", 0, 0);
     Applink::ParserResult result;
     auto cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::NEED_MORE_DATA), int(result));
     cppcut_assert_null(cmd.get());
 
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("WORD token password\nGET SERVICE_CREDE", 0, 0);
     cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
@@ -351,7 +351,7 @@ void test_read_two_scattered_variable_requests()
     cppcut_assert_equal("password", static_cast<const char *>(buffer.data()));
 
     /* more to come */
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("NTIALS qobuz\n", 0, 0);
     cmd = in_buf->get_next_command(default_peer_fd, result);
     cppcut_assert_equal(int(Applink::ParserResult::HAVE_COMMAND), int(result));
@@ -380,7 +380,7 @@ void test_read_two_scattered_variable_requests()
  */
 void test_read_single_variable_request_with_one_character_parameters()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("GET AIRABLE_PASSWORD ab 1\n", 0, 0);
 
     Applink::ParserResult result;
@@ -414,7 +414,7 @@ void test_read_single_variable_request_with_one_character_parameters()
  */
 void test_read_multiple_variable_request_after_empty_lines()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("GET AIRABLE_ROOT_URL\n"
                           "GET AIRABLE_AUTH_URL en-US 192.168.1.1\n"
                           "GET SERVICE_CREDENTIALS tidal\n",
@@ -450,7 +450,7 @@ void test_read_multiple_variable_request_after_empty_lines()
  */
 void test_read_garbage_command()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("This is not a command\n", 0, 0);
 
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
@@ -509,7 +509,7 @@ void test_generate_answer_line_for_variable()
  */
 void test_single_unrequested_answer_from_app()
 {
-    mock_os->expect_os_try_read_to_buffer_callback(fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
     fill_buffer_data->set("SERVICE_LOGGED_IN: tidal test\\ account\n", 0, 0);
 
     Applink::ParserResult result;
@@ -569,7 +569,7 @@ void test_put_single_answer_into_output_queue_and_remove()
                        [] (int) { ++notifications; },
                        [] (int, bool) { cut_fail("unexpected call"); });
     static const std::string command("Testing");
-    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), default_peer_fd);
+    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), default_peer_fd);
     peer.send_to_queue(default_peer_fd, std::string(command));
     cppcut_assert_equal(size_t(1), notifications);
     cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
@@ -594,7 +594,7 @@ void test_put_multiple_answers_into_output_queue_and_remove()
 
     for(const auto &cmd : commands)
     {
-        mock_os->expect_os_write_from_buffer(0, cmd.c_str(), cmd.size(), default_peer_fd);
+        mock_os->expect_os_write_from_buffer(0, 0, cmd.c_str(), cmd.size(), default_peer_fd);
         cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
     }
 
@@ -901,6 +901,7 @@ void test_peer_reconnect_after_disconnect_on_write_error()
     check_and_reset_queue_size(peer_fd, 1);
 
     mock_os->expect_os_write_from_buffer_callback(
+            0,
             [] (const void *src, size_t count, int fd)
             {
                 cppcut_assert_not_null(src);
@@ -946,6 +947,7 @@ void test_peer_reconnect_after_disconnect_on_read_error()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
                                               "Smartphone app over TCP/IP on fd 753");
     mock_os->expect_os_try_read_to_buffer_callback(
+            0,
             [] (void *dest, size_t count, size_t *add_bytes_read,
                 int fd, bool suppress_error_on_eagain) -> int
             {
@@ -999,6 +1001,7 @@ void test_peer_ready_to_read_and_disconnected()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
                                               "Smartphone app over TCP/IP on fd 63");
     mock_os->expect_os_try_read_to_buffer_callback(
+            0,
             [] (void *dest, size_t count, size_t *add_bytes_read,
                 int fd, bool suppress_error_on_eagain) -> int
             {
@@ -1045,7 +1048,7 @@ void test_sending_broadcast_answer_to_single_peer()
 
     check_and_reset_queue_size(peer_fd, 1);
 
-    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), peer_fd);
+    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), peer_fd);
     connections->process_out_queue();
 }
 
@@ -1075,9 +1078,9 @@ void test_sending_broadcast_answer_to_multiple_peers()
     check_and_reset_queue_size(berta, 1, true);
     check_and_reset_queue_size(chuck, 1, true);
 
-    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), anton);
-    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), berta);
-    mock_os->expect_os_write_from_buffer(0, command.c_str(), command.size(), chuck);
+    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), anton);
+    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), berta);
+    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), chuck);
     connections->process_out_queue();
 }
 
@@ -1092,6 +1095,7 @@ static void setup_request_expectations(int peer_fd,
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, os.str().c_str());
 
     mock_os->expect_os_try_read_to_buffer_callback(
+            0,
             [peer_fd, take_second_fill_buffer]
             (void *dest, size_t count, size_t *add_bytes_read, int fd,
              bool suppress_error_on_eagain) -> int
@@ -1101,7 +1105,7 @@ static void setup_request_expectations(int peer_fd,
                                                 peer_fd, take_second_fill_buffer);
             });
 
-    mock_os->expect_os_try_read_to_buffer_callback(return_nothing);
+    mock_os->expect_os_try_read_to_buffer_callback(0, return_nothing);
     (take_second_fill_buffer ? fill_buffer_data_second : fill_buffer_data)->set(("GET SERVICE_CREDENTIALS " + service_id + '\n').c_str(), 0, 0);
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
                                               "App request: SERVICE_CREDENTIALS");
@@ -1134,6 +1138,7 @@ static void peer_requests_service_credentials(struct pollfd *fds,
 
     std::string written;
     mock_os->expect_os_write_from_buffer_callback(
+            0,
             [&peer_fd, &written]
             (const void *src, size_t count, int fd) -> int
             {

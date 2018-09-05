@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -187,19 +187,19 @@ expect_create_default_network_preferences(struct os_mapped_file_data &file_with_
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Creating default network preferences file");
-    mock_os->expect_os_file_new(expected_os_write_fd, default_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, default_config_file);
     for(int i = 0; i < 2 * 3 + expected_number_of_assignments * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir_callback(default_path_to_config,
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir_callback(0, default_path_to_config,
                                          std::bind(move_os_write_buffer_to_file,
                                                    std::ref(file_with_written_default_contents),
                                                    std::ref(written_default_contents)));
 
     const struct os_mapped_file_data *mf = &file_with_written_default_contents;
 
-    mock_os->expect_os_map_file_to_memory(0, mf, default_config_file);
-    mock_os->expect_os_unmap_file(mf);
+    mock_os->expect_os_map_file_to_memory(0, 0, mf, default_config_file);
+    mock_os->expect_os_unmap_file(0, mf);
 
     return mf;
 }
@@ -212,15 +212,25 @@ static void do_migration(const char *const old_ethernet_config_name,
                          size_t expected_number_of_assignments,
                          const struct os_mapped_file_data *const existing_new_config = nullptr)
 {
-    mock_os->expect_os_map_file_to_memory(old_ethernet_config,
-                                          old_ethernet_config_name);
     if(old_ethernet_config != nullptr)
-        mock_os->expect_os_unmap_file(old_ethernet_config);
+    {
+        mock_os->expect_os_map_file_to_memory(0, 0, old_ethernet_config,
+                                              old_ethernet_config_name);
+        mock_os->expect_os_unmap_file(0, old_ethernet_config);
+    }
+    else
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, old_ethernet_config,
+                                              old_ethernet_config_name);
 
-    mock_os->expect_os_map_file_to_memory(old_wlan_config,
-                                          old_wlan_config_name);
     if(old_wlan_config != nullptr)
-        mock_os->expect_os_unmap_file(old_wlan_config);
+    {
+        mock_os->expect_os_map_file_to_memory(0, 0, old_wlan_config,
+                                              old_wlan_config_name);
+        mock_os->expect_os_unmap_file(0, old_wlan_config);
+    }
+    else
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, old_wlan_config,
+                                              old_wlan_config_name);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "MIGRATING OLD NETWORK CONFIGURATION");
@@ -230,13 +240,13 @@ static void do_migration(const char *const old_ethernet_config_name,
 
     if(existing_new_config == nullptr)
     {
-        mock_os->expect_os_map_file_to_memory(-1, false, default_config_file);
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, default_config_file);
         expect_create_default_network_preferences(network_ini, written_default_contents, 4);
     }
     else
     {
-        mock_os->expect_os_map_file_to_memory(existing_new_config, default_config_file);
-        mock_os->expect_os_unmap_file(existing_new_config);
+        mock_os->expect_os_map_file_to_memory(0, 0, existing_new_config, default_config_file);
+        mock_os->expect_os_unmap_file(0, existing_new_config);
     }
 
     if(old_ethernet_config != nullptr)
@@ -258,20 +268,20 @@ static void do_migration(const char *const old_ethernet_config_name,
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration file");
 
-    mock_os->expect_os_file_new(expected_os_write_fd, default_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, default_config_file);
     const int expected_number_of_writes =
         expected_number_of_sections * 3 + expected_number_of_assignments * 4;
     for(int i = 0; i < expected_number_of_writes; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(default_path_to_config);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, default_path_to_config);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Deleting old network configuration files");
 
     /* both deletes are always done */
-    mock_os->expect_os_file_delete(old_ethernet_config_name);
-    mock_os->expect_os_file_delete(old_wlan_config_name);
+    mock_os->expect_os_file_delete(0, 0, old_ethernet_config_name);
+    mock_os->expect_os_file_delete(0, 0, old_wlan_config_name);
 
     /* only one of the following items are supposed to be deleted */
     std::vector<MockOs::ForeachItemData> items;
@@ -283,12 +293,12 @@ static void do_migration(const char *const old_ethernet_config_name,
     items.emplace_back(MockOs::ForeachItemData("/connman/settings", false));
     items.emplace_back(MockOs::ForeachItemData("/connman/wifi_00e1b0534115_5441557064617465536572766572_managed_psk", true));
 
-    mock_os->expect_os_foreach_in_path(0, default_path_to_connman, items);
+    mock_os->expect_os_foreach_in_path(0, 0, default_path_to_connman, items);
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Deleting residual configuration file: \"builtin_00f00d1f00d1.config\"");
-    mock_os->expect_os_file_delete("/connman/builtin_00f00d1f00d1.config");
+    mock_os->expect_os_file_delete(0, 0, "/connman/builtin_00f00d1f00d1.config");
 
-    mock_os->expect_os_sync_dir(default_path_to_connman);
+    mock_os->expect_os_sync_dir(0, default_path_to_connman);
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
                                               "Migrated old network configuration");
@@ -571,8 +581,8 @@ void test_migrate_old_wlan_configuration_file_with_manual_config()
  */
 void test_migrate_with_no_configuration_files()
 {
-    mock_os->expect_os_map_file_to_memory(nullptr, "/connman/builtin_09fa01d467e2.config");
-    mock_os->expect_os_map_file_to_memory(nullptr, "/connman/wlan_device.config");
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, "/connman/builtin_09fa01d467e2.config");
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, "/connman/wlan_device.config");
 
     network_prefs_migrate_old_network_configuration_files(default_path_to_connman);
 

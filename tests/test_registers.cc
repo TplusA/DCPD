@@ -2636,19 +2636,19 @@ expect_create_default_network_preferences(struct os_mapped_file_data &file_with_
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Creating default network preferences file");
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + expected_number_of_assignments * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir_callback(network_config_path,
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir_callback(0, network_config_path,
                                          std::bind(move_os_write_buffer_to_file,
                                                    std::ref(file_with_written_default_contents),
                                                    std::ref(written_default_contents)));
 
     const struct os_mapped_file_data *mf = &file_with_written_default_contents;
 
-    mock_os->expect_os_map_file_to_memory(0, mf, network_config_file);
-    mock_os->expect_os_unmap_file(mf);
+    mock_os->expect_os_map_file_to_memory(0, 0, mf, network_config_file);
+    mock_os->expect_os_unmap_file(0, mf);
 
     return mf;
 }
@@ -2719,7 +2719,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
 
     if(existing_file == nullptr)
     {
-        mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
 
         existing_file =
             expect_create_default_network_preferences(file_with_written_default_contents,
@@ -2727,15 +2727,15 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     }
     else
     {
-        mock_os->expect_os_map_file_to_memory(existing_file, network_config_file);
-        mock_os->expect_os_unmap_file(existing_file);
+        mock_os->expect_os_map_file_to_memory(0, 0, existing_file, network_config_file);
+        mock_os->expect_os_unmap_file(0, existing_file);
     }
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 7 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -2786,7 +2786,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
 
     if(existing_file == nullptr)
     {
-        mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
 
         existing_file =
             expect_create_default_network_preferences(file_with_written_default_contents,
@@ -2794,15 +2794,15 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     }
     else
     {
-        mock_os->expect_os_map_file_to_memory(existing_file, network_config_file);
-        mock_os->expect_os_unmap_file(existing_file);
+        mock_os->expect_os_map_file_to_memory(0, 0, existing_file, network_config_file);
+        mock_os->expect_os_unmap_file(0, existing_file);
     }
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 4 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
     return expect_default_network_preferences_content(written_config_file,
@@ -2971,7 +2971,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
@@ -2979,11 +2979,11 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
         "Disabling IPv4 on interface C4:FD:EC:AF:DE:AD because DHCPv4 "
         "was disabled and static IPv4 configuration was not sent");
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 3 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -3316,13 +3316,13 @@ static void set_one_dns_server()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
-    mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
-    mock_os->expect_os_unmap_file(&config_file);
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, network_config_file);
+    mock_os->expect_os_unmap_file(0, &config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 8 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -3406,13 +3406,13 @@ void test_set_both_dns_servers()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
-    mock_os->expect_os_map_file_to_memory(&config_file, network_config_file);
-    mock_os->expect_os_unmap_file(&config_file);
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, network_config_file);
+    mock_os->expect_os_unmap_file(0, &config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 9 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -3508,15 +3508,15 @@ void test_replace_primary_dns_server_of_two_servers()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -3565,15 +3565,15 @@ void test_replace_secondary_dns_server_of_two_servers()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -3629,15 +3629,15 @@ void test_add_secondary_dns_server_to_primary_server()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 6 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -3682,18 +3682,18 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Ignoring wireless parameters for active wired interface");
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + 4 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_ETHERNET);
 
@@ -3761,17 +3761,17 @@ static void set_wlan_security_mode(const char *requested_security_mode,
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
     if(expecting_configuration_file_be_written)
     {
-        mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+        mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
         for(int i = 0; i < 2 * 3 + (2 + 3) * 4; ++i)
-            mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-        mock_os->expect_os_file_close(expected_os_write_fd);
-        mock_os->expect_os_sync_dir(network_config_path);
+            mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+        mock_os->expect_os_file_close(0, expected_os_write_fd);
+        mock_os->expect_os_sync_dir(0, network_config_path);
     }
 
     if(wps_ssid != nullptr)
@@ -3884,7 +3884,7 @@ void test_set_wlan_security_mode_wep()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
@@ -3919,7 +3919,7 @@ void test_set_invalid_wlan_security_mode()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
@@ -4043,11 +4043,11 @@ static void set_passphrase_with_security_mode(const char *passphrase,
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
 
     if(strcmp(connman_security_mode, "none") == 0)
     {
@@ -4059,10 +4059,10 @@ static void set_passphrase_with_security_mode(const char *passphrase,
         2 * 3 + (2 + 3 + ((passphrase_size == 0) ? 0 : 1)) * 4;
 
     for(int i = 0; i < expected_number_of_writes; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
 
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_WLAN);
 
@@ -4245,7 +4245,7 @@ void test_set_passphrase_without_security_mode_does_not_work()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
@@ -4374,15 +4374,15 @@ void test_set_simple_ascii_wlan_ssid()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_WLAN);
 
@@ -4434,15 +4434,15 @@ void test_set_binary_wlan_ssid()
 
     struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
     std::vector<char> written_default_contents;
-    mock_os->expect_os_map_file_to_memory(-1, false, network_config_file);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
                                               written_default_contents, 4);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, network_config_file);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, network_config_file);
     for(int i = 0; i < 2 * 3 + (2 + 4) * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(network_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, network_config_path);
 
     commit_ipv4_config(NWPREFSTECH_WLAN);
 
@@ -5333,7 +5333,7 @@ void test_read_out_default_friendly_name()
                                                 Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6);
     cppcut_assert_not_null(reg);
 
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, expected_rc_filename);
 
     uint8_t buffer[64];
     size_t bytes = reg->read(buffer, sizeof(buffer));
@@ -5374,12 +5374,12 @@ static void write_and_read_name(const char *name,
         ++stored_name_length;
     }
 
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     reg->write(reinterpret_cast<const uint8_t *>(name), sent_name_length);
 
@@ -5425,8 +5425,8 @@ static void write_and_read_name(const char *name,
         .length = config_file_buffer.size(),
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
     uint8_t buffer[1024];
     size_t bytes = reg->read(buffer, sizeof(buffer));
@@ -5540,14 +5540,14 @@ void test_writing_different_friendly_name_restarts_flagpole_service()
         .length = sizeof(config_file_content) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
                                                 Regs::UPnPName::DCP::read_88_upnp_friendly_name,
@@ -5583,8 +5583,8 @@ void test_writing_same_name_does_not_change_files_nor_flagpole_service()
 
     static const char upnp_name[] = "My UPnP Device";
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DEBUG, "UPnP name unchanged");
 
     reg->write(reinterpret_cast<const uint8_t *>(upnp_name), sizeof(upnp_name));
@@ -5592,12 +5592,12 @@ void test_writing_same_name_does_not_change_files_nor_flagpole_service()
 
 void test_writing_new_appliance_id_restarts_flagpole_service()
 {
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     Regs::UPnPName::set_appliance_id("MY_APPLIANCE");
 
@@ -5621,14 +5621,14 @@ void test_writing_new_appliance_id_leaves_other_values_untouched()
         .length = sizeof(config_file_content) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     Regs::UPnPName::set_appliance_id("MyAppliance");
 
@@ -5652,8 +5652,8 @@ void test_writing_same_appliance_id_does_not_change_files_nor_flagpole_service()
         .length = sizeof(config_file_content) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
     Regs::UPnPName::set_appliance_id("UnitTestAppliance");
 }
@@ -5671,14 +5671,14 @@ void test_writing_new_different_appliance_id_restarts_flagpole_service()
         .length = sizeof(config_file_content) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     Regs::UPnPName::set_appliance_id("X 9000");
 
@@ -5692,12 +5692,12 @@ void test_writing_new_different_appliance_id_restarts_flagpole_service()
 
 void test_writing_new_device_uuid_restarts_flagpole_service()
 {
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     Regs::UPnPName::set_device_uuid("09AB7C8F0013");
 
@@ -5722,14 +5722,14 @@ void test_writing_new_device_uuid_leaves_other_values_untouched()
         .length = sizeof(config_file_content) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     Regs::UPnPName::set_device_uuid("30f9e75521bb60ec05bcc4b2dc414924");
 
@@ -5754,8 +5754,8 @@ void test_writing_same_device_uuid_does_not_change_files_nor_flagpole_service()
         .length = sizeof(config_file_content) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
     Regs::UPnPName::set_device_uuid("UnitTestUUID");
 }
@@ -5763,12 +5763,12 @@ void test_writing_same_device_uuid_does_not_change_files_nor_flagpole_service()
 void test_set_all_upnp_variables()
 {
     /* write UUID to non-existent file */
-    mock_os->expect_os_map_file_to_memory(-1, false, expected_rc_filename);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, expected_rc_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     Regs::UPnPName::set_device_uuid("09AB7C8F0013");
 
@@ -5788,13 +5788,13 @@ void test_set_all_upnp_variables()
         .length = sizeof(config_file_content_first) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file_first, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file_first);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file_first, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file_first);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     Regs::UPnPName::set_appliance_id("MY_APPLIANCE");
 
@@ -5815,13 +5815,13 @@ void test_set_all_upnp_variables()
         .length = sizeof(config_file_content_second) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file_second, expected_rc_filename);
-    mock_os->expect_os_unmap_file(&config_file_second);
-    mock_os->expect_os_file_new(expected_os_write_fd, expected_rc_filename);
-    mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(expected_rc_path);
-    mock_os->expect_os_system(EXIT_SUCCESS, true, "/bin/systemctl restart flagpole");
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file_second, expected_rc_filename);
+    mock_os->expect_os_unmap_file(0, &config_file_second);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_rc_filename);
+    mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, expected_rc_path);
+    mock_os->expect_os_system(EXIT_SUCCESS, 0, true, "/bin/systemctl restart flagpole");
 
     auto *reg = lookup_register_expect_handlers(88, 1, 0, 5,
                                                 Regs::UPnPName::DCP::read_88_upnp_friendly_name,
@@ -6255,7 +6255,7 @@ void test_send_reboot_request()
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
 
-    mock_os->expect_os_path_get_type(OS_PATH_TYPE_IO_ERROR, "/tmp/do_update.sh");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_IO_ERROR, 0, "/tmp/do_update.sh");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
                                               "Shutdown requested via DCP command");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
@@ -6274,7 +6274,7 @@ void test_send_reboot_request_during_update()
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
 
-    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, 0, "/tmp/do_update.sh");
     mock_messages->expect_msg_error(0, LOG_ERR,
         "System reboot request ignored, we are in the middle of an update");
     reg->write(hcr_command, sizeof(hcr_command));
@@ -6412,11 +6412,11 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
 
     if(have_regular_inifile)
     {
-        mock_os->expect_os_map_file_to_memory(&existing_config_file, feed_config_filename);
-        mock_os->expect_os_unmap_file(&existing_config_file);
+        mock_os->expect_os_map_file_to_memory(0, 0, &existing_config_file, feed_config_filename);
+        mock_os->expect_os_unmap_file(0, &existing_config_file);
     }
     else
-        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, feed_config_filename);
 
     std::vector<MockOs::ForeachItemData> items_before;
     items_before.emplace_back(MockOs::ForeachItemData("somedir", true));
@@ -6445,18 +6445,18 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
         "/etc/opkg/raspberrypi-feed.conf",
     };
 
-    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path, items_before);
-    mock_os->expect_os_file_delete(expected_generated_feed_file_names[0]);
-    mock_os->expect_os_file_delete(expected_generated_feed_file_names[1]);
-    mock_os->expect_os_file_delete(expected_generated_feed_file_names[2]);
-    mock_os->expect_os_file_delete("/etc/opkg/extra-feed.conf");
-    mock_os->expect_os_sync_dir(opkg_configuration_path);
+    mock_os->expect_os_foreach_in_path(0, 0, opkg_configuration_path, items_before);
+    mock_os->expect_os_file_delete(0, 0, expected_generated_feed_file_names[0]);
+    mock_os->expect_os_file_delete(0, 0, expected_generated_feed_file_names[1]);
+    mock_os->expect_os_file_delete(0, 0, expected_generated_feed_file_names[2]);
+    mock_os->expect_os_file_delete(0, 0, "/etc/opkg/extra-feed.conf");
+    mock_os->expect_os_sync_dir(0, opkg_configuration_path);
 
-    mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, feed_config_filename);
     for(unsigned int i = 0; i < (expected_generated_feed_file_names.size() + 1) * 3 + 3 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(feed_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, feed_config_path);
 
     auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
@@ -6485,7 +6485,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Attempting to START SYSTEM UPDATE");
 
-    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path, items_after);
+    mock_os->expect_os_foreach_in_path(0, 0, opkg_configuration_path, items_after);
 
     const struct os_mapped_file_data modified_config_file =
     {
@@ -6531,33 +6531,34 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
 
     if(have_override_inifile)
     {
-        mock_os->expect_os_map_file_to_memory(&override_config_file,
+        mock_os->expect_os_map_file_to_memory(0, 0, &override_config_file,
                                               feed_config_override_filename);
-        mock_os->expect_os_unmap_file(&override_config_file);
+        mock_os->expect_os_unmap_file(0, &override_config_file);
     }
     else
     {
-        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_override_filename);
-        mock_os->expect_os_map_file_to_memory(&modified_config_file, feed_config_filename);
-        mock_os->expect_os_unmap_file(&modified_config_file);
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, feed_config_override_filename);
+        mock_os->expect_os_map_file_to_memory(0, 0, &modified_config_file, feed_config_filename);
+        mock_os->expect_os_unmap_file(0, &modified_config_file);
     }
 
     for(size_t i = 0; i < expected_generated_feed_file_names.size(); ++i)
     {
-        mock_os->expect_os_file_new(expected_os_write_fd, expected_generated_feed_file_names[i]);
-        mock_os->expect_os_write_from_buffer_callback(std::bind(write_feed_conf_from_buffer_callback,
+        mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_generated_feed_file_names[i]);
+        mock_os->expect_os_write_from_buffer_callback(0,
+                                                      std::bind(write_feed_conf_from_buffer_callback,
                                                                 std::placeholders::_1,
                                                                 std::placeholders::_2,
                                                                 std::placeholders::_3,
                                                                 expected_generated_feed_file_contents[i]));
-        mock_os->expect_os_file_close(expected_os_write_fd);
+        mock_os->expect_os_file_close(0, expected_os_write_fd);
     }
 
-    mock_os->expect_os_sync_dir(opkg_configuration_path);
+    mock_os->expect_os_sync_dir(0, opkg_configuration_path);
 
     /* let's stop it at this point, we have tested what we wanted */
     mock_messages->expect_msg_info("Update in progress, not starting again");
-    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, 0, "/tmp/do_update.sh");
 
     reg = lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
@@ -6614,7 +6615,7 @@ static void feed_configuration_file_is_created_on_system_update(bool have_overri
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                                     "Attempting to START SYSTEM UPDATE");
 
-    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path);
+    mock_os->expect_os_foreach_in_path(0, 0, opkg_configuration_path);
 
     static char override_config_file_buffer[] =
         "[global]\n"
@@ -6634,14 +6635,14 @@ static void feed_configuration_file_is_created_on_system_update(bool have_overri
 
     if(have_override_inifile)
     {
-        mock_os->expect_os_map_file_to_memory(&override_config_file,
+        mock_os->expect_os_map_file_to_memory(0, 0, &override_config_file,
                                               feed_config_override_filename);
-        mock_os->expect_os_unmap_file(&override_config_file);
+        mock_os->expect_os_unmap_file(0, &override_config_file);
     }
     else
     {
-        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_override_filename);
-        mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, feed_config_override_filename);
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, feed_config_filename);
     }
 
     static constexpr std::array<const char *, 3> expected_generated_feed_file_names =
@@ -6678,20 +6679,21 @@ static void feed_configuration_file_is_created_on_system_update(bool have_overri
 
     for(size_t i = 0; i < expected_generated_feed_file_names.size(); ++i)
     {
-        mock_os->expect_os_file_new(expected_os_write_fd, expected_generated_feed_file_names[i]);
-        mock_os->expect_os_write_from_buffer_callback(std::bind(write_feed_conf_from_buffer_callback,
+        mock_os->expect_os_file_new(expected_os_write_fd, 0, expected_generated_feed_file_names[i]);
+        mock_os->expect_os_write_from_buffer_callback(0,
+                                                      std::bind(write_feed_conf_from_buffer_callback,
                                                                 std::placeholders::_1,
                                                                 std::placeholders::_2,
                                                                 std::placeholders::_3,
                                                                 expected_generated_feed_file_contents[i]));
-        mock_os->expect_os_file_close(expected_os_write_fd);
+        mock_os->expect_os_file_close(0, expected_os_write_fd);
     }
 
-    mock_os->expect_os_sync_dir(opkg_configuration_path);
+    mock_os->expect_os_sync_dir(0, opkg_configuration_path);
 
     /* let's stop it at this point, we have tested what we wanted */
     mock_messages->expect_msg_info("Update in progress, not starting again");
-    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, "/tmp/do_update.sh");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, 0, "/tmp/do_update.sh");
 
     auto *reg = lookup_register_expect_handlers(40, Regs::FileTransfer::DCP::write_40_download_control);
 
@@ -6746,13 +6748,13 @@ void test_feed_configuration_file_is_created_on_config_if_does_not_exist()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Set package update URL \"http://dev.tua.local/Test\" for release \"experimental\"");
 
-    mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
-    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path);
-    mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, feed_config_filename);
+    mock_os->expect_os_foreach_in_path(0, 0, opkg_configuration_path);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, feed_config_filename);
     for(unsigned int i = 0; i < 4 * 3 + 3 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(feed_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, feed_config_path);
 
     auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
@@ -6786,13 +6788,13 @@ void test_feed_configurations_with_trailing_zero_bytes_are_accepted()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Set package update URL \"http://dev.tua.local/foo\" for release \"bar\"");
 
-    mock_os->expect_os_map_file_to_memory(-1, false, feed_config_filename);
-    mock_os->expect_os_foreach_in_path(0, opkg_configuration_path);
-    mock_os->expect_os_file_new(expected_os_write_fd, feed_config_filename);
+    mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, feed_config_filename);
+    mock_os->expect_os_foreach_in_path(0, 0, opkg_configuration_path);
+    mock_os->expect_os_file_new(expected_os_write_fd, 0, feed_config_filename);
     for(unsigned int i = 0; i < 4 * 3 + 3 * 4; ++i)
-        mock_os->expect_os_write_from_buffer_callback(write_from_buffer_callback);
-    mock_os->expect_os_file_close(expected_os_write_fd);
-    mock_os->expect_os_sync_dir(feed_config_path);
+        mock_os->expect_os_write_from_buffer_callback(0, write_from_buffer_callback);
+    mock_os->expect_os_file_close(0, expected_os_write_fd);
+    mock_os->expect_os_sync_dir(0, feed_config_path);
 
     auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
@@ -6841,8 +6843,8 @@ void test_feed_configuration_file_remains_unchanged_if_passed_config_is_same()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, feed_config_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, feed_config_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
     auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
@@ -6881,8 +6883,8 @@ void test_feed_configuration_with_more_than_two_fields_is_accepted()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    mock_os->expect_os_map_file_to_memory(&config_file, feed_config_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, feed_config_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
     auto *reg = lookup_register_expect_handlers(209, Regs::FileTransfer::DCP::write_209_download_url);
 
@@ -9342,8 +9344,8 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
 
     auto *reg = Regs::lookup(37);
 
-    mock_os->expect_os_map_file_to_memory(&config_file, expected_config_filename);
-    mock_os->expect_os_unmap_file(&config_file);
+    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_config_filename);
+    mock_os->expect_os_unmap_file(0, &config_file);
 
     if(expected_warning != nullptr)
         mock_messages->expect_msg_error_formatted(0, LOG_NOTICE, expected_warning);
