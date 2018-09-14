@@ -3866,7 +3866,7 @@ void test_set_wlan_security_mode_to_abort_wps()
 }
 
 /*!\test
- * Setting WLAN security mode to WEP is not implemented yet.
+ * Setting WLAN security mode to WEP is not implemented.
  */
 void test_set_wlan_security_mode_wep()
 {
@@ -3890,7 +3890,7 @@ void test_set_wlan_security_mode_wep()
 
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Support for insecure WLAN mode "
-                                    "\"WEP\" not implemented yet");
+                                    "\"WEP\" not implemented");
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
@@ -4119,9 +4119,9 @@ void test_set_hex_passphrase_with_psk_security_mode()
 }
 
 /*!\test
- * ASCII passphrase lengths must be with certain limits.
+ * ASCII passphrase lengths are more or less with out any limits.
  */
-void test_ascii_passphrase_minimum_and_maximum_length()
+void test_ascii_passphrase_has_no_practical_length_boundaries()
 {
     assume_wlan_interface_is_active();
 
@@ -4130,8 +4130,8 @@ void test_ascii_passphrase_minimum_and_maximum_length()
     static constexpr char passphrase[] =
         "12345678901234567890"
         "abcdefghijklmnopqrst"
-        "12345678901234567890"
-        "1234";
+        " ~123456789012345678"
+        "abcdefghijklmnopqrst";
     static auto *passphrase_arg = reinterpret_cast<const uint8_t *>(passphrase);
 
     auto *reg = lookup_register_expect_handlers(102,
@@ -4141,14 +4141,31 @@ void test_ascii_passphrase_minimum_and_maximum_length()
     reg->write(passphrase_arg, 0);
     reg->write(passphrase_arg, 1);
     reg->write(passphrase_arg, 63);
+    reg->write(passphrase_arg, 64);  /* length of a hex password */
+    reg->write(passphrase_arg, 65);
+    reg->write(passphrase_arg, sizeof(passphrase) - 1);
+}
+
+/*!\test
+ * Passphrase shall not contain special characters.
+ */
+void test_passphrase_must_be_within_sane_ascii_character_subset()
+{
+    assume_wlan_interface_is_active();
+
+    start_ipv4_config(Connman::Technology::WLAN);
+
+    auto *reg = lookup_register_expect_handlers(102,
+                                                Regs::NetworkConfig::DCP::read_102_passphrase,
+                                                Regs::NetworkConfig::DCP::write_102_passphrase);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Invalid passphrase: not a hex-string (Invalid argument)");
-    write_buffer_expect_failure(reg, passphrase_arg, 64, -1);
+        "Invalid passphrase: expected ASCII passphrase (Invalid argument)");
+    write_buffer_expect_failure(reg, "\x80", 1, -1);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Unexpected data length 65 (expected 0...64) (Invalid argument)");
-    write_buffer_expect_failure(reg, passphrase_arg, sizeof(passphrase), -1);
+        "Invalid passphrase: expected ASCII passphrase (Invalid argument)");
+    write_buffer_expect_failure(reg, "\x1f", 1, -1);
 }
 
 struct StringWithLength
@@ -4481,7 +4498,7 @@ void test_set_empty_wlan_ssid_is_an_error()
                                                 Regs::NetworkConfig::DCP::write_94_ssid);
 
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Unexpected data length 0 (expected 1...32) (Invalid argument)");
+                                              "Empty SSID rejected (Invalid argument)");
 
     uint8_t dummy = UINT8_MAX;
     write_buffer_expect_failure(reg, &dummy, 0, -1);
