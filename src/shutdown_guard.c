@@ -105,7 +105,7 @@ bool shutdown_guard_down(struct ShutdownGuard *sdg)
     return ret;
 }
 
-bool shutdown_guard_is_shutting_down_unlocked(struct ShutdownGuard *sdg)
+bool shutdown_guard_is_shutting_down_unlocked(const struct ShutdownGuard *sdg)
 {
     log_assert(sdg != NULL);
     return sdg->is_shutting_down;

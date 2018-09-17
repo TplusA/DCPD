@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -39,7 +39,7 @@ bool shutdown_guard_down(struct ShutdownGuard *sdg);
  * \attention
  *     Function may only be called with a locked \p sdg.
  */
-bool shutdown_guard_is_shutting_down_unlocked(struct ShutdownGuard *sdg);
+bool shutdown_guard_is_shutting_down_unlocked(const struct ShutdownGuard *sdg);
 
 #ifdef __cplusplus
 }
