@@ -122,6 +122,7 @@ libregisters_la_SOURCES = \
     dbus_handlers_connman_manager_glue.h networkprefs.h \
     connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
     network_device.hh network_device_list.hh \
+    network_config_request.hh \
     dbusdl_dbus.h \
     stream_id.h \
     coverart.cc coverart.hh md5.cc md5.hh \
