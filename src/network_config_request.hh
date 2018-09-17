@@ -40,25 +40,12 @@ enum class WPSMode
 /*!
  * Network configuration change requests.
  *
- * It is necessary to collect all configuration changes in RAM before writing
- * them to file because updating each value immediately would cause pointless
- * file writes and trigger reconfiguration attempts on behalf of Connman.
- *
- * All configuration changes are recorded in a #Network::ConfigRequest object
- * after the client has written a 0 to the \c SELECTED_IP_PROFILE register
- * (DCP register 54). Without this, no changes are recorded. Writing a 0 to the
- * \c SELECTED_IP_PROFILE deletes all requested changes. All configuration
- * changes are applied when the client writes a 0 to the \c ACTIVE_IP_PROFILE
- * register (DCP register 53).
+ * This is a full set of network configuration, expected to be complete and
+ * valid. Proper validation is done when the change request is applied, not
+ * when filling it (hence all the public members).
  */
 class ConfigRequest
 {
-  private:
-    /*!
-     * Networking technology at the time the change request was commenced.
-     */
-    Connman::Technology selected_technology_;
-
   public:
     Maybe<std::string> dhcpv4_mode_;
     Maybe<std::string> ipv4_address_;
@@ -76,13 +63,10 @@ class ConfigRequest
     ConfigRequest(const ConfigRequest &) = delete;
     ConfigRequest &operator=(const ConfigRequest &) = delete;
 
-    explicit ConfigRequest():
-        selected_technology_(Connman::Technology::UNKNOWN_TECHNOLOGY)
-    {}
+    explicit ConfigRequest() {}
 
-    void reset(Connman::Technology tech)
+    void reset()
     {
-        selected_technology_ = tech;
         dhcpv4_mode_.set_unknown();
         ipv4_address_.set_unknown();
         ipv4_netmask_.set_unknown();
@@ -95,20 +79,9 @@ class ConfigRequest
         wlan_wpa_passphrase_hex_.set_unknown();
     }
 
-    bool is_in_edit_mode() const
-    {
-        return selected_technology_ != Connman::Technology::UNKNOWN_TECHNOLOGY;
-    }
-
-    void cancel()
-    {
-        selected_technology_ = Connman::Technology::UNKNOWN_TECHNOLOGY;
-    }
-
     bool empty() const
     {
-        return !is_in_edit_mode() ||
-               !(dhcpv4_mode_.is_known() ||
+        return !(dhcpv4_mode_.is_known() ||
                  ipv4_address_.is_known() ||
                  ipv4_netmask_.is_known() ||
                  ipv4_gateway_.is_known() ||
@@ -118,17 +91,6 @@ class ConfigRequest
                  wlan_ssid_hex_.is_known() ||
                  wlan_wpa_passphrase_ascii_.is_known() ||
                  wlan_wpa_passphrase_hex_.is_known());
-    }
-
-    void switch_technology(Connman::Technology tech)
-    {
-        if(is_in_edit_mode())
-            selected_technology_ = tech;
-    }
-
-    Connman::Technology get_selected_technology() const
-    {
-        return selected_technology_;
     }
 
     bool is_dhcpv4_mode() const { return dhcpv4_mode_ == "dhcp"; }
