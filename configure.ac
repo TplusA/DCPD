@@ -140,7 +140,7 @@ AM_CONDITIONAL([WITH_VALGRIND], [test "x$enable_valgrind" = "xyes"])
 AM_CONDITIONAL([WITH_MARKDOWN], [test "x$ac_cv_prog_MARKDOWN" != "x"])
 AM_CONDITIONAL([CAN_BUILD_DEBIAN_PACKAGE], [test "x$ac_cv_prog_DPKG_BUILDPACKAGE" != x && test "x$DEBIAN_ARCHITECTURE_NAME" != x])
 
-AC_CONFIG_FILES([Makefile src/Makefile tests/Makefile dist/Makefile Doxyfile])
+AC_CONFIG_FILES([Makefile src/Makefile tests_new/Makefile tests/Makefile dist/Makefile Doxyfile])
 AC_CONFIG_FILES([versioninfo.cache])
 AC_CONFIG_FILES([debian/control])
 AC_CONFIG_FILES([tests/run_test.sh], [chmod +x tests/run_test.sh])

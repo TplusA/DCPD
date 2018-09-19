@@ -16,7 +16,7 @@
 # along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-SUBDIRS = . src dist tests
+SUBDIRS = . src dist tests_new tests
 
 ACLOCAL_AMFLAGS = -I m4
 

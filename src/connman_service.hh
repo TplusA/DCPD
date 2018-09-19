@@ -329,6 +329,39 @@ DHCPV6Method parse_connman_dhcp_v6_method(const char *method);
 Technology parse_connman_technology(const char *technology);
 ServiceState parse_connman_service_state(const char *state);
 
+class ServiceNameComponents
+{
+  public:
+    const Connman::Technology technology_;
+    const std::string mac_address_;
+    const std::string ssid_;
+    const std::string security_;
+
+    ServiceNameComponents(const ServiceNameComponents &) = delete;
+    ServiceNameComponents(ServiceNameComponents &&) = default;
+    ServiceNameComponents &operator=(const ServiceNameComponents &) = delete;
+
+  private:
+    explicit ServiceNameComponents(Connman::Technology tech,
+                                   const char *mac, size_t mac_length,
+                                   const char *ssid, size_t ssid_length,
+                                   const char *sec, size_t sec_length):
+        technology_(tech),
+        mac_address_(mac, mac_length),
+        ssid_(ssid, ssid_length),
+        security_(sec, sec_length)
+    {}
+
+    explicit ServiceNameComponents(Connman::Technology tech,
+                                   const char *mac, size_t mac_length):
+        technology_(tech),
+        mac_address_(mac, mac_length)
+    {}
+
+  public:
+    static ServiceNameComponents from_service_name(const char *name);
+};
+
 }
 
 #endif /* !CONNMAN_SERVICE_HH */

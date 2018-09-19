@@ -108,3 +108,58 @@ Connman::ServiceState Connman::parse_connman_service_state(const char *state)
                                     ServiceState::NOT_AVAILABLE,
                                     ServiceState::UNKNOWN_STATE);
 }
+
+Connman::ServiceNameComponents
+Connman::ServiceNameComponents::from_service_name(const char *service_name)
+{
+    if(service_name == nullptr)
+        throw std::domain_error("Service name is null");
+
+    const char *const end = service_name + strlen(service_name) + 1;
+
+    if(std::distance(service_name, end) == 0)
+        throw std::domain_error("Service name is empty");
+
+    std::vector<std::pair<const char * const, const size_t>> tokens;
+
+    const char *token_start = service_name;
+
+    do
+    {
+        const char *const next = std::find(token_start, end, '_');
+        auto length = std::distance(token_start, next);
+
+        if(next == end && length > 0)
+            --length;
+
+        if(length == 0)
+            break;
+
+        tokens.emplace_back(std::make_pair(token_start, length));
+        token_start = next + 1;
+    }
+    while(token_start < end);
+
+    const std::string tech_name(tokens.size() > 0 ? tokens[0].first : "",
+                                tokens.size() > 0 ? tokens[0].second : 0);
+    const auto tech = parse_connman_technology(tech_name.c_str());
+
+    if(tokens.size() == 3)
+    {
+        /* should be cable */
+        if(tech == Technology::ETHERNET)
+            return ServiceNameComponents(tech,
+                                         tokens[1].first, tokens[1].second);
+    }
+    else if(tokens.size() == 5)
+    {
+        /* should be WLAN */
+        if(tech == Technology::WLAN)
+            return ServiceNameComponents(tech,
+                                         tokens[1].first, tokens[1].second,
+                                         tokens[2].first, tokens[2].second,
+                                         tokens[4].first, tokens[4].second);
+    }
+
+    throw std::domain_error("Service name is invalid");
+}

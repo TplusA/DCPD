@@ -38,7 +38,7 @@ dcpd_SOURCES = \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
     connman_iter.c connman_scan.c connman.h \
     connman_common.c connman_common.h \
-    connman_service.cc connman_service.hh connman_service_list.hh maybe.hh \
+    connman_service.hh connman_service_list.hh maybe.hh \
     connman_address.hh \
     network_device.hh network_device_list.hh \
     stream_id.h \
@@ -87,6 +87,7 @@ noinst_LTLIBRARIES = \
     libconfiguration_dbus.la \
     libappliance_dbus.la \
     libservicelist.la \
+    libconnman_service.la \
     libconnman_dbus.la \
     liblogind_dbus.la \
     libsystemd_dbus.la \
@@ -140,6 +141,10 @@ libservicelist_la_SOURCES = \
     messages.h
 libservicelist_la_CFLAGS = $(AM_CFLAGS)
 libservicelist_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libconnman_service_la_SOURCES = connman_service.cc connman_service.hh
+libconnman_service_la_CFLAGS = $(AM_CFLAGS)
+libconnman_service_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)
