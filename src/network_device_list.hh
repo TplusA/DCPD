@@ -54,7 +54,6 @@ class NetworkDeviceList
 
     void clear()
     {
-        dummy_device_ = nullptr;
         auto_select_mac_ethernet_.unset();
         auto_select_mac_wlan_.unset();
         devices_.clear();
