@@ -1518,10 +1518,10 @@ ssize_t Regs::NetworkConfig::DCP::read_51_mac_address(uint8_t *response, size_t 
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 51 handler %p %zu", response, length);
 
-    if(data_length_is_unexpected(length, Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH + 1))
+    if(data_length_is_unexpected(length, Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH_MAX + 1))
         return -1;
 
-    if(length < Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH)
+    if(length < Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH_MAX)
         return -1;
 
     const auto locked_services(Connman::ServiceList::get_singleton_const());

@@ -144,22 +144,36 @@ Connman::ServiceNameComponents::from_service_name(const char *service_name)
                                 tokens.size() > 0 ? tokens[0].second : 0);
     const auto tech = parse_connman_technology(tech_name.c_str());
 
+
+    Address<AddressType::MAC> mac(
+        std::string(tokens.size() > 1 ? tokens[1].first : "",
+                    tokens.size() > 1 ? tokens[1].second : 0));
+
     if(tokens.size() == 3)
     {
         /* should be cable */
         if(tech == Technology::ETHERNET)
-            return ServiceNameComponents(tech,
-                                         tokens[1].first, tokens[1].second);
+            return ServiceNameComponents(tech, std::move(mac));
     }
     else if(tokens.size() == 5)
     {
         /* should be WLAN */
         if(tech == Technology::WLAN)
-            return ServiceNameComponents(tech,
-                                         tokens[1].first, tokens[1].second,
+            return ServiceNameComponents(tech, std::move(mac),
                                          tokens[2].first, tokens[2].second,
                                          tokens[4].first, tokens[4].second);
     }
 
     throw std::domain_error("Service name is invalid");
+}
+
+bool Connman::is_locally_administered_mac_address(const Address<AddressType::MAC> &mac_address)
+{
+    if(mac_address.empty())
+        return false;
+
+    const char ch = mac_address.get_string()[1];
+    const uint8_t nibble = isdigit(ch) ? ch - '0' : 10 + (ch - 'A');
+
+    return (nibble & 0x02) != 0;
 }

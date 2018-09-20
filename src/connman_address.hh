@@ -23,6 +23,7 @@
 
 #include <string>
 #include <cstring>
+#include <stdexcept>
 
 namespace Connman
 {
@@ -74,24 +75,100 @@ struct AddressTraits;
 template <>
 struct AddressTraits<AddressType::MAC>
 {
-    static constexpr size_t ADDRESS_SIZE = 6;
-    static constexpr size_t ADDRESS_STRING_LENGTH = 17;
+    static constexpr size_t ADDRESS_STRING_LENGTH_MIN = 6 * 2 + 5;
+    static constexpr size_t ADDRESS_STRING_LENGTH_MAX = ADDRESS_STRING_LENGTH_MIN;
+
+    static inline bool is_input_string_length_in_range(size_t addrlen)
+    {
+        return addrlen == 6 * 2 || addrlen == ADDRESS_STRING_LENGTH_MAX;
+    }
+
+    static inline bool sanitize_and_patch(std::string &addr_string)
+    {
+        if(addr_string.length() == ADDRESS_STRING_LENGTH_MAX)
+        {
+            /* colons must be in correct place */
+            for(size_t i = 2; i < ADDRESS_STRING_LENGTH_MAX; i += 3)
+            {
+                if(addr_string[i] != ':')
+                    return false;
+            }
+        }
+        else
+        {
+            /* weave in some colons */
+            std::string temp(addr_string, 0, 2);
+
+            for(size_t i = 2; i < addr_string.length(); i += 2)
+            {
+                temp += ':';
+                temp += addr_string[i + 0];
+                temp += addr_string[i + 1];
+            }
+
+            addr_string.swap(temp);
+
+            if(addr_string.length() != ADDRESS_STRING_LENGTH_MAX)
+                return false;
+        }
+
+        /* must have hexadecimal digits in between, converted to uppercase on
+         * the fly */
+        for(size_t i = 0; i < ADDRESS_STRING_LENGTH_MAX; i += 3)
+        {
+            if(!isxdigit(addr_string[i]) || !isxdigit(addr_string[i + 1]))
+                return false;
+
+            addr_string[i + 0] = toupper(addr_string[i + 0]);
+            addr_string[i + 1] = toupper(addr_string[i + 1]);
+        }
+
+        return true;
+    }
 };
 
 template <>
 struct AddressTraits<AddressType::IPV4>
 {
-    static constexpr size_t ADDRESS_SIZE = 4;
-    static constexpr size_t ADDRESS_STRING_LENGTH = 15;
+    static constexpr size_t ADDRESS_STRING_LENGTH_MIN = 4 * 1 + 3;
+    static constexpr size_t ADDRESS_STRING_LENGTH_MAX = 4 * 3 + 3;
+
     using DHCPMethod = DHCPV4Method;
+
+    static inline bool is_input_string_length_in_range(size_t addrlen)
+    {
+        return addrlen >= ADDRESS_STRING_LENGTH_MIN &&
+               addrlen <= ADDRESS_STRING_LENGTH_MAX;
+    }
+
+    static inline bool sanitize_and_patch(std::string &addr_string)
+    {
+        /* TODO: Proper implementation */
+        return true;
+    }
 };
 
 template <>
 struct AddressTraits<AddressType::IPV6>
 {
-    static constexpr size_t ADDRESS_SIZE = 16;
-    static constexpr size_t ADDRESS_STRING_LENGTH = 45;
+    static constexpr size_t ADDRESS_STRING_LENGTH_MIN = 2;
+    static constexpr size_t ADDRESS_STRING_LENGTH_MAX =
+        6 * 4 + 6 +
+        AddressTraits<AddressType::IPV4>::ADDRESS_STRING_LENGTH_MAX;
+
     using DHCPMethod = DHCPV6Method;
+
+    static inline bool is_input_string_length_in_range(size_t addrlen)
+    {
+        return addrlen >= ADDRESS_STRING_LENGTH_MIN &&
+               addrlen <= ADDRESS_STRING_LENGTH_MAX;
+    }
+
+    static inline bool sanitize_and_patch(std::string &addr_string)
+    {
+        /* TODO: Proper implementation */
+        return true;
+    }
 };
 
 template <AddressType AType, class Traits = AddressTraits<AType>>
@@ -105,59 +182,58 @@ class Address
     Address(Address &&) = default;
     Address &operator=(const Address &) = default;
 
-    explicit Address()
-    {
-        address_.reserve(Traits::ADDRESS_STRING_LENGTH);
-    }
+    explicit Address() {}
 
     explicit Address(const char *address)
     {
-        address_.reserve(Traits::ADDRESS_STRING_LENGTH);
         set(address);
     }
 
     explicit Address(std::string &&address)
     {
-        address_.reserve(Traits::ADDRESS_STRING_LENGTH);
         set(std::move(address));
     }
 
-    bool set(const char *address)
+    void set(const char *address)
     {
         log_assert(address != nullptr);
 
         const size_t addrlen = strlen(address);
 
-        if(addrlen > Traits::ADDRESS_STRING_LENGTH)
-        {
-            BUG("Length of address \"%s\" exceeds %zu",
-                address, Traits::ADDRESS_STRING_LENGTH);
-            return false;
-        }
-
         if(addrlen > 0)
+        {
+            if(!Traits::is_input_string_length_in_range(addrlen))
+                throw std::domain_error("Incorrect address length");
+
             address_ = address;
+
+            if(!Traits::sanitize_and_patch(address_))
+            {
+                address_.clear();
+                throw std::domain_error("Failed parsing address");
+            }
+        }
         else
             unset();
-
-        return true;
     }
 
-    bool set(std::string &&address)
+    void set(std::string &&address)
     {
-        if(address.length() > Traits::ADDRESS_STRING_LENGTH)
-        {
-            BUG("Length of address \"%s\" exceeds %zu",
-                address.c_str(), Traits::ADDRESS_STRING_LENGTH);
-            return false;
-        }
-
         if(!address.empty())
+        {
+            if(!Traits::is_input_string_length_in_range(address.length()))
+                throw std::domain_error("Incorrect address length");
+
             address_ = std::move(address);
+
+            if(!Traits::sanitize_and_patch(address_))
+            {
+                address_.clear();
+                throw std::domain_error("Failed parsing address");
+            }
+        }
         else
             unset();
-
-        return true;
     }
 
     void unset() { address_.clear(); }
@@ -206,6 +282,8 @@ class Address
         return !(*this == other);
     }
 };
+
+bool is_locally_administered_mac_address(const Address<AddressType::MAC> &mac_address);
 
 }
 

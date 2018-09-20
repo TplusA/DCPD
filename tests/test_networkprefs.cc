@@ -37,8 +37,8 @@ namespace networkprefs_tests
 static MockMessages *mock_messages;
 static MockOs *mock_os;
 
-static constexpr char default_ethernet_mac[] = "09:fa:01:d4:67:e2";
-static constexpr char default_wlan_mac[] = "19:af:10:4d:76:e3";
+static constexpr char default_ethernet_mac[] = "09:FA:01:D4:67:E2";
+static constexpr char default_wlan_mac[] = "19:AF:10:4D:76:E3";
 static constexpr char default_path_to_config[] = "/cfg";
 static constexpr char default_path_to_connman[] = "/connman";
 static constexpr char default_config_file[] = "/cfg/network.ini";

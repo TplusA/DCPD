@@ -1281,12 +1281,23 @@ static bool parse_generic_service_data(const char *prop, GVariant *value,
 
         while(g_variant_iter_loop(&iter, "{&sv}", &iter_key, &iter_value))
         {
-            if(strcmp(iter_key, "Address") == 0 &&
-               mac_address.set(g_variant_get_string(iter_value, NULL)))
+            if(strcmp(iter_key, "Address") != 0)
+                continue;
+
+            try
             {
-                g_variant_unref(iter_value);
-                break;
+                mac_address.set(g_variant_get_string(iter_value, NULL));
             }
+            catch(const std::domain_error &e)
+            {
+                msg_error(0, LOG_NOTICE,
+                          "Ignoring invalid MAC address in service data: \"%s\"",
+                          g_variant_get_string(iter_value, NULL));
+                continue;
+            }
+
+            g_variant_unref(iter_value);
+            break;
         }
     }
     else if(strcmp(prop, "Nameservers") == 0)

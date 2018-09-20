@@ -332,8 +332,8 @@ ServiceState parse_connman_service_state(const char *state);
 class ServiceNameComponents
 {
   public:
-    const Connman::Technology technology_;
-    const std::string mac_address_;
+    const Technology technology_;
+    const Address<AddressType::MAC> mac_address_;
     const std::string ssid_;
     const std::string security_;
 
@@ -342,20 +342,20 @@ class ServiceNameComponents
     ServiceNameComponents &operator=(const ServiceNameComponents &) = delete;
 
   private:
-    explicit ServiceNameComponents(Connman::Technology tech,
-                                   const char *mac, size_t mac_length,
+    explicit ServiceNameComponents(Technology tech,
+                                   Address<AddressType::MAC> &&mac,
                                    const char *ssid, size_t ssid_length,
                                    const char *sec, size_t sec_length):
         technology_(tech),
-        mac_address_(mac, mac_length),
+        mac_address_(std::move(mac)),
         ssid_(ssid, ssid_length),
         security_(sec, sec_length)
     {}
 
-    explicit ServiceNameComponents(Connman::Technology tech,
-                                   const char *mac, size_t mac_length):
+    explicit ServiceNameComponents(Technology tech,
+                                   Address<AddressType::MAC> &&mac):
         technology_(tech),
-        mac_address_(mac, mac_length)
+        mac_address_(std::move(mac))
     {}
 
   public:

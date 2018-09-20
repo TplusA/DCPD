@@ -96,43 +96,10 @@ bool Connman::NetworkDeviceList::is_auto_select(Connman::Technology technology,
 static bool process_address(Connman::Technology technology,
                             Connman::Address<Connman::AddressType::MAC> &mac_address)
 {
-    const auto &addr_string(mac_address.get_string());
-
-    bool failed = (mac_address.empty() ||
-                   addr_string.length() != Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH);
-
-    if(!failed)
+    if(mac_address.empty())
     {
-        /* colons must be in correct place */
-        for(size_t i = 2; i < Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH; i += 3)
-        {
-            if(addr_string[i] != ':')
-            {
-                msg_error(0, LOG_ERR, "MAC address wrong format (colons)");
-                failed = true;
-                break;
-            }
-        }
-    }
-    else
-        msg_error(0, LOG_ERR, "MAC address length wrong");
+        msg_error(0, LOG_ERR, "MAC address empty");
 
-    if(!failed)
-    {
-        /* must have hexadecimal digits in between */
-        for(size_t i = 0; i < Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH; i += 3)
-        {
-            if(!isxdigit(addr_string[i]) || !isxdigit(addr_string[i + 1]))
-            {
-                msg_error(0, LOG_ERR, "MAC address wrong format (digits)");
-                failed = true;
-                break;
-            }
-        }
-    }
-
-    if(failed)
-    {
         /* locally administered address, invalid in the wild */
         switch(technology)
         {
@@ -152,16 +119,13 @@ static bool process_address(Connman::Technology technology,
         return false;
     }
 
-    const uint8_t nibble = isdigit(addr_string[1])
-        ? addr_string[1] - '0'
-        : 10 + (toupper(addr_string[1]) - 'A');
-
-    const bool result = (nibble & 0x02) == 0;
-
-    if(!result)
+    if(Connman::is_locally_administered_mac_address(mac_address))
+    {
         msg_error(0, LOG_ERR, "MAC address is locally administered");
+        return false;
+    }
 
-    return result;
+    return true;
 }
 
 std::shared_ptr<Connman::NetworkDevice>

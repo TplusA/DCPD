@@ -95,6 +95,7 @@ test_registers_la_LIBADD = \
     $(top_builddir)/src/libdynamic_buffer.la \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libconnman_service.la \
     $(top_builddir)/src/libinifile.la \
     $(top_builddir)/src/libxmodem.la
 test_registers_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
@@ -121,6 +122,7 @@ test_transactions_la_LIBADD = \
     $(top_builddir)/src/libconfigproxy.la \
     $(top_builddir)/src/libregisters.la \
     $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libconnman_service.la \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libshutdown_guard.la \
     $(top_builddir)/src/libdynamic_buffer.la
@@ -144,6 +146,7 @@ test_networkprefs_la_SOURCES = \
 test_networkprefs_la_LIBADD = \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libconnman_service.la \
     $(top_builddir)/src/libinifile.la
 test_networkprefs_la_CFLAGS = $(AM_CFLAGS)
 test_networkprefs_la_CXXFLAGS = $(AM_CXXFLAGS)
