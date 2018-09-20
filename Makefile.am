@@ -59,6 +59,11 @@ versioninfo.h: versioninfo.cache
 .md.html:
 	$(MARKDOWN) $< >$@
 
+if WITH_DOCTEST
+doctest:
+	$(MAKE) $(AM_MAKEFLAGS) -C tests_new $@
+endif
+
 if CAN_BUILD_DEBIAN_PACKAGE
 DEBIAN_PACKAGE_FILES = debian/changelog debian/compat debian/control debian/rules
 

@@ -17,17 +17,26 @@
 #
 
 if WITH_DOCTEST
-TESTS = test_connman_service
+check_PROGRAMS = test_connman_service
 
-check_PROGRAMS = $(TESTS)
+TESTS = $(check_PROGRAMS)
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_builddir)/src
 AM_CPPFLAGS += -I$(top_srcdir)/dbus_interfaces
 AM_CFLAGS = $(CWARNINGS)
 AM_CXXFLAGS = $(CXXWARNINGS)
 
+noinst_LTLIBRARIES = libtestrunner.la
+
+libtestrunner_la_SOURCES = testrunner.cc
+
 test_connman_service_SOURCES = test_connman_service.cc
-test_connman_service_LDADD = $(top_builddir)/src/libconnman_service.la
+test_connman_service_LDADD = \
+    libtestrunner.la \
+    $(top_builddir)/src/libconnman_service.la
 test_connman_service_CPPFLAGS = $(AM_CPPFLAGS)
 test_connman_service_CXXFLAGS = $(AM_CXXFLAGS)
+
+doctest: $(check_PROGRAMS)
+	for p in $(check_PROGRAMS); do ./$$p $(DOCTEST_EXTRA_OPTIONS); done
 endif

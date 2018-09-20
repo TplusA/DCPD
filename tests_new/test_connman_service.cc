@@ -20,7 +20,6 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
 
 #include "connman_service.hh"
