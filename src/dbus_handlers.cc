@@ -225,6 +225,30 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     return TRUE;
 }
 
+gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
+                                    GDBusMethodInvocation *invocation,
+                                    const gchar *have_version,
+                                    gpointer user_data)
+{
+    g_dbus_method_invocation_return_error(invocation,
+                                          G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                                          "Not implemented yet");
+    return TRUE;
+}
+
+gboolean
+dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
+                                             GDBusMethodInvocation *invocation,
+                                             const gchar *service_name,
+                                             const gchar *configuration,
+                                             gpointer user_data)
+{
+    g_dbus_method_invocation_return_error(invocation,
+                                          G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                                          "Not implemented yet");
+    return TRUE;
+}
+
 void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
                                   const gchar *signal_name, GVariant *parameters,
                                   gpointer user_data)

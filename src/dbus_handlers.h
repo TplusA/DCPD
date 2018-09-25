@@ -63,6 +63,17 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     guint16 raw_stream_id,
                                     const gchar *title, const gchar *url);
 
+gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
+                                    GDBusMethodInvocation *invocation,
+                                    const gchar *have_version,
+                                    gpointer user_data);
+gboolean
+dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
+                                             GDBusMethodInvocation *invocation,
+                                             const gchar *service_name,
+                                             const gchar *configuration,
+                                             gpointer user_data);
+
 void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
                                   const gchar *signal_name, GVariant *parameters,
                                   gpointer user_data);

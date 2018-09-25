@@ -41,6 +41,7 @@ tdbusdcpdPlayback *dbus_get_playback_iface(void);
 tdbusdcpdViews *dbus_get_views_iface(void);
 tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void);
 tdbusdcpdListItem *dbus_get_list_item_iface(void);
+tdbusdcpdNetwork *dbus_get_network_config_iface(void);
 tdbusmixerVolume *dbus_mixer_get_volume_iface(void);
 tdbusaupathManager *dbus_audiopath_get_manager_iface(void);
 tdbusaupathAppliance *dbus_audiopath_get_appliance_iface(void);

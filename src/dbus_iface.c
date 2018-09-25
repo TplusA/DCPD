@@ -69,6 +69,7 @@ static struct
     tdbusdcpdViews *views_iface;
     tdbusdcpdListNavigation *list_navigation_iface;
     tdbusdcpdListItem *list_item_iface;
+    tdbusdcpdNetwork *network_config_iface;
     tdbusaupathSource *audiopath_source_iface;
     tdbusmixerVolume *mixer_volume_iface;
     tdbusappliancePower *appliance_power_iface;
@@ -192,6 +193,7 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.views_iface = tdbus_dcpd_views_skeleton_new();
         dcpd_iface_data.list_navigation_iface = tdbus_dcpd_list_navigation_skeleton_new();
         dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
+        dcpd_iface_data.network_config_iface = tdbus_dcpd_network_skeleton_new();
         dcpd_iface_data.audiopath_source_iface = tdbus_aupath_source_skeleton_new();
         dcpd_iface_data.mixer_volume_iface = tdbus_mixer_volume_skeleton_new();
         dcpd_iface_data.appliance_power_iface = tdbus_appliance_power_skeleton_new();
@@ -203,6 +205,11 @@ static void bus_acquired(GDBusConnection *connection,
 
         g_signal_connect(dcpd_iface_data.playback_iface, "handle-set-stream-info",
                          G_CALLBACK(dbusmethod_set_stream_info), NULL);
+
+        g_signal_connect(dcpd_iface_data.network_config_iface, "handle-get-all",
+                         G_CALLBACK(dbusmethod_network_get_all), NULL);
+        g_signal_connect(dcpd_iface_data.network_config_iface, "handle-set-service-configuration",
+                         G_CALLBACK(dbusmethod_network_set_service_configuration), NULL);
 
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-selected",
                          G_CALLBACK(dbusmethod_audiopath_source_selected), NULL);
@@ -246,6 +253,7 @@ static void bus_acquired(GDBusConnection *connection,
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.views_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_item_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.network_config_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.audiopath_source_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.mixer_volume_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.appliance_power_iface));
@@ -601,6 +609,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     log_assert(dcpd_iface_data.views_iface != NULL);
     log_assert(dcpd_iface_data.list_navigation_iface != NULL);
     log_assert(dcpd_iface_data.list_item_iface != NULL);
+    log_assert(dcpd_iface_data.network_config_iface != NULL);
     log_assert(dcpd_iface_data.audiopath_source_iface != NULL);
     log_assert(dcpd_iface_data.mixer_volume_iface != NULL);
     log_assert(dcpd_iface_data.appliance_power_iface != NULL);
@@ -678,6 +687,7 @@ void dbus_shutdown(void)
     g_object_unref(dcpd_iface_data.views_iface);
     g_object_unref(dcpd_iface_data.list_navigation_iface);
     g_object_unref(dcpd_iface_data.list_item_iface);
+    g_object_unref(dcpd_iface_data.network_config_iface);
     g_object_unref(dcpd_iface_data.audiopath_source_iface);
     g_object_unref(dcpd_iface_data.mixer_volume_iface);
     g_object_unref(dcpd_iface_data.appliance_power_iface);
@@ -802,6 +812,11 @@ tdbusdcpdListNavigation *dbus_get_list_navigation_iface(void)
 tdbusdcpdListItem *dbus_get_list_item_iface(void)
 {
     return dcpd_iface_data.list_item_iface;
+}
+
+tdbusdcpdNetwork *dbus_get_network_config_iface(void)
+{
+    return dcpd_iface_data.network_config_iface;
 }
 
 tdbusmixerVolume *dbus_mixer_get_volume_iface(void)
