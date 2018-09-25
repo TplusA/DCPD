@@ -19,7 +19,7 @@
 #ifndef DCPREGS_NETWORKCONFIG_HH
 #define DCPREGS_NETWORKCONFIG_HH
 
-#include "connman_address.hh"
+#include "network_config_request.hh"
 
 /*!
  * \addtogroup registers
@@ -42,6 +42,10 @@ void init();
 void deinit();
 
 void set_primary_technology(Connman::Technology tech);
+
+bool request_configuration_for_mac(Network::ConfigRequest &config_request,
+                                   const Connman::Address<Connman::AddressType::MAC> &mac,
+                                   Connman::Technology tech);
 
 /*!
  * Report change of networking interfaces.

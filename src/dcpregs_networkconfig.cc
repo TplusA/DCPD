@@ -97,6 +97,8 @@ class ConfigRequestEditState
  */
 struct NetworkConfigWriteData
 {
+    std::mutex commit_configuration_lock;
+
     ConfigRequestEditState edit_state;
     Network::ConfigRequest config_request;
 
@@ -784,11 +786,13 @@ static bool is_known_security_mode_name(const std::string &name)
     return std::find(names.begin(), names.end(), name) != names.end();
 }
 
-static Network::WPSMode handle_set_wireless_config(Network::ConfigRequest &req,
-                                                   const Connman::ServiceBase &service,
-                                                   struct network_prefs *prefs,
-                                                   std::unique_ptr<std::string> &out_wps_network_name,
-                                                   std::unique_ptr<std::string> &out_wps_network_ssid)
+static Network::WPSMode
+handle_set_wireless_config(Network::ConfigRequest &req,
+                           Connman::Technology target_tech,
+                           const Maybe<std::string> *fallback_wlan_security_mode,
+                           struct network_prefs *prefs,
+                           std::unique_ptr<std::string> &out_wps_network_name,
+                           std::unique_ptr<std::string> &out_wps_network_ssid)
 {
     if(!req.wlan_security_mode_.is_known() &&
        !req.wlan_ssid_ascii_.is_known() &&
@@ -797,7 +801,7 @@ static Network::WPSMode handle_set_wireless_config(Network::ConfigRequest &req,
        !req.wlan_wpa_passphrase_hex_.is_known())
         return Network::WPSMode::NONE;
 
-    switch(service.get_technology())
+    switch(target_tech)
     {
       case Connman::Technology::UNKNOWN_TECHNOLOGY:
         BUG("Tried setting WLAN parameters for unknown technology");
@@ -827,11 +831,8 @@ static Network::WPSMode handle_set_wireless_config(Network::ConfigRequest &req,
             req.wlan_security_mode_.set_unknown();
         }
     }
-    else
-    {
-        const auto &tech_data(static_cast<const Connman::Service<Connman::Technology::WLAN> &>(service).get_tech_data());
-        req.wlan_security_mode_ = tech_data.security_;
-    }
+    else if(fallback_wlan_security_mode != nullptr)
+        req.wlan_security_mode_ = *fallback_wlan_security_mode;
 
     if(!req.wlan_security_mode_.is_known() ||
        req.wlan_security_mode_.get().empty())
@@ -894,6 +895,9 @@ static Network::WPSMode handle_set_wireless_config(Network::ConfigRequest &req,
     switch(retval)
     {
       case Network::WPSMode::INVALID:
+        msg_error(EINVAL, LOG_ERR, "WPS requested for empty SSID");
+        break;
+
       case Network::WPSMode::NONE:
       case Network::WPSMode::SCAN:
       case Network::WPSMode::ABORT:
@@ -946,7 +950,7 @@ static bool apply_changes_to_prefs(Network::ConfigRequest &req,
 }
 
 /*!
- * Write changes to file.
+ * Write changes received from SPI slave to file.
  *
  * \attention
  *     Must be called with the #ShutdownGuard from #nwstatus_data locked.
@@ -1004,9 +1008,12 @@ modify_network_configuration(
         patch_request(req, *service);
 
     auto wps_mode = apply_changes_to_prefs(req, selected_prefs)
-        ? handle_set_wireless_config(req, *service, selected_prefs,
-                                     out_wps_network_name,
-                                     out_wps_network_ssid)
+        ? handle_set_wireless_config(
+            req, service->get_technology(),
+            service->get_technology() == Connman::Technology::WLAN
+            ? &static_cast<const Connman::Service<Connman::Technology::WLAN> *>(service)->get_tech_data().security_
+            : nullptr,
+            selected_prefs, out_wps_network_name, out_wps_network_ssid)
         : Network::WPSMode::INVALID;
 
     switch(wps_mode)
@@ -1121,7 +1128,7 @@ static bool is_ethernet_service_auto_configured(const Connman::ServiceBase &s)
  * configured by IPv4LL */
 static bool should_auto_switch_to_wlan(Connman::Technology active_tech,
                                        Connman::Technology target_tech,
-                                       Network::ConfigRequest &req)
+                                       const Network::ConfigRequest &req)
 {
     switch(target_tech)
     {
@@ -1181,14 +1188,11 @@ static bool should_auto_switch_to_wlan(Connman::Technology active_tech,
     return result;
 }
 
-static bool do_process_config_request(
+static bool process_config_request_from_spi_slave(
         ConfigRequestEditState &edit, Network::ConfigRequest &config_request,
         ShutdownGuard &shutdown_guard,
         const std::function<void(Network::ConfigRequest &, const Connman::ServiceBase &)> &patch_request)
 {
-    static std::mutex run_exclusive;
-    std::lock_guard<std::mutex> lock(run_exclusive);
-
     if(should_auto_switch_to_wlan(edit.get_selected_technology(),
                                   config_request.wlan_security_mode_.is_known()
                                   ? Connman::Technology::WLAN
@@ -1256,6 +1260,165 @@ static bool do_process_config_request(
     return false;
 }
 
+/*!
+ * Write changes received via D-Bus to file.
+ *
+ * \attention
+ *     Must be called with the #ShutdownGuard from #nwstatus_data locked.
+ */
+static Network::WPSMode
+modify_network_configuration_from_external_request(
+        Network::ConfigRequest &req,
+        Connman::Technology target_tech,
+        const ShutdownGuard &sg,
+        std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> &previous_wlan_name_buffer,
+        std::unique_ptr<std::string> &out_wps_network_name,
+        std::unique_ptr<std::string> &out_wps_network_ssid)
+{
+    if(shutdown_guard_is_shutting_down_unlocked(&sg))
+    {
+        msg_info("Not writing network configuration during shutdown.");
+        return Network::WPSMode::INVALID;
+    }
+
+    struct network_prefs *ethernet_prefs;
+    struct network_prefs *wlan_prefs;
+    struct network_prefs_handle *cfg =
+        network_prefs_open_rw(&ethernet_prefs, &wlan_prefs);
+
+    if(cfg == nullptr)
+        return Network::WPSMode::INVALID;
+
+    struct network_prefs *selected_prefs =
+        target_tech == Connman::Technology::ETHERNET ? ethernet_prefs : wlan_prefs;
+
+    network_prefs_generate_service_name(target_tech == Connman::Technology::ETHERNET
+                                        ? nullptr
+                                        : selected_prefs,
+                                        previous_wlan_name_buffer.data(),
+                                        previous_wlan_name_buffer.size(), true);
+
+    if(selected_prefs == nullptr)
+        selected_prefs = network_prefs_add_prefs(cfg, map_network_technology(target_tech));
+
+    auto wps_mode = apply_changes_to_prefs(req, selected_prefs)
+        ? handle_set_wireless_config(req, target_tech, nullptr,
+                                     selected_prefs, out_wps_network_name,
+                                     out_wps_network_ssid)
+        : Network::WPSMode::INVALID;
+
+    switch(wps_mode)
+    {
+      case Network::WPSMode::NONE:
+        if(network_prefs_write_to_file(cfg) < 0)
+            wps_mode = Network::WPSMode::INVALID;
+
+        break;
+
+      case Network::WPSMode::INVALID:
+      case Network::WPSMode::DIRECT:
+      case Network::WPSMode::SCAN:
+      case Network::WPSMode::ABORT:
+        break;
+    }
+
+    network_prefs_close(cfg);
+
+    return wps_mode;
+}
+
+static bool process_external_config_request(
+        Network::ConfigRequest &config_request,
+        const Connman::Address<Connman::AddressType::MAC> &mac,
+        Connman::Technology target_tech, ShutdownGuard &shutdown_guard)
+{
+    bool is_device_with_given_mac_present;
+
+    {
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+    const auto &devices(locked_devices.first);
+    const auto device(devices[mac]);
+    is_device_with_given_mac_present = device != nullptr && device->is_real_;
+    }
+
+    if(!is_device_with_given_mac_present)
+    {
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "Writing network configuration for non-existent devices "
+                  "not supported yet due to low-level protocol limitation");
+        return false;
+    }
+
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                "Writing new network configuration for MAC address %s (%s)",
+                mac.get_string().c_str(),
+                target_tech == Connman::Technology::WLAN ? "WLAN" : "Ethernet");
+
+    shutdown_guard_lock(&shutdown_guard);
+    std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> current_wlan_service_name;
+    std::unique_ptr<std::string> wps_network_name;
+    std::unique_ptr<std::string> wps_network_ssid;
+    Network::WPSMode wps_mode = modify_network_configuration_from_external_request(
+            config_request, target_tech, shutdown_guard,
+            current_wlan_service_name, wps_network_name, wps_network_ssid);
+    shutdown_guard_unlock(&shutdown_guard);
+
+    if(!is_device_with_given_mac_present)
+    {
+        switch(wps_mode)
+        {
+          case Network::WPSMode::INVALID:
+            return false;
+
+          case Network::WPSMode::NONE:
+            break;
+
+          case Network::WPSMode::DIRECT:
+          case Network::WPSMode::SCAN:
+            msg_info("Cannot start WPS on non-existent device");
+            break;
+
+          case Network::WPSMode::ABORT:
+            msg_info("Cannot abort WPS on non-existent device");
+            break;
+        }
+
+        return true;
+    }
+
+    switch(wps_mode)
+    {
+      case Network::WPSMode::INVALID:
+        dbussignal_connman_manager_cancel_wps();
+        break;
+
+      case Network::WPSMode::NONE:
+        dbussignal_connman_manager_connect_to_service(map_network_technology(target_tech),
+                                                      current_wlan_service_name.data());
+        return true;
+
+      case Network::WPSMode::DIRECT:
+        log_assert(target_tech == Connman::Technology::WLAN);
+        dbussignal_connman_manager_connect_to_wps_service(
+            wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
+            wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
+            current_wlan_service_name.data());
+        return true;
+
+      case Network::WPSMode::SCAN:
+        log_assert(target_tech == Connman::Technology::WLAN);
+        dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
+                                                          current_wlan_service_name.data());
+        return true;
+
+      case Network::WPSMode::ABORT:
+        dbussignal_connman_manager_cancel_wps();
+        return true;
+    }
+
+    return false;
+}
+
 static NetworkConfigWriteData nwconfig_write_data;
 static NetworkStatusData nwstatus_data;
 
@@ -1276,6 +1439,33 @@ void Regs::NetworkConfig::init()
 void Regs::NetworkConfig::deinit()
 {
     shutdown_guard_free(&nwstatus_data.shutdown_guard);
+}
+
+bool Regs::NetworkConfig::request_configuration_for_mac(
+        Network::ConfigRequest &config_request,
+        const Connman::Address<Connman::AddressType::MAC> &mac,
+        Connman::Technology tech)
+{
+    if(config_request.empty())
+    {
+        /* nothing to do */
+        return true;
+    }
+
+    switch(tech)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        return false;
+
+      case Connman::Technology::ETHERNET:
+      case Connman::Technology::WLAN:
+        break;
+    }
+
+    std::lock_guard<std::mutex> lock(nwconfig_write_data.commit_configuration_lock);
+
+    return process_external_config_request(config_request, mac, tech,
+                                           *nwstatus_data.shutdown_guard);
 }
 
 int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, size_t length)
@@ -1299,7 +1489,9 @@ int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, si
         return 0;
     }
 
-    return do_process_config_request(
+    std::lock_guard<std::mutex> lock(nwconfig_write_data.commit_configuration_lock);
+
+    return process_config_request_from_spi_slave(
                 nwconfig_write_data.edit_state,
                 nwconfig_write_data.config_request,
                 *nwstatus_data.shutdown_guard,
