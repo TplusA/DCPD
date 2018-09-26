@@ -880,8 +880,13 @@ void network_prefs_put_wlan_config(struct network_prefs *prefs,
                                    const char *security,
                                    const char *passphrase)
 {
-    modify_pref(prefs->section, "NetworkName", network_name);
-    modify_pref(prefs->section, "SSID", ssid);
+    if(network_name != nullptr || ssid != nullptr)
+    {
+        modify_pref(prefs->section, "NetworkName",
+                    network_name != nullptr ? network_name : "");
+        modify_pref(prefs->section, "SSID", ssid != nullptr ? ssid : "");
+    }
+
     modify_pref(prefs->section, "Security", security);
     modify_pref(prefs->section, "Passphrase", passphrase);
 }
