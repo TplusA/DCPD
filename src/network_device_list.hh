@@ -83,10 +83,8 @@ class NetworkDeviceList
         return (*const_cast<NetworkDeviceList *>(this))[mac_address];
     }
 
-    Map::const_iterator find(const std::string &mac_address) const { return devices_.find(mac_address); }
     Map::const_iterator begin() const { return devices_.begin(); }
     Map::const_iterator end() const { return devices_.end(); }
-    Map::iterator find(const std::string &mac_address) { return devices_.find(mac_address); }
     Map::iterator begin() { return devices_.begin(); }
     Map::iterator end() { return devices_.end(); }
 
@@ -95,6 +93,10 @@ class NetworkDeviceList
 
     static std::pair<NetworkDeviceList &, std::unique_lock<std::recursive_mutex>>
     get_singleton_for_update();
+
+  private:
+    Map::const_iterator find(const std::string &mac_address) const { return devices_.find(mac_address); }
+    Map::iterator find(const std::string &mac_address) { return devices_.find(mac_address); }
 };
 
 }
