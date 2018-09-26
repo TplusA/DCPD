@@ -46,73 +46,13 @@ class ServiceList
         number_of_wlan_services_(0)
     {}
 
-    void clear()
-    {
-        services_.clear();
-        number_of_ethernet_services_ = 0;
-        number_of_wlan_services_ = 0;
-    }
-
-    void erase(const std::string &name)
-    {
-        auto it(services_.find(name));
-
-        if(it == services_.end())
-            return;
-
-        switch(it->second->get_technology())
-        {
-          case Technology::UNKNOWN_TECHNOLOGY:
-            break;
-
-          case Technology::ETHERNET:
-            log_assert(number_of_ethernet_services_ > 0);
-            --number_of_ethernet_services_;
-            break;
-
-          case Technology::WLAN:
-            log_assert(number_of_wlan_services_ > 0);
-            --number_of_wlan_services_;
-            break;
-        }
-
-        services_.erase(name);
-    }
-
+    void clear();
+    void erase(const std::string &name);
     bool insert(const char *name, ServiceData &&service_data,
-                Service<Technology::ETHERNET>::TechDataType &&ethernet_data)
-    {
-        if(services_.find(name) != services_.end())
-            return false;
-
-        services_[name].reset(new Service<Technology::ETHERNET>(std::move(service_data),
-                                                                std::move(ethernet_data)));
-
-        ++number_of_ethernet_services_;
-
-        return true;
-    }
-
+                Service<Technology::ETHERNET>::TechDataType &&ethernet_data);
     bool insert(const char *name, ServiceData &&service_data,
-                Service<Technology::WLAN>::TechDataType &&wlan_data)
-    {
-        if(services_.find(name) != services_.end())
-            return false;
-
-        services_[name].reset(new Service<Technology::WLAN>(std::move(service_data),
-                                                            std::move(wlan_data)));
-
-        ++number_of_wlan_services_;
-
-        return true;
-    }
-
-    size_t number_of_services() const
-    {
-        log_assert(services_.size() == number_of_ethernet_services_ + number_of_wlan_services_);
-        return services_.size();
-    }
-
+                Service<Technology::WLAN>::TechDataType &&wlan_data);
+    size_t number_of_services() const;
     size_t number_of_ethernet_services() const { return number_of_ethernet_services_; }
     size_t number_of_wlan_services() const { return number_of_wlan_services_; }
 
