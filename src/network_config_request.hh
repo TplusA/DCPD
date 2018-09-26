@@ -51,7 +51,20 @@ class ConfigRequest
     Maybe<std::string> ipv4_address_;
     Maybe<std::string> ipv4_netmask_;
     Maybe<std::string> ipv4_gateway_;
-    Maybe<std::vector<std::string>> ipv4_dns_servers_;
+
+    Maybe<std::string> dhcpv6_mode_;
+    Maybe<std::string> ipv6_address_;
+    Maybe<std::string> ipv6_prefix_length_;
+    Maybe<std::string> ipv6_gateway_;
+
+    Maybe<std::vector<std::string>> dns_servers_;
+    Maybe<std::vector<std::string>> time_servers_;
+    Maybe<std::vector<std::string>> domains_;
+
+    Maybe<std::string> proxy_method_;
+    Maybe<std::string> proxy_pac_url_;
+    Maybe<std::vector<std::string>> proxy_servers_;
+    Maybe<std::vector<std::string>> proxy_excluded_;
 
     Maybe<std::string> wlan_security_mode_;
     Maybe<std::string> wlan_ssid_ascii_;
@@ -71,7 +84,17 @@ class ConfigRequest
         ipv4_address_.set_unknown();
         ipv4_netmask_.set_unknown();
         ipv4_gateway_.set_unknown();
-        ipv4_dns_servers_.set_unknown();
+        dhcpv6_mode_.set_unknown();
+        ipv6_address_.set_unknown();
+        ipv6_prefix_length_.set_unknown();
+        ipv6_gateway_.set_unknown();
+        dns_servers_.set_unknown();
+        time_servers_.set_unknown();
+        domains_.set_unknown();
+        proxy_method_.set_unknown();
+        proxy_pac_url_.set_unknown();
+        proxy_servers_.set_unknown();
+        proxy_excluded_.set_unknown();
         wlan_security_mode_.set_unknown();
         wlan_ssid_ascii_.set_unknown();
         wlan_ssid_hex_.set_unknown();
@@ -85,7 +108,17 @@ class ConfigRequest
                  ipv4_address_.is_known() ||
                  ipv4_netmask_.is_known() ||
                  ipv4_gateway_.is_known() ||
-                 ipv4_dns_servers_.is_known() ||
+                 dhcpv6_mode_.is_known() ||
+                 ipv6_address_.is_known() ||
+                 ipv6_prefix_length_.is_known() ||
+                 ipv6_gateway_.is_known() ||
+                 dns_servers_.is_known() ||
+                 time_servers_.is_known() ||
+                 domains_.is_known() ||
+                 proxy_method_.is_known() ||
+                 proxy_pac_url_.is_known() ||
+                 proxy_servers_.is_known() ||
+                 proxy_excluded_.is_known() ||
                  wlan_security_mode_.is_known() ||
                  wlan_ssid_ascii_.is_known() ||
                  wlan_ssid_hex_.is_known() ||

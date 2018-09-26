@@ -28,6 +28,7 @@
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_status.hh"
+#include "connman_service.hh"
 #include "volume_control.hh"
 #include "smartphone_app_send.hh"
 #include "configproxy.h"
@@ -36,6 +37,7 @@
 
 #include <cstring>
 #include <cerrno>
+#include <jsoncpp/json.h>
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
                            const char *sender_name)
@@ -236,6 +238,290 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
     return TRUE;
 }
 
+static const Json::Value &
+lookup_field(GDBusMethodInvocation *invocation,
+             const Json::Value &json, const char *field,
+             Json::ValueType expected_type = Json::nullValue,
+             bool must_exist = true)
+{
+    const auto &result(json[field]);
+
+    if(result.isNull())
+    {
+        if(must_exist)
+        {
+            g_dbus_method_invocation_return_error(
+                invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                "Required field missing: \"%s\"", field);
+            throw std::runtime_error("Required field missing");
+        }
+    }
+    else if(result.type() != expected_type)
+    {
+        if(expected_type != Json::nullValue)
+        {
+            g_dbus_method_invocation_return_error(
+                invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                "Field of unexpected type: \"%s\"", field);
+            throw std::runtime_error("Unexpected field type");
+        }
+    }
+
+    return result;
+}
+
+static bool copy_if_available(GDBusMethodInvocation *invocation,
+                              const Json::Value &json, const char *field,
+                              Maybe<std::string> &dest)
+{
+    const auto &s(lookup_field(invocation, json, field, Json::stringValue, false));
+
+    if(!s.isString())
+        return false;
+
+    dest = s.asString();
+    return true;
+}
+
+static bool copy_if_available(GDBusMethodInvocation *invocation,
+                              const Json::Value &json, const char *field,
+                              Maybe<std::vector<std::string>> &dest)
+{
+    const auto &in(lookup_field(invocation, json, field, Json::arrayValue, false));
+
+    if(!in.isArray())
+        return false;
+
+    dest.set_known();
+    auto &out(dest.get_rw());
+
+    out.clear();
+
+    for(const auto &s : in)
+    {
+        if(!s.isString())
+        {
+            g_dbus_method_invocation_return_error(
+                invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                "Array contains value of unexpected type: %s", field);
+            throw std::runtime_error("Unexpected array value type");
+        }
+
+        out.push_back(s.asString());
+    }
+
+    return true;
+}
+
+static void set_common_service_configuration(GDBusMethodInvocation *invocation,
+                                             const Json::Value &json,
+                                             Network::ConfigRequest &req)
+{
+    const auto &cfg(lookup_field(invocation, json,
+                                 "configuration", Json::objectValue));
+
+    const auto &ipv4_config(lookup_field(invocation, cfg, "ipv4_config",
+                                         Json::objectValue, false));
+
+    if(!ipv4_config.isNull())
+    {
+        copy_if_available(invocation, ipv4_config, "address", req.ipv4_address_);
+        copy_if_available(invocation, ipv4_config, "dhcp_method", req.dhcpv4_mode_);
+        copy_if_available(invocation, ipv4_config, "gateway", req.ipv4_gateway_);
+        copy_if_available(invocation, ipv4_config, "netmask", req.ipv4_netmask_);
+    }
+
+    const auto &ipv6_config(lookup_field(invocation, cfg, "ipv6_config",
+                                         Json::objectValue, false));
+
+    if(!ipv6_config.isNull())
+    {
+        copy_if_available(invocation, ipv6_config, "address", req.ipv6_address_);
+        copy_if_available(invocation, ipv6_config, "dhcp_method", req.dhcpv6_mode_);
+        copy_if_available(invocation, ipv6_config, "gateway", req.ipv6_gateway_);
+        copy_if_available(invocation, ipv6_config, "prefix_length", req.ipv6_prefix_length_);
+    }
+
+    const auto &proxy_config(lookup_field(invocation, cfg, "proxy_config",
+                                          Json::objectValue, false));
+
+    if(!proxy_config.isNull())
+    {
+        copy_if_available(invocation, proxy_config, "method", req.proxy_method_);
+        copy_if_available(invocation, proxy_config, "auto_config_pac_url", req.proxy_pac_url_);
+        copy_if_available(invocation, proxy_config, "proxy_servers", req.proxy_servers_);
+        copy_if_available(invocation, proxy_config, "excluded_hosts", req.proxy_excluded_);
+    }
+
+    copy_if_available(invocation, json, "dns_servers", req.dns_servers_);
+    copy_if_available(invocation, json, "time_servers", req.time_servers_);
+    copy_if_available(invocation, json, "domains", req.domains_);
+}
+
+static void parse_device_info(GDBusMethodInvocation *invocation,
+                              const Json::Value &json,
+                              Connman::Technology tech,
+                              Connman::Address<Connman::AddressType::MAC> &mac)
+{
+    switch(tech)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        break;
+
+      case Connman::Technology::ETHERNET:
+      case Connman::Technology::WLAN:
+        return;
+    }
+
+    const auto &device_info(lookup_field(invocation, json, "device_info",
+                                         Json::objectValue));
+
+    if(!mac.empty())
+        return;
+
+    const auto &mac_string(lookup_field(invocation, device_info, "mac",
+                                        Json::stringValue).asString());
+
+    try
+    {
+        mac.set(std::string(mac_string));
+    }
+    catch(const std::domain_error &e)
+    {
+        /* handled below */
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Bad MAC address: \"%s\"", mac_string.c_str());
+        throw;
+    }
+}
+
+static bool set_wlan_service_configuration(GDBusMethodInvocation *invocation,
+                                           const Json::Value &json,
+                                           Connman::Technology tech,
+                                           Network::ConfigRequest &req)
+{
+    switch(tech)
+    {
+      case Connman::Technology::ETHERNET:
+        return false;
+
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+      case Connman::Technology::WLAN:
+        break;
+    }
+
+    const auto &wlan_settings(lookup_field(invocation, json, "wlan_settings",
+                                           Json::objectValue,
+                                           tech == Connman::Technology::WLAN));
+    if(wlan_settings.isNull())
+        return false;
+
+    req.wlan_security_mode_ =
+        lookup_field(invocation, wlan_settings, "security",
+                     Json::stringValue).asString();
+
+    if(!copy_if_available(invocation, wlan_settings, "ssid", req.wlan_ssid_hex_) &&
+       !copy_if_available(invocation, wlan_settings, "name", req.wlan_ssid_ascii_))
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Required field missing: \"ssid\" or \"name\"");
+        throw std::runtime_error("Required field missing");
+    }
+
+    req.wlan_wpa_passphrase_ascii_ =
+        lookup_field(invocation, wlan_settings, "passphrase",
+                     Json::stringValue).asString();
+
+    return true;
+}
+
+static bool set_network_service_configuration(
+        GDBusMethodInvocation *invocation, const Json::Value &json,
+        Connman::Technology tech, Network::ConfigRequest &req,
+        Connman::Address<Connman::AddressType::MAC> &mac)
+{
+    const auto &is_favorite(lookup_field(invocation, json, "is_favorite",
+                                         Json::booleanValue).asBool());
+
+    set_common_service_configuration(invocation, json, req);
+    const bool has_wlan_settings =
+        set_wlan_service_configuration(invocation, json, tech, req);
+    parse_device_info(invocation, json, tech, mac);
+
+    /*
+     * We cannot handle configurations for non-favorites as long as there is
+     * still a notion of two "primary" networking interfaces in DCP. The D-Bus
+     * interface allows us to do much better, but for compatibility with
+     * current DCP limitations, we must error out at this point.
+     *
+     * Note that we could check for this condition much earlier. Instead, we
+     * are doing it last to prevent masking of errors discovered during input
+     * sanitation.
+     */
+    if(!is_favorite)
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "We cannot handle non-favorite services yet---sorry :(");
+        throw std::runtime_error("Cannot handle non-favorites yet");
+    }
+
+    return has_wlan_settings;
+}
+
+static bool parse_json_from_buffer(GDBusMethodInvocation *invocation,
+                                   Json::Value &json, const char *buffer,
+                                   size_t buffer_size, const char *what)
+{
+    Json::CharReaderBuilder reader_builder;
+    reader_builder["collectComments"] = false;
+    std::unique_ptr<Json::CharReader> reader(reader_builder.newCharReader());
+    std::string errors;
+
+    if(reader->parse(buffer, buffer + buffer_size, &json, &errors))
+        return true;
+
+    g_dbus_method_invocation_return_error(
+        invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+        "Failed parsing JSON data (%s): %s", what, errors.c_str());
+    return false;
+}
+
+static bool determine_tech_and_mac_from_service_name(
+        GDBusMethodInvocation *invocation, const char *service_name,
+        Connman::Technology &tech,
+        Connman::Address<Connman::AddressType::MAC> &mac)
+{
+    if(service_name == nullptr || service_name[0] == '\0')
+    {
+        tech = Connman::Technology::UNKNOWN_TECHNOLOGY;
+        return true;
+    }
+
+    try
+    {
+        auto components(Connman::ServiceNameComponents::from_service_name(service_name));
+        tech = components.technology_;
+        mac = std::move(components.mac_address_);
+    }
+    catch(const std::domain_error &e)
+    {
+        tech = Connman::Technology::UNKNOWN_TECHNOLOGY;
+    }
+
+    if(tech != Connman::Technology::UNKNOWN_TECHNOLOGY)
+        return true;
+    else
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Invalid service name");
+        return false;
+    }
+}
+
 gboolean
 dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
                                              GDBusMethodInvocation *invocation,
@@ -243,9 +529,57 @@ dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
                                              const gchar *configuration,
                                              gpointer user_data)
 {
-    g_dbus_method_invocation_return_error(invocation,
-                                          G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-                                          "Not implemented yet");
+    Json::Value json;
+    if(!parse_json_from_buffer(invocation, json,
+                               configuration, strlen(configuration),
+                               "network configuration request"))
+        return TRUE;
+
+    Connman::Technology tech;
+    Connman::Address<Connman::AddressType::MAC> mac;
+
+    if(!determine_tech_and_mac_from_service_name(invocation, service_name,
+                                                 tech, mac))
+        return TRUE;
+
+    Network::ConfigRequest req;
+    bool has_wlan_settings;
+
+    try
+    {
+        has_wlan_settings =
+            set_network_service_configuration(invocation, json,
+                                              tech, req, mac);
+    }
+    catch(const std::runtime_error &e)
+    {
+        /* some data is missing or unexpected */
+        return TRUE;
+    }
+    catch(const std::domain_error &e)
+    {
+        /* bad MAC address */
+        return TRUE;
+    }
+
+    if(mac.empty())
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "MAC address unknown");
+        return TRUE;
+    }
+
+    if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY && has_wlan_settings)
+        tech = Connman::Technology::WLAN;
+
+    if(Regs::NetworkConfig::request_configuration_for_mac(req, mac, tech))
+        tdbus_dcpd_network_complete_set_service_configuration(object, invocation);
+    else
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Invalid configuration request");
+
     return TRUE;
 }
 

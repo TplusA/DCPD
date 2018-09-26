@@ -619,7 +619,7 @@ static bool handle_set_dhcp_mode(Network::ConfigRequest &req,
         req.ipv4_address_.set_unknown();
         req.ipv4_netmask_.set_unknown();
         req.ipv4_gateway_.set_unknown();
-        req.ipv4_dns_servers_.set_unknown();
+        req.dns_servers_.set_unknown();
     }
     else if(!req.ipv4_address_.is_known() && !req.ipv4_netmask_.is_known() &&
             !req.ipv4_gateway_.is_known())
@@ -634,7 +634,7 @@ static bool handle_set_dhcp_mode(Network::ConfigRequest &req,
 
         network_prefs_disable_ipv4(prefs);
 
-        req.ipv4_dns_servers_.set_unknown();
+        req.dns_servers_.set_unknown();
     }
 
     return true;
@@ -677,10 +677,10 @@ static bool handle_set_static_ipv4_config(const Network::ConfigRequest &req,
 static bool handle_set_dns_servers(const Network::ConfigRequest &req,
                                    struct network_prefs *prefs)
 {
-    if(!req.ipv4_dns_servers_.is_known())
+    if(!req.dns_servers_.is_known())
         return true;
 
-    const auto &servers(req.ipv4_dns_servers_.get());
+    const auto &servers(req.dns_servers_.get());
 
     if(!servers.empty())
         network_prefs_put_nameservers(prefs,
@@ -699,6 +699,42 @@ static bool handle_set_dns_servers(const Network::ConfigRequest &req,
     }
 
     return true;
+}
+
+/*!
+ * All the stuff that isn't in DCP yet...
+ */
+static bool handle_unhandled_settings(const Network::ConfigRequest &req)
+{
+    bool result = true;
+
+    if(req.ipv6_address_.is_known() || req.ipv6_prefix_length_.is_known() ||
+       req.ipv6_gateway_.is_known() || req.dhcpv6_mode_ != "off")
+    {
+        msg_error(0, LOG_ERR, "IPv6 configuration not supported yet");
+        result = false;
+    }
+
+    if(req.time_servers_.is_known())
+    {
+        msg_error(0, LOG_ERR, "Time server configuration is not supported yet");
+        result = false;
+    }
+
+    if(req.time_servers_.is_known())
+    {
+        msg_error(0, LOG_ERR, "Domain configuration is not supported yet");
+        result = false;
+    }
+
+    if(req.proxy_method_.is_known() || req.proxy_pac_url_.is_known() ||
+       req.proxy_servers_.is_known() || req.proxy_excluded_.is_known())
+    {
+        msg_error(0, LOG_ERR, "Proxy configuration is not supported yet");
+        result = false;
+    }
+
+    return result;
 }
 
 static char nibble_to_char(uint8_t nibble)
@@ -927,8 +963,8 @@ static void move_dns_servers_to_config_request(NetworkConfigWriteData &wd,
 
     fill_in_missing_dns_server_config_requests(wd, service);
 
-    req.ipv4_dns_servers_.set_known();
-    auto &servers(req.ipv4_dns_servers_.get_rw());
+    req.dns_servers_.set_known();
+    auto &servers(req.dns_servers_.get_rw());
 
     servers.clear();
 
@@ -946,7 +982,8 @@ static bool apply_changes_to_prefs(Network::ConfigRequest &req,
 
     return handle_set_dhcp_mode(req, prefs) &&
            handle_set_static_ipv4_config(req, prefs) &&
-           handle_set_dns_servers(req, prefs);
+           handle_set_dns_servers(req, prefs) &&
+           handle_unhandled_settings(req);
 }
 
 /*!
@@ -1327,6 +1364,50 @@ modify_network_configuration_from_external_request(
     return wps_mode;
 }
 
+static bool check_back_with_existing_devices(
+        const Connman::Address<Connman::AddressType::MAC> &mac,
+        bool &is_device_with_given_mac_present,
+        Connman::Technology &target_tech)
+{
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+    const auto &devices(locked_devices.first);
+    const auto device(devices[mac]);
+
+    is_device_with_given_mac_present = device != nullptr && device->is_real_;
+
+    switch(target_tech)
+    {
+      case Connman::Technology::UNKNOWN_TECHNOLOGY:
+        if(device == nullptr)
+        {
+            msg_error(0, LOG_ERR,
+                      "Cannot figure out technology of non-existent device "
+                      "for network configuration request for MAC address %s",
+                      mac.get_string().c_str());
+            return false;
+        }
+
+        target_tech = device->technology_;
+        return true;
+
+      case Connman::Technology::ETHERNET:
+      case Connman::Technology::WLAN:
+        break;
+    }
+
+    if(device == nullptr)
+        return true;
+
+    if(target_tech == device->technology_)
+        return true;
+
+    msg_error(0, LOG_ERR,
+              "Technology of device with MAC address %s differs from "
+              "requested technology",
+              mac.get_string().c_str());
+    return false;
+}
+
 static bool process_external_config_request(
         Network::ConfigRequest &config_request,
         const Connman::Address<Connman::AddressType::MAC> &mac,
@@ -1334,12 +1415,9 @@ static bool process_external_config_request(
 {
     bool is_device_with_given_mac_present;
 
-    {
-    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
-    const auto &devices(locked_devices.first);
-    const auto device(devices[mac]);
-    is_device_with_given_mac_present = device != nullptr && device->is_real_;
-    }
+    if(!check_back_with_existing_devices(mac, is_device_with_given_mac_present,
+                                         target_tech))
+        return false;
 
     if(!is_device_with_given_mac_present)
     {
@@ -1450,16 +1528,6 @@ bool Regs::NetworkConfig::request_configuration_for_mac(
     {
         /* nothing to do */
         return true;
-    }
-
-    switch(tech)
-    {
-      case Connman::Technology::UNKNOWN_TECHNOLOGY:
-        return false;
-
-      case Connman::Technology::ETHERNET:
-      case Connman::Technology::WLAN:
-        break;
     }
 
     std::lock_guard<std::mutex> lock(nwconfig_write_data.commit_configuration_lock);
@@ -1699,8 +1767,8 @@ int Regs::NetworkConfig::DCP::write_55_dhcp_enabled(const uint8_t *data, size_t 
         nwconfig_write_data.config_request.ipv4_address_ = "";
         nwconfig_write_data.config_request.ipv4_netmask_ = "";
         nwconfig_write_data.config_request.ipv4_gateway_ = "";
-        nwconfig_write_data.config_request.ipv4_dns_servers_.set_known();
-        nwconfig_write_data.config_request.ipv4_dns_servers_.get_rw().clear();
+        nwconfig_write_data.config_request.dns_servers_.set_known();
+        nwconfig_write_data.config_request.dns_servers_.get_rw().clear();
     }
 
     return 0;
