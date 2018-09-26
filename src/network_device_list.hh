@@ -69,7 +69,7 @@ class NetworkDeviceList
     std::shared_ptr<NetworkDevice> insert(Technology technology,
                                           Address<AddressType::MAC> &&mac_address);
 
-    std::shared_ptr<NetworkDevice> &operator[](const Address<AddressType::MAC> &mac_address)
+    std::shared_ptr<NetworkDevice> operator[](const Address<AddressType::MAC> &mac_address)
     {
         if(mac_address.empty())
             return dummy_device_;

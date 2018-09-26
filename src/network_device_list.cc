@@ -141,11 +141,10 @@ Connman::NetworkDeviceList::insert(Connman::Technology technology,
         return it->second;
 
     const bool is_auto = is_auto_select(technology, mac_address);
-    auto &dest = (*this)[mac_address];
     auto dev = std::make_shared<Connman::NetworkDevice>(technology,
                                                         std::move(mac_address),
                                                         true, is_auto);
-    dest = dev;
+    devices_.insert({dev->mac_address_.get_string(), dev});
 
     return dev;
 }
