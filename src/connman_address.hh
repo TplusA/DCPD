@@ -247,12 +247,10 @@ class Address
         if(address_.length() != other.address_.length())
             return false;
 
-        if(address_.empty() == 0)
+        if(address_.empty())
             return true;
 
-        return std::equal(address_.begin(), address_.end(),
-                          other.address_.begin(),
-                          [] (const char &a, const char &b) { return toupper(a) == toupper(b); });
+        return address_ == other.address_;
     }
 
     bool operator!=(const Address &other) const
@@ -270,7 +268,7 @@ class Address
             if(other[i] == '\0')
                 return false;
 
-            if(toupper(other[i] != toupper(address_[i])))
+            if(toupper(other[i] != address_[i]))
                 return false;
         }
 
