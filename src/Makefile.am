@@ -139,6 +139,7 @@ libservicelist_la_SOURCES = \
     connman_service_list.cc connman_service_list.hh \
     connman_service.hh connman_address.hh maybe.hh \
     network_device_list.cc network_device.hh network_device_list.hh \
+    network_netlink.cc network_netlink.hh \
     messages.h
 libservicelist_la_CFLAGS = $(AM_CFLAGS)
 libservicelist_la_CXXFLAGS = $(AM_CXXFLAGS)
@@ -171,6 +172,7 @@ libdbus_handlers_la_SOURCES = \
     dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h connman_agent.h \
     dbus_handlers_connman_manager.cc dbus_handlers_connman_manager.h \
     dbus_handlers_connman_manager_glue.h \
+    network_config_to_json.cc network_config_to_json.hh \
     networkprefs.h \
     connman_dbus.h \
     actor_id.h \

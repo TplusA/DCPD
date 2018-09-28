@@ -28,7 +28,7 @@
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_status.hh"
-#include "connman_service.hh"
+#include "network_config_to_json.hh"
 #include "volume_control.hh"
 #include "smartphone_app_send.hh"
 #include "configproxy.h"
@@ -232,9 +232,19 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
                                     const gchar *have_version,
                                     gpointer user_data)
 {
-    g_dbus_method_invocation_return_error(invocation,
-                                          G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-                                          "Not implemented yet");
+    const auto locked_services(Connman::ServiceList::get_singleton_const());
+    const auto &services(locked_services.first);
+
+    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+    const auto &devices(locked_devices.first);
+
+    std::string version;
+    const auto json(Network::configuration_to_json(services, devices,
+                                                   have_version, version));
+
+    tdbus_dcpd_network_complete_get_all(object, invocation,
+                                        version.c_str(), json.c_str());
+
     return TRUE;
 }
 
