@@ -751,6 +751,11 @@ size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
     return len;
 }
 
+const char *network_prefs_get_mac(const struct network_prefs *prefs)
+{
+    return get_pref(prefs->section, "MAC");
+}
+
 const char *network_prefs_get_name(const struct network_prefs *prefs)
 {
     return get_pref(prefs->section, "NetworkName");
@@ -759,6 +764,11 @@ const char *network_prefs_get_name(const struct network_prefs *prefs)
 const char *network_prefs_get_ssid(const struct network_prefs *prefs)
 {
     return get_pref(prefs->section, "SSID");
+}
+
+const char *network_prefs_get_security(const struct network_prefs *prefs)
+{
+    return get_pref(prefs->section, "Security");
 }
 
 const char *network_prefs_get_passphrase(const struct network_prefs *prefs)

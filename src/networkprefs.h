@@ -68,8 +68,10 @@ int network_prefs_write_to_file(struct network_prefs_handle *handle);
 size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
                                            char *buffer, size_t buffer_size,
                                            bool with_service_prefix);
+const char *network_prefs_get_mac(const struct network_prefs *prefs);
 const char *network_prefs_get_name(const struct network_prefs *prefs);
 const char *network_prefs_get_ssid(const struct network_prefs *prefs);
+const char *network_prefs_get_security(const struct network_prefs *prefs);
 const char *network_prefs_get_passphrase(const struct network_prefs *prefs);
 bool network_prefs_get_ipv4_settings(const struct network_prefs *prefs,
                                      bool *with_dhcp, const char **address,
