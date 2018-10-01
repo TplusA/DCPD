@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -66,7 +66,8 @@ bool network_prefs_remove_prefs(struct network_prefs_handle *handle,
 int network_prefs_write_to_file(struct network_prefs_handle *handle);
 
 size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
-                                           char *buffer, size_t buffer_size);
+                                           char *buffer, size_t buffer_size,
+                                           bool with_service_prefix);
 const char *network_prefs_get_name(const struct network_prefs *prefs);
 const char *network_prefs_get_ssid(const struct network_prefs *prefs);
 const char *network_prefs_get_passphrase(const struct network_prefs *prefs);

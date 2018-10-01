@@ -995,7 +995,7 @@ modify_network_configuration(
                                         ? nullptr
                                         : selected_prefs,
                                         previous_wlan_name_buffer.data(),
-                                        previous_wlan_name_buffer.size());
+                                        previous_wlan_name_buffer.size(), true);
 
     if(selected_prefs == nullptr)
         selected_prefs = network_prefs_add_prefs(cfg, map_network_technology(edit.get_selected_technology()));

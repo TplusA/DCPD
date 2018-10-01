@@ -647,7 +647,7 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
     memcpy(buffer, service, tech_length);
     buffer[tech_length] = '\0';
 
-    if(network_prefs_generate_service_name(prefs, buffer, sizeof(buffer)) == 0)
+    if(network_prefs_generate_service_name(prefs, buffer, sizeof(buffer), true) == 0)
     {
         network_prefs_close(*prefsfile);
         *prefsfile = NULL;

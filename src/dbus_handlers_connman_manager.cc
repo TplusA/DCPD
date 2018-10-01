@@ -1832,11 +1832,13 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
     const bool have_ethernet_service_prefs =
         network_prefs_generate_service_name(ethernet_prefs,
                                             configured_ethernet_service_name,
-                                            sizeof(configured_ethernet_service_name)) > 0;
+                                            sizeof(configured_ethernet_service_name),
+                                            true) > 0;
     const bool have_wlan_service_prefs =
         network_prefs_generate_service_name(wlan_prefs,
                                             configured_wlan_service_name,
-                                            sizeof(configured_wlan_service_name)) > 0;
+                                            sizeof(configured_wlan_service_name),
+                                            true) > 0;
 
     /* up to two services known by Connman for which the user also has provided
      * configuration data */
@@ -2278,7 +2280,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 
       case NWPREFSTECH_ETHERNET:
         if(network_prefs_generate_service_name(ethernet_prefs, service_name,
-                                               sizeof(service_name)) > 0)
+                                               sizeof(service_name), true) > 0)
         {
             auto our_service(services.find(service_name));
 
@@ -2291,7 +2293,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 
       case NWPREFSTECH_WLAN:
         if(network_prefs_generate_service_name(wlan_prefs, service_name,
-                                               sizeof(service_name)) > 0)
+                                               sizeof(service_name), true) > 0)
         {
             auto our_service(services.find(service_name));
 

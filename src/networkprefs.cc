@@ -706,7 +706,8 @@ int network_prefs_write_to_file(struct network_prefs_handle *handle)
 }
 
 size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
-                                           char *buffer, size_t buffer_size)
+                                           char *buffer, size_t buffer_size,
+                                           bool with_service_prefix)
 {
     if(buffer_size > 0)
         buffer[0] = '\0';
@@ -718,7 +719,8 @@ size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
 
     log_assert(prefs->section != NULL);
 
-    static const size_t tech_offset = sizeof(service_prefix) - 1;
+    const size_t tech_offset =
+        with_service_prefix ? sizeof(service_prefix) - 1 : 0;
 
     const struct ini_section *const section = prefs->section;
 
@@ -731,7 +733,9 @@ size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
     if(start_offset >= buffer_size)
         return 0;
 
-    memcpy(buffer, service_prefix, tech_offset);
+    if(with_service_prefix)
+        memcpy(buffer, service_prefix, sizeof(service_prefix) - 1);
+
     memcpy(buffer + tech_offset, section->name, namelen + 1);
 
     const size_t len =
