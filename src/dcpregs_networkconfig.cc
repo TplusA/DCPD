@@ -532,8 +532,8 @@ static void fill_in_missing_dns_server_config_requests(NetworkConfigWriteData &w
      * "primary" one or a "secondary" */
 
     const bool have_dns_servers =
-        (service.get_service_data().dns_servers_.is_known() &&
-         !service.get_service_data().dns_servers_.get().empty());
+        (service.get_service_data().active_.dns_servers_.is_known() &&
+         !service.get_service_data().active_.dns_servers_.get().empty());
 
     if(!have_dns_servers)
     {
@@ -547,7 +547,7 @@ static void fill_in_missing_dns_server_config_requests(NetworkConfigWriteData &w
     }
     else
     {
-        const auto &dns_servers(service.get_service_data().dns_servers_.get());
+        const auto &dns_servers(service.get_service_data().active_.dns_servers_.get());
 
         if(wd.ipv4_dns_server1.is_known())
         {
@@ -598,10 +598,10 @@ static bool query_dhcp_mode(const ConfigRequestEditState &edit)
     if(service == nullptr)
         return false;
 
-    if(!service->get_service_data().ip_settings_v4_.is_known())
+    if(!service->get_service_data().active_.ipsettings_v4_.is_known())
         return false;
 
-    return map_dhcp_method(service->get_service_data().ip_settings_v4_.get().get_dhcp_method()) == NETWORK_STATUS_IPV4_DHCP;
+    return map_dhcp_method(service->get_service_data().active_.ipsettings_v4_.get().get_dhcp_method()) == NETWORK_STATUS_IPV4_DHCP;
 }
 
 static bool handle_set_dhcp_mode(Network::ConfigRequest &req,
@@ -1127,13 +1127,14 @@ static bool is_ethernet_service_auto_configured(const Connman::ServiceBase &s)
 {
     const Connman::ServiceData &sdata(s.get_service_data());
 
-    if(sdata.dns_servers_.is_known() && !sdata.dns_servers_.get().empty())
+    if(sdata.active_.dns_servers_.is_known() &&
+       !sdata.active_.dns_servers_.get().empty())
         return false;
 
-    if(!sdata.ip_settings_v4_.is_known())
+    if(!sdata.active_.ipsettings_v4_.is_known())
         return false;
 
-    const auto &settings(sdata.ip_settings_v4_.get());
+    const auto &settings(sdata.active_.ipsettings_v4_.get());
 
     switch(settings.get_dhcp_method())
     {
@@ -1634,9 +1635,9 @@ static void fill_network_status_register_response(std::array<uint8_t, 3> &respon
     if(service == nullptr)
         return;
 
-    if(service->get_service_data().ip_settings_v4_.is_known())
+    if(service->get_service_data().active_.ipsettings_v4_.is_known())
     {
-        const auto &settings(service->get_service_data().ip_settings_v4_.get());
+        const auto &settings(service->get_service_data().active_.ipsettings_v4_.get());
 
         if(settings.is_configuration_valid())
         {
@@ -1849,8 +1850,8 @@ ssize_t Regs::NetworkConfig::DCP::read_56_ipv4_address(uint8_t *response, size_t
                 nwconfig_write_data.config_request.ipv4_address_, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
-                    if(s.get_service_data().ip_settings_v4_.is_known())
-                        return copy_to_array(s.get_service_data().ip_settings_v4_.get().get_address().get_string(),
+                    if(s.get_service_data().active_.ipsettings_v4_.is_known())
+                        return copy_to_array(s.get_service_data().active_.ipsettings_v4_.get().get_address().get_string(),
                                              out, len);
                     else
                         return -1;
@@ -1867,8 +1868,8 @@ ssize_t Regs::NetworkConfig::DCP::read_57_ipv4_netmask(uint8_t *response, size_t
                 nwconfig_write_data.config_request.ipv4_netmask_, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
-                    if(s.get_service_data().ip_settings_v4_.is_known())
-                        return copy_to_array(s.get_service_data().ip_settings_v4_.get().get_netmask().get_string(),
+                    if(s.get_service_data().active_.ipsettings_v4_.is_known())
+                        return copy_to_array(s.get_service_data().active_.ipsettings_v4_.get().get_netmask().get_string(),
                                              out, len);
                     else
                         return -1;
@@ -1885,8 +1886,8 @@ ssize_t Regs::NetworkConfig::DCP::read_58_ipv4_gateway(uint8_t *response, size_t
                 nwconfig_write_data.config_request.ipv4_gateway_, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
-                    if(s.get_service_data().ip_settings_v4_.is_known())
-                        return copy_to_array(s.get_service_data().ip_settings_v4_.get().get_gateway().get_string(),
+                    if(s.get_service_data().active_.ipsettings_v4_.is_known())
+                        return copy_to_array(s.get_service_data().active_.ipsettings_v4_.get().get_gateway().get_string(),
                                              out, len);
                     else
                         return -1;
@@ -1903,10 +1904,10 @@ ssize_t Regs::NetworkConfig::DCP::read_62_primary_dns(uint8_t *response, size_t 
                 nwconfig_write_data.ipv4_dns_server1, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
-                    if(!s.get_service_data().dns_servers_.is_known())
+                    if(!s.get_service_data().active_.dns_servers_.is_known())
                         return -1;
 
-                    const auto &servers(s.get_service_data().dns_servers_.get());
+                    const auto &servers(s.get_service_data().active_.dns_servers_.get());
 
                     if(!servers.empty())
                         return copy_to_array(servers[0], out, len);
@@ -1925,10 +1926,10 @@ ssize_t Regs::NetworkConfig::DCP::read_63_secondary_dns(uint8_t *response, size_
                 nwconfig_write_data.ipv4_dns_server2, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
-                    if(!s.get_service_data().dns_servers_.is_known())
+                    if(!s.get_service_data().active_.dns_servers_.is_known())
                         return -1;
 
-                    const auto &servers(s.get_service_data().dns_servers_.get());
+                    const auto &servers(s.get_service_data().active_.dns_servers_.get());
 
                     if(servers.size() >= 2)
                         return copy_to_array(servers[1], out, len);

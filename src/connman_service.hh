@@ -104,11 +104,26 @@ struct ServiceData
     Maybe<bool> is_immutable_;
     Maybe<ServiceState> state_;
 
-    Maybe<IPSettings<AddressType::IPV4>> ip_settings_v4_;
-    Maybe<IPSettings<AddressType::IPV6>> ip_settings_v6_;
-    Maybe<IPSettings<AddressType::IPV4>> ip_configuration_v4_;
-    Maybe<IPSettings<AddressType::IPV6>> ip_configuration_v6_;
-    Maybe<std::vector<std::string>> dns_servers_;
+    struct Settings
+    {
+        Maybe<IPSettings<AddressType::IPV4>> ipsettings_v4_;
+        Maybe<IPSettings<AddressType::IPV6>> ipsettings_v6_;
+        Maybe<std::vector<std::string>> dns_servers_;
+        Maybe<std::vector<std::string>> time_servers_;
+        Maybe<std::vector<std::string>> domains_;
+
+        bool operator==(const Settings &other) const
+        {
+            return (ipsettings_v4_ == other.ipsettings_v4_ &&
+                    ipsettings_v6_ == other.ipsettings_v6_ &&
+                    dns_servers_ == other.dns_servers_ &&
+                    time_servers_ == other.time_servers_ &&
+                    domains_ == other.domains_);
+        }
+    };
+
+    Settings active_;
+    Settings configured_;
 
     ServiceData(const ServiceData &) = default;
     ServiceData(ServiceData &&) = default;
@@ -123,9 +138,8 @@ struct ServiceData
                 is_auto_connect_ == other.is_auto_connect_ &&
                 is_immutable_ == other.is_immutable_ &&
                 state_ == other.state_ &&
-                ip_settings_v4_ == other.ip_settings_v4_ &&
-                ip_settings_v6_ == other.ip_settings_v6_ &&
-                dns_servers_ == other.dns_servers_);
+                active_ == other.active_ &&
+                configured_ == other.configured_);
     }
 
     bool operator!=(const ServiceData &other) const

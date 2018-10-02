@@ -2238,16 +2238,16 @@ static void setup_default_connman_service_list()
     data.is_favorite_ = true;
     data.is_auto_connect_ = true;
     data.is_immutable_ = false;
-    data.ip_settings_v4_.set_known();
-    data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
-    data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
-    data.ip_settings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
-    data.ip_settings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
-    data.ip_configuration_v4_.set_known();
-    data.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
-    data.dns_servers_.set_known();
-    data.dns_servers_.get_rw().push_back(standard_dns1_address);
-    data.dns_servers_.get_rw().push_back(standard_dns2_address);
+    data.active_.ipsettings_v4_.set_known();
+    data.active_.ipsettings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.active_.ipsettings_v4_.get_rw().set_address(standard_ipv4_address);
+    data.active_.ipsettings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
+    data.active_.ipsettings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
+    data.active_.dns_servers_.set_known();
+    data.active_.dns_servers_.get_rw().push_back(standard_dns1_address);
+    data.active_.dns_servers_.get_rw().push_back(standard_dns2_address);
+    data.configured_.ipsettings_v4_.set_known();
+    data.configured_.ipsettings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
 
     services.insert(ethernet_name, std::move(data),
                     std::move(Connman::TechData<Connman::Technology::ETHERNET>()));
@@ -2261,16 +2261,16 @@ static void setup_default_connman_service_list()
     data.is_favorite_ = true;
     data.is_auto_connect_ = true;
     data.is_immutable_ = false;
-    data.ip_settings_v4_.set_known();
-    data.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
-    data.ip_settings_v4_.get_rw().set_address(standard_ipv4_address);
-    data.ip_settings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
-    data.ip_settings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
-    data.ip_configuration_v4_.set_known();
-    data.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
-    data.dns_servers_.set_known();
-    data.dns_servers_.get_rw().push_back(standard_dns1_address);
-    data.dns_servers_.get_rw().push_back(standard_dns2_address);
+    data.active_.ipsettings_v4_.set_known();
+    data.active_.ipsettings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
+    data.active_.ipsettings_v4_.get_rw().set_address(standard_ipv4_address);
+    data.active_.ipsettings_v4_.get_rw().set_netmask(standard_ipv4_netmask);
+    data.active_.ipsettings_v4_.get_rw().set_gateway(standard_ipv4_gateway);
+    data.active_.dns_servers_.set_known();
+    data.active_.dns_servers_.get_rw().push_back(standard_dns1_address);
+    data.active_.dns_servers_.get_rw().push_back(standard_dns2_address);
+    data.configured_.ipsettings_v4_.set_known();
+    data.configured_.ipsettings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::ON);
 
     services.insert(wlan_name, std::move(data),
                     std::move(Connman::TechData<Connman::Technology::WLAN>()));
@@ -3014,13 +3014,13 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_disabled()
     assume_interface_is_active<Connman::Technology::ETHERNET>(
         [] (const Connman::ServiceData &sdata)
         {
-            cut_assert_true(sdata.ip_settings_v4_.is_known());
-            cut_assert_true(sdata.ip_configuration_v4_.is_known());
+            cut_assert_true(sdata.active_.ipsettings_v4_.is_known());
+            cut_assert_true(sdata.configured_.ipsettings_v4_.is_known());
         },
         [] (Connman::ServiceData &sdata)
         {
-            sdata.ip_settings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::MANUAL);
-            sdata.ip_configuration_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::MANUAL);
+            sdata.active_.ipsettings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::MANUAL);
+            sdata.configured_.ipsettings_v4_.get_rw().set_dhcp_method(Connman::DHCPV4Method::MANUAL);
         });
 
     auto *reg = lookup_register_expect_handlers(55,
@@ -3042,10 +3042,10 @@ void test_read_dhcp_mode_in_normal_mode_with_dhcp_enabled()
     assume_interface_is_active<Connman::Technology::ETHERNET>(
         [] (const Connman::ServiceData &sdata)
         {
-            cut_assert_true(sdata.ip_settings_v4_.is_known());
-            cut_assert_true(sdata.ip_settings_v4_.get().get_dhcp_method() == Connman::DHCPV4Method::ON);
-            cut_assert_true(sdata.ip_configuration_v4_.is_known());
-            cut_assert_true(sdata.ip_configuration_v4_.get().get_dhcp_method() == Connman::DHCPV4Method::ON);
+            cut_assert_true(sdata.active_.ipsettings_v4_.is_known());
+            cut_assert_true(sdata.active_.ipsettings_v4_.get().get_dhcp_method() == Connman::DHCPV4Method::ON);
+            cut_assert_true(sdata.configured_.ipsettings_v4_.is_known());
+            cut_assert_true(sdata.configured_.ipsettings_v4_.get().get_dhcp_method() == Connman::DHCPV4Method::ON);
         },
         nullptr);
 
@@ -3303,7 +3303,7 @@ static void set_one_dns_server()
         nullptr,
         [] (Connman::ServiceData &sdata)
         {
-            sdata.dns_servers_.set_unknown();
+            sdata.active_.dns_servers_.set_unknown();
         });
 
     start_ipv4_config(Connman::Technology::ETHERNET);
@@ -3611,8 +3611,8 @@ void test_add_secondary_dns_server_to_primary_server()
     inject_service_changes(ethernet_name,
                            [] (Connman::ServiceData &sdata)
                            {
-                               sdata.dns_servers_.get_rw().clear();
-                               sdata.dns_servers_.get_rw().push_back(assumed_primary_dns);
+                               sdata.active_.dns_servers_.get_rw().clear();
+                               sdata.active_.dns_servers_.get_rw().push_back(assumed_primary_dns);
                            });
 
     start_ipv4_config(Connman::Technology::ETHERNET);
@@ -5181,16 +5181,16 @@ void test_network_status__ethernet_idle__wlan_idle()
         [] (Connman::ServiceData &sdata)
         {
             sdata.state_ = Connman::ServiceState::IDLE;
-            sdata.ip_settings_v4_.set_unknown();
-            sdata.ip_settings_v6_.set_unknown();
+            sdata.active_.ipsettings_v4_.set_unknown();
+            sdata.active_.ipsettings_v6_.set_unknown();
         });
 
     inject_service_changes(wlan_name,
         [] (Connman::ServiceData &sdata)
         {
             sdata.state_ = Connman::ServiceState::IDLE;
-            sdata.ip_settings_v4_.set_unknown();
-            sdata.ip_settings_v6_.set_unknown();
+            sdata.active_.ipsettings_v4_.set_unknown();
+            sdata.active_.ipsettings_v6_.set_unknown();
         });
 
     expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
@@ -5214,8 +5214,8 @@ void test_network_status__ethernet_idle___wlan_unavailable()
         [] (Connman::ServiceData &sdata)
         {
             sdata.state_ = Connman::ServiceState::IDLE;
-            sdata.ip_settings_v4_.set_unknown();
-            sdata.ip_settings_v6_.set_unknown();
+            sdata.active_.ipsettings_v4_.set_unknown();
+            sdata.active_.ipsettings_v6_.set_unknown();
         });
 
     expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
@@ -5239,8 +5239,8 @@ void test_network_status__ethernet_unavailable___wlan_idle()
         [] (Connman::ServiceData &sdata)
         {
             sdata.state_ = Connman::ServiceState::IDLE;
-            sdata.ip_settings_v4_.set_unknown();
-            sdata.ip_settings_v6_.set_unknown();
+            sdata.active_.ipsettings_v4_.set_unknown();
+            sdata.active_.ipsettings_v6_.set_unknown();
         });
 
     expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,

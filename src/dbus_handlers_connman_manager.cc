@@ -962,13 +962,13 @@ static bool configure_ipv4_settings(const Connman::ServiceBase &service,
 
     Connman::DHCPV4Method system_dhcp_mode;
     const bool different_ipv4_config =
-        ipv4_settings_are_different(service.get_service_data().ip_configuration_v4_,
+        ipv4_settings_are_different(service.get_service_data().configured_.ipsettings_v4_,
                                     want_dhcp, want_address, want_netmask,
                                     want_gateway, system_dhcp_mode);
     const bool different_nameservers =
         different_ipv4_config
         ? false
-        : nameservers_are_different(service.get_service_data().dns_servers_,
+        : nameservers_are_different(service.get_service_data().active_.dns_servers_,
                                     system_dhcp_mode,
                                     want_dns1, want_dns2);
 
@@ -1255,6 +1255,21 @@ static void parse_ip_settings(GVariant *values,
     ip_settings.set_known();
 }
 
+static void copy_strings_to_vector(GVariant *value,
+                                   Maybe<std::vector<std::string>> &dest)
+{
+    GVariantIter iter;
+    g_variant_iter_init(&iter, value);
+
+    const char *iter_string;
+    auto &v(dest.get_rw());
+
+    while(g_variant_iter_loop(&iter, "&s", &iter_string))
+        v.push_back(iter_string);
+
+    dest.set_known();
+}
+
 static bool parse_generic_service_data(const char *prop, GVariant *value,
                                        Connman::ServiceData &service_data,
                                        Connman::Technology &tech,
@@ -1301,27 +1316,25 @@ static bool parse_generic_service_data(const char *prop, GVariant *value,
         }
     }
     else if(strcmp(prop, "Nameservers") == 0)
-    {
-        GVariantIter iter;
-        g_variant_iter_init(&iter, value);
-
-        const char *iter_string;
-
-        auto &servers(service_data.dns_servers_.get_rw());
-
-        while(g_variant_iter_loop(&iter, "&s", &iter_string))
-            servers.push_back(iter_string);
-
-        service_data.dns_servers_.set_known();
-    }
+        copy_strings_to_vector(value, service_data.active_.dns_servers_);
+    else if(strcmp(prop, "Nameservers.Configuration") == 0)
+        copy_strings_to_vector(value, service_data.configured_.dns_servers_);
+    else if(strcmp(prop, "Timeservers") == 0)
+        copy_strings_to_vector(value, service_data.active_.time_servers_);
+    else if(strcmp(prop, "Timeservers.Configuration") == 0)
+        copy_strings_to_vector(value, service_data.configured_.time_servers_);
+    else if(strcmp(prop, "Domains") == 0)
+        copy_strings_to_vector(value, service_data.active_.domains_);
+    else if(strcmp(prop, "Domains.Configuration") == 0)
+        copy_strings_to_vector(value, service_data.configured_.domains_);
     else if(strcmp(prop, "IPv4") == 0)
-        parse_ip_settings(value, service_data.ip_settings_v4_);
+        parse_ip_settings(value, service_data.active_.ipsettings_v4_);
     else if(strcmp(prop, "IPv4.Configuration") == 0)
-        parse_ip_settings(value, service_data.ip_configuration_v4_);
+        parse_ip_settings(value, service_data.configured_.ipsettings_v4_);
     else if(strcmp(prop, "IPv6") == 0)
-        parse_ip_settings(value, service_data.ip_settings_v6_);
+        parse_ip_settings(value, service_data.active_.ipsettings_v6_);
     else if(strcmp(prop, "IPv6.Configuration") == 0)
-        parse_ip_settings(value, service_data.ip_configuration_v6_);
+        parse_ip_settings(value, service_data.configured_.ipsettings_v6_);
     else
         return false;
 
@@ -1563,10 +1576,10 @@ static bool disable_ipv6(Connman::ServiceBase &service,
 
     const auto &data(service.get_service_data());
 
-    if(!data.ip_configuration_v6_.is_known())
+    if(!data.configured_.ipsettings_v6_.is_known())
         return false;
 
-    switch(data.ip_configuration_v6_.get().get_dhcp_method())
+    switch(data.configured_.ipsettings_v6_.get().get_dhcp_method())
     {
       case Connman::DHCPV6Method::NOT_AVAILABLE:
       case Connman::DHCPV6Method::OFF:

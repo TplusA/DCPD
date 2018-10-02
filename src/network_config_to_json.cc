@@ -294,7 +294,9 @@ static bool fill_in_service_configuration(
         Json::Value &config, MD5::Context &ctx, bool allow_empty,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV4>> &ipv4,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV6>> &ipv6,
-        const Maybe<std::vector<std::string>> &dns_servers)
+        const Maybe<std::vector<std::string>> &dns_servers,
+        const Maybe<std::vector<std::string>> &time_servers,
+        const Maybe<std::vector<std::string>> &domains)
 {
     config = Json::Value();
 
@@ -330,6 +332,42 @@ static bool fill_in_service_configuration(
             add_empty_to_hash(ctx);
 
         config["dns_servers"].swap(temp);
+    }
+    else
+        add_missing_to_hash(ctx);
+
+    if(time_servers.is_known() && (!time_servers.get().empty() || allow_empty))
+    {
+        Json::Value temp(Json::arrayValue);
+
+        for(const auto &srv : time_servers.get())
+        {
+            temp.append(srv);
+            add_to_hash(ctx, srv);
+        }
+
+        if(time_servers.get().empty())
+            add_empty_to_hash(ctx);
+
+        config["time_servers"].swap(temp);
+    }
+    else
+        add_missing_to_hash(ctx);
+
+    if(domains.is_known() && (!domains.get().empty() || allow_empty))
+    {
+        Json::Value temp(Json::arrayValue);
+
+        for(const auto &srv : domains.get())
+        {
+            temp.append(srv);
+            add_to_hash(ctx, srv);
+        }
+
+        if(domains.get().empty())
+            add_empty_to_hash(ctx);
+
+        config["domains"].swap(temp);
     }
     else
         add_missing_to_hash(ctx);
@@ -381,13 +419,19 @@ static void add_services_from_connman(Json::Value &srv,
         Json::Value config;
 
         if(fill_in_service_configuration(config, ctx, false,
-                                         sd.ip_settings_v4_, sd.ip_settings_v6_,
-                                         sd.dns_servers_))
+                                         sd.active_.ipsettings_v4_,
+                                         sd.active_.ipsettings_v6_,
+                                         sd.active_.dns_servers_,
+                                         sd.active_.time_servers_,
+                                         sd.active_.domains_))
             item["active_config"].swap(config);
 
         if(fill_in_service_configuration(config, ctx, true,
-                                         sd.ip_configuration_v4_, sd.ip_configuration_v6_,
-                                         Maybe<std::vector<std::string>>()))
+                                         sd.configured_.ipsettings_v4_,
+                                         sd.configured_.ipsettings_v6_,
+                                         sd.configured_.dns_servers_,
+                                         sd.configured_.time_servers_,
+                                         sd.configured_.domains_))
             item["supposed_config"].swap(config);
 
         switch(s.get_technology())

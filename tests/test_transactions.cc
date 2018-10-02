@@ -552,7 +552,7 @@ static void setup_network_config(const char *mac)
     data.is_auto_connect_ = true;
     data.is_immutable_ = false;
     data.state_ = Connman::ServiceState::ONLINE;
-    data.ip_settings_v4_ = std::move(ipv4_data);
+    data.active_.ipsettings_v4_ = std::move(ipv4_data);
     Connman::ServiceList::get_singleton_for_update().first.insert(
             "/some/service", std::move(data),
             std::move(Connman::TechData<Connman::Technology::ETHERNET>()));
