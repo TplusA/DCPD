@@ -181,6 +181,7 @@ class Address
     Address(const Address &) = default;
     Address(Address &&) = default;
     Address &operator=(const Address &) = default;
+    Address &operator=(Address &&) = default;
 
     explicit Address() {}
 

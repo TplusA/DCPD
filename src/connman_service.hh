@@ -60,6 +60,7 @@ class IPSettings
     IPSettings(const IPSettings &) = default;
     IPSettings(IPSettings &&) = default;
     IPSettings &operator=(const IPSettings &) = default;
+    IPSettings &operator=(IPSettings &&) = default;
 
     explicit IPSettings():
         dhcp_method_(DHCPMethod::NOT_AVAILABLE)
@@ -112,6 +113,13 @@ struct ServiceData
         Maybe<std::vector<std::string>> time_servers_;
         Maybe<std::vector<std::string>> domains_;
 
+        Settings(const Settings &) = default;
+        Settings(Settings &&) = default;
+        Settings &operator=(const Settings &) = delete;
+        Settings &operator=(Settings &&) = default;
+
+        explicit Settings() = default;
+
         bool operator==(const Settings &other) const
         {
             return (ipsettings_v4_ == other.ipsettings_v4_ &&
@@ -127,7 +135,8 @@ struct ServiceData
 
     ServiceData(const ServiceData &) = default;
     ServiceData(ServiceData &&) = default;
-    ServiceData &operator=(const ServiceData &) = default;
+    ServiceData &operator=(const ServiceData &) = delete;
+    ServiceData &operator=(ServiceData &&) = default;
 
     explicit ServiceData() = default;
 
