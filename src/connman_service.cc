@@ -76,6 +76,21 @@ Connman::DHCPV6Method Connman::parse_connman_dhcp_v6_method(const char *method)
                                     DHCPV6Method::UNKNOWN_METHOD);
 }
 
+Connman::ProxyMethod Connman::parse_connman_proxy_method(const char *method)
+{
+    static constexpr std::array<const std::pair<const char *, const ProxyMethod>,
+                                size_t(ProxyMethod::LAST_VALUE) - 1> methods
+    {
+        std::make_pair("direct", ProxyMethod::DIRECT),
+        std::make_pair("auto",   ProxyMethod::AUTO),
+        std::make_pair("manual", ProxyMethod::MANUAL),
+    };
+
+    return map_string_to_enum_value(methods, method,
+                                    ProxyMethod::NOT_AVAILABLE,
+                                    ProxyMethod::UNKNOWN_METHOD);
+}
+
 Connman::Technology Connman::parse_connman_technology(const char *technology)
 {
     static constexpr std::array<const std::pair<const char *, const Technology>,

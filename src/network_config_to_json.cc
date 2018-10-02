@@ -290,10 +290,74 @@ static bool fill_ipv6_settings(Json::Value &json, MD5::Context &ctx,
     return !json.isNull();
 }
 
+static void fill_string_array(Json::Value &json, const char *field,
+                              MD5::Context &ctx,
+                              const std::vector<std::string> &a,
+                              bool allow_empty)
+{
+    if(a.empty() && !allow_empty)
+    {
+        add_missing_to_hash(ctx);
+        return;
+    }
+
+    Json::Value temp(Json::arrayValue);
+
+    if(a.empty())
+        add_empty_to_hash(ctx);
+    else
+    {
+        for(const auto &s : a)
+        {
+            temp.append(s);
+            add_to_hash(ctx, s);
+        }
+    }
+
+    json[field].swap(temp);
+}
+
+static void fill_string_array(Json::Value &json, const char *field,
+                              MD5::Context &ctx,
+                              const Maybe<std::vector<std::string>> &a,
+                              bool allow_empty)
+{
+    if(a.is_known())
+        fill_string_array(json, field, ctx, a.get(), allow_empty);
+    else
+        add_missing_to_hash(ctx);
+}
+
+static void fill_proxy_settings(Json::Value &json, MD5::Context &ctx,
+                                const Connman::ProxySettings &proxy,
+                                bool allow_empty)
+{
+    if(proxy.get_method() != Connman::ProxyMethod::NOT_AVAILABLE)
+    {
+        static const std::array<const std::string,
+                                static_cast<size_t>(Connman::ProxyMethod::LAST_VALUE) + 1> methods
+        {
+            "", "unknown", "direct", "auto", "manual"
+        };
+
+        json["method"] = methods[static_cast<size_t>(proxy.get_method())];
+    }
+
+    if(!proxy.get_pac_url().empty())
+        json["auto_config_pac_url"] = proxy.get_pac_url();
+
+    add_to_hash(ctx, json, "method");
+    add_to_hash(ctx, json, "auto_config_pac_url");
+
+    fill_string_array(json, "proxy_servers", ctx, proxy.get_proxy_servers(), allow_empty);
+    fill_string_array(json, "excluded_hosts", ctx, proxy.get_excluded_hosts(), allow_empty);
+}
+
 static bool fill_in_service_configuration(
         Json::Value &config, MD5::Context &ctx, bool allow_empty,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV4>> &ipv4,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV6>> &ipv6,
+        const Maybe<Connman::ProxySettings> proxy,
         const Maybe<std::vector<std::string>> &dns_servers,
         const Maybe<std::vector<std::string>> &time_servers,
         const Maybe<std::vector<std::string>> &domains)
@@ -318,59 +382,18 @@ static bool fill_in_service_configuration(
     else
         add_missing_to_hash(ctx);
 
-    if(dns_servers.is_known() && (!dns_servers.get().empty() || allow_empty))
+    if(proxy.is_known())
     {
-        Json::Value temp(Json::arrayValue);
+        Json::Value temp;
+        fill_proxy_settings(temp, ctx, proxy.get(), allow_empty);
 
-        for(const auto &srv : dns_servers.get())
-        {
-            temp.append(srv);
-            add_to_hash(ctx, srv);
-        }
-
-        if(dns_servers.get().empty())
-            add_empty_to_hash(ctx);
-
-        config["dns_servers"].swap(temp);
+        if(!temp.isNull())
+            config["proxy_config"].swap(temp);
     }
-    else
-        add_missing_to_hash(ctx);
 
-    if(time_servers.is_known() && (!time_servers.get().empty() || allow_empty))
-    {
-        Json::Value temp(Json::arrayValue);
-
-        for(const auto &srv : time_servers.get())
-        {
-            temp.append(srv);
-            add_to_hash(ctx, srv);
-        }
-
-        if(time_servers.get().empty())
-            add_empty_to_hash(ctx);
-
-        config["time_servers"].swap(temp);
-    }
-    else
-        add_missing_to_hash(ctx);
-
-    if(domains.is_known() && (!domains.get().empty() || allow_empty))
-    {
-        Json::Value temp(Json::arrayValue);
-
-        for(const auto &srv : domains.get())
-        {
-            temp.append(srv);
-            add_to_hash(ctx, srv);
-        }
-
-        if(domains.get().empty())
-            add_empty_to_hash(ctx);
-
-        config["domains"].swap(temp);
-    }
-    else
-        add_missing_to_hash(ctx);
+    fill_string_array(config, "dns_servers", ctx, dns_servers, allow_empty);
+    fill_string_array(config, "time_servers", ctx, time_servers, allow_empty);
+    fill_string_array(config, "domains", ctx, domains, allow_empty);
 
     return !config.isNull();
 }
@@ -421,6 +444,7 @@ static void add_services_from_connman(Json::Value &srv,
         if(fill_in_service_configuration(config, ctx, false,
                                          sd.active_.ipsettings_v4_,
                                          sd.active_.ipsettings_v6_,
+                                         sd.active_.proxy_,
                                          sd.active_.dns_servers_,
                                          sd.active_.time_servers_,
                                          sd.active_.domains_))
@@ -429,6 +453,7 @@ static void add_services_from_connman(Json::Value &srv,
         if(fill_in_service_configuration(config, ctx, true,
                                          sd.configured_.ipsettings_v4_,
                                          sd.configured_.ipsettings_v6_,
+                                         sd.configured_.proxy_,
                                          sd.configured_.dns_servers_,
                                          sd.configured_.time_servers_,
                                          sd.configured_.domains_))

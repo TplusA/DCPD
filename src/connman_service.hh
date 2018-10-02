@@ -96,6 +96,54 @@ class IPSettings
     }
 };
 
+enum class ProxyMethod
+{
+    NOT_AVAILABLE,
+    UNKNOWN_METHOD,
+    DIRECT,
+    AUTO,
+    MANUAL,
+
+    LAST_VALUE = MANUAL,
+};
+
+class ProxySettings
+{
+  private:
+    ProxyMethod proxy_method_;
+    std::string pac_url_;
+    std::vector<std::string> servers_;
+    std::vector<std::string> excluded_;
+
+  public:
+    ProxySettings(const ProxySettings &) = default;
+    ProxySettings(ProxySettings &&) = default;
+    ProxySettings &operator=(const ProxySettings &) = delete;
+    ProxySettings &operator=(ProxySettings &&) = default;
+
+    explicit ProxySettings():
+        proxy_method_(ProxyMethod::NOT_AVAILABLE)
+    {}
+
+    void set_method(ProxyMethod method) { proxy_method_ = method; }
+    void set_pac_url(std::string &&url) { pac_url_ = std::move(url); }
+    void set_proxy_servers(std::vector<std::string> &&servers) { servers_ = std::move(servers); }
+    void set_excluded_hosts(std::vector<std::string> &&excluded) { excluded_ = std::move(excluded); }
+
+    ProxyMethod get_method() const { return proxy_method_; }
+    const std::string &get_pac_url() const { return pac_url_; }
+    const std::vector<std::string> &get_proxy_servers() const { return servers_; }
+    const std::vector<std::string> &get_excluded_hosts() const { return excluded_; }
+
+    bool operator==(const ProxySettings &other) const
+    {
+        return (proxy_method_ == other.proxy_method_ &&
+                pac_url_ == other.pac_url_ &&
+                servers_ == other.servers_ &&
+                excluded_ == other.excluded_);
+    }
+};
+
 struct ServiceData
 {
     std::shared_ptr<const NetworkDevice> device_;
@@ -109,6 +157,7 @@ struct ServiceData
     {
         Maybe<IPSettings<AddressType::IPV4>> ipsettings_v4_;
         Maybe<IPSettings<AddressType::IPV6>> ipsettings_v6_;
+        Maybe<ProxySettings> proxy_;
         Maybe<std::vector<std::string>> dns_servers_;
         Maybe<std::vector<std::string>> time_servers_;
         Maybe<std::vector<std::string>> domains_;
@@ -124,6 +173,7 @@ struct ServiceData
         {
             return (ipsettings_v4_ == other.ipsettings_v4_ &&
                     ipsettings_v6_ == other.ipsettings_v6_ &&
+                    proxy_ == other.proxy_ &&
                     dns_servers_ == other.dns_servers_ &&
                     time_servers_ == other.time_servers_ &&
                     domains_ == other.domains_);
@@ -349,6 +399,7 @@ class Service: public ServiceBase
 
 DHCPV4Method parse_connman_dhcp_v4_method(const char *method);
 DHCPV6Method parse_connman_dhcp_v6_method(const char *method);
+ProxyMethod parse_connman_proxy_method(const char *method);
 Technology parse_connman_technology(const char *technology);
 ServiceState parse_connman_service_state(const char *state);
 

@@ -1256,18 +1256,57 @@ static void parse_ip_settings(GVariant *values,
 }
 
 static void copy_strings_to_vector(GVariant *value,
-                                   Maybe<std::vector<std::string>> &dest)
+                                   std::vector<std::string> &dest)
 {
     GVariantIter iter;
     g_variant_iter_init(&iter, value);
 
     const char *iter_string;
-    auto &v(dest.get_rw());
 
     while(g_variant_iter_loop(&iter, "&s", &iter_string))
-        v.push_back(iter_string);
+        dest.push_back(iter_string);
+}
 
+static void copy_strings_to_vector(GVariant *value,
+                                   Maybe<std::vector<std::string>> &dest)
+{
+    copy_strings_to_vector(value, dest.get_rw());
     dest.set_known();
+}
+
+static void parse_proxy_settings(GVariant *values,
+                                 Maybe<Connman::ProxySettings> &proxy_settings)
+{
+    GVariantIter iter;
+    g_variant_iter_init(&iter, values);
+
+    const char *iter_key;
+    GVariant *iter_value;
+
+    auto &settings(proxy_settings.get_rw());
+
+    while(g_variant_iter_loop(&iter, "{&sv}", &iter_key, &iter_value))
+    {
+        if(strcmp(iter_key, "Method") == 0)
+            settings.set_method(Connman::parse_connman_proxy_method(
+                                    g_variant_get_string(iter_value, NULL)));
+        else if(strcmp(iter_key, "URL") == 0)
+            settings.set_pac_url(g_variant_get_string(iter_value, NULL));
+        else if(strcmp(iter_key, "Servers") == 0)
+        {
+            std::vector<std::string> v;
+            copy_strings_to_vector(iter_value, v);
+            settings.set_proxy_servers(std::move(v));
+        }
+        else if(strcmp(iter_key, "Excludes") == 0)
+        {
+            std::vector<std::string> v;
+            copy_strings_to_vector(iter_value, v);
+            settings.set_excluded_hosts(std::move(v));
+        }
+    }
+
+    proxy_settings.set_known();
 }
 
 static bool parse_generic_service_data(const char *prop, GVariant *value,
@@ -1335,6 +1374,10 @@ static bool parse_generic_service_data(const char *prop, GVariant *value,
         parse_ip_settings(value, service_data.active_.ipsettings_v6_);
     else if(strcmp(prop, "IPv6.Configuration") == 0)
         parse_ip_settings(value, service_data.configured_.ipsettings_v6_);
+    else if(strcmp(prop, "Proxy") == 0)
+        parse_proxy_settings(value, service_data.active_.proxy_);
+    else if(strcmp(prop, "Proxy.Configuration") == 0)
+        parse_proxy_settings(value, service_data.configured_.proxy_);
     else
         return false;
 
