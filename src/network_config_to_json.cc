@@ -438,6 +438,7 @@ static void add_services_from_connman(Json::Value &srv,
 
         set_if_known(item, "is_system_service", ctx, sd.is_immutable_);
         set_if_known(item, "is_favorite", ctx, sd.is_favorite_);
+        set_if_known(item, "is_auto_connect", ctx, sd.is_auto_connect_);
 
         Json::Value config;
 
@@ -560,6 +561,7 @@ static void add_service_from_prefs(Json::Value &srv,
     item["state"] = "unknown";
     item["is_system_service"] = false;
     item["is_favorite"] = true;
+    item["is_auto_connect"] = true;
 
     bool with_dhcp;
     const char *address;
