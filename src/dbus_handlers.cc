@@ -239,11 +239,21 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
     const auto &devices(locked_devices.first);
 
     std::string version;
-    const auto json(Network::configuration_to_json(services, devices,
-                                                   have_version, version));
 
-    tdbus_dcpd_network_complete_get_all(object, invocation,
-                                        version.c_str(), json.c_str());
+    try
+    {
+        const auto json(Network::configuration_to_json(services, devices,
+                                                       have_version, version));
+
+        tdbus_dcpd_network_complete_get_all(object, invocation,
+                                            version.c_str(), json.c_str());
+    }
+    catch(const std::exception &e)
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Failed reading out configuration: \"%s\"", e.what());
+    }
 
     return TRUE;
 }
