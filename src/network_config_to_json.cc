@@ -613,9 +613,11 @@ static void add_service_from_prefs(Json::Value &srv,
 
       case Connman::Technology::WLAN:
         {
-            item["name"] = network_prefs_get_name(prefs);
+            const char *temp = network_prefs_get_name(prefs);
+            if(temp != nullptr)
+                item["name"] = temp;
 
-            const char *temp = network_prefs_get_ssid(prefs);
+            temp = network_prefs_get_ssid(prefs);
             if(temp != nullptr)
                 item["ssid"] = temp;
 
