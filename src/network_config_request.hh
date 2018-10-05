@@ -47,6 +47,15 @@ enum class WPSMode
 class ConfigRequest
 {
   public:
+    enum class ApplyWhen
+    {
+        NEVER,
+        ON_AUTO_CONNECT,
+        NOW,
+    };
+
+    Maybe<ApplyWhen> when_;
+
     Maybe<std::string> dhcpv4_mode_;
     Maybe<std::string> ipv4_address_;
     Maybe<std::string> ipv4_netmask_;
@@ -80,6 +89,7 @@ class ConfigRequest
 
     void reset()
     {
+        when_.set_unknown();
         dhcpv4_mode_.set_unknown();
         ipv4_address_.set_unknown();
         ipv4_netmask_.set_unknown();
@@ -104,6 +114,9 @@ class ConfigRequest
 
     bool empty() const
     {
+        if(!when_.is_known())
+            return true;
+
         return !(dhcpv4_mode_.is_known() ||
                  ipv4_address_.is_known() ||
                  ipv4_netmask_.is_known() ||

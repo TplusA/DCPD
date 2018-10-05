@@ -465,40 +465,24 @@ static bool set_network_service_configuration(
     const auto &auto_connect(lookup_field(invocation, json, "auto_connect",
                                           Json::stringValue).asString());
 
-    set_common_service_configuration(invocation, json, req);
-    const bool has_wlan_settings =
-        set_wlan_service_configuration(invocation, json, tech, req);
-    parse_device_info(invocation, json, tech, mac);
-
-    /*
-     * We cannot handle configurations for non-auto-connecting or immediately
-     * auto-connecting services as long as there is still a notion of two
-     * "primary" networking interfaces in DCP. The D-Bus interface allows us to
-     * do much better, but for compatibility with current DCP limitations, we
-     * must error out at this point.
-     *
-     * Note that we could check for this condition much earlier. Instead, we
-     * are doing it last to prevent masking of errors discovered during input
-     * sanitation.
-     */
-    if(auto_connect == "no" || auto_connect == "now")
-    {
-        BUG("TODO: We don't handle the auto_connect request \"%s\" yet",
-            auto_connect.c_str());
-        g_dbus_method_invocation_return_error(
-            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-            "We can handle services with \"auto_connect\" set to \"yes\" only "
-            "at the moment---sorry :(");
-        throw std::runtime_error("TODO: Can only handle auto_connect=yes");
-    }
-
-    if(auto_connect != "yes")
+    if(auto_connect == "no")
+        req.when_ = Network::ConfigRequest::ApplyWhen::NEVER;
+    else if(auto_connect == "yes")
+        req.when_ = Network::ConfigRequest::ApplyWhen::ON_AUTO_CONNECT;
+    else if(auto_connect == "now")
+        req.when_ = Network::ConfigRequest::ApplyWhen::NOW;
+    else
     {
         g_dbus_method_invocation_return_error(
             invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
             "Invalid \"auto_connect\" request \"%s\"", auto_connect.c_str());
         throw std::runtime_error("Invalid \"auto_connect\" value");
     }
+
+    set_common_service_configuration(invocation, json, req);
+    const bool has_wlan_settings =
+        set_wlan_service_configuration(invocation, json, tech, req);
+    parse_device_info(invocation, json, tech, mac);
 
     return has_wlan_settings;
 }

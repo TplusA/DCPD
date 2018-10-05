@@ -1273,7 +1273,8 @@ static bool process_config_request_from_spi_slave(
 
       case Network::WPSMode::NONE:
         dbussignal_connman_manager_connect_to_service(map_network_technology(tech),
-                                                      current_wlan_service_name.data());
+                                                      current_wlan_service_name.data(),
+                                                      true);
         return true;
 
       case Network::WPSMode::DIRECT:
@@ -1465,33 +1466,59 @@ static bool process_external_config_request(
         return true;
     }
 
+    bool immediate_activation = true;
+
+    switch(config_request.when_.get())
+    {
+      case Network::ConfigRequest::ApplyWhen::NEVER:
+        return true;
+
+      case Network::ConfigRequest::ApplyWhen::ON_AUTO_CONNECT:
+        immediate_activation = false;
+        break;
+
+      case Network::ConfigRequest::ApplyWhen::NOW:
+        break;
+    }
+
     switch(wps_mode)
     {
       case Network::WPSMode::INVALID:
-        dbussignal_connman_manager_cancel_wps();
+        if(immediate_activation)
+            dbussignal_connman_manager_cancel_wps();
+
         break;
 
       case Network::WPSMode::NONE:
         dbussignal_connman_manager_connect_to_service(map_network_technology(target_tech),
-                                                      current_wlan_service_name.data());
+                                                      current_wlan_service_name.data(),
+                                                      immediate_activation);
         return true;
 
       case Network::WPSMode::DIRECT:
         log_assert(target_tech == Connman::Technology::WLAN);
-        dbussignal_connman_manager_connect_to_wps_service(
-            wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
-            wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
-            current_wlan_service_name.data());
+
+        if(immediate_activation)
+            dbussignal_connman_manager_connect_to_wps_service(
+                wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
+                wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
+                current_wlan_service_name.data());
+
         return true;
 
       case Network::WPSMode::SCAN:
         log_assert(target_tech == Connman::Technology::WLAN);
-        dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
-                                                          current_wlan_service_name.data());
+
+        if(immediate_activation)
+            dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
+                                                              current_wlan_service_name.data());
+
         return true;
 
       case Network::WPSMode::ABORT:
-        dbussignal_connman_manager_cancel_wps();
+        if(immediate_activation)
+            dbussignal_connman_manager_cancel_wps();
+
         return true;
     }
 
@@ -1558,6 +1585,11 @@ int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, si
         return 0;
     }
 
+    if(!nwconfig_write_data.config_request.when_.is_known())
+        BUG("Network configuration request application time point unknown");
+    else if(nwconfig_write_data.config_request.when_ != Network::ConfigRequest::ApplyWhen::NOW)
+        BUG("Unexpected network configuration request application time point");
+
     std::lock_guard<std::mutex> lock(nwconfig_write_data.commit_configuration_lock);
 
     return process_config_request_from_spi_slave(
@@ -1607,6 +1639,7 @@ int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, 
                   nwconfig_write_data.edit_state.get_selected_technology() == Connman::Technology::ETHERNET
                   ? "Ethernet"
                   : "WLAN");
+        nwconfig_write_data.config_request.when_ = Network::ConfigRequest::ApplyWhen::NOW;
         return 0;
     }
 

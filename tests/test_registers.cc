@@ -444,7 +444,7 @@ class ConnectToConnManServiceData
     }
 
     void called(enum NetworkPrefsTechnology tech,
-                const char *service_to_be_disabled)
+                const char *service_to_be_disabled, bool immediate_activation)
     {
         cppcut_assert_equal(Mode::FROM_CONFIG, expected_mode_);
         cppcut_assert_equal(Mode::NONE, called_mode_);
@@ -453,6 +453,7 @@ class ConnectToConnManServiceData
 
         cppcut_assert_equal(expected_tech_, tech);
         cppcut_assert_equal(expected_service_cstr_, service_to_be_disabled);
+        cut_assert_true(immediate_activation);
     }
 
     void called(const char *network_name, const char *network_ssid,
@@ -586,9 +587,11 @@ static CancelWPSData cancel_wps_data;
 /* Instead of writing a full mock for the ConnMan D-Bus API, we'll just have
  * this little function as a poor, but quick replacement */
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
-                                                   const char *service_to_be_disabled)
+                                                   const char *service_to_be_disabled,
+                                                   bool immediate_activation)
 {
-    connect_to_connman_service_data.called(tech, service_to_be_disabled);
+    connect_to_connman_service_data.called(tech, service_to_be_disabled,
+                                           immediate_activation);
 }
 
 /* Another quick replacement for the Connman D-Bus API */
