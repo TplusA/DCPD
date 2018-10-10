@@ -1,3 +1,30 @@
+2018-10-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.16 released.
+
+	* Networking: Allow pushing network configuration change requests from
+	  SPI slave as well as over D-Bus (latter mechanism is used by the
+	  REST API).
+
+	  This change required quite some changes and refactoring to make the
+	  SPI register interface just one possibility to send in some changes.
+	  Various improvements and bug fixes have been applied to the network
+	  configuration code along the way.
+
+	* Networking: Much more data is extracted from ConnMan services and
+	  returned over D-Bus when a D-Bus client asks for information. The
+	  intention is to allow D-Bus clients (i.e., the REST API) to see
+	  everything and to be able to modify everything.
+
+	* Unit tests: Use doctest for new tests. The plan is to abandon Cutter
+	  completely in favor of doctest. This will remove the very annoying
+	  GLib dependency from unit tests, currently forcing us to execute the
+	  Jenkins build jobs on srv-dev due to many memory leaks detected by
+	  Valgrind in GLib (and suppressed by us using a huge list of
+	  exceptions, and that list depends on the specific GLib version).
+
+	* Misc: Avoid false BUG message in logs.
+
 2018-08-21  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.15 released.
