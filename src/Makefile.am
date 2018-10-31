@@ -457,5 +457,5 @@ systemd_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_systemd1.xml
 do_update_sh.h: do_update.sh
 	echo 'static const uint8_t shell_script_content[] =' >$@
 	echo '{' >>$@
-	xxd -i <$^ >>$@
+	od -An -tx1 -v <$^ | sed 's/ / 0x/g;s/^ //;s/ /, /g;s/$$/,/' >>$@
 	echo '};' >>$@
