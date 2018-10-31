@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <queue>
+#include <functional>
 #include <stdexcept>
 #include <cinttypes>
 #include <cstdlib>

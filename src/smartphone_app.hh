@@ -26,6 +26,7 @@
 #include <deque>
 #include <map>
 #include <mutex>
+#include <functional>
 
 namespace Applink
 {

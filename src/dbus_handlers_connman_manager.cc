@@ -31,6 +31,7 @@
 #include "network_device_list.hh"
 #include "dbus_common.h"
 
+#include <functional>
 #include <cinttypes>
 
 /*!

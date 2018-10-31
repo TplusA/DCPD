@@ -34,6 +34,7 @@
 #include <arpa/inet.h>
 
 #include <algorithm>
+#include <functional>
 
 class ConfigRequestEditState
 {
