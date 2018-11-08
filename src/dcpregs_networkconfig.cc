@@ -235,14 +235,18 @@ class NetworkConfigWriteData
 /*!
  * Network status register data and other stuff.
  */
-struct NetworkStatusData
+class NetworkStatusData
 {
-    struct ShutdownGuard *shutdown_guard;
+  public:
+    static constexpr size_t RESPONSE_SIZE = 3;
+
+  private:
+    struct ShutdownGuard *shutdown_guard_;
 
     /*!
      * Appliance-specific networking technology to use as fallback.
      */
-    Connman::Technology fallback_technology;
+    Connman::Technology fallback_technology_;
 
     /*!
      * The status last communicated to the slave device.
@@ -250,7 +254,50 @@ struct NetworkStatusData
      * Status changes are only sent to the slave if the information represented
      * by the status register actually changed.
      */
-    std::array<uint8_t, 3> previous_response;
+    std::array<uint8_t, RESPONSE_SIZE> previous_status_bytes_;
+
+  public:
+    NetworkStatusData():
+        shutdown_guard_(shutdown_guard_alloc("networkconfig")),
+        fallback_technology_(Connman::Technology::UNKNOWN_TECHNOLOGY),
+        previous_status_bytes_{UINT8_MAX, UINT8_MAX, UINT8_MAX}
+    {}
+
+    ~NetworkStatusData()
+    {
+        shutdown_guard_free(&shutdown_guard_);
+    }
+
+    struct ShutdownGuard &shutdown_guard() { return *shutdown_guard_; }
+
+    Connman::Technology fixup_active_technology(Connman::Technology tech) const
+    {
+        if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY)
+        {
+            msg_info("Could not determine active network technology, "
+                     "trying fallback");
+            return fallback_technology_;
+        }
+        else
+            return tech;
+    }
+
+    void set_fallback_technology(Connman::Technology tech)
+    {
+        fallback_technology_ = tech;
+    }
+
+    void store_network_status(const uint8_t *status_bytes, size_t length)
+    {
+        log_assert(length >= RESPONSE_SIZE);
+        std::copy(status_bytes, status_bytes + RESPONSE_SIZE,
+                  previous_status_bytes_.begin());
+    }
+
+    bool is_network_status_different(const std::array<uint8_t, NetworkStatusData::RESPONSE_SIZE> &status) const
+    {
+        return status != previous_status_bytes_;
+    }
 };
 
 static NetworkPrefsTechnology map_network_technology(const Connman::Technology tech)
@@ -1603,22 +1650,20 @@ static bool process_external_config_request(
 }
 
 static NetworkConfigWriteData nwconfig_write_data;
-static NetworkStatusData nwstatus_data;
+static std::unique_ptr<NetworkStatusData> nwstatus_data;
 
 void Regs::NetworkConfig::init()
 {
-    nwconfig_write_data.init();
+    if(nwstatus_data != nullptr)
+        return;
 
-    nwstatus_data.shutdown_guard = shutdown_guard_alloc("networkconfig");
-    nwstatus_data.fallback_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
-    nwstatus_data.previous_response[0] = UINT8_MAX;
-    nwstatus_data.previous_response[1] = UINT8_MAX;
-    nwstatus_data.previous_response[2] = UINT8_MAX;
+    nwconfig_write_data.init();
+    nwstatus_data.reset(new NetworkStatusData());
 }
 
 void Regs::NetworkConfig::deinit()
 {
-    shutdown_guard_free(&nwstatus_data.shutdown_guard);
+    nwstatus_data = nullptr;
 }
 
 bool Regs::NetworkConfig::request_configuration_for_mac(
@@ -1634,7 +1679,7 @@ bool Regs::NetworkConfig::request_configuration_for_mac(
 
     const auto lock(nwconfig_write_data.lock());
     return process_external_config_request(config_request, mac, tech,
-                                           *nwstatus_data.shutdown_guard);
+                                           nwstatus_data->shutdown_guard());
 }
 
 int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, size_t length)
@@ -1663,8 +1708,8 @@ int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, si
         BUG("Unexpected network configuration request application time point");
 
     const auto lock(nwconfig_write_data.lock());
-    return process_config_request_from_spi_slave( nwconfig_write_data,
-                *nwstatus_data.shutdown_guard,
+    return process_config_request_from_spi_slave(nwconfig_write_data,
+                nwstatus_data->shutdown_guard(),
                 [] (Network::ConfigRequest &req, const Connman::ServiceBase &service)
                 {
                     move_dns_servers_to_config_request(nwconfig_write_data, req, service);
@@ -1683,20 +1728,13 @@ int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, 
 
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
-
-    auto tech = determine_active_network_technology(services, false);
-
-    if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY)
-    {
-        msg_info("Could not determine active network technology, "
-                 "trying fallback");
-        tech = nwstatus_data.fallback_technology;
-    }
+    const auto tech =
+        nwstatus_data->fixup_active_technology(determine_active_network_technology(services, false));
 
     return nwconfig_write_data.enter_edit_mode(tech) ? 0 : -1;
 }
 
-static void fill_network_status_register_response(std::array<uint8_t, 3> &response)
+static void fill_network_status_register_response(uint8_t *response)
 {
     response[0] = NETWORK_STATUS_IPV4_NOT_CONFIGURED;
     response[1] = NETWORK_STATUS_DEVICE_NONE;
@@ -1757,13 +1795,11 @@ ssize_t Regs::NetworkConfig::DCP::read_50_network_status(uint8_t *response, size
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 50 handler %p %zu", response, length);
 
-    if(data_length_is_unexpected(length, nwstatus_data.previous_response.size()))
+    if(data_length_is_unexpected(length, NetworkStatusData::RESPONSE_SIZE))
         return -1;
 
-    fill_network_status_register_response(nwstatus_data.previous_response);
-    std::copy(nwstatus_data.previous_response.begin(),
-              nwstatus_data.previous_response.end(),
-              response);
+    fill_network_status_register_response(response);
+    nwstatus_data->store_network_status(response, length);
 
     return length;
 }
@@ -2375,21 +2411,21 @@ int Regs::NetworkConfig::DCP::write_102_passphrase(const uint8_t *data, size_t l
 
 void Regs::NetworkConfig::interfaces_changed()
 {
-    std::array<uint8_t, nwstatus_data.previous_response.size()> response;
+    std::array<uint8_t, NetworkStatusData::RESPONSE_SIZE> response;
 
     Connman::wlan_power_on();
-    fill_network_status_register_response(response);
+    fill_network_status_register_response(response.data());
 
-    if(nwstatus_data.previous_response != response)
+    if(nwstatus_data->is_network_status_different(response))
         Regs::get_data().register_changed_notification_fn(50);
 }
 
 void Regs::NetworkConfig::prepare_for_shutdown()
 {
-    (void)shutdown_guard_down(nwstatus_data.shutdown_guard);
+    (void)shutdown_guard_down(&nwstatus_data->shutdown_guard());
 }
 
 void Regs::NetworkConfig::set_primary_technology(Connman::Technology tech)
 {
-    nwstatus_data.fallback_technology = tech;
+    nwstatus_data->set_fallback_technology(tech);
 }

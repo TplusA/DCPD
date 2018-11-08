@@ -205,6 +205,8 @@ static ApplianceData global_appliance_data;
 
 bool Regs::Appliance::init()
 {
+    Regs::NetworkConfig::init();
+
     std::lock_guard<std::mutex> lock(global_appliance_data.lock);
 
     char appliance_id[64];
