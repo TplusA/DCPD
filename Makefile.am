@@ -62,4 +62,7 @@ versioninfo.h: versioninfo.cache
 if WITH_DOCTEST
 doctest:
 	$(MAKE) $(AM_MAKEFLAGS) -C tests_new $@
+
+doctest-valgrind:
+	$(MAKE) $(AM_MAKEFLAGS) -C tests_new $@
 endif

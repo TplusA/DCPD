@@ -24,22 +24,26 @@
 
 #include "connman_service.hh"
 
-TEST_SUITE("Parsing ConnMan service names")
-{
+#include "mock_messages.hh"
+#include "mock_os.hh"
 
-TEST_CASE("exception on nullptr")
+#include <iostream>
+
+TEST_SUITE_BEGIN("Parsing ConnMan service names");
+
+TEST_CASE("Exception on nullptr")
 {
     CHECK_THROWS_AS(Connman::ServiceNameComponents::from_service_name(nullptr),
                     std::domain_error);
 }
 
-TEST_CASE("exception on empty name")
+TEST_CASE("Exception on empty name")
 {
     CHECK_THROWS_AS(Connman::ServiceNameComponents::from_service_name(""),
                     std::domain_error);
 }
 
-TEST_CASE("wireless services")
+TEST_CASE("Wireless services")
 {
     auto first(Connman::ServiceNameComponents::from_service_name(
             "wifi_82b01c771c09_4d794e6574776f726b_managed_psk"));
@@ -57,7 +61,7 @@ TEST_CASE("wireless services")
     CHECK(second.security_ == "ieee8021x");
 }
 
-TEST_CASE("wired services")
+TEST_CASE("Wired services")
 {
     auto first(Connman::ServiceNameComponents::from_service_name(
             "ethernet_92b01c771c08_cable"));
@@ -74,61 +78,72 @@ TEST_CASE("wired services")
     CHECK(second.security_.empty());
 }
 
-TEST_CASE("exception on unsupported technology")
+TEST_CASE("Exception on unsupported technology")
 {
     CHECK_THROWS_AS(Connman::ServiceNameComponents::from_service_name(
                         "wifix_82b01c771c09_4d794e6574776f726b_managed_psk"),
                     std::domain_error);
 }
 
-TEST_CASE("exception on empty tokens")
+TEST_CASE("Exception on empty tokens")
 {
     CHECK_THROWS_AS(Connman::ServiceNameComponents::from_service_name(
                         "wifi_82b01c771c09__psk"),
                     std::domain_error);
 }
 
-TEST_CASE("exception on last empty token")
+TEST_CASE("Exception on last empty token")
 {
     CHECK_THROWS_AS(Connman::ServiceNameComponents::from_service_name(
                         "wifi_82b01c771c09_4d794e6574776f726b_managed_"),
                     std::domain_error);
 }
 
-}
+TEST_SUITE_END();
 
-/*
- * TODO: We need our mocks ported to doctest.
- */
-void msg_error(int error_code, int priority, const char *error_format, ...)
+
+TEST_SUITE_BEGIN("ConnMan MAC addresses");
+
+class ConnmanMACAddressTestsFixture
 {
-    FAIL("Unexpected call");
-}
+  protected:
+    std::unique_ptr<MockMessages::Mock> mock_messages;
+    std::unique_ptr<MockOS::Mock> mock_os;
 
-/*
- * TODO: We need our mocks ported to doctest.
- */
-void os_abort(void)
-{
-    FAIL("Unexpected call");
-}
+  public:
+    explicit ConnmanMACAddressTestsFixture():
+        mock_messages(new MockMessages::Mock),
+        mock_os(new MockOS::Mock)
+    {
+        MockMessages::singleton = mock_messages.get();
+        MockOS::singleton = mock_os.get();
+    }
 
-TEST_SUITE("ConnMan MAC addresses")
-{
+    ~ConnmanMACAddressTestsFixture()
+    {
+        mock_messages->done();
+        MockMessages::singleton = nullptr;
+        mock_messages = nullptr;
 
-TEST_CASE("addresses are converted to upper case")
+        mock_os->done();
+        MockOS::singleton = nullptr;
+        mock_os = nullptr;
+    }
+};
+
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Addresses are converted to upper case")
 {
     Connman::Address<Connman::AddressType::MAC> address("aA:Bb:cc:DD:e0:0f");
     CHECK(address == "AA:BB:CC:DD:E0:0F");
 }
 
-TEST_CASE("addresses without colons are converted")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Addresses without colons are converted")
 {
     Connman::Address<Connman::AddressType::MAC> address("ffbbccdde00a");
     CHECK(address == "FF:BB:CC:DD:E0:0A");
 }
 
-TEST_CASE("addresses must have expected length")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Addresses must have expected length")
 {
     CHECK_THROWS_AS(Connman::Address<Connman::AddressType::MAC> address("ffbbccdde0"),
                     std::domain_error);
@@ -144,7 +159,7 @@ TEST_CASE("addresses must have expected length")
                     std::domain_error);
 }
 
-TEST_CASE("addresses must have valid format")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Addresses must have valid format")
 {
     CHECK_THROWS_AS(Connman::Address<Connman::AddressType::MAC> address("aA:Bb:cc:D:De0:0f"),
                     std::domain_error);
@@ -160,7 +175,7 @@ TEST_CASE("addresses must have valid format")
                     std::domain_error);
 }
 
-TEST_CASE("addresses must contain hexadecimal characters")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Addresses must contain hexadecimal characters")
 {
     CHECK_THROWS_AS(Connman::Address<Connman::AddressType::MAC> address("@A:Bb:cc:DD:e0:0f"),
                     std::domain_error);
@@ -188,7 +203,7 @@ TEST_CASE("addresses must contain hexadecimal characters")
                     std::domain_error);
 }
 
-TEST_CASE("locally administered address can be detected")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Locally administered address can be detected")
 {
     Connman::Address<Connman::AddressType::MAC> first("02:bb:cc:dd:e0:0a");
     CHECK(is_locally_administered_mac_address(first));
@@ -200,7 +215,7 @@ TEST_CASE("locally administered address can be detected")
     CHECK(is_locally_administered_mac_address(third));
 }
 
-TEST_CASE("official address can be detected")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Official address can be detected")
 {
     Connman::Address<Connman::AddressType::MAC> first("00:bb:cc:dd:e0:0a");
     CHECK_FALSE(is_locally_administered_mac_address(first));
@@ -212,7 +227,7 @@ TEST_CASE("official address can be detected")
     CHECK_FALSE(is_locally_administered_mac_address(third));
 }
 
-TEST_CASE("set address can be unset")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Set address can be unset")
 {
     Connman::Address<Connman::AddressType::MAC> mac("80:90:b1:c2:fe:ed");
     CHECK_FALSE(mac.empty());
@@ -220,7 +235,7 @@ TEST_CASE("set address can be unset")
     CHECK(mac.empty());
 }
 
-TEST_CASE("overwriting set address with empty address works")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Overwriting set address with empty address works")
 {
     Connman::Address<Connman::AddressType::MAC> mac("80:90:b1:c2:fe:ed");
     CHECK_FALSE(mac.empty());
@@ -228,7 +243,7 @@ TEST_CASE("overwriting set address with empty address works")
     CHECK(mac.empty());
 }
 
-TEST_CASE("overwriting empty address with empty address works")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Overwriting empty address with empty address works")
 {
     Connman::Address<Connman::AddressType::MAC> mac;
     CHECK(mac.empty());
@@ -236,7 +251,7 @@ TEST_CASE("overwriting empty address with empty address works")
     CHECK(mac.empty());
 }
 
-TEST_CASE("overwriting set address with different address works")
+TEST_CASE_FIXTURE(ConnmanMACAddressTestsFixture, "Overwriting set address with different address works")
 {
     Connman::Address<Connman::AddressType::MAC> mac("80:90:b1:c2:fe:ed");
     CHECK(mac == "80:90:B1:C2:FE:ED");
@@ -244,4 +259,4 @@ TEST_CASE("overwriting set address with different address works")
     CHECK(mac == "17:6B:7A:8C:12:09");
 }
 
-}
+TEST_SUITE_END();

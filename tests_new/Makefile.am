@@ -19,7 +19,15 @@
 if WITH_DOCTEST
 check_PROGRAMS = test_connman_service
 
-TESTS = $(check_PROGRAMS)
+TESTS = run_tests.sh
+
+if WITH_VALGRIND
+AM_TESTS_ENVIRONMENT = VALGRIND="$(VALGRIND)"
+TESTS += valgrind.sh
+endif
+
+EXTRA_DIST = run_tests.sh valgrind.sh
+CLEANFILES = *.junit.xml *.valgrind.xml
 
 AM_CPPFLAGS = -DDOCTEST_CONFIG_TREAT_CHAR_STAR_AS_STRING
 AM_CPPFLAGS += -I$(top_srcdir)/src -I$(top_builddir)/src
@@ -31,7 +39,11 @@ noinst_LTLIBRARIES = libtestrunner.la
 
 libtestrunner_la_SOURCES = testrunner.cc
 
-test_connman_service_SOURCES = test_connman_service.cc
+test_connman_service_SOURCES = \
+    test_connman_service.cc \
+    mock_os.hh mock_os.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
 test_connman_service_LDADD = \
     libtestrunner.la \
     $(top_builddir)/src/libconnman_service.la
@@ -40,4 +52,7 @@ test_connman_service_CXXFLAGS = $(AM_CXXFLAGS)
 
 doctest: $(check_PROGRAMS)
 	for p in $(check_PROGRAMS); do ./$$p $(DOCTEST_EXTRA_OPTIONS); done
+
+doctest-valgrind: $(check_PROGRAMS)
+	for p in $(check_PROGRAMS); do $(VALGRIND) --leak-check=full --show-reachable=yes --error-limit=no ./$$p $(DOCTEST_EXTRA_OPTIONS); done
 endif
