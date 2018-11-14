@@ -928,7 +928,9 @@ tdbusconnmanManager *dbus_get_connman_manager_iface(void)
     return connman_iface_data.connman_manager_iface;
 }
 
-tdbusconnmanTechnology *dbus_new_connman_technology_proxy_for_object_path(const char *path)
+tdbusconnmanTechnology *
+dbus_new_connman_technology_proxy_for_object_path(const char *path,
+                                                  GCallback signal_handler, void *user_data)
 {
     GDBusConnection *connection =
         g_dbus_proxy_get_connection(G_DBUS_PROXY(dbus_get_connman_manager_iface()));
@@ -940,7 +942,12 @@ tdbusconnmanTechnology *dbus_new_connman_technology_proxy_for_object_path(const 
                                                 G_DBUS_PROXY_FLAGS_NONE,
                                                 "net.connman", strdup(path),
                                                 NULL, &error);
-    (void)dbus_common_handle_dbus_error(&error, "Create ConnMan tech proxy");
+
+    if(dbus_common_handle_dbus_error(&error, "Create ConnMan tech proxy") == 0 &&
+       signal_handler != NULL)
+    {
+        g_signal_connect(proxy, "g-signal", signal_handler, user_data);
+    }
 
     return proxy;
 }

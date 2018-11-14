@@ -40,6 +40,7 @@ dcpd_SOURCES = \
     connman_common.c connman_common.h \
     connman_service.hh connman_service_list.hh maybe.hh \
     connman_address.hh \
+    connman_technology_registry.cc connman_technology_registry.hh \
     connman_property_cache.hh \
     network_device.hh network_device_list.hh \
     stream_id.h \

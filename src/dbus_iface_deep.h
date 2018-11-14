@@ -67,7 +67,9 @@ tdbusConfigurationWrite *dbus_new_configuration_write_iface(const char *dest, co
 tdbusConfigurationMonitor *dbus_get_configuration_monitor_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
-tdbusconnmanTechnology *dbus_new_connman_technology_proxy_for_object_path(const char *path);
+tdbusconnmanTechnology *
+dbus_new_connman_technology_proxy_for_object_path(const char *path,
+                                                  GCallback signal_handler, void *user_data);
 tdbusconnmanService *dbus_new_connman_service_proxy_for_object_path(const char *path, gint timeout_sec);
 
 tdbuslogindManager *dbus_get_logind_manager_iface(void);
