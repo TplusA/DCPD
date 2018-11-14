@@ -17,7 +17,9 @@
 #
 
 if WITH_DOCTEST
-check_PROGRAMS = test_connman_service
+check_PROGRAMS = \
+    test_connman_service \
+    test_connman_property_cache
 
 TESTS = run_tests.sh
 
@@ -49,6 +51,11 @@ test_connman_service_LDADD = \
     $(top_builddir)/src/libconnman_service.la
 test_connman_service_CPPFLAGS = $(AM_CPPFLAGS)
 test_connman_service_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_connman_property_cache_SOURCES = test_connman_property_cache.cc
+test_connman_property_cache_LDADD = libtestrunner.la
+test_connman_property_cache_CPPFLAGS = $(AM_CPPFLAGS)
+test_connman_property_cache_CXXFLAGS = $(AM_CXXFLAGS)
 
 doctest: $(check_PROGRAMS)
 	for p in $(check_PROGRAMS); do \
