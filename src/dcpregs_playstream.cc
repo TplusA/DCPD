@@ -35,7 +35,7 @@
 
 constexpr const char *ArtCache::ReadError::names_[];
 
-static const auto plainurl_register_dump_level = MESSAGE_LEVEL_DIAG;
+static const auto plainurl_register_dump_level = MESSAGE_LEVEL_NORMAL;
 
 enum class DevicePlaymode
 {

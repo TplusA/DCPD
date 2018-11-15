@@ -7067,10 +7067,10 @@ static void set_stream_meta_data_dump_expectations(const std::string &prefix,
                                                    const std::string &album,
                                                    const std::string &title)
 {
-    mock_messages->expect_msg_is_verbose(true, MESSAGE_LEVEL_DIAG);
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, (prefix + " artist: \"" + artist + "\"").c_str());
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, (prefix + " album : \"" + album + "\"").c_str());
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, (prefix + " title : \"" + title + '"').c_str());
+    mock_messages->expect_msg_is_verbose(true, MESSAGE_LEVEL_NORMAL);
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_NORMAL, (prefix + " artist: \"" + artist + "\"").c_str());
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_NORMAL, (prefix + " album : \"" + album + "\"").c_str());
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_NORMAL, (prefix + " title : \"" + title + '"').c_str());
 }
 
 static void set_start_title(const std::string expected_artist,
@@ -7225,7 +7225,7 @@ static void set_start_playing_expectations(const std::string expected_artist,
         expected_message += ": \"";
         expected_message += url;
         expected_message += '"';
-        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, expected_message.c_str());
+        mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_NORMAL, expected_message.c_str());
         break;
     }
 
@@ -7373,7 +7373,7 @@ static void set_next_url(const std::string title, const std::string url,
             expected_message += ": \"";
             expected_message += url;
             expected_message += '"';
-            mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, expected_message.c_str());
+            mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_NORMAL, expected_message.c_str());
 
             MD5::Context ctx;
             MD5::init(ctx);
@@ -7604,7 +7604,7 @@ static void stop_stream()
 {
     const auto *const reg = Regs::lookup(79);
 
-    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "First stream URL (reg 79): <empty>");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_NORMAL, "First stream URL (reg 79): <empty>");
     mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
     mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
 
