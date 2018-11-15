@@ -16,11 +16,10 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CONNMAN_H
-#define CONNMAN_H
+#ifndef CONNMAN_SCAN_H
+#define CONNMAN_SCAN_H
 
 #include <stdbool.h>
-#include <unistd.h>
 
 /*!
  * WLAN site survey result.
@@ -60,4 +59,4 @@ bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback);
 }
 #endif
 
-#endif /* !CONNMAN_H */
+#endif /* !CONNMAN_SCAN_H */

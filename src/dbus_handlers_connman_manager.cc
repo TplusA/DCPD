@@ -24,7 +24,7 @@
 #include "dbus_handlers_connman_manager_glue.h"
 #include "dbus_iface_deep.h"
 #include "dcpregs_networkconfig.hh"
-#include "connman.h"
+#include "connman_scan.h"
 #include "connman_agent.h"
 #include "connman_common.h"
 #include "connman_service_list.hh"

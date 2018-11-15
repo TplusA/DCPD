@@ -27,7 +27,7 @@
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
 #include "network_config_request.hh"
-#include "connman.h"
+#include "connman_scan.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "shutdown_guard.h"
 

@@ -40,7 +40,7 @@
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_upnpname.hh"
-#include "connman.h"
+#include "connman_scan.h"
 #include "networkprefs.h"
 #include "configproxy.h"
 #include "configuration_dcpd.hh"

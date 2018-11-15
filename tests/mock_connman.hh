@@ -19,7 +19,7 @@
 #ifndef MOCK_CONNMAN_HH
 #define MOCK_CONNMAN_HH
 
-#include "connman.h"
+#include "connman_scan.h"
 #include "connman_iter.h"
 #include "mock_expectation.hh"
 
