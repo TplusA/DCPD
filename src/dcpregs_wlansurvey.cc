@@ -67,7 +67,7 @@ static void survey_done(Connman::SiteSurveyResult result)
 
     msg_info("WLAN site survey done, %s (%d)",
              (result == Connman::SiteSurveyResult::OK) ? "succeeded" : "failed",
-             result);
+             int(result));
 
     nwwlan_survey_data.survey_in_progress = false;
     nwwlan_survey_data.last_result = result;
