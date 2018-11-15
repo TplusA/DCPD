@@ -40,7 +40,7 @@
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_upnpname.hh"
-#include "connman.h"
+#include "connman_scan.hh"
 #include "networkprefs.h"
 #include "configproxy.h"
 #include "configuration_dcpd.hh"
@@ -1476,7 +1476,7 @@ int main(int argc, char *argv[])
     sigaction(SIGTERM, &action, nullptr);
 
     if(parameters.with_connman)
-        connman_wlan_power_on();
+        Connman::wlan_power_on();
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 

@@ -27,7 +27,7 @@
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
 #include "network_config_request.hh"
-#include "connman.h"
+#include "connman_scan.hh"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "shutdown_guard.h"
 
@@ -2324,7 +2324,7 @@ void Regs::NetworkConfig::interfaces_changed()
 {
     std::array<uint8_t, nwstatus_data.previous_response.size()> response;
 
-    connman_wlan_power_on();
+    Connman::wlan_power_on();
     fill_network_status_register_response(response);
 
     if(nwstatus_data.previous_response != response)

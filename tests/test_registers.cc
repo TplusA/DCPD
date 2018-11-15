@@ -287,8 +287,8 @@ class SurveyCompleteNotificationData
     bool direct_call_;
     bool was_called_;
     bool was_processed_;
-    ConnmanSurveyDoneFn callback_;
-    enum ConnmanSiteScanResult callback_result_;
+    Connman::SiteSurveyDoneFn callback_;
+    Connman::SiteSurveyResult callback_result_;
 
   public:
     SurveyCompleteNotificationData(const SurveyCompleteNotificationData &) = delete;
@@ -303,7 +303,7 @@ class SurveyCompleteNotificationData
         was_called_ = false;
         was_processed_ = false;
         callback_ = nullptr;
-        callback_result_ = ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1);
+        callback_result_ = Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_RESULT) + 1);
     }
 
     void expect(bool direct_call = false)
@@ -312,8 +312,8 @@ class SurveyCompleteNotificationData
         direct_call_ = direct_call;
     }
 
-    void set(ConnmanSurveyDoneFn callback,
-             enum ConnmanSiteScanResult callback_result)
+    void set(Connman::SiteSurveyDoneFn callback,
+             Connman::SiteSurveyResult callback_result)
     {
         cut_assert_true(is_expected_);
         cut_assert_false(was_called_);
@@ -351,8 +351,8 @@ class SurveyCompleteNotificationData
 
 static SurveyCompleteNotificationData survey_complete_notification_data;
 
-static void survey_complete(ConnmanSurveyDoneFn callback,
-                            enum ConnmanSiteScanResult callback_result)
+static void survey_complete(Connman::SiteSurveyDoneFn callback,
+                            Connman::SiteSurveyResult callback_result)
 {
     survey_complete_notification_data.set(callback, callback_result);
 }
@@ -4907,7 +4907,7 @@ void test_start_wlan_site_survey()
 
     mock_messages->expect_msg_info("WLAN site survey started");
     mock_connman->expect_connman_start_wlan_site_survey(
-        true, survey_complete, CONNMAN_SITE_SCAN_OK);
+        true, survey_complete, Connman::SiteSurveyResult::OK);
     survey_complete_notification_data.expect();
     reg->write(nullptr, 0);
 
@@ -5018,7 +5018,7 @@ void test_start_wlan_site_survey_fails_on_connman_failure()
                                                 Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
 
     mock_connman->expect_connman_start_wlan_site_survey(
-        false, survey_complete, CONNMAN_SITE_SCAN_CONNMAN_ERROR);
+        false, survey_complete, Connman::SiteSurveyResult::CONNMAN_ERROR);
     survey_complete_notification_data.expect();
     reg->write(nullptr, 0);
 
@@ -5052,7 +5052,7 @@ void test_start_wlan_site_survey_fails_on_dbus_failure()
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (2)");
     mock_connman->expect_connman_start_wlan_site_survey(
-        false, survey_complete, CONNMAN_SITE_SCAN_DBUS_ERROR);
+        false, survey_complete, Connman::SiteSurveyResult::DBUS_ERROR);
     survey_complete_notification_data.expect(true);
     reg->write(nullptr, 0);
     register_changed_data->check(105);
@@ -5084,7 +5084,7 @@ void test_start_wlan_site_survey_fails_if_no_hardware_available()
 
     mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (4)");
     mock_connman->expect_connman_start_wlan_site_survey(
-        false, survey_complete, CONNMAN_SITE_SCAN_NO_HARDWARE);
+        false, survey_complete, Connman::SiteSurveyResult::NO_HARDWARE);
     survey_complete_notification_data.expect(true);
     reg->write(nullptr, 0);
     register_changed_data->check(105);

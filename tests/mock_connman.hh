@@ -19,7 +19,8 @@
 #ifndef MOCK_CONNMAN_HH
 #define MOCK_CONNMAN_HH
 
-#include "connman.h"
+#include "connman_scan.hh"
+#include "connman_iter.h"
 #include "mock_expectation.hh"
 
 class MockConnman
@@ -142,7 +143,7 @@ class MockConnman
     void init();
     void check() const;
 
-    using SurveyCallbackInvocation = void (*)(ConnmanSurveyDoneFn, enum ConnmanSiteScanResult);
+    using SurveyCallbackInvocation = void (*)(Connman::SiteSurveyDoneFn, Connman::SiteSurveyResult);
 
     void set_connman_service_iterator_data(const ServiceIterData &iter_data, size_t number_of_services);
     bool have_iter_data() const { return iter_data_ != nullptr; }
@@ -161,7 +162,7 @@ class MockConnman
     void expect_connman_security_iterator_get_security(const char *ret, struct ConnmanServiceSecurityIterator *iter);
 
     void expect_connman_start_wlan_site_survey(bool ret);
-    void expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, enum ConnmanSiteScanResult callback_result);
+    void expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, enum Connman::SiteSurveyResult callback_result);
 };
 
 extern MockConnman *mock_connman_singleton;
