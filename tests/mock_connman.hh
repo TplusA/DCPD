@@ -20,6 +20,7 @@
 #define MOCK_CONNMAN_HH
 
 #include "connman.h"
+#include "connman_iter.h"
 #include "mock_expectation.hh"
 
 class MockConnman

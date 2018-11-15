@@ -41,27 +41,9 @@ enum ConnmanSiteScanResult
 
 typedef void (*ConnmanSurveyDoneFn)(enum ConnmanSiteScanResult result);
 
-struct ConnmanServiceIterator;
-struct ConnmanServiceSecurityIterator;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-struct ConnmanServiceIterator *connman_service_iterator_get(void);
-void connman_service_iterator_rewind(struct ConnmanServiceIterator *iter);
-bool connman_service_iterator_next(struct ConnmanServiceIterator *iter);
-void connman_service_iterator_free(struct ConnmanServiceIterator *iter);
-const char *connman_service_iterator_get_service_name(struct ConnmanServiceIterator *iter);
-const char *connman_service_iterator_get_technology_type(struct ConnmanServiceIterator *iter);
-const char *connman_service_iterator_get_ssid(struct ConnmanServiceIterator *iter);
-int connman_service_iterator_get_strength(struct ConnmanServiceIterator *iter);
-struct ConnmanServiceSecurityIterator *
-connman_service_iterator_get_security_iterator(struct ConnmanServiceIterator *iter,
-                                               size_t *count);
-bool connman_security_iterator_next(struct ConnmanServiceSecurityIterator *iter);
-void connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter);
-const char *connman_security_iterator_get_security(struct ConnmanServiceSecurityIterator *iter);
 
 void connman_wlan_power_on(void);
 

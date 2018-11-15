@@ -23,6 +23,7 @@
 #include "dcpregs_wlansurvey.hh"
 #include "registers_priv.hh"
 #include "connman.h"
+#include "connman_iter.h"
 #include "dynamic_buffer_util.h"
 #include "messages.h"
 
