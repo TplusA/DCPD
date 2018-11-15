@@ -24,20 +24,12 @@
 #include "connman_common.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
+#include "gvariantwrapper.hh"
 #include "messages.h"
 
-#include <string.h>
-
-struct wifi_scan_data
-{
-    GMutex lock;
-
-    tdbusconnmanTechnology *proxy;
-    int remaining_tries;
-
-    Connman::SiteSurveyDoneFn callbacks[5];
-    size_t number_of_callbacks;
-};
+#include <vector>
+#include <mutex>
+#include <algorithm>
 
 static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powered)
 {
@@ -46,230 +38,240 @@ static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powe
 
     GVariant *bool_variant = g_variant_new("v", g_variant_new("b", true));
     tdbus_connman_technology_call_set_property(proxy, "Powered", bool_variant,
-                                               NULL, NULL, NULL);
+                                               nullptr, nullptr, nullptr);
 
     return true;
 }
 
-/*!
- * Call and clear all registered callbacks for WLAN survey completion.
- *
- * Must be called while holding #wifi_scan_data::lock.
- */
-static void call_all_callbacks(struct wifi_scan_data *data,
-                               Connman::SiteSurveyResult result)
+class WifiScanner
 {
-    for(size_t i = 0; i < data->number_of_callbacks; ++i)
-        (data->callbacks[i])(result);
+  private:
+    std::mutex lock_;
+    std::vector<Connman::SiteSurveyDoneFn> callbacks_;
+    tdbusconnmanTechnology *proxy_;
+    int remaining_tries_;
 
-    data->number_of_callbacks = 0;
-}
+  public:
+    WifiScanner(const WifiScanner &) = delete;
+    WifiScanner(WifiScanner &&) = default;
+    WifiScanner &operator=(const WifiScanner &) = delete;
+    WifiScanner &operator=(WifiScanner &&) = default;
 
-static gboolean do_initiate_scan(gpointer user_data);
+    explicit WifiScanner():
+        proxy_(nullptr),
+        remaining_tries_(0)
+    {}
 
-/*!
- * D-Bus callback for WLAN survey completion.
- *
- * This function is called from GLib's D-Bus code, context basically unknown.
- */
-static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer user_data)
-{
-    auto *const data = static_cast<struct wifi_scan_data *>(user_data);
-
-    g_mutex_lock(&data->lock);
-
-    log_assert(TDBUS_CONNMAN_TECHNOLOGY(source_object) == data->proxy);
-
-    GError *error = NULL;
-    (void)tdbus_connman_technology_call_scan_finish(data->proxy, res, &error);
-
-    const bool success = (dbus_common_handle_dbus_error(&error, "WLAN survey done") == 0);
-
-    if(success || --data->remaining_tries <= 0)
+    /*!
+     * Initiate WLAN scan or take a free ride with ongoing scan.
+     */
+    void scan(const char *object_path, bool is_powered,
+              Connman::SiteSurveyDoneFn &&callback)
     {
-        data->remaining_tries = 0;
-        call_all_callbacks(data,
-                           success ? Connman::SiteSurveyResult::OK : Connman::SiteSurveyResult::CONNMAN_ERROR);
-        g_object_unref(data->proxy);
-        data->proxy = NULL;
-    }
-    else
-    {
-        static const guint retry_interval_ms = 100;
+        log_assert(object_path != nullptr);
+        log_assert(callback != nullptr);
 
-        msg_info("WLAN scan failed, trying again in %u ms (%d tr%s left)",
-                 retry_interval_ms, data->remaining_tries,
-                 data->remaining_tries != 1 ? "ies" : "y");
-        g_timeout_add(retry_interval_ms, do_initiate_scan, user_data);
-    }
+        std::lock_guard<std::mutex> lock(lock_);
 
-    g_mutex_unlock(&data->lock);
-}
+        if(proxy_ != nullptr)
+        {
+            free_ride(std::move(callback));
+            return;
+        }
 
-/*!
- * Start WLAN survey, asynchronously.
- *
- * Must be called while holding #wifi_scan_data::lock.
- */
-static gboolean do_initiate_scan(gpointer user_data)
-{
-    auto *const data = static_cast<struct wifi_scan_data *>(user_data);
+        proxy_ = dbus_get_connman_technology_proxy_for_object_path(object_path);
 
-    tdbus_connman_technology_call_scan(data->proxy, NULL,
-                                       wifi_scan_done, user_data);
-    return G_SOURCE_REMOVE;
-}
+        if(proxy_ == nullptr)
+        {
+            callback(Connman::SiteSurveyResult::DBUS_ERROR);
+            return;
+        }
 
-/*!
- * WLAN survey already in progress, take a free ride.
- *
- * Must be called while holding #wifi_scan_data::lock.
- */
-static void free_ride(struct wifi_scan_data *data,
-                      Connman::SiteSurveyDoneFn callback)
-{
-    size_t i;
+        if(enable_wifi_if_necessary(proxy_, is_powered))
+            remaining_tries_ = 10;
+        else
+            remaining_tries_ = 1;
 
-    for(i = 0; i < data->number_of_callbacks; ++i)
-    {
-        if(data->callbacks[i] == callback)
-            break;
+        callbacks_.emplace_back(std::move(callback));
+
+        do_initiate_scan();
     }
 
-    if(i == data->number_of_callbacks)
+  private:
+    /*!
+     * WLAN survey already in progress, take a free ride.
+     */
+    void free_ride(Connman::SiteSurveyDoneFn &&callback)
     {
-        /* not registered yet */
-        if(data->number_of_callbacks < sizeof(data->callbacks) / sizeof(data->callbacks[0]))
-            data->callbacks[data->number_of_callbacks++] = callback;
+        if(std::find(callbacks_.begin(), callbacks_.end(), callback) != callbacks_.end())
+            return;
+
+        if(callbacks_.size() < 10)
+            callbacks_.emplace_back(std::move(callback));
         else
         {
             BUG("Too many WLAN site survey callbacks registered");
             callback(Connman::SiteSurveyResult::OUT_OF_MEMORY);
         }
     }
-}
 
-/*!
- * Initiate WLAN scan or take a free ride on ongoing scan.
- *
- * Must be called while holding #wifi_scan_data::lock.
- */
-static void scan_wifi(struct wifi_scan_data *data,
-                      const char *object_path, bool is_powered,
-                      Connman::SiteSurveyDoneFn callback)
-{
-    log_assert(callback != NULL);
-
-    if(data->proxy != NULL)
+    /*!
+     * D-Bus callback for WLAN survey completion.
+     *
+     * This function is called from GLib's D-Bus code, context basically
+     * unknown.
+     */
+    static void done_callback(GObject *source_object, GAsyncResult *res, gpointer user_data)
     {
-        free_ride(data, callback);
-        return;
+        auto *const scanner = static_cast<WifiScanner *>(user_data);
+        std::lock_guard<std::mutex> lock(scanner->lock_);
+        scanner->done(source_object, res);
     }
 
-    data->proxy =
-        dbus_get_connman_technology_proxy_for_object_path(object_path);
-
-    if(data->proxy == NULL)
+    /*!
+     * Finalize WLAN survey.
+     *
+     * All callbacks are called informing about the survey completion, and the
+     * object is reset to idle state so that more WLAN survey requests can be
+     * handled.
+     *
+     * In case of survey failure, the operation may be automatically restarted.
+     */
+    void done(GObject *source_object, GAsyncResult *res)
     {
-        callback(Connman::SiteSurveyResult::DBUS_ERROR);
-        return;
+        GError *error = nullptr;
+        (void)tdbus_connman_technology_call_scan_finish(TDBUS_CONNMAN_TECHNOLOGY(source_object),
+                                                        res, &error);
+
+        const bool success = (dbus_common_handle_dbus_error(&error, "WLAN survey done") == 0);
+
+        if(success || --remaining_tries_ <= 0)
+        {
+            remaining_tries_ = 0;
+
+            for(const auto &fn : callbacks_)
+                fn(success ? Connman::SiteSurveyResult::OK : Connman::SiteSurveyResult::CONNMAN_ERROR);
+
+            callbacks_.clear();
+
+            if(proxy_ != nullptr)
+            {
+                g_object_unref(proxy_);
+                proxy_ = nullptr;
+            }
+        }
+        else
+        {
+            static constexpr guint retry_interval_ms = 100;
+
+            msg_info("WLAN scan failed, trying again in %u ms (%d tr%s left)",
+                     retry_interval_ms, remaining_tries_,
+                     remaining_tries_ != 1 ? "ies" : "y");
+            g_timeout_add(retry_interval_ms, timed_scan, this);
+        }
     }
 
-    if(enable_wifi_if_necessary(data->proxy, is_powered))
-        data->remaining_tries = 10;
-    else
-        data->remaining_tries = 1;
+    /*!
+     * GLib callback for starting WLAN survey.
+     *
+     * This function is called from GLib's main loop.
+     */
+    static gboolean timed_scan(gpointer user_data)
+    {
+        auto *const scanner = static_cast<WifiScanner *>(user_data);
+        std::lock_guard<std::mutex> lock(scanner->lock_);
+        scanner->do_initiate_scan();
+        return G_SOURCE_REMOVE;
+    }
 
-    data->callbacks[0] = callback;
-    data->number_of_callbacks = 1;
+    /*!
+     * Ask Connman to start WLAN survey now.
+     *
+     * This function does not block. Upon completion, the function
+     * #WifiScanner::done_callback() is called.
+     */
+    void do_initiate_scan()
+    {
+        tdbus_connman_technology_call_scan(proxy_, nullptr,
+                                           WifiScanner::done_callback, this);
+    }
+};
 
-    do_initiate_scan(data);
-}
-
-static GVariant *find_technology_by_name(tdbusconnmanManager *iface,
-                                         const char *name, GVariantDict *dict)
+static GVariantWrapper find_technology_by_name(tdbusconnmanManager *iface,
+                                               const std::string &name,
+                                               GVariantDict *dict)
 {
-    if(iface == NULL)
-        return NULL;
+    if(iface == nullptr)
+        return GVariantWrapper();
 
-    GVariant *technologies = NULL;
-    GError *error = NULL;
-    tdbus_connman_manager_call_get_technologies_sync(iface, &technologies,
-                                                     NULL, &error);
+    GVariant *temp = nullptr;
+    GError *error = nullptr;
+    tdbus_connman_manager_call_get_technologies_sync(iface, &temp,
+                                                     nullptr, &error);
     (void)dbus_common_handle_dbus_error(&error, "Find network technology");
+    GVariantWrapper technologies(temp);
 
-    if(technologies == NULL)
+    if(technologies == nullptr)
     {
         msg_error(0, LOG_CRIT, "Failed getting technologies from Connman");
-        return NULL;
+        return GVariantWrapper();
     }
 
-    const size_t count = g_variant_n_children(technologies);
-    GVariant *tuple = NULL;
+    const size_t count = g_variant_n_children(GVariantWrapper::get(technologies));
 
     for(size_t i = 0; i < count; ++i)
     {
-        tuple = g_variant_get_child_value(technologies, i);
-        log_assert(tuple != NULL);
+        GVariantWrapper tuple(g_variant_get_child_value(GVariantWrapper::get(technologies), i),
+                              GVariantWrapper::Transfer::JUST_MOVE);
+        log_assert(tuple != nullptr);
 
         connman_common_init_dict_from_temp_gvariant(
-            g_variant_get_child_value(tuple, 1), dict);
+            g_variant_get_child_value(GVariantWrapper::get(tuple), 1), dict);
 
-        GVariant *tech_type_variant =
-            g_variant_dict_lookup_value(dict, "Type", G_VARIANT_TYPE_STRING);
-        log_assert(tech_type_variant != NULL);
+        GVariantWrapper tech_type_variant(g_variant_dict_lookup_value(dict, "Type",
+                                                                      G_VARIANT_TYPE_STRING),
+                                          GVariantWrapper::Transfer::JUST_MOVE);
+        log_assert(tech_type_variant != nullptr);
 
         const char *tech_type_string =
-            g_variant_get_string(tech_type_variant, NULL);
+            g_variant_get_string(GVariantWrapper::get(tech_type_variant), nullptr);
 
-        if(strcmp(tech_type_string, name) != 0)
-        {
-            g_variant_dict_clear(dict);
-            g_variant_unref(tuple);
-            tuple = NULL;
-        }
-        else
-            i = count;
+        if(tech_type_string == name)
+            return tuple;
 
-        g_variant_unref(tech_type_variant);
+        g_variant_dict_clear(dict);
     }
 
-    g_variant_unref(technologies);
-
-    return tuple;
+    return GVariantWrapper();
 }
 
 static bool check_if_powered(GVariantDict *dict)
 {
-    GVariant *tech_powered_variant =
-        g_variant_dict_lookup_value(dict, "Powered", G_VARIANT_TYPE_BOOLEAN);
-    bool is_powered;
+    GVariantWrapper tech_powered_variant(g_variant_dict_lookup_value(dict, "Powered",
+                                                                     G_VARIANT_TYPE_BOOLEAN),
+                                         GVariantWrapper::Transfer::JUST_MOVE);
 
-    if(tech_powered_variant == NULL)
+    if(tech_powered_variant != nullptr)
+        return g_variant_get_boolean(GVariantWrapper::get(tech_powered_variant));
+    else
     {
         msg_error(0, LOG_ERR, "Failed to get power state for WLAN");
-        is_powered = false;
+        return false;
     }
-    else
-        is_powered = g_variant_get_boolean(tech_powered_variant);
-
-    g_variant_unref(tech_powered_variant);
-
-    return is_powered;
 }
 
-static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn site_survey_callback)
+static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn &&site_survey_callback)
 {
     tdbusconnmanManager *iface = dbus_get_connman_manager_iface();
 
     GVariantDict dict;
-    GVariant *entry = find_technology_by_name(iface, "wifi", &dict);
+    GVariantWrapper entry(find_technology_by_name(iface, "wifi", &dict));
 
-    if(entry == NULL)
+    if(entry == nullptr)
     {
         msg_error(0, LOG_NOTICE, "No WLAN adapter connected");
 
-        if(site_survey_callback != NULL)
+        if(site_survey_callback != nullptr)
             site_survey_callback(Connman::SiteSurveyResult::NO_HARDWARE);
 
         return false;
@@ -277,33 +279,31 @@ static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn site_survey_c
 
     const bool is_powered = check_if_powered(&dict);
 
-    GVariant *tech_path_variant = g_variant_get_child_value(entry, 0);
-    log_assert(tech_path_variant != NULL);
+    GVariantWrapper tech_path_variant(g_variant_get_child_value(GVariantWrapper::get(entry), 0),
+                                      GVariantWrapper::Transfer::JUST_MOVE);
+    log_assert(tech_path_variant != nullptr);
 
-    const char *object_path = g_variant_get_string(tech_path_variant, NULL);
+    const char *object_path = g_variant_get_string(GVariantWrapper::get(tech_path_variant), nullptr);
 
-    if(site_survey_callback != NULL)
+    if(site_survey_callback != nullptr)
     {
-        static struct wifi_scan_data scan_data;
-
-        g_mutex_lock(&scan_data.lock);
-        scan_wifi(&scan_data, object_path, is_powered, site_survey_callback);
-        g_mutex_unlock(&scan_data.lock);
+        /* scan requested */
+        static WifiScanner scanner;
+        scanner.scan(object_path, is_powered, std::move(site_survey_callback));
     }
     else
     {
+        /* power on requested */
         tdbusconnmanTechnology *const proxy =
             dbus_get_connman_technology_proxy_for_object_path(object_path);
 
-        if(proxy != NULL)
+        if(proxy != nullptr)
         {
             (void)enable_wifi_if_necessary(proxy, is_powered);
             g_object_unref(proxy);
         }
     }
 
-    g_variant_unref(tech_path_variant);
-    g_variant_unref(entry);
     g_variant_dict_clear(&dict);
 
     return true;
@@ -311,11 +311,11 @@ static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn site_survey_c
 
 void Connman::wlan_power_on()
 {
-    (void)site_survey_or_just_power_on(NULL);
+    (void)site_survey_or_just_power_on(nullptr);
 }
 
 bool Connman::start_wlan_site_survey(Connman::SiteSurveyDoneFn callback)
 {
-    log_assert(callback != NULL);
-    return site_survey_or_just_power_on(callback);
+    log_assert(callback != nullptr);
+    return site_survey_or_just_power_on(std::move(callback));
 }
