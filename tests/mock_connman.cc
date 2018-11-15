@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -183,7 +183,7 @@ class MockConnman::Expectation
         bool arg_pointer_shall_be_null_;
         size_t arg_dest_size_;
         SurveyCallbackInvocation callback_invocation_;
-        enum ConnmanSiteScanResult callback_result_;
+        Connman::SiteSurveyResult callback_result_;
         struct ConnmanServiceIterator *service_iterator_;
 
         explicit Data(ConnmanFn fn):
@@ -197,7 +197,7 @@ class MockConnman::Expectation
             arg_pointer_shall_be_null_(false),
             arg_dest_size_(9876543),
             callback_invocation_(nullptr),
-            callback_result_(ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1)),
+            callback_result_(Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_RESULT) + 1)),
             service_iterator_(nullptr)
         {}
     };
@@ -234,7 +234,7 @@ class MockConnman::Expectation
     }
 
     explicit Expectation(bool ret, SurveyCallbackInvocation invocation,
-                         enum ConnmanSiteScanResult callback_result):
+                         Connman::SiteSurveyResult callback_result):
         d(ConnmanFn::start_wlan_site_survey)
     {
         data_.ret_bool_ = ret;
@@ -417,10 +417,10 @@ void MockConnman::expect_connman_security_iterator_get_security(const char *ret,
 void MockConnman::expect_connman_start_wlan_site_survey(bool ret)
 {
     expectations_->add(Expectation(ret, nullptr,
-                                   ConnmanSiteScanResult(CONNMAN_SITE_SCAN_RESULT_LAST + 1)));
+                                   Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_RESULT) + 1)));
 }
 
-void MockConnman::expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, enum ConnmanSiteScanResult callback_result)
+void MockConnman::expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, Connman::SiteSurveyResult callback_result)
 {
     expectations_->add(Expectation(ret, callback_invocation, callback_result));
 }
@@ -557,7 +557,7 @@ const char *connman_security_iterator_get_security(struct ConnmanServiceSecurity
     return NULL;
 }
 
-bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)
+bool Connman::start_wlan_site_survey(Connman::SiteSurveyDoneFn callback)
 {
     const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
 

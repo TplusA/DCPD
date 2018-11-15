@@ -20,7 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "connman_scan.h"
+#include "connman_scan.hh"
 #include "connman_common.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
@@ -35,7 +35,7 @@ struct wifi_scan_data
     tdbusconnmanTechnology *proxy;
     int remaining_tries;
 
-    ConnmanSurveyDoneFn callbacks[5];
+    Connman::SiteSurveyDoneFn callbacks[5];
     size_t number_of_callbacks;
 };
 
@@ -57,7 +57,7 @@ static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powe
  * Must be called while holding #wifi_scan_data::lock.
  */
 static void call_all_callbacks(struct wifi_scan_data *data,
-                               enum ConnmanSiteScanResult result)
+                               Connman::SiteSurveyResult result)
 {
     for(size_t i = 0; i < data->number_of_callbacks; ++i)
         (data->callbacks[i])(result);
@@ -74,7 +74,7 @@ static gboolean do_initiate_scan(gpointer user_data);
  */
 static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
-    struct wifi_scan_data *const data = user_data;
+    auto *const data = static_cast<struct wifi_scan_data *>(user_data);
 
     g_mutex_lock(&data->lock);
 
@@ -89,7 +89,7 @@ static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer u
     {
         data->remaining_tries = 0;
         call_all_callbacks(data,
-                           success ? CONNMAN_SITE_SCAN_OK : CONNMAN_SITE_SCAN_CONNMAN_ERROR);
+                           success ? Connman::SiteSurveyResult::OK : Connman::SiteSurveyResult::CONNMAN_ERROR);
         g_object_unref(data->proxy);
         data->proxy = NULL;
     }
@@ -113,7 +113,7 @@ static void wifi_scan_done(GObject *source_object, GAsyncResult *res, gpointer u
  */
 static gboolean do_initiate_scan(gpointer user_data)
 {
-    struct wifi_scan_data *const data = user_data;
+    auto *const data = static_cast<struct wifi_scan_data *>(user_data);
 
     tdbus_connman_technology_call_scan(data->proxy, NULL,
                                        wifi_scan_done, user_data);
@@ -126,7 +126,7 @@ static gboolean do_initiate_scan(gpointer user_data)
  * Must be called while holding #wifi_scan_data::lock.
  */
 static void free_ride(struct wifi_scan_data *data,
-                      ConnmanSurveyDoneFn callback)
+                      Connman::SiteSurveyDoneFn callback)
 {
     size_t i;
 
@@ -144,7 +144,7 @@ static void free_ride(struct wifi_scan_data *data,
         else
         {
             BUG("Too many WLAN site survey callbacks registered");
-            callback(CONNMAN_SITE_SCAN_OUT_OF_MEMORY);
+            callback(Connman::SiteSurveyResult::OUT_OF_MEMORY);
         }
     }
 }
@@ -156,7 +156,7 @@ static void free_ride(struct wifi_scan_data *data,
  */
 static void scan_wifi(struct wifi_scan_data *data,
                       const char *object_path, bool is_powered,
-                      ConnmanSurveyDoneFn callback)
+                      Connman::SiteSurveyDoneFn callback)
 {
     log_assert(callback != NULL);
 
@@ -171,7 +171,7 @@ static void scan_wifi(struct wifi_scan_data *data,
 
     if(data->proxy == NULL)
     {
-        callback(CONNMAN_SITE_SCAN_DBUS_ERROR);
+        callback(Connman::SiteSurveyResult::DBUS_ERROR);
         return;
     }
 
@@ -258,7 +258,7 @@ static bool check_if_powered(GVariantDict *dict)
     return is_powered;
 }
 
-static bool site_survey_or_just_power_on(ConnmanSurveyDoneFn site_survey_callback)
+static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn site_survey_callback)
 {
     tdbusconnmanManager *iface = dbus_get_connman_manager_iface();
 
@@ -270,7 +270,7 @@ static bool site_survey_or_just_power_on(ConnmanSurveyDoneFn site_survey_callbac
         msg_error(0, LOG_NOTICE, "No WLAN adapter connected");
 
         if(site_survey_callback != NULL)
-            site_survey_callback(CONNMAN_SITE_SCAN_NO_HARDWARE);
+            site_survey_callback(Connman::SiteSurveyResult::NO_HARDWARE);
 
         return false;
     }
@@ -309,12 +309,12 @@ static bool site_survey_or_just_power_on(ConnmanSurveyDoneFn site_survey_callbac
     return true;
 }
 
-void connman_wlan_power_on(void)
+void Connman::wlan_power_on()
 {
     (void)site_survey_or_just_power_on(NULL);
 }
 
-bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback)
+bool Connman::start_wlan_site_survey(Connman::SiteSurveyDoneFn callback)
 {
     log_assert(callback != NULL);
     return site_survey_or_just_power_on(callback);

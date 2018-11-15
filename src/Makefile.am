@@ -36,7 +36,7 @@ dcpd_SOURCES = \
     dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
-    connman_iter.c connman_iter.h connman_scan.c connman_scan.h \
+    connman_iter.c connman_iter.h connman_scan.cc connman_scan.hh \
     connman_common.c connman_common.h \
     connman_service.hh connman_service_list.hh maybe.hh \
     connman_address.hh \

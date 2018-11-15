@@ -22,7 +22,7 @@
 
 #include "dcpregs_wlansurvey.hh"
 #include "registers_priv.hh"
-#include "connman_scan.h"
+#include "connman_scan.hh"
 #include "connman_iter.h"
 #include "dynamic_buffer_util.h"
 #include "messages.h"
@@ -38,7 +38,7 @@ static struct
     std::recursive_mutex lock;
 
     bool survey_in_progress;
-    enum ConnmanSiteScanResult last_result;
+    Connman::SiteSurveyResult last_result;
 }
 nwwlan_survey_data;
 
@@ -52,12 +52,12 @@ enum WifiServiceType
 void Regs::WLANSurvey::init()
 {
     nwwlan_survey_data.survey_in_progress = false;
-    nwwlan_survey_data.last_result = CONNMAN_SITE_SCAN_OK;
+    nwwlan_survey_data.last_result = Connman::SiteSurveyResult::OK;
 }
 
 void Regs::WLANSurvey::deinit() {}
 
-static void survey_done(enum ConnmanSiteScanResult result)
+static void survey_done(Connman::SiteSurveyResult result)
 {
     {
     std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
@@ -66,7 +66,7 @@ static void survey_done(enum ConnmanSiteScanResult result)
         BUG("Got WLAN survey done notification, but didn't start any");
 
     msg_info("WLAN site survey done, %s (%d)",
-             (result == CONNMAN_SITE_SCAN_OK) ? "succeeded" : "failed",
+             (result == Connman::SiteSurveyResult::OK) ? "succeeded" : "failed",
              result);
 
     nwwlan_survey_data.survey_in_progress = false;
@@ -106,7 +106,7 @@ int Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey(const uint8_t *data,
 
     nwwlan_survey_data.survey_in_progress = true;
 
-    if(connman_start_wlan_site_survey(survey_done))
+    if(Connman::start_wlan_site_survey(survey_done))
         msg_info("WLAN site survey started");
 
     return 0;
@@ -284,11 +284,13 @@ exit_free_service_iter:
     return retval;
 }
 
-static const char *survey_result_to_string(enum ConnmanSiteScanResult result)
+static const char *survey_result_to_string(Connman::SiteSurveyResult result)
 {
-    if(result >= 0 && result <= CONNMAN_SITE_SCAN_RESULT_LAST)
+    const auto idx = size_t(result);
+
+    if(idx >= 0 && idx <= size_t(Connman::SiteSurveyResult::LAST_RESULT))
     {
-        static const char *strings[CONNMAN_SITE_SCAN_RESULT_LAST + 1] =
+        static const char *strings[size_t(Connman::SiteSurveyResult::LAST_RESULT) + 1] =
         {
             "ok",
             "network",
@@ -297,7 +299,7 @@ static const char *survey_result_to_string(enum ConnmanSiteScanResult result)
             "hardware",
         };
 
-        return strings[result];
+        return strings[idx];
     }
     else
         return "bug";
@@ -313,19 +315,19 @@ bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(struct dynamic_buf
 
     switch(nwwlan_survey_data.last_result)
     {
-      case CONNMAN_SITE_SCAN_OK:
+      case Connman::SiteSurveyResult::OK:
         if(fill_buffer_with_services(buffer))
             return true;
 
         dynamic_buffer_clear(buffer);
-        nwwlan_survey_data.last_result = CONNMAN_SITE_SCAN_OUT_OF_MEMORY;
+        nwwlan_survey_data.last_result = Connman::SiteSurveyResult::OUT_OF_MEMORY;
 
         /* fall-through */
 
-      case CONNMAN_SITE_SCAN_CONNMAN_ERROR:
-      case CONNMAN_SITE_SCAN_DBUS_ERROR:
-      case CONNMAN_SITE_SCAN_OUT_OF_MEMORY:
-      case CONNMAN_SITE_SCAN_NO_HARDWARE:
+      case Connman::SiteSurveyResult::CONNMAN_ERROR:
+      case Connman::SiteSurveyResult::DBUS_ERROR:
+      case Connman::SiteSurveyResult::OUT_OF_MEMORY:
+      case Connman::SiteSurveyResult::NO_HARDWARE:
         retval = true;
 
         TRY_EMIT(buffer, /* nothing */,

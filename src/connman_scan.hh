@@ -16,10 +16,11 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CONNMAN_SCAN_H
-#define CONNMAN_SCAN_H
+#ifndef CONNMAN_SCAN_HH
+#define CONNMAN_SCAN_HH
 
-#include <stdbool.h>
+namespace Connman
+{
 
 /*!
  * WLAN site survey result.
@@ -27,24 +28,20 @@
  * \attention
  *     This enumeration must match the array in #survey_result_to_string().
  */
-enum ConnmanSiteScanResult
+enum class SiteSurveyResult
 {
-    CONNMAN_SITE_SCAN_OK,
-    CONNMAN_SITE_SCAN_CONNMAN_ERROR,
-    CONNMAN_SITE_SCAN_DBUS_ERROR,
-    CONNMAN_SITE_SCAN_OUT_OF_MEMORY,
-    CONNMAN_SITE_SCAN_NO_HARDWARE,
+    OK,
+    CONNMAN_ERROR,
+    DBUS_ERROR,
+    OUT_OF_MEMORY,
+    NO_HARDWARE,
 
-    CONNMAN_SITE_SCAN_RESULT_LAST = CONNMAN_SITE_SCAN_NO_HARDWARE,
+    LAST_RESULT = NO_HARDWARE,
 };
 
-typedef void (*ConnmanSurveyDoneFn)(enum ConnmanSiteScanResult result);
+using SiteSurveyDoneFn = void (*)(SiteSurveyResult result);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void connman_wlan_power_on(void);
+void wlan_power_on();
 
 /*!
  * Start WLAN site survey, call callback when done.
@@ -53,10 +50,8 @@ void connman_wlan_power_on(void);
  * called within D-Bus context. Thus, the callback should be implemented in a
  * thread-safe way.
  */
-bool connman_start_wlan_site_survey(ConnmanSurveyDoneFn callback);
+bool start_wlan_site_survey(SiteSurveyDoneFn callback);
 
-#ifdef __cplusplus
 }
-#endif
 
-#endif /* !CONNMAN_SCAN_H */
+#endif /* !CONNMAN_SCAN_HH */

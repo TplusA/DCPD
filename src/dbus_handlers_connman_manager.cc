@@ -24,7 +24,7 @@
 #include "dbus_handlers_connman_manager_glue.h"
 #include "dbus_iface_deep.h"
 #include "dcpregs_networkconfig.hh"
-#include "connman_scan.h"
+#include "connman_scan.hh"
 #include "connman_agent.h"
 #include "connman_common.h"
 #include "connman_service_list.hh"
@@ -588,7 +588,7 @@ static void schedule_wlan_connect__unlocked(DBusSignalManagerData &data)
         data.wlan_connection_state.get_state() == WLANConnectionState::State::WAIT_FOR_REGISTRAR ||
         data.wlan_connection_state.get_state() == WLANConnectionState::State::ABOUT_TO_CONNECT);
 
-    connman_wlan_power_on();
+    Connman::wlan_power_on();
     data.schedule_connect_to_wlan();
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
@@ -755,7 +755,7 @@ static FindRegistrarResult find_wps_registrar(WLANConnectionState &state,
     return FindRegistrarResult::FOUND;
 }
 
-static void scan_for_wps_done(enum ConnmanSiteScanResult result);
+static void scan_for_wps_done(Connman::SiteSurveyResult result);
 
 bool dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
 {
@@ -771,7 +771,7 @@ bool dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
             switch(find_wps_registrar(data->wlan_connection_state, services))
             {
               case FindRegistrarResult::NOT_FOUND:
-                connman_start_wlan_site_survey(scan_for_wps_done);
+                Connman::start_wlan_site_survey(scan_for_wps_done);
                 return true;
 
               case FindRegistrarResult::FOUND:
@@ -1830,7 +1830,7 @@ static void bug_if_not_processed(const Connman::ServiceList &known_services)
 }
 #endif /* NDEBUG */
 
-static void survey_after_suspend(enum ConnmanSiteScanResult result)
+static void survey_after_suspend(Connman::SiteSurveyResult result)
 {
     msg_vinfo(MESSAGE_LEVEL_DIAG,
               "Site survey result after suspend: %d", int(result));
@@ -1964,7 +1964,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
            {
                /* there are no known WLANs, maybe because the WLAN adapter
                 * is in suspend mode */
-               connman_start_wlan_site_survey(survey_after_suspend);
+               Connman::start_wlan_site_survey(survey_after_suspend);
                return false;
            }
 
@@ -1987,7 +1987,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 
     /* this is the least we should do so that ConnMan can find WLAN
      * networks, manual connect may or may not be necessary (see below) */
-    connman_wlan_power_on();
+    Connman::wlan_power_on();
 
     if(our_wlan->second->is_active() == true)
         return false;
@@ -2245,19 +2245,19 @@ dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(),
     return &global_dbussignal_connman_manager_data;
 }
 
-static void scan_for_wps_done(enum ConnmanSiteScanResult result)
+static void scan_for_wps_done(Connman::SiteSurveyResult result)
 {
     std::lock_guard<std::recursive_mutex> lock(global_dbussignal_connman_manager_data.lock);
 
     switch(result)
     {
-      case CONNMAN_SITE_SCAN_OK:
+      case Connman::SiteSurveyResult::OK:
         break;
 
-      case CONNMAN_SITE_SCAN_CONNMAN_ERROR:
-      case CONNMAN_SITE_SCAN_DBUS_ERROR:
-      case CONNMAN_SITE_SCAN_OUT_OF_MEMORY:
-      case CONNMAN_SITE_SCAN_NO_HARDWARE:
+      case Connman::SiteSurveyResult::CONNMAN_ERROR:
+      case Connman::SiteSurveyResult::DBUS_ERROR:
+      case Connman::SiteSurveyResult::OUT_OF_MEMORY:
+      case Connman::SiteSurveyResult::NO_HARDWARE:
         msg_error(0, LOG_ERR,
                   "WLAN scan failed hard (%d), stopping WPS",
                   static_cast<int>(result));
