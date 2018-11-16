@@ -149,8 +149,8 @@ allocate_owner(struct ConfigProxyData *data,
             return NULL;
         }
 
-        read_iface = dbus_get_configuration_read_iface(dbus_dest, dbus_path);
-        write_iface = dbus_get_configuration_write_iface(dbus_dest, dbus_path);
+        read_iface = dbus_new_configuration_read_iface(dbus_dest, dbus_path);
+        write_iface = dbus_new_configuration_write_iface(dbus_dest, dbus_path);
 
         if(read_iface == NULL || write_iface == NULL)
         {

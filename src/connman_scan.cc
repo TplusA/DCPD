@@ -79,7 +79,7 @@ class WifiScanner
             return;
         }
 
-        proxy_ = dbus_get_connman_technology_proxy_for_object_path(object_path);
+        proxy_ = dbus_new_connman_technology_proxy_for_object_path(object_path);
 
         if(proxy_ == nullptr)
         {
@@ -295,7 +295,7 @@ static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn &&site_survey
     {
         /* power on requested */
         tdbusconnmanTechnology *const proxy =
-            dbus_get_connman_technology_proxy_for_object_path(object_path);
+            dbus_new_connman_technology_proxy_for_object_path(object_path);
 
         if(proxy != nullptr)
         {

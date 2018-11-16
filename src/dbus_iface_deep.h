@@ -62,13 +62,13 @@ tdbusartcacheRead *dbus_get_artcache_read_iface(void);
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void);
 tdbuscredentialsWrite *dbus_get_credentials_write_iface(void);
 
-tdbusConfigurationRead *dbus_get_configuration_read_iface(const char *dest, const char *path);
-tdbusConfigurationWrite *dbus_get_configuration_write_iface(const char *dest, const char *path);
+tdbusConfigurationRead *dbus_new_configuration_read_iface(const char *dest, const char *path);
+tdbusConfigurationWrite *dbus_new_configuration_write_iface(const char *dest, const char *path);
 tdbusConfigurationMonitor *dbus_get_configuration_monitor_iface(void);
 
 tdbusconnmanManager *dbus_get_connman_manager_iface(void);
-tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path);
-tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *path, gint timeout_sec);
+tdbusconnmanTechnology *dbus_new_connman_technology_proxy_for_object_path(const char *path);
+tdbusconnmanService *dbus_new_connman_service_proxy_for_object_path(const char *path, gint timeout_sec);
 
 tdbuslogindManager *dbus_get_logind_manager_iface(void);
 

@@ -43,7 +43,7 @@ bool connman_common_set_service_property(const char *object_path,
                                          GVariant *value)
 {
     tdbusconnmanService *proxy =
-        dbus_get_connman_service_proxy_for_object_path(object_path, -1);
+        dbus_new_connman_service_proxy_for_object_path(object_path, -1);
 
     if(proxy == NULL)
         return false;
@@ -62,7 +62,7 @@ bool connman_common_set_service_property(const char *object_path,
 void connman_common_disconnect_service_by_object_path(const char *object_path)
 {
     tdbusconnmanService *proxy =
-        dbus_get_connman_service_proxy_for_object_path(object_path, -1);
+        dbus_new_connman_service_proxy_for_object_path(object_path, -1);
 
     if(proxy == NULL)
         return;
@@ -80,7 +80,7 @@ void connman_common_disconnect_service_by_object_path(const char *object_path)
 void connman_common_remove_service_by_object_path(const char *object_path)
 {
     tdbusconnmanService *proxy =
-        dbus_get_connman_service_proxy_for_object_path(object_path, -1);
+        dbus_new_connman_service_proxy_for_object_path(object_path, -1);
 
     if(proxy == NULL)
         return;

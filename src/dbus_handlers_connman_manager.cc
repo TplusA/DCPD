@@ -424,7 +424,7 @@ class WLANConnectionState
         static constexpr int wlan_connect_timeout_seconds = 150;
 
         auto proxy =
-            dbus_get_connman_service_proxy_for_object_path(candidate_->get_service_name().c_str(),
+            dbus_new_connman_service_proxy_for_object_path(candidate_->get_service_name().c_str(),
                                                            wlan_connect_timeout_seconds);
 
         if(proxy == nullptr)

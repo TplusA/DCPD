@@ -884,7 +884,7 @@ tdbuscredentialsWrite *dbus_get_credentials_write_iface(void)
     return credentials_iface_data.cred_write_iface;
 }
 
-tdbusConfigurationRead *dbus_get_configuration_read_iface(const char *dest, const char *path)
+tdbusConfigurationRead *dbus_new_configuration_read_iface(const char *dest, const char *path)
 {
     GDBusConnection *connection =
         g_dbus_interface_skeleton_get_connection(G_DBUS_INTERFACE_SKELETON(dbus_get_configuration_proxy_iface()));
@@ -901,7 +901,7 @@ tdbusConfigurationRead *dbus_get_configuration_read_iface(const char *dest, cons
     return proxy;
 }
 
-tdbusConfigurationWrite *dbus_get_configuration_write_iface(const char *dest, const char *path)
+tdbusConfigurationWrite *dbus_new_configuration_write_iface(const char *dest, const char *path)
 {
     GDBusConnection *connection =
         g_dbus_interface_skeleton_get_connection(G_DBUS_INTERFACE_SKELETON(dbus_get_configuration_proxy_iface()));
@@ -928,7 +928,7 @@ tdbusconnmanManager *dbus_get_connman_manager_iface(void)
     return connman_iface_data.connman_manager_iface;
 }
 
-tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const char *path)
+tdbusconnmanTechnology *dbus_new_connman_technology_proxy_for_object_path(const char *path)
 {
     GDBusConnection *connection =
         g_dbus_proxy_get_connection(G_DBUS_PROXY(dbus_get_connman_manager_iface()));
@@ -945,7 +945,7 @@ tdbusconnmanTechnology *dbus_get_connman_technology_proxy_for_object_path(const 
     return proxy;
 }
 
-tdbusconnmanService *dbus_get_connman_service_proxy_for_object_path(const char *path,
+tdbusconnmanService *dbus_new_connman_service_proxy_for_object_path(const char *path,
                                                                     gint timeout_sec)
 {
     GDBusConnection *connection =
