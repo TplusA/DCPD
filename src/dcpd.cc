@@ -1466,6 +1466,28 @@ int main(int argc, char *argv[])
     }
 
     Connman::TechnologyRegistry::late_init();
+    Connman::TechnologyRegistry::get_singleton_for_update().first.register_property_watcher(
+        [] (Connman::TechnologyPropertiesWIFI::Property property,
+            Connman::TechnologyPropertiesBase::StoreResult result,
+            Connman::TechnologyPropertiesWIFI &props)
+        {
+            switch(property)
+            {
+              case Connman::TechnologyPropertiesWIFI::Property::POWERED:
+                if(!props.get<Connman::TechnologyPropertiesWIFI::Property::POWERED>())
+                    Connman::wlan_power_on();
+                break;
+
+              case Connman::TechnologyPropertiesWIFI::Property::CONNECTED:
+              case Connman::TechnologyPropertiesWIFI::Property::NAME:
+              case Connman::TechnologyPropertiesWIFI::Property::TYPE:
+              case Connman::TechnologyPropertiesWIFI::Property::TETHERING:
+              case Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER:
+              case Connman::TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE:
+                break;
+            }
+        });
+
     Regs::PlayStream::late_init();
 
     static struct sigaction action;
