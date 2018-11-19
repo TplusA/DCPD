@@ -41,7 +41,7 @@ enum class SiteSurveyResult
 
 using SiteSurveyDoneFn = void (*)(SiteSurveyResult result);
 
-void wlan_power_on();
+bool wlan_power_on();
 
 /*!
  * Start WLAN site survey, call callback when done.

@@ -250,9 +250,9 @@ static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn &&site_survey
     return true;
 }
 
-void Connman::wlan_power_on()
+bool Connman::wlan_power_on()
 {
-    (void)site_survey_or_just_power_on(nullptr);
+    return site_survey_or_just_power_on(nullptr);
 }
 
 bool Connman::start_wlan_site_survey(Connman::SiteSurveyDoneFn callback)
