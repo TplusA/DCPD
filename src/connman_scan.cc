@@ -21,25 +21,21 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "connman_scan.hh"
-#include "connman_common.h"
+#include "connman_technology_registry.hh"
+#include "connman_dbus.h"
 #include "dbus_common.h"
-#include "dbus_iface_deep.h"
-#include "gvariantwrapper.hh"
 #include "messages.h"
 
-#include <vector>
-#include <mutex>
 #include <algorithm>
 
-static bool enable_wifi_if_necessary(tdbusconnmanTechnology *proxy, bool is_powered)
+static bool enable_wifi_if_necessary(bool is_powered)
 {
     if(is_powered)
         return false;
 
-    GVariant *bool_variant = g_variant_new("v", g_variant_new("b", true));
-    tdbus_connman_technology_call_set_property(proxy, "Powered", bool_variant,
-                                               nullptr, nullptr, nullptr);
-
+    const auto &locked_reg(Connman::TechnologyRegistry::get_singleton_for_update());
+    auto &reg(locked_reg.first);
+    reg.wifi().set<Connman::TechnologyPropertiesWIFI::Property::POWERED>(true);
     return true;
 }
 
@@ -48,7 +44,7 @@ class WifiScanner
   private:
     std::mutex lock_;
     std::vector<Connman::SiteSurveyDoneFn> callbacks_;
-    tdbusconnmanTechnology *proxy_;
+    bool is_active_;
     int remaining_tries_;
 
   public:
@@ -58,7 +54,7 @@ class WifiScanner
     WifiScanner &operator=(WifiScanner &&) = default;
 
     explicit WifiScanner():
-        proxy_(nullptr),
+        is_active_(false),
         remaining_tries_(0)
     {}
 
@@ -73,28 +69,30 @@ class WifiScanner
 
         std::lock_guard<std::mutex> lock(lock_);
 
-        if(proxy_ != nullptr)
+        if(is_active_)
         {
             free_ride(std::move(callback));
             return;
         }
 
-        proxy_ = dbus_new_connman_technology_proxy_for_object_path(object_path, nullptr, nullptr);
-
-        if(proxy_ == nullptr)
-        {
-            callback(Connman::SiteSurveyResult::DBUS_ERROR);
-            return;
-        }
-
-        if(enable_wifi_if_necessary(proxy_, is_powered))
-            remaining_tries_ = 10;
-        else
-            remaining_tries_ = 1;
-
         callbacks_.emplace_back(std::move(callback));
 
-        do_initiate_scan();
+        try
+        {
+            is_active_ = true;
+
+            if(enable_wifi_if_necessary(is_powered))
+                remaining_tries_ = 10;
+            else
+                remaining_tries_ = 1;
+
+            do_initiate_scan();
+        }
+        catch(...)
+        {
+            notify_and_finish(Connman::SiteSurveyResult::DBUS_ERROR);
+            return;
+        }
     }
 
   private:
@@ -113,6 +111,22 @@ class WifiScanner
             BUG("Too many WLAN site survey callbacks registered");
             callback(Connman::SiteSurveyResult::OUT_OF_MEMORY);
         }
+    }
+
+    /*!
+     * Ask Connman to start WLAN survey now.
+     *
+     * This function does not block. Upon completion, the function
+     * #WifiScanner::done_callback() is called.
+     */
+    void do_initiate_scan()
+    {
+        const auto &locked_reg(Connman::TechnologyRegistry::get_singleton_for_update());
+        auto &reg(locked_reg.first);
+        tdbusconnmanTechnology *const proxy = reg.wifi().get_dbus_proxy();
+
+        tdbus_connman_technology_call_scan(proxy, nullptr,
+                                           WifiScanner::done_callback, this);
     }
 
     /*!
@@ -146,20 +160,9 @@ class WifiScanner
         const bool success = (dbus_common_handle_dbus_error(&error, "WLAN survey done") == 0);
 
         if(success || --remaining_tries_ <= 0)
-        {
-            remaining_tries_ = 0;
-
-            for(const auto &fn : callbacks_)
-                fn(success ? Connman::SiteSurveyResult::OK : Connman::SiteSurveyResult::CONNMAN_ERROR);
-
-            callbacks_.clear();
-
-            if(proxy_ != nullptr)
-            {
-                g_object_unref(proxy_);
-                proxy_ = nullptr;
-            }
-        }
+            notify_and_finish(success
+                              ? Connman::SiteSurveyResult::OK
+                              : Connman::SiteSurveyResult::CONNMAN_ERROR);
         else
         {
             static constexpr guint retry_interval_ms = 100;
@@ -171,6 +174,16 @@ class WifiScanner
         }
     }
 
+    void notify_and_finish(Connman::SiteSurveyResult result)
+    {
+        for(const auto &fn : callbacks_)
+            fn(result);
+
+        remaining_tries_ = 0;
+        is_active_ = false;
+        callbacks_.clear();
+    }
+
     /*!
      * GLib callback for starting WLAN survey.
      *
@@ -180,110 +193,47 @@ class WifiScanner
     {
         auto *const scanner = static_cast<WifiScanner *>(user_data);
         std::lock_guard<std::mutex> lock(scanner->lock_);
-        scanner->do_initiate_scan();
-        return G_SOURCE_REMOVE;
-    }
 
-    /*!
-     * Ask Connman to start WLAN survey now.
-     *
-     * This function does not block. Upon completion, the function
-     * #WifiScanner::done_callback() is called.
-     */
-    void do_initiate_scan()
-    {
-        tdbus_connman_technology_call_scan(proxy_, nullptr,
-                                           WifiScanner::done_callback, this);
+        try
+        {
+            scanner->do_initiate_scan();
+        }
+        catch(...)
+        {
+            scanner->notify_and_finish(Connman::SiteSurveyResult::DBUS_ERROR);
+        }
+
+        return G_SOURCE_REMOVE;
     }
 };
 
-static GVariantWrapper find_technology_by_name(tdbusconnmanManager *iface,
-                                               const std::string &name,
-                                               GVariantDict *dict)
-{
-    if(iface == nullptr)
-        return GVariantWrapper();
-
-    GVariant *temp = nullptr;
-    GError *error = nullptr;
-    tdbus_connman_manager_call_get_technologies_sync(iface, &temp,
-                                                     nullptr, &error);
-    (void)dbus_common_handle_dbus_error(&error, "Find network technology");
-    GVariantWrapper technologies(temp);
-
-    if(technologies == nullptr)
-    {
-        msg_error(0, LOG_CRIT, "Failed getting technologies from Connman");
-        return GVariantWrapper();
-    }
-
-    const size_t count = g_variant_n_children(GVariantWrapper::get(technologies));
-
-    for(size_t i = 0; i < count; ++i)
-    {
-        GVariantWrapper tuple(g_variant_get_child_value(GVariantWrapper::get(technologies), i),
-                              GVariantWrapper::Transfer::JUST_MOVE);
-        log_assert(tuple != nullptr);
-
-        connman_common_init_dict_from_temp_gvariant(
-            g_variant_get_child_value(GVariantWrapper::get(tuple), 1), dict);
-
-        GVariantWrapper tech_type_variant(g_variant_dict_lookup_value(dict, "Type",
-                                                                      G_VARIANT_TYPE_STRING),
-                                          GVariantWrapper::Transfer::JUST_MOVE);
-        log_assert(tech_type_variant != nullptr);
-
-        const char *tech_type_string =
-            g_variant_get_string(GVariantWrapper::get(tech_type_variant), nullptr);
-
-        if(tech_type_string == name)
-            return tuple;
-
-        g_variant_dict_clear(dict);
-    }
-
-    return GVariantWrapper();
-}
-
-static bool check_if_powered(GVariantDict *dict)
-{
-    GVariantWrapper tech_powered_variant(g_variant_dict_lookup_value(dict, "Powered",
-                                                                     G_VARIANT_TYPE_BOOLEAN),
-                                         GVariantWrapper::Transfer::JUST_MOVE);
-
-    if(tech_powered_variant != nullptr)
-        return g_variant_get_boolean(GVariantWrapper::get(tech_powered_variant));
-    else
-    {
-        msg_error(0, LOG_ERR, "Failed to get power state for WLAN");
-        return false;
-    }
-}
-
 static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn &&site_survey_callback)
 {
-    tdbusconnmanManager *iface = dbus_get_connman_manager_iface();
+    const char *object_path = nullptr;
+    bool is_powered = false;
 
-    GVariantDict dict;
-    GVariantWrapper entry(find_technology_by_name(iface, "wifi", &dict));
-
-    if(entry == nullptr)
     {
-        msg_error(0, LOG_NOTICE, "No WLAN adapter connected");
+        const auto &locked_reg(Connman::TechnologyRegistry::get_singleton_for_update());
+        auto &reg(locked_reg.first);
 
-        if(site_survey_callback != nullptr)
-            site_survey_callback(Connman::SiteSurveyResult::NO_HARDWARE);
-
-        return false;
+        try
+        {
+            tdbusconnmanTechnology *proxy = reg.wifi().get_dbus_proxy();
+            object_path = g_dbus_proxy_get_object_path(G_DBUS_PROXY(proxy));
+            is_powered = reg.wifi().get<Connman::TechnologyPropertiesWIFI::Property::POWERED>();
+        }
+        catch(const Connman::TechnologyRegistryUnavailableError &e)
+        {
+            /* don't have anything WLAN for some reason: don't emit any error
+             * messages to avoid flooding the log */
+            return false;
+        }
+        catch(const Connman::TechnologyRegistryError &e)
+        {
+            msg_error(0, LOG_ERR, "Failed to get WLAN properties: %s", e.what());
+            return false;
+        }
     }
-
-    const bool is_powered = check_if_powered(&dict);
-
-    GVariantWrapper tech_path_variant(g_variant_get_child_value(GVariantWrapper::get(entry), 0),
-                                      GVariantWrapper::Transfer::JUST_MOVE);
-    log_assert(tech_path_variant != nullptr);
-
-    const char *object_path = g_variant_get_string(GVariantWrapper::get(tech_path_variant), nullptr);
 
     if(site_survey_callback != nullptr)
     {
@@ -294,17 +244,8 @@ static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn &&site_survey
     else
     {
         /* power on requested */
-        tdbusconnmanTechnology *const proxy =
-            dbus_new_connman_technology_proxy_for_object_path(object_path, nullptr, nullptr);
-
-        if(proxy != nullptr)
-        {
-            (void)enable_wifi_if_necessary(proxy, is_powered);
-            g_object_unref(proxy);
-        }
+        enable_wifi_if_necessary(is_powered);
     }
-
-    g_variant_dict_clear(&dict);
 
     return true;
 }
