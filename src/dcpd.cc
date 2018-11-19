@@ -41,6 +41,7 @@
 #include "dcpregs_playstream.hh"
 #include "dcpregs_upnpname.hh"
 #include "connman_scan.hh"
+#include "connman_technology_registry.hh"
 #include "networkprefs.h"
 #include "configproxy.h"
 #include "configuration_dcpd.hh"
@@ -1464,6 +1465,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    Connman::TechnologyRegistry::late_init();
     Regs::PlayStream::late_init();
 
     static struct sigaction action;
