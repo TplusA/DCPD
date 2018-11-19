@@ -96,34 +96,157 @@ class ConfigRequestEditState
  * pointless file writes and trigger many failing reconfiguration attempts on
  * behalf of Connman.
  */
-struct NetworkConfigWriteData
+class NetworkConfigWriteData
 {
-    std::mutex commit_configuration_lock;
+  private:
+    std::mutex commit_configuration_lock_;
 
-    ConfigRequestEditState edit_state;
-    Network::ConfigRequest config_request;
+    ConfigRequestEditState edit_state_;
+    Network::ConfigRequest config_request_;
 
     /* handling the warts of the amateurish DC protocol... */
-    Maybe<std::string> ipv4_dns_server1;
-    Maybe<std::string> ipv4_dns_server2;
+    Maybe<std::string> ipv4_dns_server1_;
+    Maybe<std::string> ipv4_dns_server2_;
+
+  public:
+    void init()
+    {
+        edit_state_.cancel();
+        config_request_.reset();
+        ipv4_dns_server1_.set_unknown();
+        ipv4_dns_server2_.set_unknown();
+    }
+
+    std::unique_lock<std::mutex> lock()
+    {
+        return std::unique_lock<std::mutex>(commit_configuration_lock_);
+    }
+
+    bool may_change_config() const
+    {
+        if(edit_state_.is_in_edit_mode())
+            return true;
+
+        msg_error(0, LOG_ERR,
+                  "Network configuration may not be changed without prior "
+                  "request for changing the configuration");
+
+        return false;
+    }
 
     bool have_requests() const
     {
-        return ipv4_dns_server1.is_known() || ipv4_dns_server2.is_known();
+        return ipv4_dns_server1_.is_known() || ipv4_dns_server2_.is_known() ||
+               !config_request_.empty();
+    }
+
+    bool enter_edit_mode(Connman::Technology tech)
+    {
+        edit_state_.enter_edit_mode(tech);
+        config_request_.reset();
+
+        switch(edit_state_.get_selected_technology())
+        {
+          case Connman::Technology::UNKNOWN_TECHNOLOGY:
+            msg_error(0, LOG_ERR, "No active network technology, cannot modify configuration");
+            break;
+
+          case Connman::Technology::ETHERNET:
+          case Connman::Technology::WLAN:
+            msg_vinfo(MESSAGE_LEVEL_DEBUG, "Modify %s configuration",
+                      edit_state_.get_selected_technology() == Connman::Technology::ETHERNET
+                      ? "Ethernet"
+                      : "WLAN");
+            config_request_.when_ = Network::ConfigRequest::ApplyWhen::NOW;
+            return true;
+        }
+
+        return false;
+    }
+
+    Connman::Technology cancel_edit_mode()
+    {
+        const auto tech(edit_state_.get_selected_technology());
+        edit_state_.cancel();
+        return tech;
+    }
+
+    const ConfigRequestEditState &get_edit_state() const { return edit_state_; }
+    const Network::ConfigRequest &get_configuration_request() const { return config_request_; }
+    Network::ConfigRequest &get_configuration_request_rw() { return config_request_; }
+    bool is_primary_dns_server_known() const { return ipv4_dns_server1_.is_known(); }
+    bool is_secondary_dns_server_known() const { return ipv4_dns_server2_.is_known(); }
+    const Maybe<std::string> &get_primary_dns_server() const { return ipv4_dns_server1_; }
+    const Maybe<std::string> &get_secondary_dns_server() const { return ipv4_dns_server2_; }
+    Maybe<std::string> &get_primary_dns_server_rw() { return ipv4_dns_server1_; }
+    Maybe<std::string> &get_secondary_dns_server_rw() { return ipv4_dns_server2_; }
+
+    void switch_technology(Connman::Technology tech) { edit_state_.switch_technology(tech); }
+
+    /*!
+     * Move secondary DNS to primary slot.
+     */
+    void shift_dns_servers()
+    {
+        ipv4_dns_server1_ = std::move(ipv4_dns_server2_);
+        ipv4_dns_server2_.set_unknown();
+    }
+
+    /*!
+     * Move secondary DNS to primary slot in case the primary slot is empty.
+     */
+    void shift_dns_servers_if_necessary()
+    {
+        if(!ipv4_dns_server1_.is_known() || ipv4_dns_server1_.get().empty())
+            shift_dns_servers();
+    }
+
+    void set_primary_dns_server(const std::string *value)
+    {
+        set_dns(ipv4_dns_server1_, value);
+    }
+
+    void set_secondary_dns_server(const std::string *value)
+    {
+        set_dns(ipv4_dns_server2_, value);
+    }
+
+    void copy_defined_dns_servers(std::vector<std::string> &dest)
+    {
+        dest.clear();
+
+        if(ipv4_dns_server1_.is_known())
+            dest.push_back(ipv4_dns_server1_.get());
+
+        if(ipv4_dns_server2_.is_known())
+            dest.push_back(ipv4_dns_server2_.get());
+    }
+
+  private:
+    static void set_dns(Maybe<std::string> &dest, const std::string *value)
+    {
+        if(value != nullptr)
+            dest = *value;
+        else
+            dest.set_unknown();
     }
 };
 
 /*!
  * Network status register data and other stuff.
  */
-struct NetworkStatusData
+class NetworkStatusData
 {
-    struct ShutdownGuard *shutdown_guard;
+  public:
+    static constexpr size_t RESPONSE_SIZE = 3;
+
+  private:
+    struct ShutdownGuard *shutdown_guard_;
 
     /*!
      * Appliance-specific networking technology to use as fallback.
      */
-    Connman::Technology fallback_technology;
+    Connman::Technology fallback_technology_;
 
     /*!
      * The status last communicated to the slave device.
@@ -131,7 +254,50 @@ struct NetworkStatusData
      * Status changes are only sent to the slave if the information represented
      * by the status register actually changed.
      */
-    std::array<uint8_t, 3> previous_response;
+    std::array<uint8_t, RESPONSE_SIZE> previous_status_bytes_;
+
+  public:
+    NetworkStatusData():
+        shutdown_guard_(shutdown_guard_alloc("networkconfig")),
+        fallback_technology_(Connman::Technology::UNKNOWN_TECHNOLOGY),
+        previous_status_bytes_{UINT8_MAX, UINT8_MAX, UINT8_MAX}
+    {}
+
+    ~NetworkStatusData()
+    {
+        shutdown_guard_free(&shutdown_guard_);
+    }
+
+    struct ShutdownGuard &shutdown_guard() { return *shutdown_guard_; }
+
+    Connman::Technology fixup_active_technology(Connman::Technology tech) const
+    {
+        if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY)
+        {
+            msg_info("Could not determine active network technology, "
+                     "trying fallback");
+            return fallback_technology_;
+        }
+        else
+            return tech;
+    }
+
+    void set_fallback_technology(Connman::Technology tech)
+    {
+        fallback_technology_ = tech;
+    }
+
+    void store_network_status(const uint8_t *status_bytes, size_t length)
+    {
+        log_assert(length >= RESPONSE_SIZE);
+        std::copy(status_bytes, status_bytes + RESPONSE_SIZE,
+                  previous_status_bytes_.begin());
+    }
+
+    bool is_network_status_different(const std::array<uint8_t, NetworkStatusData::RESPONSE_SIZE> &status) const
+    {
+        return status != previous_status_bytes_;
+    }
 };
 
 static NetworkPrefsTechnology map_network_technology(const Connman::Technology tech)
@@ -485,24 +651,6 @@ static int fill_in_missing_ipv4_config_requests(const Network::ConfigRequest &re
 }
 
 /*!
- * Move secondary DNS to primary slot.
- */
-static void shift_dns_servers(NetworkConfigWriteData &wd)
-{
-    wd.ipv4_dns_server1 = std::move(wd.ipv4_dns_server2);
-    wd.ipv4_dns_server2.set_unknown();
-}
-
-/*!
- * Move secondary DNS to primary slot in case the primary slot is empty.
- */
-static void shift_dns_servers_if_necessary(NetworkConfigWriteData &wd)
-{
-    if(!wd.ipv4_dns_server1.is_known() || wd.ipv4_dns_server1.get().empty())
-        shift_dns_servers(wd);
-}
-
-/*!
  * Merge existing DNS server list with newly set servers.
  *
  * Because of the poor DCP design, this function is much more complicated than
@@ -521,11 +669,11 @@ static void shift_dns_servers_if_necessary(NetworkConfigWriteData &wd)
 static void fill_in_missing_dns_server_config_requests(NetworkConfigWriteData &wd,
                                                        const Connman::ServiceBase &service)
 {
-    log_assert(wd.ipv4_dns_server1.is_known() || wd.ipv4_dns_server2.is_known());
+    log_assert(wd.is_primary_dns_server_known() || wd.is_secondary_dns_server_known());
 
-    if(wd.ipv4_dns_server1.is_known() && wd.ipv4_dns_server2.is_known())
+    if(wd.is_primary_dns_server_known() && wd.is_secondary_dns_server_known())
     {
-        shift_dns_servers_if_necessary(wd);
+        wd.shift_dns_servers_if_necessary();
         return;
     }
 
@@ -543,29 +691,25 @@ static void fill_in_missing_dns_server_config_requests(NetworkConfigWriteData &w
          * was sent. If the sent DNS was meant to be the secondary one, we
          * silently make it the new primary one.
          */
-        if(wd.ipv4_dns_server2.is_known())
-            shift_dns_servers(wd);
+        if(wd.is_secondary_dns_server_known())
+            wd.shift_dns_servers();
     }
     else
     {
         const auto &dns_servers(service.get_service_data().active_.dns_servers_.get());
 
-        if(wd.ipv4_dns_server1.is_known())
+        if(wd.is_primary_dns_server_known())
         {
             /* have new primary server, now copy over the previously defined,
              * secondary one (if any) */
-            if(dns_servers.size() > 1)
-                wd.ipv4_dns_server2 = dns_servers[1];
-            else
-                wd.ipv4_dns_server2.set_unknown();
-
-            shift_dns_servers_if_necessary(wd);
+            wd.set_secondary_dns_server(dns_servers.size() > 1 ? &dns_servers[1] : nullptr);
+            wd.shift_dns_servers_if_necessary();
         }
         else
         {
             /* have new secondary server, now copy over the previously defined,
              * primary one */
-            wd.ipv4_dns_server1 = dns_servers[0];
+            wd.set_primary_dns_server(&dns_servers[0]);
         }
     }
 }
@@ -959,21 +1103,13 @@ static void move_dns_servers_to_config_request(NetworkConfigWriteData &wd,
                                                Network::ConfigRequest &req,
                                                const Connman::ServiceBase &service)
 {
-    if(!wd.ipv4_dns_server1.is_known() && !wd.ipv4_dns_server2.is_known())
+    if(!wd.is_primary_dns_server_known() && !wd.is_secondary_dns_server_known())
         return;
 
     fill_in_missing_dns_server_config_requests(wd, service);
 
     req.dns_servers_.set_known();
-    auto &servers(req.dns_servers_.get_rw());
-
-    servers.clear();
-
-    if(wd.ipv4_dns_server1.is_known())
-        servers.push_back(wd.ipv4_dns_server1.get());
-
-    if(wd.ipv4_dns_server2.is_known())
-        servers.push_back(wd.ipv4_dns_server2.get());
+    wd.copy_defined_dns_servers(req.dns_servers_.get_rw());
 }
 
 static bool apply_changes_to_prefs(Network::ConfigRequest &req,
@@ -1072,18 +1208,6 @@ modify_network_configuration(
     network_prefs_close(cfg);
 
     return wps_mode;
-}
-
-static bool may_change_config(const ConfigRequestEditState &edit)
-{
-    if(edit.is_in_edit_mode())
-        return true;
-
-    msg_error(0, LOG_ERR,
-              "Network configuration may not be changed without prior "
-              "request for changing the configuration");
-
-    return false;
 }
 
 static bool data_length_is_unexpected(size_t length, size_t expected)
@@ -1228,16 +1352,15 @@ static bool should_auto_switch_to_wlan(Connman::Technology active_tech,
 }
 
 static bool process_config_request_from_spi_slave(
-        ConfigRequestEditState &edit, Network::ConfigRequest &config_request,
-        ShutdownGuard &shutdown_guard,
+        NetworkConfigWriteData &cfg_wd, ShutdownGuard &shutdown_guard,
         const std::function<void(Network::ConfigRequest &, const Connman::ServiceBase &)> &patch_request)
 {
-    if(should_auto_switch_to_wlan(edit.get_selected_technology(),
-                                  config_request.wlan_security_mode_.is_known()
+    if(should_auto_switch_to_wlan(cfg_wd.get_edit_state().get_selected_technology(),
+                                  cfg_wd.get_configuration_request().wlan_security_mode_.is_known()
                                   ? Connman::Technology::WLAN
                                   : Connman::Technology::UNKNOWN_TECHNOLOGY,
-                                  config_request))
-        edit.switch_technology(Connman::Technology::WLAN);
+                                  cfg_wd.get_configuration_request()))
+        cfg_wd.switch_technology(Connman::Technology::WLAN);
 
     {
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
@@ -1245,7 +1368,7 @@ static bool process_config_request_from_spi_slave(
 
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "Writing new network configuration for MAC address %s",
-              devices.get_auto_select_mac_address(edit.get_selected_technology()).get_string().c_str());
+              devices.get_auto_select_mac_address(cfg_wd.get_edit_state().get_selected_technology()).get_string().c_str());
     }
 
     shutdown_guard_lock(&shutdown_guard);
@@ -1253,7 +1376,9 @@ static bool process_config_request_from_spi_slave(
     std::unique_ptr<std::string> wps_network_name;
     std::unique_ptr<std::string> wps_network_ssid;
     const Network::WPSMode wps_mode = modify_network_configuration(
-            edit, config_request, shutdown_guard, patch_request,
+            cfg_wd.get_edit_state(),
+            cfg_wd.get_configuration_request_rw(),
+            shutdown_guard, patch_request,
             current_wlan_service_name, wps_network_name, wps_network_ssid);
     shutdown_guard_unlock(&shutdown_guard);
 
@@ -1262,9 +1387,7 @@ static bool process_config_request_from_spi_slave(
                (wps_mode != Network::WPSMode::DIRECT &&
                 (wps_network_name == nullptr && wps_network_ssid == nullptr)));
 
-    const auto tech(edit.get_selected_technology());
-
-    edit.cancel();
+    const Connman::Technology tech(cfg_wd.cancel_edit_mode());
 
     switch(wps_mode)
     {
@@ -1527,25 +1650,20 @@ static bool process_external_config_request(
 }
 
 static NetworkConfigWriteData nwconfig_write_data;
-static NetworkStatusData nwstatus_data;
+static std::unique_ptr<NetworkStatusData> nwstatus_data;
 
 void Regs::NetworkConfig::init()
 {
-    nwconfig_write_data.edit_state.cancel();
-    nwconfig_write_data.config_request.reset();
-    nwconfig_write_data.ipv4_dns_server1.set_unknown();
-    nwconfig_write_data.ipv4_dns_server2.set_unknown();
+    if(nwstatus_data != nullptr)
+        return;
 
-    nwstatus_data.shutdown_guard = shutdown_guard_alloc("networkconfig");
-    nwstatus_data.fallback_technology = Connman::Technology::UNKNOWN_TECHNOLOGY;
-    nwstatus_data.previous_response[0] = UINT8_MAX;
-    nwstatus_data.previous_response[1] = UINT8_MAX;
-    nwstatus_data.previous_response[2] = UINT8_MAX;
+    nwconfig_write_data.init();
+    nwstatus_data.reset(new NetworkStatusData());
 }
 
 void Regs::NetworkConfig::deinit()
 {
-    shutdown_guard_free(&nwstatus_data.shutdown_guard);
+    nwstatus_data = nullptr;
 }
 
 bool Regs::NetworkConfig::request_configuration_for_mac(
@@ -1559,10 +1677,9 @@ bool Regs::NetworkConfig::request_configuration_for_mac(
         return true;
     }
 
-    std::lock_guard<std::mutex> lock(nwconfig_write_data.commit_configuration_lock);
-
+    const auto lock(nwconfig_write_data.lock());
     return process_external_config_request(config_request, mac, tech,
-                                           *nwstatus_data.shutdown_guard);
+                                           nwstatus_data->shutdown_guard());
 }
 
 int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, size_t length)
@@ -1575,28 +1692,24 @@ int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, si
     if(data[0] != 0)
         return -1;
 
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    if(!nwconfig_write_data.have_requests() &&
-       nwconfig_write_data.config_request.empty())
+    if(!nwconfig_write_data.have_requests())
     {
         /* nothing to do */
-        nwconfig_write_data.edit_state.cancel();
+        nwconfig_write_data.cancel_edit_mode();
         return 0;
     }
 
-    if(!nwconfig_write_data.config_request.when_.is_known())
+    if(!nwconfig_write_data.get_configuration_request().when_.is_known())
         BUG("Network configuration request application time point unknown");
-    else if(nwconfig_write_data.config_request.when_ != Network::ConfigRequest::ApplyWhen::NOW)
+    else if(nwconfig_write_data.get_configuration_request().when_ != Network::ConfigRequest::ApplyWhen::NOW)
         BUG("Unexpected network configuration request application time point");
 
-    std::lock_guard<std::mutex> lock(nwconfig_write_data.commit_configuration_lock);
-
-    return process_config_request_from_spi_slave(
-                nwconfig_write_data.edit_state,
-                nwconfig_write_data.config_request,
-                *nwstatus_data.shutdown_guard,
+    const auto lock(nwconfig_write_data.lock());
+    return process_config_request_from_spi_slave(nwconfig_write_data,
+                nwstatus_data->shutdown_guard(),
                 [] (Network::ConfigRequest &req, const Connman::ServiceBase &service)
                 {
                     move_dns_servers_to_config_request(nwconfig_write_data, req, service);
@@ -1615,39 +1728,13 @@ int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, 
 
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
+    const auto tech =
+        nwstatus_data->fixup_active_technology(determine_active_network_technology(services, false));
 
-    auto tech = determine_active_network_technology(services, false);
-
-    if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY)
-    {
-        msg_info("Could not determine active network technology, "
-                 "trying fallback");
-        tech = nwstatus_data.fallback_technology;
-    }
-
-    nwconfig_write_data.edit_state.enter_edit_mode(tech);
-    nwconfig_write_data.config_request.reset();
-
-    switch(nwconfig_write_data.edit_state.get_selected_technology())
-    {
-      case Connman::Technology::UNKNOWN_TECHNOLOGY:
-        msg_error(0, LOG_ERR, "No active network technology, cannot modify configuration");
-        break;
-
-      case Connman::Technology::ETHERNET:
-      case Connman::Technology::WLAN:
-        msg_vinfo(MESSAGE_LEVEL_DEBUG, "Modify %s configuration",
-                  nwconfig_write_data.edit_state.get_selected_technology() == Connman::Technology::ETHERNET
-                  ? "Ethernet"
-                  : "WLAN");
-        nwconfig_write_data.config_request.when_ = Network::ConfigRequest::ApplyWhen::NOW;
-        return 0;
-    }
-
-    return -1;
+    return nwconfig_write_data.enter_edit_mode(tech) ? 0 : -1;
 }
 
-static void fill_network_status_register_response(std::array<uint8_t, 3> &response)
+static void fill_network_status_register_response(uint8_t *response)
 {
     response[0] = NETWORK_STATUS_IPV4_NOT_CONFIGURED;
     response[1] = NETWORK_STATUS_DEVICE_NONE;
@@ -1708,13 +1795,11 @@ ssize_t Regs::NetworkConfig::DCP::read_50_network_status(uint8_t *response, size
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 50 handler %p %zu", response, length);
 
-    if(data_length_is_unexpected(length, nwstatus_data.previous_response.size()))
+    if(data_length_is_unexpected(length, NetworkStatusData::RESPONSE_SIZE))
         return -1;
 
-    fill_network_status_register_response(nwstatus_data.previous_response);
-    std::copy(nwstatus_data.previous_response.begin(),
-              nwstatus_data.previous_response.end(),
-              response);
+    fill_network_status_register_response(response);
+    nwstatus_data->store_network_status(response, length);
 
     return length;
 }
@@ -1765,11 +1850,11 @@ ssize_t Regs::NetworkConfig::DCP::read_55_dhcp_enabled(uint8_t *response, size_t
     if(data_length_is_unexpected(length, 1))
         return -1;
 
-    if(nwconfig_write_data.edit_state.is_in_edit_mode() &&
-       nwconfig_write_data.config_request.dhcpv4_mode_.is_known())
-        response[0] = nwconfig_write_data.config_request.is_dhcpv4_mode();
+    if(nwconfig_write_data.get_edit_state().is_in_edit_mode() &&
+       nwconfig_write_data.get_configuration_request().dhcpv4_mode_.is_known())
+        response[0] = nwconfig_write_data.get_configuration_request().is_dhcpv4_mode();
     else
-        response[0] = query_dhcp_mode(nwconfig_write_data.edit_state);
+        response[0] = query_dhcp_mode(nwconfig_write_data.get_edit_state());
 
     return length;
 }
@@ -1781,7 +1866,7 @@ int Regs::NetworkConfig::DCP::write_55_dhcp_enabled(const uint8_t *data, size_t 
     if(data_length_is_unexpected(length, 1))
         return -1;
 
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
     if(data[0] > 1)
@@ -1794,16 +1879,18 @@ int Regs::NetworkConfig::DCP::write_55_dhcp_enabled(const uint8_t *data, size_t 
 
     msg_info("%sable DHCP", data[0] == 0 ? "Dis" : "En");
 
+    auto &config_request(nwconfig_write_data.get_configuration_request_rw());
+
     if(data[0] == 0)
-        nwconfig_write_data.config_request.dhcpv4_mode_ = "off";
+        config_request.dhcpv4_mode_ = "off";
     else
     {
-        nwconfig_write_data.config_request.dhcpv4_mode_ = "dhcp";
-        nwconfig_write_data.config_request.ipv4_address_ = "";
-        nwconfig_write_data.config_request.ipv4_netmask_ = "";
-        nwconfig_write_data.config_request.ipv4_gateway_ = "";
-        nwconfig_write_data.config_request.dns_servers_.set_known();
-        nwconfig_write_data.config_request.dns_servers_.get_rw().clear();
+        config_request.dhcpv4_mode_ = "dhcp";
+        config_request.ipv4_address_ = "";
+        config_request.ipv4_netmask_ = "";
+        config_request.ipv4_gateway_ = "";
+        config_request.dns_servers_.set_known();
+        config_request.dns_servers_.get_rw().clear();
     }
 
     return 0;
@@ -1880,8 +1967,8 @@ ssize_t Regs::NetworkConfig::DCP::read_56_ipv4_address(uint8_t *response, size_t
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 56 handler %p %zu", response, length);
 
-    return read_out_parameter(nwconfig_write_data.edit_state,
-                nwconfig_write_data.config_request.ipv4_address_, true,
+    return read_out_parameter(nwconfig_write_data.get_edit_state(),
+                nwconfig_write_data.get_configuration_request().ipv4_address_, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     if(s.get_service_data().active_.ipsettings_v4_.is_known())
@@ -1898,8 +1985,8 @@ ssize_t Regs::NetworkConfig::DCP::read_57_ipv4_netmask(uint8_t *response, size_t
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 57 handler %p %zu", response, length);
 
-    return read_out_parameter(nwconfig_write_data.edit_state,
-                nwconfig_write_data.config_request.ipv4_netmask_, true,
+    return read_out_parameter(nwconfig_write_data.get_edit_state(),
+                nwconfig_write_data.get_configuration_request().ipv4_netmask_, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     if(s.get_service_data().active_.ipsettings_v4_.is_known())
@@ -1916,8 +2003,8 @@ ssize_t Regs::NetworkConfig::DCP::read_58_ipv4_gateway(uint8_t *response, size_t
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 58 handler %p %zu", response, length);
 
-    return read_out_parameter(nwconfig_write_data.edit_state,
-                nwconfig_write_data.config_request.ipv4_gateway_, true,
+    return read_out_parameter(nwconfig_write_data.get_edit_state(),
+                nwconfig_write_data.get_configuration_request().ipv4_gateway_, true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     if(s.get_service_data().active_.ipsettings_v4_.is_known())
@@ -1934,8 +2021,8 @@ ssize_t Regs::NetworkConfig::DCP::read_62_primary_dns(uint8_t *response, size_t 
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 62 handler %p %zu", response, length);
 
-    return read_out_parameter(nwconfig_write_data.edit_state,
-                nwconfig_write_data.ipv4_dns_server1, true,
+    return read_out_parameter(nwconfig_write_data.get_edit_state(),
+                nwconfig_write_data.get_primary_dns_server(), true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     if(!s.get_service_data().active_.dns_servers_.is_known())
@@ -1956,8 +2043,8 @@ ssize_t Regs::NetworkConfig::DCP::read_63_secondary_dns(uint8_t *response, size_
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 63 handler %p %zu", response, length);
 
-    return read_out_parameter(nwconfig_write_data.edit_state,
-                nwconfig_write_data.ipv4_dns_server2, true,
+    return read_out_parameter(nwconfig_write_data.get_edit_state(),
+                nwconfig_write_data.get_secondary_dns_server(), true,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     if(!s.get_service_data().active_.dns_servers_.is_known())
@@ -2017,46 +2104,46 @@ static int copy_ipv4_address(Maybe<std::string> &dest,
 
 int Regs::NetworkConfig::DCP::write_56_ipv4_address(const uint8_t *data, size_t length)
 {
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    return copy_ipv4_address(nwconfig_write_data.config_request.ipv4_address_,
+    return copy_ipv4_address(nwconfig_write_data.get_configuration_request_rw().ipv4_address_,
                              data, length, false);
 }
 
 int Regs::NetworkConfig::DCP::write_57_ipv4_netmask(const uint8_t *data, size_t length)
 {
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    return copy_ipv4_address(nwconfig_write_data.config_request.ipv4_netmask_,
+    return copy_ipv4_address(nwconfig_write_data.get_configuration_request_rw().ipv4_netmask_,
                              data, length, false);
 }
 
 int Regs::NetworkConfig::DCP::write_58_ipv4_gateway(const uint8_t *data, size_t length)
 {
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    return copy_ipv4_address(nwconfig_write_data.config_request.ipv4_gateway_,
+    return copy_ipv4_address(nwconfig_write_data.get_configuration_request_rw().ipv4_gateway_,
                              data, length, false);
 }
 
 int Regs::NetworkConfig::DCP::write_62_primary_dns(const uint8_t *data, size_t length)
 {
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    return copy_ipv4_address(nwconfig_write_data.ipv4_dns_server1,
+    return copy_ipv4_address(nwconfig_write_data.get_primary_dns_server_rw(),
                              data, length, true);
 }
 
 int Regs::NetworkConfig::DCP::write_63_secondary_dns(const uint8_t *data, size_t length)
 {
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    return copy_ipv4_address(nwconfig_write_data.ipv4_dns_server2,
+    return copy_ipv4_address(nwconfig_write_data.get_secondary_dns_server_rw(),
                              data, length, true);
 }
 
@@ -2078,8 +2165,8 @@ get_wlan_tech_data(const Connman::ServiceBase &s)
 
 ssize_t Regs::NetworkConfig::DCP::read_92_wlan_security(uint8_t *response, size_t length)
 {
-    return read_out_parameter(nwconfig_write_data.edit_state,
-                nwconfig_write_data.config_request.wlan_security_mode_, false,
+    return read_out_parameter(nwconfig_write_data.get_edit_state(),
+                nwconfig_write_data.get_configuration_request().wlan_security_mode_, false,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     const auto *const d(get_wlan_tech_data(s));
@@ -2095,10 +2182,10 @@ ssize_t Regs::NetworkConfig::DCP::read_92_wlan_security(uint8_t *response, size_
 
 int Regs::NetworkConfig::DCP::write_92_wlan_security(const uint8_t *data, size_t length)
 {
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    auto &s(nwconfig_write_data.config_request.wlan_security_mode_);
+    auto &s(nwconfig_write_data.get_configuration_request_rw().wlan_security_mode_);
 
     s.set_known();
     s.get_rw().clear();
@@ -2144,8 +2231,8 @@ int Regs::NetworkConfig::DCP::write_93_ibss(const uint8_t *data, size_t length)
 ssize_t Regs::NetworkConfig::DCP::read_94_ssid(uint8_t *response, size_t length)
 {
     ssize_t result =
-        read_out_parameter(nwconfig_write_data.edit_state,
-                nwconfig_write_data.config_request.wlan_ssid_ascii_, false,
+        read_out_parameter(nwconfig_write_data.get_edit_state(),
+                nwconfig_write_data.get_configuration_request().wlan_ssid_ascii_, false,
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     const auto *const d(get_wlan_tech_data(s));
@@ -2162,12 +2249,12 @@ ssize_t Regs::NetworkConfig::DCP::read_94_ssid(uint8_t *response, size_t length)
         return result;
 
     if(result >= 0 &&
-       nwconfig_write_data.edit_state.is_in_edit_mode() &&
-       nwconfig_write_data.config_request.wlan_ssid_ascii_.is_known())
+       nwconfig_write_data.get_edit_state().is_in_edit_mode() &&
+       nwconfig_write_data.get_configuration_request().wlan_ssid_ascii_.is_known())
         return result;
 
     /* binary SSID */
-    result = read_out_parameter(nwconfig_write_data.edit_state,
+    result = read_out_parameter(nwconfig_write_data.get_edit_state(),
                 [] (const Connman::ServiceBase &s, char *out, size_t len) -> ssize_t
                 {
                     const auto *const d(get_wlan_tech_data(s));
@@ -2191,10 +2278,10 @@ int Regs::NetworkConfig::DCP::write_94_ssid(const uint8_t *data, size_t length)
         return -1;
     }
 
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
 
-    auto &s(nwconfig_write_data.config_request.wlan_ssid_ascii_);
+    auto &s(nwconfig_write_data.get_configuration_request_rw().wlan_ssid_ascii_);
 
     s.set_known();
     s.get_rw().clear();
@@ -2236,15 +2323,15 @@ int Regs::NetworkConfig::DCP::write_101_wpa_cipher(const uint8_t *data, size_t l
 
 ssize_t Regs::NetworkConfig::DCP::read_102_passphrase(uint8_t *response, size_t length)
 {
-    if(!nwconfig_write_data.edit_state.is_in_edit_mode())
+    if(!nwconfig_write_data.get_edit_state().is_in_edit_mode())
     {
         msg_error(0, LOG_NOTICE,
                   "Passphrase cannot be read out while in non-edit mode");
         return -1;
     }
 
-    auto &sa(nwconfig_write_data.config_request.wlan_wpa_passphrase_ascii_);
-    auto &sh(nwconfig_write_data.config_request.wlan_wpa_passphrase_hex_);
+    auto &sa(nwconfig_write_data.get_configuration_request().wlan_wpa_passphrase_ascii_);
+    auto &sh(nwconfig_write_data.get_configuration_request().wlan_wpa_passphrase_hex_);
     auto &s(sa.is_known() ? sa : sh);
 
     if(!s.is_known())
@@ -2269,13 +2356,15 @@ ssize_t Regs::NetworkConfig::DCP::read_102_passphrase(uint8_t *response, size_t 
 
 int Regs::NetworkConfig::DCP::write_102_passphrase(const uint8_t *data, size_t length)
 {
-    if(!may_change_config(nwconfig_write_data.edit_state))
+    if(!nwconfig_write_data.may_change_config())
         return -1;
+
+    auto &config_request(nwconfig_write_data.get_configuration_request_rw());
 
     if(length == 0)
     {
-        nwconfig_write_data.config_request.wlan_wpa_passphrase_ascii_ = "";
-        nwconfig_write_data.config_request.wlan_wpa_passphrase_hex_.set_unknown();
+        config_request.wlan_wpa_passphrase_ascii_ = "";
+        config_request.wlan_wpa_passphrase_hex_.set_unknown();
         return 0;
     }
 
@@ -2308,13 +2397,13 @@ int Regs::NetworkConfig::DCP::write_102_passphrase(const uint8_t *data, size_t l
 
     if(length == 64 && passphrase_is_hex)
     {
-        nwconfig_write_data.config_request.wlan_wpa_passphrase_hex_ = pass;
-        nwconfig_write_data.config_request.wlan_wpa_passphrase_ascii_.set_unknown();
+        config_request.wlan_wpa_passphrase_hex_ = pass;
+        config_request.wlan_wpa_passphrase_ascii_.set_unknown();
     }
     else
     {
-        nwconfig_write_data.config_request.wlan_wpa_passphrase_hex_.set_unknown();
-        nwconfig_write_data.config_request.wlan_wpa_passphrase_ascii_ = pass;
+        config_request.wlan_wpa_passphrase_hex_.set_unknown();
+        config_request.wlan_wpa_passphrase_ascii_ = pass;
     }
 
     return 0;
@@ -2322,21 +2411,21 @@ int Regs::NetworkConfig::DCP::write_102_passphrase(const uint8_t *data, size_t l
 
 void Regs::NetworkConfig::interfaces_changed()
 {
-    std::array<uint8_t, nwstatus_data.previous_response.size()> response;
+    std::array<uint8_t, NetworkStatusData::RESPONSE_SIZE> response;
 
     Connman::wlan_power_on();
-    fill_network_status_register_response(response);
+    fill_network_status_register_response(response.data());
 
-    if(nwstatus_data.previous_response != response)
+    if(nwstatus_data->is_network_status_different(response))
         Regs::get_data().register_changed_notification_fn(50);
 }
 
 void Regs::NetworkConfig::prepare_for_shutdown()
 {
-    (void)shutdown_guard_down(nwstatus_data.shutdown_guard);
+    (void)shutdown_guard_down(&nwstatus_data->shutdown_guard());
 }
 
 void Regs::NetworkConfig::set_primary_technology(Connman::Technology tech)
 {
-    nwstatus_data.fallback_technology = tech;
+    nwstatus_data->set_fallback_technology(tech);
 }
