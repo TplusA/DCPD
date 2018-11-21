@@ -43,6 +43,8 @@ enum class ApplianceID
     MP2500R,
     MP3100HV,
     MP8,
+    SD3100HV,
+    SDV3100HV,
     CALA_CDR,
     CALA_SR,
     CALA_BERBEL,
@@ -99,6 +101,8 @@ static void setup_primary_network_devices_for_appliance(ApplianceID appliance,
       case ApplianceID::MP2000R:
       case ApplianceID::MP2500R:
       case ApplianceID::MP3100HV:
+      case ApplianceID::SD3100HV:
+      case ApplianceID::SDV3100HV:
       case ApplianceID::CALA_CDR:
       case ApplianceID::CALA_SR:
       case ApplianceID::FALLBACK:
@@ -159,6 +163,8 @@ static ApplianceID map_appliance_id(const char *name)
         std::move(std::make_pair("MP2500R",    ApplianceID::MP2500R)),
         std::move(std::make_pair("MP3100HV",   ApplianceID::MP3100HV)),
         std::move(std::make_pair("MP8",        ApplianceID::MP8)),
+        std::move(std::make_pair("SD3100HV",   ApplianceID::SD3100HV)),
+        std::move(std::make_pair("SDV3100HV",  ApplianceID::SDV3100HV)),
         std::move(std::make_pair("CalaCDR",    ApplianceID::CALA_CDR)),
         std::move(std::make_pair("CalaSR",     ApplianceID::CALA_SR)),
         std::move(std::make_pair("CalaBerbel", ApplianceID::CALA_BERBEL)),
