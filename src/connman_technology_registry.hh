@@ -337,7 +337,7 @@ class TechnologyRegistry
         return std::unique_lock<std::recursive_mutex>(lock_);
     }
 
-    void connect_to_connman();
+    void connect_to_connman(const void *data = nullptr);
 
     const TechnologyPropertiesWIFI &wifi() const
     {

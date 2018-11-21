@@ -27,7 +27,7 @@ dcpd_SOURCES = \
     smartphone_app_send.cc smartphone_app_send.hh smartphone_app.hh \
     actor_id.h \
     applink.hh applink_variables.hh \
-    network.h network_status_bits.h \
+    network.h network_status_bits.h accesspoint.hh \
     transactions.hh dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
     dynamic_buffer.h drcp.h drcp_command_codes.h \
@@ -91,6 +91,7 @@ noinst_LTLIBRARIES = \
     libservicelist.la \
     libconnman_service.la \
     libconnman_dbus.la \
+    libaccesspoint.la \
     liblogind_dbus.la \
     libsystemd_dbus.la \
     libdebug_dbus.la
@@ -187,6 +188,9 @@ libdbus_handlers_la_SOURCES = \
     dcpregs_status.hh
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 libdbus_handlers_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libaccesspoint_la_SOURCES = accesspoint.cc accesspoint.hh
+libaccesspoint_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
