@@ -22,7 +22,7 @@
 
 #include <doctest.h>
 
-#include "accesspoint.hh"
+#include "accesspoint_manager.hh"
 
 #include "mock_connman_technology_registry.hh"
 #include "mock_messages.hh"
@@ -115,6 +115,98 @@ class AccessPointModeTestsWifiPoweredFixture: public AccessPointModeTestsBasicFi
     }
 };
 
+/*!
+ * Fixture: Access point manager fully set up, WLAN connected, AP disabled.
+ */
+class AccessPointManagerAPDisabledFixture: public AccessPointModeTestsBasicFixture
+{
+  private:
+    struct ExpectationInjector
+    {
+        ExpectationInjector(MockMessages::Mock &mock_messages)
+        {
+            mock_messages.expect(
+                new MockMessages::MsgInfo("Access point status UNKNOWN -> UNKNOWN", false));
+        }
+    };
+
+    ExpectationInjector injector;
+
+  protected:
+    MockConnmanTechnologyRegistry::FixtureSetupData sd;
+    Network::AccessPointManager apman;
+
+  public:
+    explicit AccessPointManagerAPDisabledFixture():
+        injector(*mock_messages),
+        apman(ap)
+    {
+        mock_messages->done();
+        sd.wifi_tech_proxy = reinterpret_cast<struct _tdbusconnmanTechnology *>(0xb3019ac7);
+        sd.wifi_is_powered = true;
+        sd.wifi_is_connected = true;
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point status UNKNOWN -> DISABLED", false));
+        tech_reg.connect_to_connman(&sd);
+        apman.start();
+        mock_messages->done();
+    }
+};
+
+/*!
+ * Fixture: Access point manager fully set up, AP enabled.
+ */
+class AccessPointManagerAPEnabledFixture: public AccessPointModeTestsBasicFixture
+{
+  private:
+    struct ExpectationInjector
+    {
+        ExpectationInjector(MockMessages::Mock &mock_messages)
+        {
+            mock_messages.expect(
+                new MockMessages::MsgInfo("Access point status UNKNOWN -> UNKNOWN", false));
+        }
+    };
+
+    ExpectationInjector injector;
+
+  protected:
+    MockConnmanTechnologyRegistry::FixtureSetupData sd;
+    Network::AccessPointManager apman;
+
+  public:
+    explicit AccessPointManagerAPEnabledFixture():
+        injector(*mock_messages),
+        apman(ap)
+    {
+        mock_messages->done();
+        sd.wifi_tech_proxy = reinterpret_cast<struct _tdbusconnmanTechnology *>(0xb3019ac7);
+        sd.wifi_is_powered = true;
+        sd.wifi_is_connected = true;
+
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point status UNKNOWN -> DISABLED", false));
+        tech_reg.connect_to_connman(&sd);
+        mock_messages->done();
+
+        apman.start();
+
+        mock_techreg_wifi->simulate_property_changed_signal("TetheringIdentifier",
+                                                            std::string("Hello World!"));
+        mock_techreg_wifi->simulate_property_changed_signal("TetheringPassphrase",
+                                                            std::string("start123"));
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point status DISABLED -> ACTIVE", false));
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point SSID \"Hello World!\"", false));
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point passphrase \"start123\"", false));
+        mock_techreg_wifi->simulate_property_changed_signal("Tethering", true);
+        mock_messages->done();
+        mock_techreg_wifi->done();
+    }
+};
+
 TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
                   "Register status watcher after construction")
 {
@@ -178,6 +270,65 @@ TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
     CHECK(int(done_data.result_) == int(Network::AccessPoint::RequestResult::FAILED));
     CHECK(int(done_data.error_) == int(Network::AccessPoint::Error::BUSY));
     CHECK(int(done_data.status_) == int(Network::AccessPoint::Status::UNKNOWN));
+}
+
+TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
+                  "Access point manager gets initialized from access point instance")
+{
+    MockConnmanTechnologyRegistry::FixtureSetupData sd;
+    sd.wifi_tech_proxy = reinterpret_cast<struct _tdbusconnmanTechnology *>(0x9821abcd);
+    sd.wifi_properties_are_initialized = false;
+    tech_reg.connect_to_connman(&sd);
+
+    mock_messages->expect(new MockMessages::MsgInfo("Access point status UNKNOWN -> UNKNOWN", false));
+    Network::AccessPointManager apman(ap);
+}
+
+TEST_CASE("Access point manager gets update from access point when started")
+{
+    Connman::TechnologyRegistry tech_reg;
+    std::unique_ptr<MockMessages::Mock> mock_messages(new MockMessages::Mock);
+    std::unique_ptr<MockConnmanTechnologyRegistry::Wifi::Mock> mock_techreg_wifi(new MockConnmanTechnologyRegistry::Wifi::Mock(tech_reg));
+    MockMessages::singleton = mock_messages.get();
+    MockConnmanTechnologyRegistry::Wifi::singleton = mock_techreg_wifi.get();
+
+    MockConnmanTechnologyRegistry::FixtureSetupData sd;
+    sd.wifi_tech_proxy = reinterpret_cast<struct _tdbusconnmanTechnology *>(0x19283746);
+    sd.wifi_is_powered = true;
+    sd.wifi_is_connected = true;
+    sd.wifi_is_tethering = true;
+    sd.wifi_tethering_identifier = "Hello World!";
+    sd.wifi_tethering_passphrase = "start123";
+
+    try
+    {
+        tech_reg.connect_to_connman(&sd);
+        Network::AccessPoint ap(tech_reg);
+
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point status UNKNOWN -> UNKNOWN", false));
+        Network::AccessPointManager apman(ap);
+        mock_messages->done();
+
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point status UNKNOWN -> ACTIVE", false));
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point SSID \"Hello World!\"", false));
+        mock_messages->expect(
+            new MockMessages::MsgInfo("Access point passphrase \"start123\"", false));
+        apman.start();
+
+        mock_messages->done();
+        mock_techreg_wifi->done();
+        MockMessages::singleton = nullptr;
+        MockConnmanTechnologyRegistry::Wifi::singleton = nullptr;
+    }
+    catch(...)
+    {
+        MockMessages::singleton = nullptr;
+        MockConnmanTechnologyRegistry::Wifi::singleton = nullptr;
+        throw;
+    }
 }
 
 TEST_CASE_FIXTURE(AccessPointModeTestsWifiPoweredFixture,
@@ -300,6 +451,112 @@ TEST_CASE_FIXTURE(AccessPointModeTestsWifiPoweredFixture,
     CHECK(int(done_data.result_) == int(Network::AccessPoint::RequestResult::FAILED));
     CHECK(int(done_data.error_) == int(Network::AccessPoint::Error::DBUS_FAILURE));
     CHECK(int(done_data.status_) == int(Network::AccessPoint::Status::DISABLED));
+}
+
+TEST_CASE_FIXTURE(AccessPointManagerAPEnabledFixture,
+                  "Shut down active access point via AP manager")
+{
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::ACTIVE));
+
+    mock_techreg_wifi->ignore(
+        new MockConnmanTechnologyRegistry::Wifi::EnsureDBusProxy(true, sd.wifi_tech_proxy));
+
+    mock_techreg_wifi->expect(
+        new MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<bool>(
+                Connman::TechnologyPropertiesWIFI::Property::TETHERING, false));
+    mock_techreg_wifi->expect(
+        new MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<std::string>(
+                Connman::TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE, ""));
+    mock_techreg_wifi->expect(
+        new MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<std::string>(
+                Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER, ""));
+
+    CHECK(apman.deactivate());
+
+    /* simulate D-Bus method call completions from Connman */
+    mock_messages->expect(
+        new MockMessages::MsgVinfo(MESSAGE_LEVEL_DEBUG,
+                                   "Access point shutdown request result: OK (OK) -> DISABLED",
+                                   false));
+    mock_messages->expect(
+        new MockMessages::MsgInfo("Access point status ACTIVE -> DISABLED", false));
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::ACTIVE));
+    mock_techreg_wifi->simulate_send_property_over_dbus_done<bool>(
+            Connman::TechnologyPropertiesWIFI::Property::TETHERING, false);
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::DISABLED));
+    mock_messages->done();
+
+    mock_techreg_wifi->simulate_send_property_over_dbus_done<std::string>(
+            Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER, false);
+    mock_techreg_wifi->simulate_send_property_over_dbus_done<std::string>(
+            Connman::TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE, false);
+}
+
+TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
+                  "Spawn access point via AP manager")
+{
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::DISABLED));
+
+    mock_techreg_wifi->ignore(
+        new MockConnmanTechnologyRegistry::Wifi::EnsureDBusProxy(true, sd.wifi_tech_proxy));
+
+    mock_techreg_wifi->expect(
+        new MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<std::string>(
+                Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER,
+                "MyNet"));
+    mock_techreg_wifi->expect(
+        new MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<std::string>(
+                Connman::TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE,
+                "12345678"));
+    mock_techreg_wifi->expect(
+        new MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<bool>(
+                Connman::TechnologyPropertiesWIFI::Property::TETHERING, true));
+
+    CHECK(apman.activate("MyNet", "12345678"));
+
+    /* simulate D-Bus method call completions from Connman */
+    mock_techreg_wifi->simulate_send_property_over_dbus_done<std::string>(
+            Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER, false);
+    mock_techreg_wifi->simulate_send_property_over_dbus_done<std::string>(
+            Connman::TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE, false);
+
+    mock_messages->expect(
+        new MockMessages::MsgVinfo(MESSAGE_LEVEL_DEBUG,
+                                   "Access point spawn request result: OK (OK) -> ACTIVE",
+                                   false));
+    mock_messages->expect(
+        new MockMessages::MsgInfo("Access point status DISABLED -> ACTIVE", false));
+    mock_messages->expect(
+        new MockMessages::MsgInfo("Access point SSID \"MyNet\"", false));
+    mock_messages->expect(
+        new MockMessages::MsgInfo("Access point passphrase \"12345678\"", false));
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::DISABLED));
+    mock_techreg_wifi->simulate_send_property_over_dbus_done<bool>(
+            Connman::TechnologyPropertiesWIFI::Property::TETHERING, false);
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::ACTIVE));
+}
+
+TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
+                  "SSID must not be empty")
+{
+    CHECK(apman.get_status() == Network::AccessPoint::Status::DISABLED);
+    mock_messages->expect(
+        new MockMessages::MsgError(EINVAL, LOG_ERR,
+                "The access point SSID must not be empty (Invalid argument)", false));
+    CHECK_FALSE(apman.activate("", "12345678"));
+    CHECK(apman.get_status() == Network::AccessPoint::Status::DISABLED);
+}
+
+TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
+                  "Minimum passphrase length is 8 characters")
+{
+    CHECK(apman.get_status() == Network::AccessPoint::Status::DISABLED);
+    mock_messages->expect(
+        new MockMessages::MsgError(EINVAL, LOG_ERR,
+                "The access point passphrase must be no shorter than 8 characters (Invalid argument)",
+                false));
+    CHECK_FALSE(apman.activate("MyNet", "1234567"));
+    CHECK(apman.get_status() == Network::AccessPoint::Status::DISABLED);
 }
 
 TEST_SUITE_END();

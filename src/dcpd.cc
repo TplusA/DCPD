@@ -41,8 +41,8 @@
 #include "dcpregs_playstream.hh"
 #include "dcpregs_upnpname.hh"
 #include "connman_scan.hh"
-#include "connman_technology_registry.hh"
 #include "networkprefs.h"
+#include "accesspoint_manager.hh"
 #include "configproxy.h"
 #include "configuration_dcpd.hh"
 #include "configuration.hh"
@@ -1495,6 +1495,10 @@ int main(int argc, char *argv[])
                 break;
             }
         });
+
+    static Network::AccessPoint ap(tech_reg);
+    static Network::AccessPointManager apman(ap);
+    apman.start();
 
     Regs::PlayStream::late_init();
 
