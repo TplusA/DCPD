@@ -51,7 +51,15 @@ test_connman_service_CPPFLAGS = $(AM_CPPFLAGS)
 test_connman_service_CXXFLAGS = $(AM_CXXFLAGS)
 
 doctest: $(check_PROGRAMS)
-	for p in $(check_PROGRAMS); do ./$$p $(DOCTEST_EXTRA_OPTIONS); done
+	for p in $(check_PROGRAMS); do \
+	    if ./$$p $(DOCTEST_EXTRA_OPTIONS); then :; \
+	    else \
+	        echo "*****"; \
+	        echo "***** Running $$p again in gdb due to failures"; \
+	        echo "*****"; \
+	        gdb -ex run --args ./$$p $(DOCTEST_EXTRA_OPTIONS); \
+	    fi; \
+	done
 
 doctest-valgrind: $(check_PROGRAMS)
 	for p in $(check_PROGRAMS); do $(VALGRIND) --leak-check=full --show-reachable=yes --error-limit=no ./$$p $(DOCTEST_EXTRA_OPTIONS); done
