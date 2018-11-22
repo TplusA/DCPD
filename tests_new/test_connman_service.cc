@@ -123,11 +123,9 @@ class ConnmanMACAddressTestsFixture
     {
         mock_messages->done();
         MockMessages::singleton = nullptr;
-        mock_messages = nullptr;
 
         mock_os->done();
         MockOS::singleton = nullptr;
-        mock_os = nullptr;
     }
 };
 
