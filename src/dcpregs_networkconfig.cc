@@ -2412,8 +2412,6 @@ int Regs::NetworkConfig::DCP::write_102_passphrase(const uint8_t *data, size_t l
 void Regs::NetworkConfig::interfaces_changed()
 {
     std::array<uint8_t, NetworkStatusData::RESPONSE_SIZE> response;
-
-    Connman::wlan_power_on();
     fill_network_status_register_response(response.data());
 
     if(nwstatus_data->is_network_status_different(response))
