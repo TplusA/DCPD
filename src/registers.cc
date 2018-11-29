@@ -570,7 +570,8 @@ static const std::array<Regs::Register, 50> register_map
                    Regs::PlayStream::DCP::write_239_next_stream_url),
 };
 
-void Regs::init(void (*register_changed_callback)(uint8_t reg_number))
+void Regs::init(void (*register_changed_callback)(uint8_t reg_number),
+                Connman::WLANTools *wlan)
 {
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 
@@ -584,7 +585,7 @@ void Regs::init(void (*register_changed_callback)(uint8_t reg_number))
     register_zero_for_unit_tests = nullptr;
 
     Regs::NetworkConfig::init();
-    Regs::WLANSurvey::init();
+    Regs::WLANSurvey::init(wlan);
     Regs::FileTransfer::init();
     Regs::AudioSources::init();
     Regs::PlayStream::init();

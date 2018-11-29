@@ -945,6 +945,7 @@ struct parameters
 static bool main_loop_init(const struct parameters *parameters,
                            Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager,
                            Applink::AppConnections &appconn,
+                           Connman::WLANTools &wlan_tools,
                            struct DBusSignalManagerData **connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
@@ -971,11 +972,12 @@ static bool main_loop_init(const struct parameters *parameters,
     if(!is_upgrading)
         network_prefs_migrate_old_network_configuration_files(connman_config_dir);
 
-    Regs::init(push_register_to_slave);
+    Regs::init(push_register_to_slave, &wlan_tools);
     Regs::FileTransfer::set_picture_provider(Regs::PlayStream::get_picture_provider());
 
     *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan,
                                                deferred_connman_refresh,
+                                               &wlan_tools,
                                                parameters->with_connman);
 
     /*
@@ -1112,7 +1114,7 @@ static int trigger_system_upgrade(bool is_enforced)
     else
         msg_info("**** Incomplete or broken upgrade state detected ****");
 
-    Regs::init(push_register_to_nowhere);
+    Regs::init(push_register_to_nowhere, nullptr);
 
     static const uint8_t update_command[] =
     {
@@ -1454,7 +1456,13 @@ int main(int argc, char *argv[])
      */
     static struct dcp_over_tcp_data dot;
 
-    main_loop_init(&parameters, config_manager, appconn, &connman, &dot, is_upgrading);
+    /*!
+     * WLAN stuff
+     */
+    static Connman::TechnologyRegistry tech_reg;
+    static Connman::WLANTools wlan_tools(tech_reg);
+
+    main_loop_init(&parameters, config_manager, appconn, wlan_tools, &connman, &dot, is_upgrading);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, connman,
@@ -1465,8 +1473,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    Connman::TechnologyRegistry::late_init();
-    Connman::TechnologyRegistry::get_singleton_for_update().first.register_property_watcher(
+    tech_reg.connect_to_connman();
+    tech_reg.register_property_watcher(
         [] (Connman::TechnologyPropertiesWIFI::Property property,
             Connman::TechnologyPropertiesBase::StoreResult result,
             Connman::TechnologyPropertiesWIFI &props)
@@ -1475,7 +1483,7 @@ int main(int argc, char *argv[])
             {
               case Connman::TechnologyPropertiesWIFI::Property::POWERED:
                 if(!props.get<Connman::TechnologyPropertiesWIFI::Property::POWERED>())
-                    Connman::wlan_power_on();
+                    wlan_tools.power_on();
                 break;
 
               case Connman::TechnologyPropertiesWIFI::Property::CONNECTED:
@@ -1500,7 +1508,7 @@ int main(int argc, char *argv[])
     sigaction(SIGTERM, &action, nullptr);
 
     if(parameters.with_connman)
-        Connman::wlan_power_on();
+        wlan_tools.power_on();
 
     dbus_lock_shutdown_sequence("Notify SPI slave");
 

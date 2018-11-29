@@ -556,16 +556,3 @@ const char *connman_security_iterator_get_security(struct ConnmanServiceSecurity
     cut_fail("not implemented");
     return NULL;
 }
-
-bool Connman::start_wlan_site_survey(Connman::SiteSurveyDoneFn callback)
-{
-    const auto &expect(mock_connman_singleton->expectations_->get_next_expectation(__func__));
-
-    cppcut_assert_equal(expect.d.function_id_, ConnmanFn::start_wlan_site_survey);
-    cppcut_assert_not_null(reinterpret_cast<void *>(callback));
-
-    if(expect.d.callback_invocation_ != nullptr)
-        expect.d.callback_invocation_(callback, expect.d.callback_result_);
-
-    return expect.d.ret_bool_;
-}

@@ -22,6 +22,8 @@
 namespace Connman
 {
 
+class TechnologyRegistry;
+
 /*!
  * WLAN site survey result.
  *
@@ -41,16 +43,32 @@ enum class SiteSurveyResult
 
 using SiteSurveyDoneFn = void (*)(SiteSurveyResult result);
 
-bool wlan_power_on();
+class WLANTools
+{
+  private:
+    TechnologyRegistry &tech_reg_;
 
-/*!
- * Start WLAN site survey, call callback when done.
- *
- * The callback function may be called directly by this function, or it may be
- * called within D-Bus context. Thus, the callback should be implemented in a
- * thread-safe way.
- */
-bool start_wlan_site_survey(SiteSurveyDoneFn callback);
+  public:
+    WLANTools(const WLANTools &) = delete;
+    WLANTools(WLANTools &&) = default;
+    WLANTools &operator=(const WLANTools &) = delete;
+    WLANTools &operator=(WLANTools &&) = default;
+
+    explicit WLANTools(Connman::TechnologyRegistry &reg):
+        tech_reg_(reg)
+    {}
+
+    bool power_on();
+
+    /*!
+     * Start WLAN site survey, call callback when done.
+     *
+     * The callback function may be called directly by this function, or it may
+     * be called within D-Bus context. Thus, the callback should be implemented
+     * in a thread-safe way.
+     */
+    bool start_site_survey(SiteSurveyDoneFn callback);
+};
 
 }
 

@@ -28,13 +28,12 @@
 
 #include <algorithm>
 
-static bool enable_wifi_if_necessary(bool is_powered)
+static bool enable_wifi_if_necessary(Connman::TechnologyRegistry &reg, bool is_powered)
 {
     if(is_powered)
         return false;
 
-    const auto &locked_reg(Connman::TechnologyRegistry::get_singleton_for_update());
-    auto &reg(locked_reg.first);
+    const auto tech_lock(reg.locked());
     reg.wifi().set<Connman::TechnologyPropertiesWIFI::Property::POWERED>(true);
     return true;
 }
@@ -44,7 +43,7 @@ class WifiScanner
   private:
     std::mutex lock_;
     std::vector<Connman::SiteSurveyDoneFn> callbacks_;
-    bool is_active_;
+    Connman::TechnologyRegistry *tech_reg_;
     int remaining_tries_;
 
   public:
@@ -54,14 +53,15 @@ class WifiScanner
     WifiScanner &operator=(WifiScanner &&) = default;
 
     explicit WifiScanner():
-        is_active_(false),
+        tech_reg_(nullptr),
         remaining_tries_(0)
     {}
 
     /*!
      * Initiate WLAN scan or take a free ride with ongoing scan.
      */
-    void scan(const char *object_path, bool is_powered,
+    void scan(Connman::TechnologyRegistry &tech_reg,
+              const char *object_path, bool is_powered,
               Connman::SiteSurveyDoneFn &&callback)
     {
         log_assert(object_path != nullptr);
@@ -69,8 +69,9 @@ class WifiScanner
 
         std::lock_guard<std::mutex> lock(lock_);
 
-        if(is_active_)
+        if(tech_reg_ != nullptr)
         {
+            log_assert(&tech_reg == tech_reg_);
             free_ride(std::move(callback));
             return;
         }
@@ -79,9 +80,9 @@ class WifiScanner
 
         try
         {
-            is_active_ = true;
+            tech_reg_ = &tech_reg;
 
-            if(enable_wifi_if_necessary(is_powered))
+            if(enable_wifi_if_necessary(*tech_reg_, is_powered))
                 remaining_tries_ = 10;
             else
                 remaining_tries_ = 1;
@@ -121,9 +122,8 @@ class WifiScanner
      */
     void do_initiate_scan()
     {
-        const auto &locked_reg(Connman::TechnologyRegistry::get_singleton_for_update());
-        auto &reg(locked_reg.first);
-        tdbusconnmanTechnology *const proxy = reg.wifi().get_dbus_proxy();
+        const auto tech_lock(tech_reg_->locked());
+        tdbusconnmanTechnology *const proxy = tech_reg_->wifi().get_dbus_proxy();
 
         tdbus_connman_technology_call_scan(proxy, nullptr,
                                            WifiScanner::done_callback, this);
@@ -180,7 +180,7 @@ class WifiScanner
             fn(result);
 
         remaining_tries_ = 0;
-        is_active_ = false;
+        tech_reg_ = nullptr;
         callbacks_.clear();
     }
 
@@ -207,14 +207,14 @@ class WifiScanner
     }
 };
 
-static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn &&site_survey_callback)
+static bool site_survey_or_just_power_on(Connman::TechnologyRegistry &reg,
+                                         Connman::SiteSurveyDoneFn &&site_survey_callback)
 {
     const char *object_path = nullptr;
     bool is_powered = false;
 
     {
-        const auto &locked_reg(Connman::TechnologyRegistry::get_singleton_for_update());
-        auto &reg(locked_reg.first);
+        const auto tech_lock(reg.locked());
 
         try
         {
@@ -239,24 +239,24 @@ static bool site_survey_or_just_power_on(Connman::SiteSurveyDoneFn &&site_survey
     {
         /* scan requested */
         static WifiScanner scanner;
-        scanner.scan(object_path, is_powered, std::move(site_survey_callback));
+        scanner.scan(reg, object_path, is_powered, std::move(site_survey_callback));
     }
     else
     {
         /* power on requested */
-        enable_wifi_if_necessary(is_powered);
+        enable_wifi_if_necessary(reg, is_powered);
     }
 
     return true;
 }
 
-bool Connman::wlan_power_on()
+bool Connman::WLANTools::power_on()
 {
-    return site_survey_or_just_power_on(nullptr);
+    return site_survey_or_just_power_on(tech_reg_, nullptr);
 }
 
-bool Connman::start_wlan_site_survey(Connman::SiteSurveyDoneFn callback)
+bool Connman::WLANTools::start_site_survey(Connman::SiteSurveyDoneFn callback)
 {
     log_assert(callback != nullptr);
-    return site_survey_or_just_power_on(std::move(callback));
+    return site_survey_or_just_power_on(tech_reg_, std::move(callback));
 }

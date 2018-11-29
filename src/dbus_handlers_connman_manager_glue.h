@@ -23,21 +23,19 @@
 
 #include <stdbool.h>
 
+namespace Connman { class WLANTools; }
+
 /*!
  * \addtogroup dbus_handlers
  */
 /*!@{*/
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 struct DBusSignalManagerData;
 
 struct DBusSignalManagerData *
 dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(void),
                                 void (*schedule_refresh_connman_services_fn)(void),
-                                bool is_enabled);
+                                Connman::WLANTools *wlan_tools, bool is_enabled);
 
 /*!
  * Tell ConnMan to connect to WLAN service with name stored in passed data.
@@ -63,10 +61,6 @@ void dbussignal_connman_manager_cancel_wps(void);
 
 bool dbussignal_connman_manager_is_connecting(bool *is_wps);
 void dbussignal_connman_manager_refresh_services(bool force_refresh_all = false);
-
-#ifdef __cplusplus
-}
-#endif
 
 /*!@}*/
 

@@ -280,83 +280,6 @@ class RegisterChangedData
     }
 };
 
-class SurveyCompleteNotificationData
-{
-  private:
-    bool is_expected_;
-    bool direct_call_;
-    bool was_called_;
-    bool was_processed_;
-    Connman::SiteSurveyDoneFn callback_;
-    Connman::SiteSurveyResult callback_result_;
-
-  public:
-    SurveyCompleteNotificationData(const SurveyCompleteNotificationData &) = delete;
-    SurveyCompleteNotificationData &operator=(const SurveyCompleteNotificationData &) = delete;
-
-    explicit SurveyCompleteNotificationData() { init(); }
-
-    void init()
-    {
-        is_expected_ = false;
-        direct_call_  = false;
-        was_called_ = false;
-        was_processed_ = false;
-        callback_ = nullptr;
-        callback_result_ = Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_RESULT) + 1);
-    }
-
-    void expect(bool direct_call = false)
-    {
-        is_expected_ = true;
-        direct_call_ = direct_call;
-    }
-
-    void set(Connman::SiteSurveyDoneFn callback,
-             Connman::SiteSurveyResult callback_result)
-    {
-        cut_assert_true(is_expected_);
-        cut_assert_false(was_called_);
-        cut_assert_false(was_processed_);
-        cppcut_assert_not_null(reinterpret_cast<void *>(callback));
-        callback_ = callback;
-        callback_result_ = callback_result;
-        was_called_ = true;
-
-        if(direct_call_)
-            (*this)();
-    }
-
-    void check()
-    {
-        cppcut_assert_equal(is_expected_, was_called_);
-        cppcut_assert_equal(is_expected_, was_processed_);
-        init();
-    }
-
-    /*!
-     * Deferred execution of callback to simulate threaded execution.
-     *
-     * Also, there is a mutex involved that would lead to a deadlock situtation
-     * would the callback be called directly.
-     */
-    void operator()()
-    {
-        cut_assert_false(was_processed_);
-        cppcut_assert_not_null(reinterpret_cast<void *>(callback_));
-        callback_(callback_result_);
-        was_processed_ = true;
-    }
-};
-
-static SurveyCompleteNotificationData survey_complete_notification_data;
-
-static void survey_complete(Connman::SiteSurveyDoneFn callback,
-                            Connman::SiteSurveyResult callback_result)
-{
-    survey_complete_notification_data.set(callback, callback_result);
-}
-
 class ConnectToConnManServiceData
 {
   public:
@@ -1234,7 +1157,7 @@ void cut_setup()
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 }
 
 void cut_teardown()
@@ -1475,7 +1398,7 @@ void test_dcp_register_72_calls_correct_write_handler()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 
     const auto *reg = Regs::lookup(72);
 
@@ -1780,7 +1703,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(register_changed_callback);
+    Regs::init(register_changed_callback, nullptr);
 }
 
 void cut_teardown()
@@ -2454,7 +2377,6 @@ void cut_setup()
 
     os_write_buffer.clear();
 
-    survey_complete_notification_data.init();
     connect_to_connman_service_data.init();
     cancel_wps_data.init();
     register_changed_data->init();
@@ -2467,7 +2389,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(network_config_path, network_config_file);
-    Regs::init(register_changed_callback);
+    Regs::init(register_changed_callback, nullptr);
 
     setup_default_connman_service_list();
 }
@@ -2487,7 +2409,6 @@ void cut_teardown()
 
     cancel_wps_data.check();
     connect_to_connman_service_data.check();
-    survey_complete_notification_data.check();
 
     os_write_buffer.clear();
     os_write_buffer.shrink_to_fit();
@@ -2554,7 +2475,7 @@ void test_read_mac_address_default()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 
     auto *reg = lookup_register_expect_handlers(51,
                                                 Regs::NetworkConfig::DCP::read_51_mac_address,
@@ -4897,243 +4818,6 @@ void test_shutdown_can_be_called_only_once()
     Regs::NetworkConfig::prepare_for_shutdown();
 }
 
-/*!\test
- * WLAN site survey can be started.
- */
-void test_start_wlan_site_survey()
-{
-    auto *reg = lookup_register_expect_handlers(104,
-                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
-
-    mock_messages->expect_msg_info("WLAN site survey started");
-    mock_connman->expect_connman_start_wlan_site_survey(
-        true, survey_complete, Connman::SiteSurveyResult::OK);
-    survey_complete_notification_data.expect();
-    reg->write(nullptr, 0);
-
-    mock_messages->expect_msg_info_formatted("WLAN site survey done, succeeded (0)");
-    survey_complete_notification_data();
-    register_changed_data->check(105);
-}
-
-/*!\test
- * XML with list of networks is sent if WLAN site survey was successful.
- */
-void test_wlan_site_survey_returns_list_of_wlan_networks()
-{
-    test_start_wlan_site_survey();
-
-    auto *reg = lookup_register_expect_handlers(105,
-                                                Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
-                                                nullptr);
-
-    static constexpr const std::array<const MockConnman::ServiceIterData, 5> services_data =
-    {
-        MockConnman::ServiceIterData("wifi",  "First WLAN",         100, MockConnman::sec_psk_wps),
-        MockConnman::ServiceIterData("wired", "Some ethernet NIC",  100, MockConnman::sec_none),
-        MockConnman::ServiceIterData("wifi",  "Not the Internet",    78, MockConnman::sec_none),
-        MockConnman::ServiceIterData("wifi",  "Last on the list",    56, MockConnman::sec_psk),
-        MockConnman::ServiceIterData("wired", "Ethernet adapter 2",  10, MockConnman::sec_none),
-    };
-
-    mock_connman->set_connman_service_iterator_data(*services_data.data(), services_data.size());
-
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
-    static constexpr char expected_xml[] =
-        "<bss_list count=\"3\">"
-        "<bss index=\"0\">"
-        "<ssid>First WLAN</ssid>"
-        "<quality>100</quality>"
-        "<security_list count=\"2\">"
-        "<security index=\"0\">psk</security>"
-        "<security index=\"1\">wps</security>"
-        "</security_list>"
-        "</bss>"
-        "<bss index=\"1\">"
-        "<ssid>Not the Internet</ssid>"
-        "<quality>78</quality>"
-        "<security_list count=\"1\">"
-        "<security index=\"0\">none</security>"
-        "</security_list>"
-        "</bss>"
-        "<bss index=\"2\">"
-        "<ssid>Last on the list</ssid>"
-        "<quality>56</quality>"
-        "<security_list count=\"1\">"
-        "<security index=\"0\">psk</security>"
-        "</security_list>"
-        "</bss>"
-        "</bss_list>";
-
-    reg->read(buffer);
-
-    cppcut_assert_operator(size_t(0), <, buffer.pos);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
-}
-
-/*!\test
- * WLAN site survey request does not accept data.
- */
-void test_start_wlan_site_survey_command_has_no_data_bytes()
-{
-    auto *reg = lookup_register_expect_handlers(104,
-                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
-
-    mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR,
-        "Unexpected data length 1 (expected 0) (Invalid argument)");
-
-    static const uint8_t zero = 0;
-    write_buffer_expect_failure(reg, &zero, 1, -1);
-}
-
-/*!\test
- * Starting WLAN site survey twice has no effect.
- */
-void test_start_wlan_site_survey_has_no_effect_if_survey_is_active()
-{
-    auto *reg = lookup_register_expect_handlers(104,
-                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
-
-    mock_messages->expect_msg_info("WLAN site survey started");
-    mock_connman->expect_connman_start_wlan_site_survey(true);
-    reg->write(nullptr, 0);
-
-    /* no extra expectations to add here, this handler will simply return */
-    mock_messages->expect_msg_error(0, LOG_NOTICE,
-                                    "WLAN site survey already in progress---please hold the line");
-    reg->write(nullptr, 0);
-}
-
-/*!\test
- * XML with error is sent if WLAN site survey errors out with a late failure
- * from Connman.
- */
-void test_start_wlan_site_survey_fails_on_connman_failure()
-{
-    auto *reg = lookup_register_expect_handlers(104,
-                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
-
-    mock_connman->expect_connman_start_wlan_site_survey(
-        false, survey_complete, Connman::SiteSurveyResult::CONNMAN_ERROR);
-    survey_complete_notification_data.expect();
-    reg->write(nullptr, 0);
-
-    mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (1)");
-    survey_complete_notification_data();
-    register_changed_data->check(105);
-
-    reg = lookup_register_expect_handlers(105,
-                                          Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
-                                          nullptr);
-
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
-    static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"network\"/>";
-    reg->read(buffer);
-
-    cppcut_assert_operator(size_t(0), <, buffer.pos);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
-}
-
-/*!\test
- * XML with error is sent if WLAN site survey errors out with a D-Bus failure.
- */
-void test_start_wlan_site_survey_fails_on_dbus_failure()
-{
-    auto *reg = lookup_register_expect_handlers(104,
-                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
-
-    mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (2)");
-    mock_connman->expect_connman_start_wlan_site_survey(
-        false, survey_complete, Connman::SiteSurveyResult::DBUS_ERROR);
-    survey_complete_notification_data.expect(true);
-    reg->write(nullptr, 0);
-    register_changed_data->check(105);
-
-    reg = lookup_register_expect_handlers(105,
-                                          Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
-                                          nullptr);
-
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
-    static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"internal\"/>";
-    reg->read(buffer);
-
-    cppcut_assert_operator(size_t(0), <, buffer.pos);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
-}
-
-/*!\test
- * XML with error is sent if WLAN site survey cannot be started due to lack of
- * hardware.
- */
-void test_start_wlan_site_survey_fails_if_no_hardware_available()
-{
-    auto *reg = lookup_register_expect_handlers(104,
-                                                Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey);
-
-    mock_messages->expect_msg_info_formatted("WLAN site survey done, failed (4)");
-    mock_connman->expect_connman_start_wlan_site_survey(
-        false, survey_complete, Connman::SiteSurveyResult::NO_HARDWARE);
-    survey_complete_notification_data.expect(true);
-    reg->write(nullptr, 0);
-    register_changed_data->check(105);
-
-    reg = lookup_register_expect_handlers(105,
-                                          Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
-                                          nullptr);
-
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
-    static constexpr char expected_xml[] = "<bss_list count=\"-1\" error=\"hardware\"/>";
-    reg->read(buffer);
-
-    cppcut_assert_operator(size_t(0), <, buffer.pos);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
-}
-
-/*!\test
- * XML with empty list of WLAN networks is returned if no scan has ever been
- * performed before.
- *
- * This is actually not quite true. If Connman knows any networks already, then
- * it will tell us about them and we will report them to the slave. In this
- * test, however, we assume that Connman does not have any networks for us.
- */
-void test_reading_out_ssids_without_scan_returns_empty_list()
-{
-    auto *reg = lookup_register_expect_handlers(105,
-                                                Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results,
-                                                nullptr);
-
-    mock_connman->expect_connman_service_iterator_get(nullptr);
-    mock_connman->expect_connman_service_iterator_free(nullptr);
-
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
-    static constexpr char expected_xml[] = "<bss_list count=\"0\"/>";
-    reg->read(buffer);
-
-    cppcut_assert_operator(size_t(0), <, buffer.pos);
-    cut_assert_equal_memory(expected_xml, sizeof(expected_xml) - 1,
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
-}
-
 static void expect_network_status(const std::array<uint8_t, 3> &expected_status)
 {
     auto *reg = lookup_register_expect_handlers(50,
@@ -5322,7 +5006,7 @@ void cut_setup()
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 }
 
 void cut_teardown()
@@ -5947,7 +5631,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(register_changed_callback);
+    Regs::init(register_changed_callback, nullptr);
     Regs::FileTransfer::set_picture_provider(Regs::PlayStream::get_picture_provider());
 }
 
@@ -6999,7 +6683,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(register_changed_callback);
+    Regs::init(register_changed_callback, nullptr);
 }
 
 void cut_teardown()
@@ -8649,7 +8333,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(register_changed_callback);
+    Regs::init(register_changed_callback, nullptr);
 
     Regs::AudioSources::set_unit_test_mode();
 }
@@ -9044,7 +8728,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 }
 
 void cut_teardown()
@@ -9297,7 +8981,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(register_changed_callback);
+    Regs::init(register_changed_callback, nullptr);
 }
 
 void cut_teardown()
@@ -10025,7 +9709,7 @@ void cut_setup()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(register_changed_callback);
+    Regs::init(register_changed_callback, nullptr);
 
     Regs::AudioSources::set_unit_test_mode();
 }

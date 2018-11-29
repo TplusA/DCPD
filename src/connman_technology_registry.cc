@@ -237,22 +237,16 @@ static Connman::Technology determine_technology_from_tech_properties(GVariantIte
     return Connman::Technology::UNKNOWN_TECHNOLOGY;
 }
 
-static void init_wifi_properties(Connman::TechnologyPropertiesWIFI *props,
+static void init_wifi_properties(Connman::TechnologyPropertiesWIFI &props,
                                  const char *object_path, GVariantIter *iter)
 {
-    if(props == nullptr)
-    {
-        BUG("NULL wifi tech properties");
-        return;
-    }
-
-    props->set_dbus_object_path(object_path);
+    props.set_dbus_object_path(object_path);
 
     const char *key;
     GVariant *value;
 
     while(g_variant_iter_loop(iter, "{sv}", &key, &value))
-        cache_value(*props, key, value, "preset");
+        cache_value(props, key, value, "preset");
 }
 
 void Connman::TechnologyRegistry::connect_to_connman()
@@ -270,36 +264,8 @@ void Connman::TechnologyRegistry::connect_to_connman()
                 break;
 
               case Technology::WLAN:
-                init_wifi_properties(wifi_properties_.get(), object_path, properties);
+                init_wifi_properties(wifi_properties_, object_path, properties);
                 break;
             }
         });
-}
-
-struct TechnologyRegistryData
-{
-    Connman::TechnologyRegistry registry;
-    std::recursive_mutex lock;
-};
-
-/* a locking wrapper around our registry data */
-static TechnologyRegistryData connman_technology_registry_singleton;
-
-void Connman::TechnologyRegistry::late_init()
-{
-    connman_technology_registry_singleton.registry.connect_to_connman();
-}
-
-std::pair<const Connman::TechnologyRegistry &, std::unique_lock<std::recursive_mutex>>
-Connman::TechnologyRegistry::get_singleton_const()
-{
-    return std::make_pair(std::cref(connman_technology_registry_singleton.registry),
-                          std::move(std::unique_lock<std::recursive_mutex>(connman_technology_registry_singleton.lock)));
-}
-
-std::pair<Connman::TechnologyRegistry &, std::unique_lock<std::recursive_mutex>>
-Connman::TechnologyRegistry::get_singleton_for_update()
-{
-    return std::make_pair(std::ref(connman_technology_registry_singleton.registry),
-                          std::move(std::unique_lock<std::recursive_mutex>(connman_technology_registry_singleton.lock)));
 }

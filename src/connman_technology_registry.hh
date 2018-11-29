@@ -324,19 +324,17 @@ struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI
 class TechnologyRegistry
 {
   private:
-    std::unique_ptr<TechnologyPropertiesWIFI> wifi_properties_;
+    TechnologyPropertiesWIFI wifi_properties_;
+    mutable std::recursive_mutex lock_;
 
   public:
     TechnologyRegistry(const TechnologyRegistry &) = delete;
     TechnologyRegistry &operator=(const TechnologyRegistry &) = delete;
+    explicit TechnologyRegistry() = default;
 
-    explicit TechnologyRegistry():
-        wifi_properties_(new TechnologyPropertiesWIFI)
-    {}
-
-    void reset()
+    std::unique_lock<std::recursive_mutex> locked() const
     {
-        wifi_properties_.reset(new TechnologyPropertiesWIFI);
+        return std::unique_lock<std::recursive_mutex>(lock_);
     }
 
     void connect_to_connman();
@@ -348,24 +346,16 @@ class TechnologyRegistry
 
     TechnologyPropertiesWIFI &wifi()
     {
-        if(wifi_properties_ != nullptr && wifi_properties_->available())
-            return *wifi_properties_;
+        if(wifi_properties_.available())
+            return wifi_properties_;
 
         throw TechnologyRegistryUnavailableError();
     }
 
     void register_property_watcher(TechnologyPropertiesWIFI::WatcherFn &&fn)
     {
-        wifi_properties_->register_property_watcher(std::move(fn));
+        wifi_properties_.register_property_watcher(std::move(fn));
     }
-
-    static void late_init();
-
-    static std::pair<const TechnologyRegistry&, std::unique_lock<std::recursive_mutex>>
-    get_singleton_const();
-
-    static std::pair<TechnologyRegistry &, std::unique_lock<std::recursive_mutex>>
-    get_singleton_for_update();
 };
 
 }

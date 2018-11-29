@@ -21,6 +21,8 @@
 
 #include "dynamic_buffer.h"
 
+namespace Connman { class WLANTools; }
+
 /*!
  * \addtogroup registers
  */
@@ -31,7 +33,7 @@ namespace Regs
 
 namespace WLANSurvey
 {
-void init();
+void init(Connman::WLANTools *wlan);
 void deinit();
 
 namespace DCP

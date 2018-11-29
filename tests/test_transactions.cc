@@ -214,7 +214,7 @@ void test_deallocation_frees_payload_buffer()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
                                               "Allocated shutdown guard \"upnpname\"");
 
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 
     auto frags(TransactionQueue::fragments_from_data(*queue,
                                                      payload_data, sizeof(payload_data),
@@ -475,7 +475,7 @@ void test_register_read_request_size_1_transaction()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
@@ -572,7 +572,7 @@ void test_register_read_request_size_16_transaction()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
     setup_network_config("11:23:34:45:56:67");
 
     auto t = TransactionQueue::Transaction::new_for_queue(
@@ -645,7 +645,7 @@ void test_register_multi_step_read_request_transaction()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
     setup_network_config("11:34:56:78:9A:BC");
 
     auto t = TransactionQueue::Transaction::new_for_queue(
@@ -744,7 +744,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
                                               "Allocated shutdown guard \"upnpname\"");
 
     network_prefs_init("/somewhere", "/somewhere/cfg.rc");
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
@@ -947,7 +947,7 @@ void cut_setup()
     Connman::NetworkDeviceList::get_singleton_for_update().first.clear();
 
     network_prefs_init(nullptr, nullptr);
-    Regs::init(nullptr);
+    Regs::init(nullptr, nullptr);
 }
 
 void cut_teardown()

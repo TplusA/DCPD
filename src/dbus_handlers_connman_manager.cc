@@ -491,22 +491,27 @@ class DBusSignalManagerData
 
     WLANConnectionState wlan_connection_state;
 
+    Connman::WLANTools *wlan_tools;
+
     DBusSignalManagerData(const DBusSignalManagerData &) = delete;
     DBusSignalManagerData &operator=(const DBusSignalManagerData &) = delete;
 
     explicit DBusSignalManagerData():
         is_disabled(false),
         schedule_connect_to_wlan(nullptr),
-        schedule_refresh_connman_services(nullptr)
+        schedule_refresh_connman_services(nullptr),
+        wlan_tools(nullptr)
     {}
 
     void init(void (*schedule_connect_to_wlan_fn)(),
-              void (*schedule_refresh_connman_services_fn)(), bool is_enabled)
+              void (*schedule_refresh_connman_services_fn)(),
+              Connman::WLANTools *wlan, bool is_enabled)
     {
         is_disabled = !is_enabled;
         schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
         schedule_refresh_connman_services = schedule_refresh_connman_services_fn;
         wlan_connection_state.reset();
+        wlan_tools = wlan;
         Connman::ServiceList::get_singleton_for_update().first.clear();
     }
 };
@@ -588,7 +593,7 @@ static void schedule_wlan_connect__unlocked(DBusSignalManagerData &data)
         data.wlan_connection_state.get_state() == WLANConnectionState::State::WAIT_FOR_REGISTRAR ||
         data.wlan_connection_state.get_state() == WLANConnectionState::State::ABOUT_TO_CONNECT);
 
-    Connman::wlan_power_on();
+    data.wlan_tools->power_on();
     data.schedule_connect_to_wlan();
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
@@ -771,7 +776,13 @@ bool dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
             switch(find_wps_registrar(data->wlan_connection_state, services))
             {
               case FindRegistrarResult::NOT_FOUND:
-                Connman::start_wlan_site_survey(scan_for_wps_done);
+                if(data->wlan_tools == nullptr)
+                {
+                    BUG("No WLAN tools");
+                    break;
+                }
+
+                data->wlan_tools->start_site_survey(scan_for_wps_done);
                 return true;
 
               case FindRegistrarResult::FOUND:
@@ -1874,6 +1885,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
                                        bool have_lost_active_ethernet_device,
                                        bool have_lost_active_wlan_device,
                                        WLANConnectionState &wlan_connection_state,
+                                       Connman::WLANTools *wlan,
                                        const struct network_prefs *ethernet_prefs,
                                        const struct network_prefs *wlan_prefs)
 {
@@ -1964,7 +1976,9 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
            {
                /* there are no known WLANs, maybe because the WLAN adapter
                 * is in suspend mode */
-               Connman::start_wlan_site_survey(survey_after_suspend);
+               if(wlan != nullptr)
+                   wlan->start_site_survey(survey_after_suspend);
+
                return false;
            }
 
@@ -1985,9 +1999,12 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 
     log_assert(our_wlan != known_services.end());
 
-    /* this is the least we should do so that ConnMan can find WLAN
+    /* powering on is the least we should do so that ConnMan can find WLAN
      * networks, manual connect may or may not be necessary (see below) */
-    Connman::wlan_power_on();
+    if(wlan == nullptr)
+        return false;
+
+    wlan->power_on();
 
     if(our_wlan->second->is_active() == true)
         return false;
@@ -2071,6 +2088,7 @@ static void process_pending_changes(DBusSignalManagerData &data,
                                    have_lost_active_ethernet_device,
                                    have_lost_active_wlan_device,
                                    data.wlan_connection_state,
+                                   data.wlan_tools,
                                    ethernet_prefs, wlan_prefs);
 
     if(handle != NULL)
@@ -2237,11 +2255,11 @@ static DBusSignalManagerData global_dbussignal_connman_manager_data;
 DBusSignalManagerData *
 dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(),
                                 void (*schedule_refresh_connman_services_fn)(),
-                                bool is_enabled)
+                                Connman::WLANTools *wlan_tools, bool is_enabled)
 {
     global_dbussignal_connman_manager_data.init(schedule_connect_to_wlan_fn,
                                                 schedule_refresh_connman_services_fn,
-                                                is_enabled);
+                                                wlan_tools, is_enabled);
     return &global_dbussignal_connman_manager_data;
 }
 

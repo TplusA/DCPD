@@ -24,6 +24,8 @@
 #include <string>
 #include <stdexcept>
 
+namespace Connman { class WLANTools; }
+
 /*!
  * \addtogroup registers SPI registers definitions
  *
@@ -260,7 +262,8 @@ extern const Register *register_zero_for_unit_tests;
  * \note
  *     This function also calls the \c dcpregs_*_init() functions.
  */
-void init(void (*register_changed_callback)(uint8_t reg_number));
+void init(void (*register_changed_callback)(uint8_t reg_number),
+          Connman::WLANTools *wlan);
 
 /*!
  * Free resources.

@@ -39,6 +39,7 @@ static struct
 
     bool survey_in_progress;
     Connman::SiteSurveyResult last_result;
+    Connman::WLANTools *wlan;
 }
 nwwlan_survey_data;
 
@@ -49,10 +50,11 @@ enum WifiServiceType
     WIFI_SERVICE_TYPE_HIDDEN,
 };
 
-void Regs::WLANSurvey::init()
+void Regs::WLANSurvey::init(Connman::WLANTools *wlan)
 {
     nwwlan_survey_data.survey_in_progress = false;
     nwwlan_survey_data.last_result = Connman::SiteSurveyResult::OK;
+    nwwlan_survey_data.wlan = wlan;
 }
 
 void Regs::WLANSurvey::deinit() {}
@@ -97,6 +99,13 @@ int Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey(const uint8_t *data,
 
     std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
 
+    if(nwwlan_survey_data.wlan == nullptr)
+    {
+        msg_error(0, LOG_NOTICE,
+                  "WLAN not available, site survey not started");
+        return 0;
+    }
+
     if(nwwlan_survey_data.survey_in_progress)
     {
         msg_error(0, LOG_NOTICE,
@@ -106,7 +115,7 @@ int Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey(const uint8_t *data,
 
     nwwlan_survey_data.survey_in_progress = true;
 
-    if(Connman::start_wlan_site_survey(survey_done))
+    if(nwwlan_survey_data.wlan->start_site_survey(survey_done))
         msg_info("WLAN site survey started");
 
     return 0;
