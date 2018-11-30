@@ -121,10 +121,17 @@ class ConnmanMACAddressTestsFixture
 
     ~ConnmanMACAddressTestsFixture()
     {
-        mock_messages->done();
-        MockMessages::singleton = nullptr;
+        try
+        {
+            mock_messages->done();
+            mock_os->done();
+        }
+        catch(...)
+        {
+            /* no throwing from dtors */
+        }
 
-        mock_os->done();
+        MockMessages::singleton = nullptr;
         MockOS::singleton = nullptr;
     }
 };
