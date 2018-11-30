@@ -37,12 +37,12 @@ dcpd_SOURCES = \
     dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
+    dcpregs_accesspoint.hh \
     connman_iter.c connman_iter.h connman_scan.cc connman_scan.hh \
     connman_common.c connman_common.h \
     connman_service.hh connman_service_list.hh maybe.hh \
     connman_address.hh \
-    connman_technology_registry.cc connman_technology_registry.hh \
-    connman_property_cache.hh \
+    connman_technology_registry.hh connman_property_cache.hh \
     network_device.hh network_device_list.hh \
     stream_id.h \
     coverart.hh gvariantwrapper.hh md5.hh \
@@ -91,6 +91,7 @@ noinst_LTLIBRARIES = \
     libappliance_dbus.la \
     libservicelist.la \
     libconnman_service.la \
+    libconnman_technology_registry.la \
     libconnman_dbus.la \
     libaccesspoint.la \
     liblogind_dbus.la \
@@ -115,6 +116,7 @@ libregisters_la_SOURCES = \
     dcpregs_networkconfig.cc dcpregs_networkconfig.hh \
     dcpregs_upnpname.cc dcpregs_upnpname.hh \
     dcpregs_wlansurvey.cc dcpregs_wlansurvey.hh \
+    dcpregs_accesspoint.cc dcpregs_accesspoint.hh \
     dcpregs_filetransfer.cc dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.cc dcpregs_tcptunnel.hh \
     dcpregs_audiosources.cc dcpregs_audiosources.hh \
@@ -151,6 +153,11 @@ libservicelist_la_CXXFLAGS = $(AM_CXXFLAGS)
 libconnman_service_la_SOURCES = connman_service.cc connman_service.hh
 libconnman_service_la_CFLAGS = $(AM_CFLAGS)
 libconnman_service_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libconnman_technology_registry_la_SOURCES = \
+    connman_technology_registry.cc connman_technology_registry.hh
+libconnman_technology_registry_la_CFLAGS = $(AM_CFLAGS)
+libconnman_technology_registry_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libinifile_la_SOURCES = inifile.c inifile.h
 libinifile_la_CFLAGS = $(AM_CFLAGS)

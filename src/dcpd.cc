@@ -40,6 +40,7 @@
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_upnpname.hh"
+#include "dcpregs_accesspoint.hh"
 #include "connman_scan.hh"
 #include "networkprefs.h"
 #include "accesspoint_manager.hh"
@@ -1500,6 +1501,7 @@ int main(int argc, char *argv[])
     static Network::AccessPointManager apman(ap);
     apman.start();
 
+    Regs::WLANAccessPoint::init(apman, tech_reg);
     Regs::PlayStream::late_init();
 
     static struct sigaction action;

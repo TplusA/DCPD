@@ -33,6 +33,7 @@
 #include "dcpregs_internationalization.hh"
 #include "dcpregs_networkconfig.hh"
 #include "dcpregs_wlansurvey.hh"
+#include "dcpregs_accesspoint.hh"
 #include "dcpregs_upnpname.hh"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_tcptunnel.hh"
@@ -48,7 +49,7 @@
 #include <array>
 #include <algorithm>
 
-#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 6)
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 7)
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -245,7 +246,7 @@ static int write_95_max_bitrate(const uint8_t *data, size_t length)
  *
  * \note The entries must be sorted by address for the binary search.
  */
-static const std::array<Regs::Register, 50> register_map
+static const std::array<Regs::Register, 51> register_map
 {
     /* Protocol level negotiation */
     Regs::Register("protocol level negotiation", 1,
@@ -525,6 +526,12 @@ static const std::array<Regs::Register, 50> register_map
                    REGISTER_MK_VERSION(1, 0, 0),
                    Regs::MediaServices::DCP::read_106_media_service_list,
                    Regs::MediaServices::DCP::write_106_media_service_list),
+
+    /* WLAN access point */
+    Regs::Register("WLAN access point", 107,
+                   REGISTER_MK_VERSION(1, 0, 7),
+                   Regs::WLANAccessPoint::DCP::read_107_access_point,
+                   Regs::WLANAccessPoint::DCP::write_107_access_point),
 
     /* TCP tunnel control */
     Regs::Register("TCP tunnel control", 119,
