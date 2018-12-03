@@ -96,6 +96,7 @@ test_registers_la_LIBADD = \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libconnman_service.la \
+    $(top_builddir)/src/libconnman_technology_registry.la \
     $(top_builddir)/src/libinifile.la \
     $(top_builddir)/src/libxmodem.la
 test_registers_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
@@ -123,6 +124,7 @@ test_transactions_la_LIBADD = \
     $(top_builddir)/src/libregisters.la \
     $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libconnman_service.la \
+    $(top_builddir)/src/libconnman_technology_registry.la \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libshutdown_guard.la \
     $(top_builddir)/src/libdynamic_buffer.la

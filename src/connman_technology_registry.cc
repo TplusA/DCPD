@@ -249,7 +249,7 @@ static void init_wifi_properties(Connman::TechnologyPropertiesWIFI &props,
         cache_value(props, key, value, "preset");
 }
 
-void Connman::TechnologyRegistry::connect_to_connman()
+void Connman::TechnologyRegistry::connect_to_connman(const void *data)
 {
     enumerate_technologies(dbus_get_connman_manager_iface(),
         [this]

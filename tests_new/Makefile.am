@@ -19,7 +19,8 @@
 if WITH_DOCTEST
 check_PROGRAMS = \
     test_connman_service \
-    test_connman_property_cache
+    test_connman_property_cache \
+    test_access_point
 
 TESTS = run_tests.sh
 
@@ -56,6 +57,17 @@ test_connman_property_cache_SOURCES = test_connman_property_cache.cc
 test_connman_property_cache_LDADD = libtestrunner.la
 test_connman_property_cache_CPPFLAGS = $(AM_CPPFLAGS)
 test_connman_property_cache_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_access_point_SOURCES = \
+    test_access_point.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_connman_technology_registry.hh mock_connman_technology_registry.cc \
+    mock_expectation.hh
+test_access_point_LDADD = \
+    libtestrunner.la \
+    $(top_builddir)/src/libaccesspoint.la
+test_access_point_CPPFLAGS = $(AM_CPPFLAGS)
+test_access_point_CXXFLAGS = $(AM_CXXFLAGS)
 
 doctest: $(check_PROGRAMS)
 	for p in $(check_PROGRAMS); do \
