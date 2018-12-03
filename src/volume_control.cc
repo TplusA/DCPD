@@ -256,23 +256,35 @@ static inline bool is_invalid_id(uint16_t id)
     return id == Mixer::VolumeControls::INVALID_CONTROL_ID;
 }
 
-std::unique_ptr<Mixer::VolumeControl> &Mixer::VolumeControls::lookup(uint16_t id)
+std::unique_ptr<Mixer::VolumeControl> &
+internal_lookup(std::vector<std::unique_ptr<Mixer::VolumeControl>> &controls,
+                uint16_t id)
 {
     if(is_invalid_id(id))
         throw std::out_of_range("Invalid volume control ID");
 
-    const auto it(std::find_if(controls_.begin(), controls_.end(),
-                               [id] (const std::unique_ptr<VolumeControl> &ctrl)
+    const auto it(std::find_if(controls.begin(), controls.end(),
+                               [id] (const std::unique_ptr<Mixer::VolumeControl> &ctrl)
                                {
                                    return ctrl != nullptr && ctrl->id_ == id;
                                }));
 
-    if(it == controls_.end())
+    if(it == controls.end())
         throw std::out_of_range("Volume control does not exist");
 
     log_assert(*it != nullptr);
 
     return *it;
+}
+
+const Mixer::VolumeControl *Mixer::VolumeControls::lookup(uint16_t id) const
+{
+    return internal_lookup(const_cast<Mixer::VolumeControls *>(this)->controls_, id).get();
+}
+
+std::unique_ptr<Mixer::VolumeControl> &Mixer::VolumeControls::lookup_rw(uint16_t id)
+{
+    return internal_lookup(controls_, id);
 }
 
 Mixer::VolumeControls::VolumeControls(std::unique_ptr<VolumeControl> predefined_master)
@@ -288,7 +300,7 @@ Mixer::VolumeControls::replace_control_properties(uint16_t id,
 {
     try
     {
-        auto &ctrl = lookup(id);
+        auto &ctrl = lookup_rw(id);
         const bool changed = ctrl->get_properties() != properties.get();
 
         if(!changed)
@@ -356,7 +368,7 @@ Mixer::VolumeControls::set_values(uint16_t id, double volume, bool is_muted)
 
     try
     {
-        auto &ctrl = lookup(id);
+        auto &ctrl = lookup_rw(id);
 
         if(ctrl->set_new_values(volume, is_muted))
             return Mixer::VolumeControls::Result::OK;
@@ -375,7 +387,7 @@ Mixer::VolumeControls::request(uint16_t id, double volume, bool is_muted)
 {
     try
     {
-        auto &ctrl = lookup(id);
+        auto &ctrl = lookup_rw(id);
 
         if(ctrl->set_request(volume, is_muted))
             return Mixer::VolumeControls::Result::OK;
@@ -391,7 +403,7 @@ Mixer::VolumeControls::request(uint16_t id, double volume, bool is_muted)
 
 Mixer::VolumeControls::Result
 Mixer::VolumeControls::get_current_values(uint16_t id,
-                                          const Mixer::VolumeSettings *&values)
+                                          const Mixer::VolumeSettings *&values) const
 {
     try
     {
@@ -407,7 +419,7 @@ Mixer::VolumeControls::get_current_values(uint16_t id,
 
 Mixer::VolumeControls::Result
 Mixer::VolumeControls::get_requested_values(uint16_t id,
-                                            const Mixer::VolumeSettings *&values)
+                                            const Mixer::VolumeSettings *&values) const
 {
     try
     {

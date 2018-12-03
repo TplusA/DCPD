@@ -643,8 +643,7 @@ size_t Regs::get_supported_protocol_levels(const ProtocolLevel **level_ranges)
         sizeof(supported_level_ranges) / sizeof(supported_level_ranges[0]) / 2;
 }
 
-void Regs::unpack_protocol_level(/* cppcheck-suppress passedByValue */
-                                 const ProtocolLevel level,
+void Regs::unpack_protocol_level(const ProtocolLevel level,
                                  uint8_t *major, uint8_t *minor,
                                  uint8_t *micro)
 {

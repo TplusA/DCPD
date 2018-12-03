@@ -168,8 +168,8 @@ class VolumeControls
     /* set request as requested by some part of the Streaming Board */
     Result request(uint16_t id, double volume, bool is_muted);
 
-    Result get_current_values(uint16_t id, const VolumeSettings *&values);
-    Result get_requested_values(uint16_t id, const VolumeSettings *&values);
+    Result get_current_values(uint16_t id, const VolumeSettings *&values) const;
+    Result get_requested_values(uint16_t id, const VolumeSettings *&values) const;
 
     const std::vector<std::unique_ptr<VolumeControl>>::const_iterator begin() const
     {
@@ -186,7 +186,7 @@ class VolumeControls
     const VolumeControl *lookup(uint16_t id) const;
 
   private:
-    std::unique_ptr<VolumeControl> &lookup(uint16_t id);
+    std::unique_ptr<VolumeControl> &lookup_rw(uint16_t id);
 };
 
 };
