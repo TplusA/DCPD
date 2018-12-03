@@ -1103,27 +1103,27 @@ static const std::array<uint8_t, 2> existing_registers_v1_0_2 =
 
 static const std::array<uint8_t, 1> existing_registers_v1_0_3 =
 {
-   73,
+    73,
 };
 
 static const std::array<uint8_t, 4> existing_registers_v1_0_4 =
 {
-   47, 80, 64, 81,
+    47, 80, 64, 81,
 };
 
 static const std::array<uint8_t, 2> existing_registers_v1_0_5 =
 {
-   18, 19,
+    18, 19,
 };
 
 static const std::array<uint8_t, 1> existing_registers_v1_0_6 =
 {
-   88,
+    88,
 };
 
 static const std::array<uint8_t, 1> existing_registers_v1_0_7 =
 {
-   107,
+    107,
 };
 
 static const std::array<RegisterSetPerVersion, 8> all_registers
