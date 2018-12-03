@@ -23,26 +23,16 @@
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_audiosources.hh"
 #include "registers_priv.hh"
-#include "dynamic_buffer_util.h"
 #include "credentials_dbus.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "actor_id.h"
+#include "gvariantwrapper.hh"
 #include "messages.h"
 
+#include <sstream>
 #include <cstring>
 #include <cerrno>
-
-#define TRY_EMIT(BUF, FAILCODE, ...) \
-    do \
-    { \
-        if(retval && !dynamic_buffer_printf((BUF), __VA_ARGS__)) \
-        { \
-            retval = false; \
-            FAILCODE \
-        } \
-    }\
-    while(0)
 
 struct XmlEscapeSequence
 {
@@ -201,7 +191,7 @@ int Regs::MediaServices::DCP::write_106_media_service_list(const uint8_t *data,
     if(safe_password_length >= sizeof(password_buffer))
         safe_password_length = sizeof(password_buffer) - 1;
 
-    memcpy(password_buffer, password, safe_password_length);
+    std::copy(password, password + safe_password_length, password_buffer);
     password_buffer[safe_password_length] = '\0';
 
     return set_credentials(string_data, login, password_buffer);
@@ -254,12 +244,14 @@ static void xml_escape(char *const buffer, const size_t buffer_size,
             buffer[out_pos++] = ch;
         else if(seq->escape_sequence_length < buffer_size - out_pos)
         {
-            memcpy(&buffer[out_pos], seq->escape_sequence, seq->escape_sequence_length);
+            std::copy(seq->escape_sequence,
+                      seq->escape_sequence + seq->escape_sequence_length,
+                      &buffer[out_pos]);
             out_pos += seq->escape_sequence_length;
         }
         else
         {
-            memset(&buffer[out_pos], 0, buffer_size - out_pos);
+            std::fill(buffer + out_pos, buffer + buffer_size, 0);
             out_pos = buffer_size;
             break;
         }
@@ -274,48 +266,51 @@ static void xml_escape(char *const buffer, const size_t buffer_size,
     buffer[out_pos] = '\0';
 }
 
-static bool fill_buffer_with_services(struct dynamic_buffer *buffer,
+static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
                                       GVariant *service_ids_and_names_variant)
 {
+    bool retval = true;
     const size_t number_of_services =
         g_variant_n_children(service_ids_and_names_variant);
 
     if(number_of_services == 0)
-        return dynamic_buffer_printf(buffer, "<services count=\"0\"/>");
+    {
+        static const std::string empty("<services count=\"0\"/>");
+        std::copy(empty.begin(), empty.end(), std::back_inserter(buffer));
+        return retval;
+    }
 
-    bool retval = true;
-
-    TRY_EMIT(buffer, return false;,
-             "<services count=\"%zu\">", number_of_services);
+    std::ostringstream os;
+    os << "<services count=\"" << number_of_services << "\">";
 
     tdbuscredentialsRead *read_iface = dbus_get_credentials_read_iface();
 
     for(size_t i = 0; i < number_of_services; ++i)
     {
-        GVariant *id_and_name =
-            g_variant_get_child_value(service_ids_and_names_variant, i);
+        GVariant *temp = g_variant_get_child_value(service_ids_and_names_variant, i);
+        GVariantWrapper id_and_name(temp, GVariantWrapper::Transfer::JUST_MOVE);
 
         const gchar *id;
         const gchar *name;
-        g_variant_get(id_and_name, "(&s&s)", &id, &name);
+        g_variant_get(GVariantWrapper::get(id_and_name), "(&s&s)", &id, &name);
 
-        GVariant *credentials = NULL;
+        temp = NULL;
         char *default_user = NULL;
         GError *error = NULL;
 
         tdbus_credentials_read_call_get_credentials_sync(read_iface, id,
-                                                         &credentials,
+                                                         &temp,
                                                          &default_user,
                                                          NULL, &error);
 
         if(dbus_common_handle_dbus_error(&error, "Get credentials") < 0)
         {
-            g_variant_unref(id_and_name);
             retval = false;
             break;
         }
 
-        const size_t number_of_credentials = g_variant_n_children(credentials);
+        GVariantWrapper credentials(temp);
+        const size_t number_of_credentials = g_variant_n_children(GVariantWrapper::get(credentials));
 
         static char buffer_first[1024];
         static char buffer_second[1024];
@@ -324,49 +319,47 @@ static bool fill_buffer_with_services(struct dynamic_buffer *buffer,
         xml_escape(buffer_second, sizeof(buffer_second), name);
 
         if(number_of_credentials == 0)
-            TRY_EMIT(buffer, break;,
-                     "<service id=\"%s\" name=\"%s\"/>", buffer_first, buffer_second);
+            os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second << "\"/>";
         else
         {
-            TRY_EMIT(buffer, break;,
-                     "<service id=\"%s\" name=\"%s\">", buffer_first, buffer_second);
+            os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second << "\">";
 
             for(size_t j = 0; j < number_of_credentials; ++j)
             {
-                GVariant *login_and_password = g_variant_get_child_value(credentials, j);
+                temp = g_variant_get_child_value(GVariantWrapper::get(credentials), j);
+                GVariantWrapper login_and_password(temp, GVariantWrapper::Transfer::JUST_MOVE);
 
                 const gchar *login;
                 const gchar *password;
-                g_variant_get(login_and_password, "(&s&s)", &login, &password);
+                g_variant_get(GVariantWrapper::get(login_and_password), "(&s&s)",
+                              &login, &password);
 
                 xml_escape(buffer_first,  sizeof(buffer_first),  login);
                 xml_escape(buffer_second, sizeof(buffer_second), password);
 
-                TRY_EMIT(buffer, break;,
-                         "<account login=\"%s\" password=\"%s\"%s/>",
-                         buffer_first, buffer_second,
-                         (strcmp(login, default_user) == 0) ? " default=\"true\"" : "");
-
-                g_variant_unref(login_and_password);
+                os << "<account login=\"" << buffer_first << "\""
+                   << " password=\"" << buffer_second << "\""
+                   << ((strcmp(login, default_user) == 0) ? " default=\"true\"" : "")
+                   << "/>";
             }
 
-            TRY_EMIT(buffer, break;, "</service>");
+            os << "</service>";
         }
 
-        g_variant_unref(credentials);
         g_free(default_user);
-
-        g_variant_unref(id_and_name);
     }
 
-    TRY_EMIT(buffer, return false;, "</services>");
+    os << "</services>";
+
+    const auto &str(os.str());
+    std::copy(str.begin(), str.end(), std::back_inserter(buffer));
 
     return retval;
 }
 
-bool Regs::MediaServices::DCP::read_106_media_service_list(struct dynamic_buffer *buffer)
+bool Regs::MediaServices::DCP::read_106_media_service_list(std::vector<uint8_t> &buffer)
 {
-    log_assert(dynamic_buffer_is_empty(buffer));
+    log_assert(buffer.empty());
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 106 handler");
 

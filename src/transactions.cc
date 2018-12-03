@@ -21,7 +21,6 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "transactions.hh"
-#include "dynamic_buffer.h"
 #include "registers.hh"
 #include "dcpdefs.h"
 #include "messages.h"
@@ -77,7 +76,7 @@ void TransactionQueue::Transaction::log_register_write(LogWrite what) const
     msg_vinfo(MESSAGE_LEVEL_DIAG,
               "RegIO W: " REGISTER_FORMAT_STRING ", %zu bytes%s",
               reg_->address_, reg_->name_.c_str(),
-              command_ == DCP_COMMAND_WRITE_REGISTER ? 2 : payload_.pos,
+              command_ == DCP_COMMAND_WRITE_REGISTER ? 2 : payload_.size(),
               suffix);
 }
 
@@ -213,9 +212,10 @@ void TransactionQueue::Transaction::init(InitialType init_type,
     current_fragment_offset_ = 0;
 
     if(is_reinit)
-        dynamic_buffer_free(&payload_);
-
-    dynamic_buffer_init(&payload_);
+    {
+        payload_.clear();
+        payload_.shrink_to_fit();
+    }
 }
 
 TransactionQueue::Transaction::Transaction(Queue &queue, InitialType init_type,
@@ -250,11 +250,6 @@ TransactionQueue::Transaction::Transaction(Queue &queue, const Regs::Register &r
     request_header_[0] = command_;
     request_header_[1] = reg.address_;
     dcp_put_header_data(&request_header_[DCP_HEADER_DATA_OFFSET], 0);
-}
-
-TransactionQueue::Transaction::~Transaction()
-{
-    dynamic_buffer_free(&payload_);
 }
 
 void TransactionQueue::Transaction::reset_for_slave()
@@ -630,7 +625,7 @@ bool TransactionQueue::Transaction::fill_payload_buffer(const int fd, bool appen
     if(size == 0)
         return true;
 
-    const size_t offset = append ? payload_.pos : 0;
+    const size_t offset = append ? payload_.size() : 0;
 
     switch(tx_sync_.does_dcp_packet_size_match(size))
     {
@@ -648,70 +643,49 @@ bool TransactionQueue::Transaction::fill_payload_buffer(const int fd, bool appen
         msg_error(EINVAL, LOG_ERR, "DCP packet size %u too large to fit "
                   "into remaining DCPSYNC payload of size %u",
                   size, tx_sync_.get_remaining_payload_size());
-        goto error_exit;
+        skip_transaction_payload(fd);
+        return false;
     }
 
     if(append)
-    {
-        log_assert(!dynamic_buffer_is_empty(&payload_));
-
-        if(!dynamic_buffer_ensure_space(&payload_, offset + size))
-           goto error_exit;
-    }
+        log_assert(!payload_.empty());
     else
     {
-        log_assert(dynamic_buffer_is_empty(&payload_));
+        log_assert(payload_.empty());
 
-        if(!dynamic_buffer_is_allocated(&payload_) &&
-           !dynamic_buffer_resize(&payload_, size))
-        {
-            goto error_exit;
-        }
-
-        if(payload_.size < offset + size)
-        {
+        if(offset > 0)
             msg_error(0, LOG_ERR,
-                      "Expecting at most %zu bytes payload for register %u, "
+                      "Expecting at most %u bytes payload for register %u, "
                       "received %zu bytes",
-                      payload_.size, reg_->address_, offset + size);
-
-            if(!dynamic_buffer_resize(&payload_, offset + size))
-                goto error_exit;
-        }
+                      size, reg_->address_, offset + size);
     }
 
-    log_assert(payload_.size >= offset + size);
+    const auto old_size = payload_.size();
+    payload_.resize(old_size + size);
 
-    switch(read_to_buffer(payload_.data + offset, size, fd, "payload"))
+    switch(read_to_buffer(payload_.data() + old_size, size, fd, "payload"))
     {
       case ReadToBufferResult::OK:
         break;
 
       case ReadToBufferResult::INCOMPLETE:
       case ReadToBufferResult::IO_ERROR:
+        payload_.resize(old_size);
         return false;
     }
-
-    payload_.pos += size;
 
     if(tx_sync_.consumed_payload(size))
         skip_transaction_payload(fd);
 
     return true;
-
-error_exit:
-    skip_transaction_payload(fd);
-    return false;
 }
 
-bool TransactionQueue::Transaction::allocate_payload_buffer()
+void TransactionQueue::Transaction::allocate_payload_buffer()
 {
     if(reg_->is_static_size())
-        return dynamic_buffer_resize(&payload_, reg_->max_data_size_);
-
-    dynamic_buffer_clear(&payload_);
-
-    return true;
+        payload_.reserve(reg_->max_data_size_);
+    else
+        payload_.clear();
 }
 
 bool TransactionQueue::Transaction::do_read_register()
@@ -719,10 +693,12 @@ bool TransactionQueue::Transaction::do_read_register()
     if(reg_->is_static_size())
     {
         size_t n;
+        const auto old_size = payload_.size();
 
         try
         {
-            n = reg_->read(payload_.data, payload_.size);
+            payload_.resize(reg_->max_data_size_);
+            n = reg_->read(payload_.data(), payload_.size());
         }
         catch(const Regs::no_handler &e)
         {
@@ -730,6 +706,7 @@ bool TransactionQueue::Transaction::do_read_register()
                       "No read handler defined for register "
                       REGISTER_FORMAT_STRING,
                       reg_->address_, reg_->name_.c_str());
+            payload_.resize(old_size);
             return false;
         }
         catch(const Regs::io_error &e)
@@ -737,6 +714,7 @@ bool TransactionQueue::Transaction::do_read_register()
             msg_error(0, LOG_ERR,
                       "RegIO R: FAILED READING " REGISTER_FORMAT_STRING " (%zd)",
                       reg_->address_, reg_->name_.c_str(), e.result());
+            payload_.resize(old_size);
             return false;
         }
 
@@ -745,7 +723,7 @@ bool TransactionQueue::Transaction::do_read_register()
                       "RegIO R: " REGISTER_FORMAT_STRING ", %zu bytes",
                       reg_->address_, reg_->name_.c_str(), n);
 
-        payload_.pos = n;
+        payload_.resize(n);
 
         return true;
     }
@@ -773,7 +751,7 @@ bool TransactionQueue::Transaction::do_read_register()
 
         msg_vinfo(MESSAGE_LEVEL_DIAG,
                   "RegIO R: " REGISTER_FORMAT_STRING ", %zu bytes",
-                  reg_->address_, reg_->name_.c_str(), payload_.pos);
+                  reg_->address_, reg_->name_.c_str(), payload_.size());
 
         return true;
     }
@@ -781,8 +759,8 @@ bool TransactionQueue::Transaction::do_read_register()
 
 size_t TransactionQueue::Transaction::get_current_fragment_size() const
 {
-    log_assert((current_fragment_offset_ < payload_.pos) ||
-               (current_fragment_offset_ == 0 && payload_.pos == 0));
+    log_assert((current_fragment_offset_ < payload_.size()) ||
+               (current_fragment_offset_ == 0 && payload_.size() == 0));
 
     const size_t temp = get_remaining_fragment_size();
 
@@ -865,7 +843,7 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
 
         if((flags & TransactionQueue::DUMP_SENT_DCP_PAYLOAD) != 0)
             hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
-                           payload_.data + current_fragment_offset_,
+                           &payload_[current_fragment_offset_],
                            fragsize, "DCP payload");
     }
     else
@@ -901,7 +879,7 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
         {
             /* TODO: std::copy() */
             memcpy(merged_buffer + merged_size,
-                   payload_.data + current_fragment_offset_, fragsize);
+                   &payload_[current_fragment_offset_], fragsize);
             merged_size += fragsize;
         }
 
@@ -990,8 +968,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
         /* fall-through */
 
       case State::SLAVE_READ_DATA:
-        if(!allocate_payload_buffer())
-            break;
+        allocate_payload_buffer();
 
         log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER ||
                    command_ == DCP_COMMAND_READ_REGISTER);
@@ -1001,7 +978,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
             if(!fill_payload_buffer(from_slave_fd, false))
                 break;
 
-            state_ = payload_.pos < DCP_PACKET_MAX_PAYLOAD_SIZE
+            state_ = payload_.size() < DCP_PACKET_MAX_PAYLOAD_SIZE
                 ? State::SLAVE_PROCESS_WRITE
                 : State::SLAVE_PREPARE_APPEND;
 
@@ -1021,15 +998,15 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
       case State::SLAVE_READ_APPEND:
         {
             log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
-            log_assert(payload_.pos > 0);
+            log_assert(!payload_.empty());
 
-            const size_t previous_pos = payload_.pos;
+            const size_t previous_pos = payload_.size();
 
             if(!fill_payload_buffer(from_slave_fd, true))
                 break;
 
             state_ =
-                (payload_.pos - previous_pos) < DCP_PACKET_MAX_PAYLOAD_SIZE
+                (payload_.size() - previous_pos) < DCP_PACKET_MAX_PAYLOAD_SIZE
                 ? State::SLAVE_PROCESS_WRITE
                 : State::SLAVE_PREPARE_APPEND;
 
@@ -1040,8 +1017,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
         }
 
       case State::PUSH_TO_SLAVE__INIT:
-        if(!allocate_payload_buffer())
-            break;
+        allocate_payload_buffer();
 
         log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
 
@@ -1066,7 +1042,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
             if(command_ == DCP_COMMAND_WRITE_REGISTER)
                 reg_->write(&request_header_[DCP_HEADER_DATA_OFFSET], 2);
             else
-                reg_->write(payload_.data, payload_.pos);
+                reg_->write(payload_.data(), payload_.size());
         }
         catch(const Regs::no_handler &ex)
         {
@@ -1081,12 +1057,12 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
             msg_error(0, LOG_ERR,
                       "RegIO W: FAILED WRITING %zu bytes to "
                       REGISTER_FORMAT_STRING " (%zd)",
-                      command_ == DCP_COMMAND_WRITE_REGISTER ? 2 : payload_.pos,
+                      command_ == DCP_COMMAND_WRITE_REGISTER ? 2 : payload_.size(),
                       reg_->address_, reg_->name_.c_str(), ex.result());
             break;
         }
 
-        log_register_write(payload_.pos < DCP_PACKET_MAX_PAYLOAD_SIZE
+        log_register_write(payload_.size() < DCP_PACKET_MAX_PAYLOAD_SIZE
                            ? LogWrite::SINGLE
                            : LogWrite::COMPLETED);
 
@@ -1096,7 +1072,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
         if(command_ != DCP_COMMAND_MULTI_WRITE_REGISTER)
         {
             log_assert(command_ == DCP_COMMAND_READ_REGISTER);
-            log_assert(payload_.data == nullptr);
+            log_assert(payload_.empty());
         }
 
         state_ = State::SEND_TO_SLAVE;
@@ -1123,7 +1099,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
                                      to_slave_fd) < 0) ||
                os_write_from_buffer(request_header_.data(), request_header_.size(),
                                     to_slave_fd) < 0 ||
-               os_write_from_buffer(payload_.data + current_fragment_offset_,
+               os_write_from_buffer(&payload_[current_fragment_offset_],
                                     fragsize, to_slave_fd) < 0)
                 break;
         }
@@ -1143,7 +1119,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
             return ProcessResult::FINISHED;
 
         current_fragment_offset_ += DCP_PACKET_MAX_PAYLOAD_SIZE;
-        log_assert(current_fragment_offset_ < payload_.pos);
+        log_assert(current_fragment_offset_ < payload_.size());
 
         refresh_as_master_transaction();
         state_ = State::SEND_TO_SLAVE;
@@ -1355,18 +1331,13 @@ uint16_t TransactionQueue::Transaction::get_max_data_size() const
     return reg_->max_data_size_;
 }
 
-bool TransactionQueue::Transaction::set_payload(const uint8_t *src, size_t length)
+void TransactionQueue::Transaction::set_payload(const uint8_t *src, size_t length)
 {
-    log_assert(payload_.data == nullptr);
+    log_assert(payload_.empty());
     log_assert(src != nullptr);
 
-    if(!dynamic_buffer_resize(&payload_, length))
-        return false;
-
-    memcpy(payload_.data, src, length);
-    payload_.pos = length;
-
-    return true;
+    payload_.reserve(length);
+    std::copy(src, src + length, std::back_inserter(payload_));
 }
 
 std::deque<std::unique_ptr<TransactionQueue::Transaction>>
@@ -1399,9 +1370,7 @@ TransactionQueue::fragments_from_data(Queue &queue, const uint8_t *data,
             size = length - i;
 
         log_assert(size > 0);
-
-        if(!t->set_payload(data + i, size))
-            break;
+        t->set_payload(data + i, size);
 
         result.emplace_back(std::move(t));
 

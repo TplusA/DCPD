@@ -19,7 +19,9 @@
 #ifndef DCPREGS_WLANSURVEY_HH
 #define DCPREGS_WLANSURVEY_HH
 
-#include "dynamic_buffer.h"
+#include <vector>
+#include <cstddef>
+#include <cstdint>
 
 namespace Connman { class WLANTools; }
 
@@ -39,7 +41,7 @@ void deinit();
 namespace DCP
 {
 int write_104_start_wlan_site_survey(const uint8_t *data, size_t length);
-bool read_105_wlan_site_survey_results(struct dynamic_buffer *buffer);
+bool read_105_wlan_site_survey_results(std::vector<uint8_t> &buffer);
 }
 
 }

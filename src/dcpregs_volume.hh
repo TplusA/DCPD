@@ -19,7 +19,8 @@
 #ifndef DCPREGS_VOLUME_HH
 #define DCPREGS_VOLUME_HH
 
-#include "dynamic_buffer.h"
+#include <cstddef>
+#include <cstdint>
 
 /*!
  * \addtogroup registers

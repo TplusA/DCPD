@@ -139,7 +139,7 @@ static void write_buffer_expect_failure(const Regs::Register *reg,
 static const Regs::Register *lookup_register_expect_handlers_full(
     uint8_t register_number,
     ssize_t (*const expected_read_handler)(uint8_t *, size_t),
-    bool (*const expected_read_handler_dynamic)(struct dynamic_buffer *buffer),
+    bool (*const expected_read_handler_dynamic)(std::vector<uint8_t> &buffer),
     int (*const expected_write_handler)(const uint8_t *, size_t),
     uint8_t version_major = 0, uint8_t version_minor = 0, uint8_t version_patch = 0)
 {
@@ -223,7 +223,7 @@ static inline const Regs::Register *lookup_register_expect_handlers(
  */
 static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
-    bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
+    bool (*const expected_read_handler)(std::vector<uint8_t> &buffer),
     int (*const expected_write_handler)(const uint8_t *, size_t))
 {
     return lookup_register_expect_handlers_full(register_number,
@@ -234,7 +234,7 @@ static inline const Regs::Register *lookup_register_expect_handlers(
 static inline const Regs::Register *lookup_register_expect_handlers(
     uint8_t register_number,
     uint8_t version_major, uint8_t version_minor, uint8_t version_patch,
-    bool (*const expected_read_handler)(struct dynamic_buffer *buffer),
+    bool (*const expected_read_handler)(std::vector<uint8_t> &buffer),
     int (*const expected_write_handler)(const uint8_t *, size_t))
 {
     return lookup_register_expect_handlers_full(register_number,
@@ -1218,7 +1218,7 @@ void test_lookup_all_existing_registers()
             cppcut_assert_not_null(reg);
             cppcut_assert_equal(unsigned(r), unsigned(reg->address_));
             cut_assert(reg->max_data_size_ > 0 ||
-                       !reg->has_handler(static_cast<bool (*)(struct dynamic_buffer *)>(nullptr)));
+                       !reg->has_handler(static_cast<bool (*)(std::vector<uint8_t> &)>(nullptr)));
             cppcut_assert_operator(reg->minimum_protocol_version_.code, <=, reg->maximum_protocol_version_.code);
             cppcut_assert_equal(uint32_t(REGISTER_MK_VERSION(regset.version_major_,
                                                              regset.version_minor_,
@@ -8378,9 +8378,7 @@ void test_read_out_empty_external_media_services()
                                                 Regs::MediaServices::DCP::read_106_media_service_list,
                                                 Regs::MediaServices::DCP::write_106_media_service_list);
 
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
-
+    std::vector<uint8_t> buffer;
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories;
 
     mock_dbus_iface->expect_dbus_get_credentials_read_iface(dbus_cred_read_iface_dummy);
@@ -8391,9 +8389,7 @@ void test_read_out_empty_external_media_services()
 
     const std::string expected_answer = "<services count=\"0\"/>";
     cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
+                            buffer.data(), buffer.size());
 }
 
 /*!\test
@@ -8413,8 +8409,7 @@ void test_read_out_external_media_services()
     register_changed_data->check(106);
 
     /* read out */
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
+    std::vector<uint8_t> buffer;
 
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories =
     {
@@ -8478,9 +8473,7 @@ void test_read_out_external_media_services()
         "</service>"
         "</services>";
     cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
+                            buffer.data(), buffer.size());
 }
 
 /*!\test
@@ -8500,8 +8493,7 @@ void test_read_out_unconfigured_external_media_services()
     register_changed_data->check(106);
 
     /* read out */
-    struct dynamic_buffer buffer;
-    dynamic_buffer_init(&buffer);
+    std::vector<uint8_t> buffer;
 
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories =
     {
@@ -8530,9 +8522,7 @@ void test_read_out_unconfigured_external_media_services()
         "<service id=\"deezer\" name=\"Deezer\"/>"
         "</services>";
     cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
-                            buffer.data, buffer.pos);
-
-    dynamic_buffer_free(&buffer);
+                            buffer.data(), buffer.size());
 }
 
 /*!\test

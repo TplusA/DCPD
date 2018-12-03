@@ -19,9 +19,8 @@
 #ifndef REGISTERS_HH
 #define REGISTERS_HH
 
-#include "dynamic_buffer.h"
-
 #include <string>
+#include <vector>
 #include <stdexcept>
 
 namespace Connman { class WLANTools; }
@@ -92,7 +91,7 @@ class Register
     /*!
      * How to handle incoming read requests (registers with dynamic size).
      */
-    bool (*read_handler_dynamic_)(struct dynamic_buffer *buffer);
+    bool (*read_handler_dynamic_)(std::vector<uint8_t> &buffer);
 
     /*!
      * How to handle incoming write requests.
@@ -123,7 +122,7 @@ class Register
     Register(std::string &&name, uint8_t address,
              uint32_t minimum_protocol_version,
              uint32_t maximum_protocol_version,
-             bool (*read_handler_dynamic)(struct dynamic_buffer *),
+             bool (*read_handler_dynamic)(std::vector<uint8_t> &),
              int (*write_handler)(const uint8_t *, size_t)):
         address_(address),
         name_(std::move(name)),
@@ -154,7 +153,7 @@ class Register
 
     Register(std::string &&name, uint8_t address,
              uint32_t minimum_protocol_version,
-             bool (*read_handler_dynamic)(struct dynamic_buffer *),
+             bool (*read_handler_dynamic)(std::vector<uint8_t> &),
              int (*write_handler)(const uint8_t *, size_t) = nullptr):
         Register(std::move(name), address, minimum_protocol_version,
                  REGISTER_MK_VERSION(UINT8_MAX, UINT8_MAX, UINT8_MAX),
@@ -170,7 +169,7 @@ class Register
      * #Regs::Register::max_data_size_ bytes to read out the register.
      * Otherwise, in case of dynamic size, the
      * #Regs::Register::read_handler_dynamic_ function must be called with an
-     * empty #dynamic_buffer.
+     * empty \c std::vector<uint8_t>.
      */
     bool is_static_size() const { return max_data_size_ > 0; }
 
@@ -187,12 +186,12 @@ class Register
         return result;
     }
 
-    void read(dynamic_buffer &buffer) const
+    void read(std::vector<uint8_t> &buffer) const
     {
         if(read_handler_dynamic_ == nullptr)
             throw no_handler("read dynamic");
 
-        if(!read_handler_dynamic_(&buffer))
+        if(!read_handler_dynamic_(buffer))
             throw io_error("read dynamic", -1);
     }
 
@@ -218,7 +217,7 @@ class Register
     /*!\internal
      * For unit tests.
      */
-    bool has_handler(bool (*handler)(struct dynamic_buffer *)) const
+    bool has_handler(bool (*handler)(std::vector<uint8_t> &)) const
     {
         return read_handler_dynamic_ == handler;
     }

@@ -719,14 +719,11 @@ static constexpr const uint8_t big_data[] =
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-static bool return_big_data(struct dynamic_buffer *buffer)
+static bool return_big_data(std::vector<uint8_t> &buffer)
 {
-    cut_assert(dynamic_buffer_is_empty(buffer));
-    cut_assert(dynamic_buffer_resize(buffer, sizeof(big_data)));
-
-    memcpy(buffer->data, big_data, sizeof(big_data));
-    buffer->pos = sizeof(big_data);
-
+    cut_assert(buffer.empty());
+    buffer.reserve(sizeof(big_data));
+    std::copy(big_data, big_data + sizeof(big_data), std::back_inserter(buffer));
     return true;
 }
 

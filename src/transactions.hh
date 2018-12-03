@@ -231,7 +231,7 @@ class Transaction
 
     const Regs::Register *reg_;
 
-    struct dynamic_buffer payload_;
+    std::vector<uint8_t> payload_;
     size_t current_fragment_offset_;
 
     Queue &queue_;
@@ -247,8 +247,6 @@ class Transaction
                          bool is_register_push, Channel channel);
 
   public:
-    ~Transaction();
-
     static std::unique_ptr<Transaction>
     new_for_queue(Queue &queue, InitialType init_type, Channel channel, bool mark_as_pinned)
     {
@@ -372,18 +370,18 @@ class Transaction
      * \note
      *     Used internally by TransactionQueue::fragments_from_data().
      */
-    bool set_payload(const uint8_t *src, size_t length);
+    void set_payload(const uint8_t *src, size_t length);
 
   private:
     void init(InitialType init_type, const Regs::Register *reg, bool is_reinit);
     void bind_to_register(const Regs::Register &reg, uint8_t command);
     void refresh_as_master_transaction();
-    bool allocate_payload_buffer();
+    void allocate_payload_buffer();
     bool fill_request_header(const int fd);
     bool fill_payload_buffer(const int fd, bool append);
     bool do_read_register();
     size_t get_current_fragment_size() const;
-    size_t get_remaining_fragment_size() const { return payload_.pos - current_fragment_offset_; }
+    size_t get_remaining_fragment_size() const { return payload_.size() - current_fragment_offset_; }
     bool is_last_fragment() const { return get_remaining_fragment_size() <= DCP_PACKET_MAX_PAYLOAD_SIZE; }
     void skip_transaction_payload(const int fd);
 

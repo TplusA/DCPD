@@ -19,7 +19,9 @@
 #ifndef DCPREGS_MEDIASERVICES_HH
 #define DCPREGS_MEDIASERVICES_HH
 
-#include "dynamic_buffer.h"
+#include <vector>
+#include <cstddef>
+#include <cstdint>
 
 /*!
  * \addtogroup registers
@@ -35,7 +37,7 @@ namespace MediaServices
 namespace DCP
 {
 int write_106_media_service_list(const uint8_t *data, size_t length);
-bool read_106_media_service_list(struct dynamic_buffer *buffer);
+bool read_106_media_service_list(std::vector<uint8_t> &buffer);
 }
 
 }

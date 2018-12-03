@@ -24,9 +24,9 @@
 #include "registers_priv.hh"
 #include "connman_scan.hh"
 #include "connman_iter.h"
-#include "dynamic_buffer_util.h"
 #include "messages.h"
 
+#include <sstream>
 #include <cstring>
 #include <mutex>
 
@@ -135,44 +135,29 @@ static size_t limit_number_of_services(size_t n)
     return n;
 }
 
-#define TRY_EMIT(BUF, FAILCODE, ...) \
-    do \
-    { \
-        if(retval && !dynamic_buffer_printf((BUF), __VA_ARGS__)) \
-        { \
-            retval = false; \
-            FAILCODE \
-        } \
-    }\
-    while(0)
-
 static bool
-fill_buffer_with_security_entries(struct dynamic_buffer *const buffer,
+fill_buffer_with_security_entries(std::ostream &os,
                                   struct ConnmanServiceSecurityIterator *const iter,
                                   const size_t sec_count)
 {
     if(iter == NULL)
         return false;
 
-    bool retval = true;
-
-    TRY_EMIT(buffer, return false;,
-             "<security_list count=\"%zu\">", sec_count);
+    os << "<security_list count=\"" << sec_count << "\">";
 
     for(size_t i = 0; i < sec_count; ++i)
     {
         log_assert(iter != NULL);
 
-        TRY_EMIT(buffer, break;,
-                 "<security index=\"%zu\">%s</security>",
-                 i, connman_security_iterator_get_security(iter));
+        os << "<security index=\"" << i << "\">"
+           << connman_security_iterator_get_security(iter) << "</security>";
 
         connman_security_iterator_next(iter);
     }
 
-    TRY_EMIT(buffer, /* nothing */;, "</security_list>");
+    os << "</security_list>";
 
-    return retval;
+    return true;
 }
 
 static inline enum WifiServiceType is_wifi_service(struct ConnmanServiceIterator *const iter)
@@ -214,54 +199,48 @@ static size_t count_number_of_wifi_services(struct ConnmanServiceIterator *const
     return limit_number_of_services(count);
 }
 
-static bool fill_buffer_with_single_service(struct dynamic_buffer *const buffer,
+static bool fill_buffer_with_single_service(std::ostream &os,
                                             struct ConnmanServiceIterator *const iter,
                                             const size_t idx)
 {
-    bool retval = true;
-
-    TRY_EMIT(buffer, return false;,
-             "<bss index=\"%zu\">", idx);
-    TRY_EMIT(buffer, return false;,
-             "<ssid>%s</ssid>", connman_service_iterator_get_ssid(iter));
-    TRY_EMIT(buffer, return false;,
-             "<quality>%d</quality>", connman_service_iterator_get_strength(iter));
+    os << "<bss index=\"" << idx << "\">"
+       << "<ssid>" << connman_service_iterator_get_ssid(iter) << "</ssid>"
+       << "<quality>" << connman_service_iterator_get_strength(iter) << "</quality>";
 
     size_t number_of_sec;
     struct ConnmanServiceSecurityIterator *const security =
         connman_service_iterator_get_security_iterator(iter,
                                                        &number_of_sec);
 
-    retval = fill_buffer_with_security_entries(buffer,
-                                               security, number_of_sec);
+    const bool retval = fill_buffer_with_security_entries(os, security, number_of_sec);
+
     if(retval)
-        TRY_EMIT(buffer, /* nothing */;, "</bss>");
+        os << "</bss>";
 
     connman_security_iterator_free(security);
 
     return retval;
 }
 
-static bool fill_buffer_with_services(struct dynamic_buffer *const buffer)
+static bool fill_buffer_with_services(std::vector<uint8_t> &buffer)
 {
     bool retval = true;
-
-    dynamic_buffer_clear(buffer);
-
     struct ConnmanServiceIterator *const service = connman_service_iterator_get();
     const size_t number_of_wifi_services = count_number_of_wifi_services(service);
 
+    buffer.clear();
+
     if(number_of_wifi_services == 0)
     {
+        static const std::string empty("<bss_list count=\"0\"/>");
         connman_service_iterator_free(service);
-        TRY_EMIT(buffer, /* nothing */, "<bss_list count=\"0\"/>");
+        std::copy(empty.begin(), empty.end(), std::back_inserter(buffer));
         return retval;
     }
 
     size_t idx = 0;
-
-    TRY_EMIT(buffer, goto exit_free_service_iter;,
-             "<bss_list count=\"%zu\">", number_of_wifi_services);
+    std::ostringstream os;
+    os << "<bss_list count=\"" << number_of_wifi_services << "\">";
 
     do
     {
@@ -273,9 +252,12 @@ static bool fill_buffer_with_services(struct dynamic_buffer *const buffer)
             break;
 
           case WIFI_SERVICE_TYPE_WLAN_WITH_SSID:
-            retval = fill_buffer_with_single_service(buffer, service, idx++);
+            retval = fill_buffer_with_single_service(os, service, idx++);
             if(!retval)
-                goto exit_free_service_iter;
+            {
+                connman_service_iterator_free(service);
+                return retval;
+            }
 
             break;
 
@@ -285,10 +267,12 @@ static bool fill_buffer_with_services(struct dynamic_buffer *const buffer)
     }
     while(connman_service_iterator_next(service));
 
-    TRY_EMIT(buffer, /* nothing */, "</bss_list>");
-
-exit_free_service_iter:
     connman_service_iterator_free(service);
+
+    os << "</bss_list>";
+
+    const auto &str(os.str());
+    std::copy(str.begin(), str.end(), std::back_inserter(buffer));
 
     return retval;
 }
@@ -314,21 +298,18 @@ static const char *survey_result_to_string(Connman::SiteSurveyResult result)
         return "bug";
 }
 
-bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(struct dynamic_buffer *buffer)
+bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(std::vector<uint8_t> &buffer)
 {
-    log_assert(dynamic_buffer_is_empty(buffer));
+    log_assert(buffer.empty());
 
     std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
-
-    bool retval = false;
 
     switch(nwwlan_survey_data.last_result)
     {
       case Connman::SiteSurveyResult::OK:
         if(fill_buffer_with_services(buffer))
-            return true;
+            break;
 
-        dynamic_buffer_clear(buffer);
         nwwlan_survey_data.last_result = Connman::SiteSurveyResult::OUT_OF_MEMORY;
 
         /* fall-through */
@@ -337,17 +318,18 @@ bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(struct dynamic_buf
       case Connman::SiteSurveyResult::DBUS_ERROR:
       case Connman::SiteSurveyResult::OUT_OF_MEMORY:
       case Connman::SiteSurveyResult::NO_HARDWARE:
-        retval = true;
-
-        TRY_EMIT(buffer, /* nothing */,
-                 "<bss_list count=\"-1\" error=\"%s\"/>",
-                 survey_result_to_string(nwwlan_survey_data.last_result));
-
-        if(buffer->pos > 0)
-            retval = true;
+        {
+            std::ostringstream os;
+            os << "<bss_list count=\"-1\" error=\""
+               << survey_result_to_string(nwwlan_survey_data.last_result) << "\"/>";
+            const auto &str(os.str());
+            buffer.clear();
+            std::copy(str.begin(), str.end(), std::back_inserter(buffer));
+            buffer.push_back('\0');
+        }
 
         break;
     }
 
-    return retval;
+    return true;
 }
