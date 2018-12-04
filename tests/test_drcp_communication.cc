@@ -25,7 +25,7 @@
 #include <memory>
 
 #include "named_pipe.h"
-#include "drcp.h"
+#include "drcp.hh"
 #include "dynamic_buffer_util.h"
 
 #include "mock_messages.hh"

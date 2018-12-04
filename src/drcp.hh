@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DRCP_H
-#define DRCP_H
+#ifndef DRCP_HH
+#define DRCP_HH
 
 #include "dynamic_buffer.h"
 
@@ -40,4 +40,4 @@ void drcp_finish_request(bool is_ok, int out_fd);
 
 /*!@}*/
 
-#endif /* !DRCP_H */
+#endif /* !DRCP_HH */

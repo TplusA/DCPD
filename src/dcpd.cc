@@ -29,7 +29,7 @@
 #include "transactions.hh"
 #include "dynamic_buffer.h"
 #include "dynamic_buffer_util.h"
-#include "drcp.h"
+#include "drcp.hh"
 #include "dbus_iface.h"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "registers.hh"

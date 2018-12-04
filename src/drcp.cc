@@ -20,7 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "drcp.h"
+#include "drcp.hh"
 #include "messages.h"
 #include "os.h"
 
@@ -81,8 +81,8 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
 
         if(expecting_size_value)
         {
-            char *const eol = memchr(buffer->data + token_start_pos, '\n',
-                                     buffer->pos - token_start_pos);
+            auto *const eol = static_cast<char *>(memchr(buffer->data + token_start_pos, '\n',
+                                                         buffer->pos - token_start_pos));
 
             if(eol != NULL)
             {
