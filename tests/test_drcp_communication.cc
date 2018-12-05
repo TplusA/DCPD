@@ -26,7 +26,6 @@
 
 #include "named_pipe.h"
 #include "drcp.hh"
-#include "dynamic_buffer_util.h"
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
@@ -80,7 +79,6 @@ static MockMessages *mock_messages;
 static MockOs *mock_os;
 static std::unique_ptr<FillBufferData> fill_buffer_data;
 static std::unique_ptr<FillBufferData> fill_buffer_data_second_try;
-static struct dynamic_buffer buffer;
 static const struct fifo_pair fds = { 10, 20 };
 
 void cut_setup()
@@ -99,16 +97,12 @@ void cut_setup()
 
     fill_buffer_data.reset(new FillBufferData);
     fill_buffer_data_second_try.reset(nullptr);
-
-    dynamic_buffer_init(&buffer);
 }
 
 void cut_teardown()
 {
     mock_messages->check();
     mock_os->check();
-
-    dynamic_buffer_free(&buffer);
 
     mock_messages_singleton = nullptr;
     mock_os_singleton = nullptr;
@@ -127,13 +121,12 @@ void cut_teardown()
 /*!
  * Local mock implementation of #os_try_read_to_buffer().
  */
-static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
-                       int fd, bool suppress_error_on_eagain)
+static int fill_buffer_with_header(void *dest, size_t count, size_t *add_bytes_read,
+                                   int fd, bool suppress_error_on_eagain)
 {
     uint8_t *dest_ptr = static_cast<uint8_t *>(dest);
 
-    cppcut_assert_equal(buffer.data, dest_ptr);
-    cppcut_assert_equal(buffer.size, count);
+    cppcut_assert_equal(size_t(16), count);
     cppcut_assert_not_null(add_bytes_read);
     cppcut_assert_equal(fds.in_fd, fd);
     cppcut_assert_not_null(fill_buffer_data.get());
@@ -152,13 +145,40 @@ static int fill_buffer(void *dest, size_t count, size_t *add_bytes_read,
 /*!
  * Proxy function for exchanging data for second #os_try_read_to_buffer() call.
  */
-static int fill_buffer_second_try(void *dest, size_t count,
-                                  size_t *add_bytes_read,
-                                  int fd, bool suppress_error_on_eagain)
+static int fill_buffer_with_header_second_try(void *dest, size_t count,
+                                              size_t *add_bytes_read,
+                                              int fd, bool suppress_error_on_eagain)
 {
     fill_buffer_data = std::move(fill_buffer_data_second_try);
 
-    return fill_buffer(dest, count, add_bytes_read, fd, suppress_error_on_eagain);
+    return fill_buffer_with_header(dest, count, add_bytes_read, fd,
+                                   suppress_error_on_eagain);
+}
+
+/*!
+ * Local mock implementation of #os_try_read_to_buffer().
+ */
+static int fill_buffer_with_data(void *dest, size_t count, size_t *add_bytes_read,
+                                 int fd, bool suppress_error_on_eagain,
+                                 std::string &xml_buffer)
+{
+    uint8_t *dest_ptr = static_cast<uint8_t *>(dest);
+
+    cppcut_assert_equal(static_cast<const void *>(xml_buffer.data()), dest);
+    cppcut_assert_equal(xml_buffer.size(), count);
+    cppcut_assert_not_null(add_bytes_read);
+    cppcut_assert_equal(fds.in_fd, fd);
+    cppcut_assert_not_null(fill_buffer_data.get());
+    cppcut_assert_equal(fill_buffer_data->suppress_eagain_error_,
+                        suppress_error_on_eagain);
+
+    const size_t n = std::min(count, fill_buffer_data->data_.length());
+    std::copy_n(fill_buffer_data->data_.begin(), n, dest_ptr + *add_bytes_read);
+    *add_bytes_read += n;
+
+    errno = fill_buffer_data->errno_value_;
+
+    return fill_buffer_data->return_value_;
 }
 
 /*!\test
@@ -166,17 +186,16 @@ static int fill_buffer_second_try(void *dest, size_t count,
  */
 void test_read_drcp_size_header()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
 
     static const char input_string[] = "Size: 731\n";
     fill_buffer_data->set(input_string, 0, 1, true);
 
     size_t size;
-    size_t offset;
-    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_true(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
     cppcut_assert_equal(size_t(731), size);
-    cppcut_assert_equal(sizeof(input_string) - 1, offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -190,22 +209,20 @@ void test_read_drcp_size_header()
  */
 void test_read_drcp_size_header_from_empty_input()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
     mock_os->expect_os_sched_yield();
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_second_try);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header_second_try);
 
     fill_buffer_data->set("", 0, 0, true);
     fill_buffer_data_second_try.reset(new FillBufferData("Size: 15\n", 0, 0, true));
 
     size_t size = 0;
-    size_t offset = 0;
-    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_true(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
 
     static const size_t expected_size_value(15);
-    static const size_t expected_payload_offset(9);
     cppcut_assert_equal(expected_size_value, size);
-    cppcut_assert_equal(expected_payload_offset, offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -219,22 +236,20 @@ void test_read_drcp_size_header_from_empty_input()
  */
 void test_read_drcp_size_header_with_incomplete_size_token()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
     mock_os->expect_os_sched_yield();
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_second_try);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header_second_try);
 
     fill_buffer_data->set("Si", 0, 0, true);
     fill_buffer_data_second_try.reset(new FillBufferData("ze: 4\n", 0, 0, true));
 
     size_t size = 0;
-    size_t offset = 0;
-    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_true(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
 
     static const size_t expected_size_value(4);
-    static const size_t expected_payload_offset(8);
     cppcut_assert_equal(expected_size_value, size);
-    cppcut_assert_equal(expected_payload_offset, offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -251,23 +266,21 @@ void test_read_drcp_size_header_with_incomplete_size_token()
  */
 void test_read_drcp_size_header_with_incomplete_size_value()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
     mock_os->expect_os_sched_yield();
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_second_try);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header_second_try);
 
     static const char input_string[] = "Size: 5";
     fill_buffer_data->set(input_string, 0, 0, true);
     fill_buffer_data_second_try.reset(new FillBufferData("10\n", 0, 0, true));
 
     size_t size = 0;
-    size_t offset = 0;
-    cut_assert_true(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_true(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
 
     static const size_t expected_size_value(510);
-    static const size_t expected_payload_offset(10);
     cppcut_assert_equal(expected_size_value, size);
-    cppcut_assert_equal(expected_payload_offset, offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -275,8 +288,7 @@ void test_read_drcp_size_header_with_incomplete_size_value()
  */
 void test_read_drcp_size_header_with_trailing_byte()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
 
     static const char input_string[] = "Size: 123F\n";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -284,10 +296,10 @@ void test_read_drcp_size_header_with_trailing_byte()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_CRIT, "Malformed XML size \"123F\" (Invalid argument)");
 
     size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_false(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
     cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -295,8 +307,7 @@ void test_read_drcp_size_header_with_trailing_byte()
  */
 void test_read_drcp_size_header_with_negative_size()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
 
     static const char input_string[] = "Size: -5\n";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -304,10 +315,10 @@ void test_read_drcp_size_header_with_negative_size()
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size -5 (Numerical result out of range)");
 
     size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_false(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
     cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -315,8 +326,7 @@ void test_read_drcp_size_header_with_negative_size()
  */
 void test_read_drcp_size_header_with_huge_size()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
 
     static const char input_string[] = "Size: 65536\n";
     fill_buffer_data->set(input_string, 0, 0, true);
@@ -324,30 +334,29 @@ void test_read_drcp_size_header_with_huge_size()
     mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size 65536 (Numerical result out of range)");
 
     size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_false(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
     cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
- * Attempting to read size header causing an integer overflow.
+ * Attempting to read very long size header results in an error.
  */
 void test_read_drcp_size_header_with_overflow_size()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
 
     static const char input_string[] = "Size: 18446744073709551616\n";
     fill_buffer_data->set(input_string, 0, 0, true);
 
-    mock_messages->expect_msg_error_formatted(ERANGE, LOG_CRIT, "Too large XML size 18446744073709551616 (Numerical result out of range)");
+    mock_messages->expect_msg_error_formatted(EINVAL, LOG_CRIT, "DRCP header too long (Invalid argument)");
 
     size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_false(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
     cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -359,8 +368,7 @@ void test_read_drcp_size_header_with_overflow_size()
  */
 void test_read_faulty_drcp_size_header()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
 
     static const char input_string[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     fill_buffer_data->set(input_string, 0, 1, true);
@@ -368,10 +376,10 @@ void test_read_faulty_drcp_size_header()
     mock_messages->expect_msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
 
     size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
+    std::string buffer;
+    cut_assert_false(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
     cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -383,19 +391,17 @@ void test_read_faulty_drcp_size_header()
  */
 void test_read_drcp_size_header_from_broken_file_descriptor()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header);
 
     fill_buffer_data->set("", EBADF, -1, true);
 
     mock_messages->expect_msg_error(EBADF, LOG_CRIT, "Reading XML size failed");
 
     size_t size = 500;
-    size_t offset = 600;
-    cut_assert_false(drcp_read_size_from_fd(&buffer, fds.in_fd, &size, &offset));
-    cppcut_assert_equal(size_t(0), buffer.pos);
+    std::string buffer;
+    cut_assert_false(Drcp::read_size_from_fd(fds.in_fd, size, buffer));
     cppcut_assert_equal(size_t(500), size);
-    cppcut_assert_equal(size_t(600), offset);
+    cut_assert_true(buffer.empty());
 }
 
 /*!\test
@@ -403,44 +409,56 @@ void test_read_drcp_size_header_from_broken_file_descriptor()
  */
 void test_read_drcp_data()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    std::string buffer;
+    mock_os->expect_os_try_read_to_buffer_callback(0,
+            [&buffer]
+            (void *dest, size_t count, size_t *add_bytes_read,
+             int fd, bool suppress_error_on_eagain) -> int
+            {
+                return fill_buffer_with_data(dest, count, add_bytes_read, fd,
+                                             suppress_error_on_eagain, buffer);
+            });
 
     static const char input_string[] =
         "Here is some test data\nread straight from the guts of\na MOCK!";
-    fill_buffer_data->set(input_string, 0, 0);
+    fill_buffer_data->set(input_string, 0, 1);
 
-    cut_assert_true(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
-                                                false, "test data"));
+    cut_assert_true(Drcp::read_xml(fds.in_fd, buffer, sizeof(input_string) - 1));
     cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
-                            buffer.data, buffer.pos);
+                            buffer.c_str(), buffer.size());
 }
 
 /*!\test
  * Attempting to read lots of data from the named pipe filled by DRCPD.
  *
- * \note This test relies on the fact that the dynamic buffers are allocated by
- *       pages, which are usually powers of 2 bytes, thus also multiples of 8.
- *       The test writes 8 bytes per read to the consumer's buffer. We expect
- *       the reader to stop reading when its buffer is full.
+ * The test reads 1024 times, 8 bytes at a time, and for each byte it appends
+ * the datat to the consumer's buffer. In the end, there will be 8 kB worth of
+ * data in our buffer.
  */
 void test_read_drcp_data_from_infinite_size_input()
 {
-    dynamic_buffer_check_space(&buffer);
-
     static const char input_string[] = "testdata";
     fill_buffer_data->set(input_string, 0, 1);
 
-    for(size_t i = 0; i < buffer.size / (sizeof(input_string) - 1); ++i)
-        mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    static constexpr auto n = 1024U;
+    std::string buffer;
 
-    cut_assert_true(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
-                                                false, "test data"));
+    for(auto i = 0U; i < n; ++i)
+        mock_os->expect_os_try_read_to_buffer_callback(0,
+                [&buffer]
+                (void *dest, size_t count, size_t *add_bytes_read,
+                 int fd, bool suppress_error_on_eagain) -> int
+                {
+                    return fill_buffer_with_data(dest, count, add_bytes_read, fd,
+                                                 suppress_error_on_eagain, buffer);
+                });
 
-    cppcut_assert_equal(buffer.size, buffer.pos);
-    for(size_t i = 0; i < buffer.pos; i += sizeof(input_string) - 1)
+    cut_assert_true(Drcp::read_xml(fds.in_fd, buffer, n * (sizeof(input_string) - 1)));
+
+    cppcut_assert_equal(n * (sizeof(input_string) - 1), buffer.size());
+    for(size_t i = 0; i < buffer.size(); i += sizeof(input_string) - 1)
         cut_assert_equal_memory(input_string, sizeof(input_string) - 1,
-                                buffer.data + i, sizeof(input_string) - 1);
+                                &buffer[i], sizeof(input_string) - 1);
 }
 
 /*!\test
@@ -452,29 +470,32 @@ void test_read_drcp_data_from_infinite_size_input()
  */
 void test_read_drcp_data_from_broken_file_descriptor()
 {
-    dynamic_buffer_check_space(&buffer);
-    mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer);
+    std::string buffer;
+    mock_os->expect_os_try_read_to_buffer_callback(0,
+            [&buffer]
+            (void *dest, size_t count, size_t *add_bytes_read,
+             int fd, bool suppress_error_on_eagain) -> int
+            {
+                return fill_buffer_with_data(dest, count, add_bytes_read, fd,
+                                             suppress_error_on_eagain, buffer);
+            });
 
     fill_buffer_data->set("", EBADF, -1);
 
     mock_messages->expect_msg_error_formatted(EBADF, LOG_CRIT, "Failed reading DRCP data from fd 10 (Bad file descriptor)");
 
-    cut_assert_false(dynamic_buffer_fill_from_fd(&buffer, fds.in_fd,
-                                                 false, "DRCP data"));
-    cppcut_assert_equal(size_t(0), buffer.pos);
+    cut_assert_false(Drcp::read_xml(fds.in_fd, buffer, 10));
+    cut_assert_true(buffer.empty());
 }
 
 /*!
  * Local mock implementation of #os_write_from_buffer().
  */
-static int receive_buffer(const void *src, size_t count, int fd)
+static int receive_buffer(const void *src, size_t count, int fd,
+                          std::string &buffer)
 {
     cppcut_assert_equal(fds.out_fd, fd);
-
-    cut_assert_true(dynamic_buffer_resize(&buffer, count));
-    std::copy_n(static_cast<const uint8_t *>(src), count, buffer.data);
-    buffer.pos += count;
-
+    std::copy_n(static_cast<const char *>(src), count, std::back_inserter(buffer));
     return 0;
 }
 
@@ -483,10 +504,16 @@ static int receive_buffer(const void *src, size_t count, int fd)
  */
 void test_write_drcp_result_successful()
 {
-    mock_os->expect_os_write_from_buffer_callback(0, receive_buffer);
+    std::string buffer;
+    mock_os->expect_os_write_from_buffer_callback(0,
+            [&buffer]
+            (const void *src, size_t count, int fd) -> int
+            {
+                return receive_buffer(src, count, fd, buffer);
+            });
 
-    drcp_finish_request(true, fds.out_fd);
-    cut_assert_equal_memory("OK\n", 3, buffer.data, buffer.pos);
+    Drcp::finish_request(fds.out_fd, true);
+    cut_assert_equal_memory("OK\n", 3, buffer.data(), buffer.size());
 }
 
 /*!\test
@@ -494,10 +521,16 @@ void test_write_drcp_result_successful()
  */
 void test_write_drcp_result_failed()
 {
-    mock_os->expect_os_write_from_buffer_callback(0, receive_buffer);
+    std::string buffer;
+    mock_os->expect_os_write_from_buffer_callback(0,
+            [&buffer]
+            (const void *src, size_t count, int fd) -> int
+            {
+                return receive_buffer(src, count, fd, buffer);
+            });
 
-    drcp_finish_request(false, fds.out_fd);
-    cut_assert_equal_memory("FF\n", 3, buffer.data, buffer.pos);
+    Drcp::finish_request(fds.out_fd, false);
+    cut_assert_equal_memory("FF\n", 3, buffer.data(), buffer.size());
 }
 
 };

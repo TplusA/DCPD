@@ -24,25 +24,74 @@
 #include "messages.h"
 #include "os.h"
 
-#include <stdlib.h>
-#include <string.h>
-#include <limits.h>
-#include <errno.h>
+#include <array>
+#include <algorithm>
+#include <cerrno>
 
-bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
-                            size_t *expected_size, size_t *payload_offset)
+bool Drcp::determine_xml_size(int in_fd, std::string &xml_string, size_t &expected_size)
 {
-    size_t token_start_pos = buffer->pos;
+    if(expected_size > 0)
+        return true;
+
+    if(!Drcp::read_size_from_fd(in_fd, expected_size, xml_string))
+        return false;
+
+    return true;
+}
+
+bool Drcp::read_xml(int in_fd, std::string &xml_string, const size_t expected_size)
+{
+    size_t pos = xml_string.size();
+
+    xml_string.resize(expected_size);
+
+    while(pos < expected_size)
+    {
+        const size_t old_pos(pos);
+        const int ret = os_try_read_to_buffer(&xml_string[0], expected_size,
+                                              &pos, in_fd, false);
+
+        if(ret > 0)
+            continue;
+
+        xml_string.resize(old_pos);
+
+        if(ret == 0)
+            break;
+        else
+        {
+            msg_error(errno, LOG_CRIT, "Failed reading DRCP data from fd %d", in_fd);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Drcp::read_size_from_fd(int in_fd, size_t &expected_size,
+                             std::string &overhang_buffer)
+{
+    static const char size_header[] = "Size: ";
+
+    /*
+     * A 16 byte buffer is all we need to handle 100% of all valid DRCP
+     * transfers. In case the DRCP header is longer than this, we know for sure
+     * there must be something wrong and we can error out.
+     */
+    std::array<char, 16> buffer;
+    size_t buffer_pos = 0;
+
+    size_t token_start_pos = 0;
     bool expecting_size_header = true;
     bool expecting_size_value = false;
-    const char *number_string = NULL;
+    const char *number_string;
 
     while(true)
     {
-        const size_t prev_pos = buffer->pos;
+        const size_t prev_pos = buffer_pos;
         const int read_result =
-            os_try_read_to_buffer(buffer->data, buffer->size,
-                                  &buffer->pos, in_fd, true);
+            os_try_read_to_buffer(buffer.data(), buffer.size(),
+                                  &buffer_pos, in_fd, true);
 
         if(read_result < 0)
         {
@@ -50,7 +99,7 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
             return false;
         }
 
-        if(buffer->pos == prev_pos)
+        if(buffer_pos == prev_pos)
         {
             /* try again later */
             os_sched_yield();
@@ -59,11 +108,10 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
 
         if(expecting_size_header)
         {
-            static const char size_header[] = "Size: ";
-
-            if(buffer->pos - token_start_pos >= sizeof(size_header))
+            if(buffer_pos - token_start_pos >= sizeof(size_header))
             {
-                if(memcmp(buffer->data, size_header, sizeof(size_header) - 1) != 0)
+                if(!std::equal(size_header, size_header + sizeof(size_header) - 1,
+                               buffer.begin()))
                 {
                     msg_error(EINVAL, LOG_CRIT, "Invalid input, expected XML size");
                     return false;
@@ -81,16 +129,21 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
 
         if(expecting_size_value)
         {
-            auto *const eol = static_cast<char *>(memchr(buffer->data + token_start_pos, '\n',
-                                                         buffer->pos - token_start_pos));
+            const auto &eol(std::find(&buffer[token_start_pos],
+                                      &buffer[buffer_pos], '\n'));
 
-            if(eol != NULL)
+            if(eol < &buffer[buffer_pos])
             {
                 expecting_size_value = false;
-                number_string = (const char *)buffer->data + token_start_pos;
+                number_string = &buffer[token_start_pos];
                 *eol = '\0';
                 token_start_pos += eol - number_string + 1;
                 break;
+            }
+            else if(buffer_pos >= buffer.size())
+            {
+                msg_error(EINVAL, LOG_CRIT, "DRCP header too long");
+                return false;
             }
             else
             {
@@ -111,25 +164,26 @@ bool drcp_read_size_from_fd(struct dynamic_buffer *buffer, int in_fd,
         return false;
     }
 
-    if(temp > UINT16_MAX || (temp == ULONG_MAX && errno == ERANGE))
+    if(temp > std::numeric_limits<uint16_t>::max() ||
+       (temp == std::numeric_limits<unsigned long>::max() && errno == ERANGE))
     {
         msg_error(ERANGE, LOG_CRIT, "Too large XML size %s", number_string);
         return false;
     }
 
-    *expected_size = temp;
-    *payload_offset = token_start_pos;
+    expected_size = temp;
+
+    overhang_buffer.clear();
+    std::copy(&buffer[token_start_pos], &buffer[buffer_pos],
+              std::back_inserter(overhang_buffer));
 
     return true;
 }
 
-void drcp_finish_request(bool is_ok, int out_fd)
+void Drcp::finish_request(int out_fd, bool is_ok)
 {
     static const char ok_result[] = "OK\n";
     static const char error_result[] = "FF\n";
-
-    const uint8_t *result =
-        (const uint8_t *)(is_ok ? ok_result : error_result);
-
+    auto *result(reinterpret_cast<const uint8_t *>(is_ok ? ok_result : error_result));
     (void)os_write_from_buffer(result, 3, out_fd);
 }

@@ -31,7 +31,7 @@ dcpd_SOURCES = \
     accesspoint_manager.hh accesspoint.hh \
     transactions.hh dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
-    dynamic_buffer.h drcp.hh drcp_command_codes.h \
+    drcp.hh drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_status.hh \
@@ -67,7 +67,6 @@ AM_CPPFLAGS += -I$(DBUS_IFACES)
 
 noinst_LTLIBRARIES = \
     libtransactions.la \
-    libdynamic_buffer.la \
     libdbus_handlers.la \
     libregisters.la \
     libnetworkprefs.la \
@@ -100,12 +99,6 @@ noinst_LTLIBRARIES = \
     libdebug_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
-
-libdynamic_buffer_la_SOURCES = \
-    dynamic_buffer.c dynamic_buffer.h \
-    dynamic_buffer_util.c dynamic_buffer_util.h
-libdynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
-libdynamic_buffer_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libregisters_la_SOURCES = \
     registers.cc registers.hh registers_priv.hh register_response_writer.hh \
@@ -252,7 +245,6 @@ libdebug_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 libdrcpdcomm_la_SOURCES = \
     drcp.cc drcp.hh \
     named_pipe.h \
-    dynamic_buffer.h dynamic_buffer_util.h \
     messages.h
 libdrcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 libdrcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
@@ -260,7 +252,7 @@ libdrcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 libtransactions_la_SOURCES = \
     transactions.cc transactions.hh os.h \
     hexdump.c hexdump.h \
-    dynamic_buffer.h registers.hh named_pipe.h dcpdefs.h messages.h
+    registers.hh named_pipe.h dcpdefs.h messages.h
 libtransactions_la_CFLAGS = $(AM_CFLAGS)
 libtransactions_la_CXXFLAGS = $(AM_CXXFLAGS)
 

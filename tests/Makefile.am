@@ -38,7 +38,6 @@ AM_CXXFLAGS = $(CXXWARNINGS)
 LIBS += $(CPPCUTTER_LIBS)
 
 check_LTLIBRARIES = \
-    test_dynamic_buffer.la \
     test_fixpoint.la \
     test_registers.la \
     test_drcpdcomm.la \
@@ -47,10 +46,6 @@ check_LTLIBRARIES = \
     test_networkprefs.la \
     test_network_dispatcher.la \
     test_applink.la
-
-test_dynamic_buffer_la_SOURCES = test_dynamic_buffer.c
-test_dynamic_buffer_la_LIBADD = $(top_builddir)/src/libdynamic_buffer.la
-test_dynamic_buffer_la_CFLAGS = $(AM_CFLAGS)
 
 test_fixpoint_la_SOURCES = \
     test_fixpoint.cc \
@@ -92,7 +87,6 @@ test_registers_la_SOURCES = \
 test_registers_la_LIBADD = \
     $(top_builddir)/src/libregisters.la \
     $(top_builddir)/src/libshutdown_guard.la \
-    $(top_builddir)/src/libdynamic_buffer.la \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libconnman_service.la \
@@ -107,7 +101,7 @@ test_drcpdcomm_la_SOURCES = \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_expectation.hh
-test_drcpdcomm_la_LIBADD = $(top_builddir)/src/libdrcpdcomm.la $(top_builddir)/src/libdynamic_buffer.la
+test_drcpdcomm_la_LIBADD = $(top_builddir)/src/libdrcpdcomm.la
 test_drcpdcomm_la_CFLAGS = $(AM_CFLAGS)
 test_drcpdcomm_la_CXXFLAGS = $(AM_CXXFLAGS)
 
@@ -126,8 +120,7 @@ test_transactions_la_LIBADD = \
     $(top_builddir)/src/libconnman_service.la \
     $(top_builddir)/src/libconnman_technology_registry.la \
     $(top_builddir)/src/libnetworkprefs.la \
-    $(top_builddir)/src/libshutdown_guard.la \
-    $(top_builddir)/src/libdynamic_buffer.la
+    $(top_builddir)/src/libshutdown_guard.la
 test_transactions_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 test_transactions_la_CXXFLAGS = $(AM_CXXFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 

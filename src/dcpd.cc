@@ -27,8 +27,6 @@
 #include "messages.h"
 #include "messages_glib.h"
 #include "transactions.hh"
-#include "dynamic_buffer.h"
-#include "dynamic_buffer_util.h"
 #include "drcp.hh"
 #include "dbus_iface.h"
 #include "dbus_handlers_connman_manager_glue.h"
@@ -51,6 +49,7 @@
 #include "os.h"
 #include "versioninfo.h"
 
+#include <string>
 #include <cstdio>
 #include <cstring>
 #include <csignal>
@@ -104,13 +103,14 @@ struct DCPDState
     TransactionQueue::Queue master_transaction_queue;
 
     /*!
-     * Dynamically growing buffer for holding XML data from drcpd.
+     * String for holding XML data from drcpd.
      *
-     * This buffer is filled while receiving XML data from drcpd. As soon as
+     * This string is filled while receiving XML data from drcpd. As soon as
      * drcpd is finished, one or more transactions are constructed and queued
      * in the #DCPDState::master_transaction_queue queue.
      */
-    struct dynamic_buffer drcp_buffer;
+    std::string drcp_buffer;
+    size_t drcp_buffer_expected_size;
 
     /*!
      * Pointer to an immortal SPI slave transaction object.
@@ -422,58 +422,6 @@ static unsigned int wait_for_events(DCPDState &state,
     return return_value;
 }
 
-static bool try_preallocate_buffer(struct dynamic_buffer *buffer,
-                                   const struct fifo_pair *fds)
-{
-    if(dynamic_buffer_is_allocated(buffer))
-        return true;
-
-    static size_t prealloc_size;
-    if(prealloc_size == 0)
-        prealloc_size = getpagesize();
-
-    if(!dynamic_buffer_resize(buffer, prealloc_size))
-        return false;
-
-    size_t expected_size;
-    size_t xml_data_offset;
-
-    buffer->size = 16;
-    if(!drcp_read_size_from_fd(buffer, fds->in_fd, &expected_size, &xml_data_offset))
-    {
-        dynamic_buffer_free(buffer);
-        return false;
-    }
-    buffer->size = prealloc_size;
-
-    log_assert(buffer->pos >= xml_data_offset);
-
-    if(expected_size > buffer->size)
-    {
-        if(!dynamic_buffer_resize(buffer, expected_size))
-        {
-            dynamic_buffer_free(buffer);
-            return false;
-        }
-    }
-    else
-    {
-        /*
-         * This is kind of a hack, but a safe one. The size field now contains
-         * the expected number of bytes to read from the pipe, and if there is
-         * any error, the buffer will be freed regardless of the size field.
-         * Even in case the size is 0, the buffer will be freed because free()
-         * is going to be called for a non-nullptr pointer.
-         */
-        buffer->size = expected_size;
-    }
-
-    buffer->pos -= xml_data_offset;
-    memmove(buffer->data, buffer->data + xml_data_offset, buffer->pos);
-
-    return true;
-}
-
 struct files
 {
     struct fifo_pair drcp_fifo;
@@ -488,17 +436,16 @@ struct files
 static bool process_drcp_input(DCPDState &state,
                                TransactionQueue::Channel channel)
 {
-    const struct dynamic_buffer *buffer = &state.drcp_buffer;
-
-    if(dynamic_buffer_is_empty(buffer))
+    if(state.drcp_buffer.empty())
     {
         msg_error(EINVAL, LOG_NOTICE, "Received empty DRCP buffer");
         return false;
     }
 
-    auto fragments(TransactionQueue::fragments_from_data(state.master_transaction_queue,
-                                                         buffer->data, buffer->pos,
-                                                         71, channel));
+    auto fragments(TransactionQueue::fragments_from_data(
+            state.master_transaction_queue,
+            reinterpret_cast<const uint8_t *>(state.drcp_buffer.data()),
+            state.drcp_buffer.size(), 71, channel));
     return state.master_transaction_queue.append(std::move(fragments));
 }
 
@@ -800,7 +747,8 @@ static void main_loop(struct files *files,
                                                      TransactionQueue::Channel::INET, true);
     state.preallocated_inet_slave_transaction_raw_pointer = state.preallocated_inet_slave_transaction.get();
 
-    dynamic_buffer_init(&state.drcp_buffer);
+    state.drcp_buffer.clear();
+    state.drcp_buffer_expected_size = 0;
 
     Regs::StrBoStatus::set_ready();
 
@@ -821,23 +769,25 @@ static void main_loop(struct files *files,
 
         if((wait_result & WAITEVENT_CAN_READ_DRCP) != 0)
         {
-            if(try_preallocate_buffer(&state.drcp_buffer, &files->drcp_fifo) &&
-               dynamic_buffer_fill_from_fd(&state.drcp_buffer,
-                                           files->drcp_fifo.in_fd, true,
-                                           "DRCP data"))
+            if(Drcp::determine_xml_size(files->drcp_fifo.in_fd, state.drcp_buffer,
+                                        state.drcp_buffer_expected_size) &&
+               Drcp::read_xml(files->drcp_fifo.in_fd, state.drcp_buffer,
+                              state.drcp_buffer_expected_size))
             {
-                if(state.drcp_buffer.pos >= state.drcp_buffer.size)
+                if(state.drcp_buffer.size() >= state.drcp_buffer_expected_size)
                 {
-                    drcp_finish_request(process_drcp_input(state,
-                                                           TransactionQueue::Channel::SPI),
-                                        files->drcp_fifo.out_fd);
-                    dynamic_buffer_free(&state.drcp_buffer);
+                    Drcp::finish_request(files->drcp_fifo.out_fd,
+                                         process_drcp_input(state,
+                                                            TransactionQueue::Channel::SPI));
+                    state.drcp_buffer.clear();
+                    state.drcp_buffer_expected_size = 0;
                 }
             }
             else
             {
-                dynamic_buffer_free(&state.drcp_buffer);
-                drcp_finish_request(false, files->drcp_fifo.out_fd);
+                Drcp::finish_request(files->drcp_fifo.out_fd, false);
+                state.drcp_buffer.clear();
+                state.drcp_buffer_expected_size = 0;
             }
         }
 
