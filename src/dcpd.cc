@@ -1358,6 +1358,8 @@ static void *update_watchdog_main(void *user_data)
     return nullptr;
 }
 
+static void dummy(bool) {}
+
 int main(int argc, char *argv[])
 {
     static struct parameters parameters;
@@ -1468,6 +1470,7 @@ int main(int argc, char *argv[])
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, connman,
                   reinterpret_cast<struct ConfigurationManagementData *>(&config_manager),
+                  dummy,
                   Regs::AudioSources::check_external_service_credentials) < 0)
     {
         shutdown(&files);

@@ -86,6 +86,7 @@ noinst_LTLIBRARIES = \
     libartcache_dbus.la \
     libairable_dbus.la \
     libcredentials_dbus.la \
+    libgerbera_dbus.la \
     libconfigproxy.la \
     libconfiguration_dbus.la \
     libappliance_dbus.la \
@@ -235,6 +236,9 @@ libairable_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libcredentials_dbus_la_SOURCES = credentials_dbus.c credentials_dbus.h
 libcredentials_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libgerbera_dbus_la_SOURCES = gerbera_dbus.c gerbera_dbus.h
+libgerbera_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 nodist_libconfiguration_dbus_la_SOURCES = configuration_dbus.c configuration_dbus.h
 libconfiguration_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
@@ -314,6 +318,10 @@ BUILT_SOURCES = \
     de_tahifi_credentials.h \
     de_tahifi_credentials.md \
     credentials_dbus.stamp \
+    $(nodist_libgerbera_dbus_la_SOURCES) \
+    io_gerbera.h \
+    io_gerbera.md \
+    gerbera_dbus.stamp \
     $(nodist_libconfiguration_dbus_la_SOURCES) \
     de_tahifi_configuration.h \
     de_tahifi_configuration.md \
@@ -414,6 +422,15 @@ credentials_dbus.h: credentials_dbus.stamp
 credentials_dbus.stamp: $(DBUS_IFACES)/de_tahifi_credentials.xml
 	$(GDBUS_CODEGEN) --generate-c-code=credentials_dbus --c-namespace tdbus_credentials --interface-prefix de.tahifi.Credentials. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_credentials.md -H de_tahifi_credentials.h -c tdbus_credentials -s de.tahifi.Credentials. -n "$(PACKAGE_NAME) (passing credentials around)"
+	touch $@
+
+io_gerbera.h: gerbera_dbus.stamp
+io_gerbera.md: gerbera_dbus.stamp
+gerbera_dbus.c: gerbera_dbus.stamp
+gerbera_dbus.h: gerbera_dbus.stamp
+gerbera_dbus.stamp: $(DBUS_IFACES)/io_gerbera.xml
+	$(GDBUS_CODEGEN) --generate-c-code=gerbera_dbus --c-namespace tdbus --interface-prefix io. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o io_gerbera.md -H io_gerbera.h -c tdbus -s io. -n "Gerbera UPnP server"
 	touch $@
 
 de_tahifi_configuration.h: configuration_dbus.stamp

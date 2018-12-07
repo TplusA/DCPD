@@ -133,6 +133,10 @@ gboolean dbusmethod_config_get_all_values(tdbusConfigurationRead *object,
                                           GDBusMethodInvocation *invocation,
                                           const gchar *database, gpointer user_data);
 
+void dbussignal_gerbera(GDBusProxy *proxy, const gchar *sender_name,
+                        const gchar *signal_name, GVariant *parameters,
+                        gpointer user_data);
+
 #ifdef __cplusplus
 }
 #endif

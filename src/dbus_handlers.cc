@@ -994,3 +994,23 @@ gboolean dbusmethod_debug_logging_config_set_level(tdbusdebugLoggingConfig *obje
 
     return TRUE;
 }
+
+void dbussignal_gerbera(GDBusProxy *proxy, const gchar *sender_name,
+                        const gchar *signal_name, GVariant *parameters,
+                        gpointer user_data)
+{
+    static const char iface_name[] = "io.gerbera.ContentManager";
+
+    if(strcmp(signal_name, "BusyChangedTo") == 0)
+    {
+        check_parameter_assertions(parameters, 1);
+
+        GVariant *val = g_variant_get_child_value(parameters, 0);
+        gboolean is_busy = g_variant_get_boolean(val);
+        g_variant_unref(val);
+
+        msg_info("Gerbera busy notification: %s", is_busy ? "BUSY" : "IDLE");
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
+}

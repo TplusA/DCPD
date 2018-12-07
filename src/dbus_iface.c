@@ -35,6 +35,7 @@
 #include "configuration_dbus.h"
 #include "appliance_dbus.h"
 #include "connman_dbus.h"
+#include "gerbera_dbus.h"
 #include "logind_dbus.h"
 #include "systemd_dbus.h"
 #include "messages.h"
@@ -127,6 +128,16 @@ static struct
 }
 audiopath_iface_data;
 
+static struct gerbera_iface_data
+{
+    bool connect_to_session_bus;
+    GDBusConnection *connection;
+    guint gerbera_watcher;
+    tdbusGerberaContentManager *cm_iface;
+    void (*content_manager_iface_available_notification)(bool);
+}
+gerbera_iface_data;
+
 static struct credentials_iface_data
 {
     bool connect_to_session_bus;
@@ -165,6 +176,44 @@ static gpointer process_dbus(gpointer user_data)
 
     g_main_loop_run(data->loop);
     return NULL;
+}
+
+static void created_gerbera_cm_proxy(GObject *source_object, GAsyncResult *res,
+                                     gpointer user_data)
+{
+    struct gerbera_iface_data *const data = user_data;
+    GError *error = NULL;
+
+    data->cm_iface = tdbus_gerbera_content_manager_proxy_new_finish(res, &error);
+
+    if(dbus_common_handle_dbus_error(&error, "Create Gerbera content manager proxy") == 0)
+    {
+        data->connection = g_dbus_proxy_get_connection(G_DBUS_PROXY(data->cm_iface));
+        g_signal_connect(data->cm_iface, "g-signal",
+                         G_CALLBACK(dbussignal_gerbera), NULL);
+    }
+}
+
+static void gerbera_appeared(GDBusConnection *connection, const gchar *name,
+                             const gchar *name_owner, gpointer user_data)
+{
+    struct gerbera_iface_data *const data = user_data;
+    data->content_manager_iface_available_notification(true);
+}
+
+static void gerbera_vanished(GDBusConnection *connection, const gchar *name,
+                             gpointer user_data)
+{
+    struct gerbera_iface_data *const data = user_data;
+    data->content_manager_iface_available_notification(false);
+
+    if(data->cm_iface == NULL)
+        tdbus_gerbera_content_manager_proxy_new(connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                "io.gerbera.ContentManager",
+                                                "/io/gerbera/ContentManager", NULL,
+                                                created_gerbera_cm_proxy,
+                                                &gerbera_iface_data);
 }
 
 static void try_export_iface(GDBusConnection *connection,
@@ -262,6 +311,17 @@ static void bus_acquired(GDBusConnection *connection,
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configuration_monitor_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_config_iface));
+    }
+
+    if(is_session_bus == gerbera_iface_data.connect_to_session_bus)
+    {
+        gerbera_iface_data.connection = connection;
+        gerbera_iface_data.gerbera_watcher =
+            g_bus_watch_name(is_session_bus ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM,
+                             "io.gerbera.ContentManager",
+                             G_BUS_NAME_WATCHER_FLAGS_NONE,
+                             gerbera_appeared, gerbera_vanished,
+                             &gerbera_iface_data, NULL);
     }
 
     if(!is_session_bus)
@@ -518,6 +578,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
                void *appconn_data,
                struct DBusSignalManagerData *connman_data,
                struct ConfigurationManagementData *configuration_data,
+               void (*content_manager_iface_available_notification)(bool),
                void (*credentials_read_iface_available_notification)(void))
 {
 #if !GLIB_CHECK_VERSION(2, 36, 0)
@@ -533,6 +594,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     memset(&airable_iface_data, 0, sizeof(airable_iface_data));
     memset(&artcache_iface_data, 0, sizeof(artcache_iface_data));
     memset(&audiopath_iface_data, 0, sizeof(audiopath_iface_data));
+    memset(&gerbera_iface_data, 0, sizeof(gerbera_iface_data));
     memset(&credentials_iface_data, 0, sizeof(credentials_iface_data));
     memset(&connman_iface_data, 0, sizeof(connman_iface_data));
     memset(&login1_iface_data, 0, sizeof(login1_iface_data));
@@ -558,6 +620,9 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
     airable_iface_data.appconn_data = appconn_data;
     artcache_iface_data.connect_to_session_bus = connect_to_session_bus;
     audiopath_iface_data.connect_to_session_bus = connect_to_session_bus;
+    gerbera_iface_data.connect_to_session_bus = connect_to_session_bus;
+    gerbera_iface_data.content_manager_iface_available_notification =
+        content_manager_iface_available_notification;
     credentials_iface_data.connect_to_session_bus = connect_to_session_bus;
     credentials_iface_data.read_iface_available_notification =
         credentials_read_iface_available_notification;
@@ -709,6 +774,12 @@ void dbus_shutdown(void)
     g_object_unref(artcache_iface_data.artcache_monitor_iface);
     g_object_unref(audiopath_iface_data.audiopath_manager_proxy);
     g_object_unref(audiopath_iface_data.audiopath_appliance_proxy);
+
+    if(gerbera_iface_data.gerbera_watcher != 0)
+        g_bus_unwatch_name(gerbera_iface_data.gerbera_watcher);
+
+    if(gerbera_iface_data.cm_iface != NULL)
+        g_object_unref(gerbera_iface_data.cm_iface);
 
     if(credentials_iface_data.cred_read_iface != NULL)
         g_object_unref(credentials_iface_data.cred_read_iface);
@@ -872,6 +943,11 @@ tdbusaupathManager *dbus_audiopath_get_manager_iface(void)
 tdbusaupathAppliance *dbus_audiopath_get_appliance_iface(void)
 {
     return audiopath_iface_data.audiopath_appliance_proxy;
+}
+
+tdbusGerberaContentManager *dbus_get_gerbera_content_manager_iface(void)
+{
+    return gerbera_iface_data.cm_iface;
 }
 
 tdbuscredentialsRead *dbus_get_credentials_read_iface(void)

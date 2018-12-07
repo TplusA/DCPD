@@ -30,6 +30,7 @@
 #include "configuration_dbus.h"
 #include "appliance_dbus.h"
 #include "connman_dbus.h"
+#include "gerbera_dbus.h"
 #include "logind_dbus.h"
 #include "systemd_dbus.h"
 
@@ -45,6 +46,7 @@ tdbusdcpdNetwork *dbus_get_network_config_iface(void);
 tdbusmixerVolume *dbus_mixer_get_volume_iface(void);
 tdbusaupathManager *dbus_audiopath_get_manager_iface(void);
 tdbusaupathAppliance *dbus_audiopath_get_appliance_iface(void);
+tdbusGerberaContentManager *dbus_get_gerbera_content_manager_iface(void);
 tdbusappliancePower *dbus_appliance_get_power_iface(void);
 tdbusConfigurationProxy *dbus_get_configuration_proxy_iface(void);
 

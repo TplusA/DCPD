@@ -32,6 +32,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
                void *appconn_data,
                struct DBusSignalManagerData *connman_manager_data,
                struct ConfigurationManagementData *configuration_data,
+               void (*content_manager_iface_available_notification)(bool),
                void (*credentials_read_iface_available_notification)(void));
 void dbus_shutdown(void);
 
