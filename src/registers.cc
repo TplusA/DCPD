@@ -35,6 +35,7 @@
 #include "dcpregs_wlansurvey.hh"
 #include "dcpregs_accesspoint.hh"
 #include "dcpregs_upnpname.hh"
+#include "dcpregs_upnpserver.hh"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_tcptunnel.hh"
 #include "dcpregs_audiosources.hh"
@@ -246,7 +247,7 @@ static int write_95_max_bitrate(const uint8_t *data, size_t length)
  *
  * \note The entries must be sorted by address for the binary search.
  */
-static const std::array<Regs::Register, 51> register_map
+static const std::array<Regs::Register, 52> register_map
 {
     /* Protocol level negotiation */
     Regs::Register("protocol level negotiation", 1,
@@ -467,6 +468,12 @@ static const std::array<Regs::Register, 51> register_map
                    256,
                    Regs::UPnPName::DCP::read_88_upnp_friendly_name,
                    Regs::UPnPName::DCP::write_88_upnp_friendly_name__v1_0_6),
+
+    /* UPnP server status and control */
+    Regs::Register("UPnP server status", 89,
+                   REGISTER_MK_VERSION(1, 0, 7),
+                   Regs::UPnPServer::DCP::read_89_upnp_server_status,
+                   Regs::UPnPServer::DCP::write_89_upnp_server_command),
 
     /* Wireless security setting */
     Regs::Register("WLAN security settings", 92,

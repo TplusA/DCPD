@@ -27,6 +27,7 @@
 #include "dcpregs_upnpname.hh"
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_playstream.hh"
+#include "dcpregs_upnpserver.hh"
 #include "dcpregs_status.hh"
 #include "network_config_to_json.hh"
 #include "volume_control.hh"
@@ -1009,7 +1010,7 @@ void dbussignal_gerbera(GDBusProxy *proxy, const gchar *sender_name,
         gboolean is_busy = g_variant_get_boolean(val);
         g_variant_unref(val);
 
-        msg_info("Gerbera busy notification: %s", is_busy ? "BUSY" : "IDLE");
+        Regs::UPnPServer::set_busy_state(is_busy);
     }
     else
         unknown_signal(iface_name, signal_name, sender_name);
