@@ -673,8 +673,7 @@ const Regs::Register *Regs::lookup(uint8_t register_number)
             {
                 return r.address_ < key.first ||
                        (r.address_ == key.first &&
-                        (r.maximum_protocol_version_.code < key.second.code ||
-                         r.minimum_protocol_version_.code > key.second.code));
+                        r.maximum_protocol_version_.code < key.second.code);
             });
 
     if(it != nullptr &&
