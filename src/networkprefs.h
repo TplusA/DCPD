@@ -89,7 +89,8 @@ void network_prefs_put_nameservers(struct network_prefs *prefs,
 void network_prefs_put_wlan_config(struct network_prefs *prefs,
                                    const char *network_name, const char *ssid,
                                    const char *security,
-                                   const char *passphrase);
+                                   const char *passphrase,
+                                   bool *have_new_passphrase);
 void network_prefs_disable_ipv4(struct network_prefs *prefs);
 
 void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path);

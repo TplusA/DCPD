@@ -52,7 +52,8 @@ bool dbussignal_connman_manager_connect_our_wlan(struct DBusSignalManagerData *d
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled,
-                                                   bool immediate_activation);
+                                                   bool immediate_activation,
+                                                   bool force_reconnect);
 
 void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
                                                        const char *network_ssid,

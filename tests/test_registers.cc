@@ -367,7 +367,8 @@ class ConnectToConnManServiceData
     }
 
     void called(enum NetworkPrefsTechnology tech,
-                const char *service_to_be_disabled, bool immediate_activation)
+                const char *service_to_be_disabled, bool immediate_activation,
+                bool force_reconnect)
     {
         cppcut_assert_equal(Mode::FROM_CONFIG, expected_mode_);
         cppcut_assert_equal(Mode::NONE, called_mode_);
@@ -511,10 +512,12 @@ static CancelWPSData cancel_wps_data;
  * this little function as a poor, but quick replacement */
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled,
-                                                   bool immediate_activation)
+                                                   bool immediate_activation,
+                                                   bool force_reconnect)
 {
     connect_to_connman_service_data.called(tech, service_to_be_disabled,
-                                           immediate_activation);
+                                           immediate_activation,
+                                           force_reconnect);
 }
 
 /* Another quick replacement for the Connman D-Bus API */

@@ -892,7 +892,8 @@ void network_prefs_put_nameservers(struct network_prefs *prefs,
 void network_prefs_put_wlan_config(struct network_prefs *prefs,
                                    const char *network_name, const char *ssid,
                                    const char *security,
-                                   const char *passphrase)
+                                   const char *passphrase,
+                                   bool *have_new_passphrase)
 {
     if(network_name != nullptr || ssid != nullptr)
     {
@@ -902,7 +903,23 @@ void network_prefs_put_wlan_config(struct network_prefs *prefs,
     }
 
     modify_pref(prefs->section, "Security", security);
-    modify_pref(prefs->section, "Passphrase", passphrase);
+
+    switch(modify_pref(prefs->section, "Passphrase", passphrase))
+    {
+      case MODIFY_UNTOUCHED_DEFINED:
+      case MODIFY_UNTOUCHED_UNDEFINED:
+      case MODIFY_FAILED_ADD:
+      case MODIFY_FAILED_REMOVE:
+        if(have_new_passphrase != NULL)
+            *have_new_passphrase = false;
+        break;
+
+      case MODIFY_ADDED:
+      case MODIFY_REMOVED:
+        if(have_new_passphrase != NULL)
+            *have_new_passphrase = true;
+        break;
+    }
 }
 
 void network_prefs_disable_ipv4(struct network_prefs *prefs)
@@ -1210,7 +1227,7 @@ static void migrate_old_config(struct network_prefs_handle *prefs,
         const char *const passphrase = get_value_or_empty(wlan_passphrase_kv);
 
         network_prefs_put_wlan_config(prefs_section, network_name, ssid,
-                                      security, passphrase);
+                                      security, passphrase, nullptr);
     }
 
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,  "Converted \"%s\"", old_config_name);

@@ -641,7 +641,7 @@ static void store_wlan_config(const Connman::ServiceBase *service)
                                       t.network_name_.get().c_str(),
                                       t.network_ssid_.get().c_str(),
                                       t.security_.get().c_str(),
-                                      nullptr);
+                                      nullptr, nullptr);
         network_prefs_write_to_file(handle);
     }
 
@@ -1054,7 +1054,8 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
                                const std::string &service_name,
                                const struct network_prefs *prefs,
                                WLANConnectionState &wlan_connection_state,
-                               bool make_it_favorite, bool immediate_activation)
+                               bool make_it_favorite, bool immediate_activation,
+                               bool force_reconnect)
 {
     switch(wlan_connection_state.get_state())
     {
@@ -1099,6 +1100,8 @@ static bool configure_our_wlan(const Connman::Service<Connman::Technology::WLAN>
                 wlan_connection_state.start_connecting();
             }
         }
+        else if(force_reconnect)
+            return true;
 
         /* rely on auto-connect */
         return false;
@@ -1806,7 +1809,7 @@ static bool process_our_wlan_service(Connman::ServiceBase &service,
         if(s.needs_processing())
         {
             if(configure_our_wlan(s, name, prefs, wlan_connection_state,
-                                  false, true))
+                                  false, true, false))
                 want_to_switch_to_wlan = true;
 
             if(s.is_active())
@@ -2326,7 +2329,8 @@ void dbussignal_connman_manager_about_to_connect_signals()
 
 void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
                                                    const char *service_to_be_disabled,
-                                                   bool immediate_activation)
+                                                   bool immediate_activation,
+                                                   bool force_reconnect)
 {
     if(global_dbussignal_connman_manager_data.is_disabled)
         return;
@@ -2379,7 +2383,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
                 if(configure_our_wlan(static_cast<const Connman::Service<Connman::Technology::WLAN> &>(*our_service->second),
                                       our_service->first, wlan_prefs,
                                       global_dbussignal_connman_manager_data.wlan_connection_state,
-                                      true, immediate_activation) &&
+                                      true, immediate_activation, force_reconnect) &&
                    immediate_activation)
                 {
                     global_dbussignal_connman_manager_data.wlan_connection_state.about_to_connect_to(

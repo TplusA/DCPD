@@ -973,7 +973,8 @@ handle_set_wireless_config(Network::ConfigRequest &req,
                            const Maybe<std::string> *fallback_wlan_security_mode,
                            struct network_prefs *prefs,
                            std::unique_ptr<std::string> &out_wps_network_name,
-                           std::unique_ptr<std::string> &out_wps_network_ssid)
+                           std::unique_ptr<std::string> &out_wps_network_ssid,
+                           bool &have_new_wlan_passphrase)
 {
     if(!req.wlan_security_mode_.is_known() &&
        !req.wlan_ssid_ascii_.is_known() &&
@@ -1071,7 +1072,7 @@ handle_set_wireless_config(Network::ConfigRequest &req,
         prefs,
         req.wlan_ssid_ascii_.is_known() ? req.wlan_ssid_ascii_.get().c_str() : nullptr,
         req.wlan_ssid_hex_.is_known() ? req.wlan_ssid_hex_.get().c_str() : nullptr,
-        req.wlan_security_mode_.get().c_str(), passphrase);
+        req.wlan_security_mode_.get().c_str(), passphrase, &have_new_wlan_passphrase);
 
     switch(retval)
     {
@@ -1136,7 +1137,8 @@ modify_network_configuration(
         const std::function<void(Network::ConfigRequest &, const Connman::ServiceBase &)> &patch_request,
         std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> &previous_wlan_name_buffer,
         std::unique_ptr<std::string> &out_wps_network_name,
-        std::unique_ptr<std::string> &out_wps_network_ssid)
+        std::unique_ptr<std::string> &out_wps_network_ssid,
+        bool &have_new_wlan_passphrase)
 {
     if(shutdown_guard_is_shutting_down_unlocked(&sg))
     {
@@ -1187,7 +1189,8 @@ modify_network_configuration(
             service->get_technology() == Connman::Technology::WLAN
             ? &static_cast<const Connman::Service<Connman::Technology::WLAN> *>(service)->get_tech_data().security_
             : nullptr,
-            selected_prefs, out_wps_network_name, out_wps_network_ssid)
+            selected_prefs, out_wps_network_name, out_wps_network_ssid,
+            have_new_wlan_passphrase)
         : Network::WPSMode::INVALID;
 
     switch(wps_mode)
@@ -1375,11 +1378,13 @@ static bool process_config_request_from_spi_slave(
     std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> current_wlan_service_name;
     std::unique_ptr<std::string> wps_network_name;
     std::unique_ptr<std::string> wps_network_ssid;
+    bool have_new_wlan_passphrase = false;
     const Network::WPSMode wps_mode = modify_network_configuration(
             cfg_wd.get_edit_state(),
             cfg_wd.get_configuration_request_rw(),
             shutdown_guard, patch_request,
-            current_wlan_service_name, wps_network_name, wps_network_ssid);
+            current_wlan_service_name, wps_network_name, wps_network_ssid,
+            have_new_wlan_passphrase);
     shutdown_guard_unlock(&shutdown_guard);
 
     log_assert((wps_mode == Network::WPSMode::DIRECT &&
@@ -1398,7 +1403,7 @@ static bool process_config_request_from_spi_slave(
       case Network::WPSMode::NONE:
         dbussignal_connman_manager_connect_to_service(map_network_technology(tech),
                                                       current_wlan_service_name.data(),
-                                                      true);
+                                                      true, have_new_wlan_passphrase);
         return true;
 
       case Network::WPSMode::DIRECT:
@@ -1436,7 +1441,8 @@ modify_network_configuration_from_external_request(
         const ShutdownGuard &sg,
         std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> &previous_wlan_name_buffer,
         std::unique_ptr<std::string> &out_wps_network_name,
-        std::unique_ptr<std::string> &out_wps_network_ssid)
+        std::unique_ptr<std::string> &out_wps_network_ssid,
+        bool &have_new_wlan_passphrase)
 {
     if(shutdown_guard_is_shutting_down_unlocked(&sg))
     {
@@ -1467,7 +1473,7 @@ modify_network_configuration_from_external_request(
     auto wps_mode = apply_changes_to_prefs(req, selected_prefs)
         ? handle_set_wireless_config(req, target_tech, nullptr,
                                      selected_prefs, out_wps_network_name,
-                                     out_wps_network_ssid)
+                                     out_wps_network_ssid, have_new_wlan_passphrase)
         : Network::WPSMode::INVALID;
 
     switch(wps_mode)
@@ -1562,9 +1568,11 @@ static bool process_external_config_request(
     std::array<char, NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE> current_wlan_service_name;
     std::unique_ptr<std::string> wps_network_name;
     std::unique_ptr<std::string> wps_network_ssid;
+    bool have_new_wlan_passphrase = false;
     Network::WPSMode wps_mode = modify_network_configuration_from_external_request(
             config_request, target_tech, shutdown_guard,
-            current_wlan_service_name, wps_network_name, wps_network_ssid);
+            current_wlan_service_name, wps_network_name, wps_network_ssid,
+            have_new_wlan_passphrase);
     shutdown_guard_unlock(&shutdown_guard);
 
     if(!is_device_with_given_mac_present)
@@ -1616,7 +1624,8 @@ static bool process_external_config_request(
       case Network::WPSMode::NONE:
         dbussignal_connman_manager_connect_to_service(map_network_technology(target_tech),
                                                       current_wlan_service_name.data(),
-                                                      immediate_activation);
+                                                      immediate_activation,
+                                                      have_new_wlan_passphrase);
         return true;
 
       case Network::WPSMode::DIRECT:
