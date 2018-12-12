@@ -12,7 +12,7 @@
 	* Appliances: Recognize appliances "SD3100HV" and "SDV3100HV".
 
 	* Networking: Cleaned up lots of network configuration code to enable
-	  future (and present) changes. Basically, paying of technical debt.
+	  future (and present) changes. Basically, paying off technical debt.
 
 	* Logging: Writes to registers 78, 79, 238, 239 are logged at normal
 	  verbosity level now.
