@@ -630,7 +630,7 @@ static void try_start_stream(PlayAppStreamData &data,
                                          token_store,
                                          selected.meta_data.c_str(),
                                          selected.url.c_str());
-    GError *error = NULL;
+    GError *error = nullptr;
 
     if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
                                            stream_id.get().get_raw_id(),
@@ -642,7 +642,7 @@ static void try_start_stream(PlayAppStreamData &data,
                                            0, "ms", 0, "ms",
                                            is_restart ? -2 : 0,
                                            &fifo_overflow, &is_playing,
-                                           NULL, &error))
+                                           nullptr, &error))
     {
         BUG("Failed pushing stream %u, URL %s to stream player",
             stream_id.get().get_raw_id(), selected.url.c_str());
@@ -675,7 +675,7 @@ static void try_start_stream(PlayAppStreamData &data,
     {
 
         if(tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
-                                                 NULL, &error))
+                                                 nullptr, &error))
             data.device_playmode = DevicePlaymode::WAIT_FOR_START_NOTIFICATION;
         else
         {
@@ -685,8 +685,8 @@ static void try_start_stream(PlayAppStreamData &data,
             data.reset_to_idle_mode();
 
             if(!tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
-                                                    0, NULL, NULL, NULL,
-                                                    NULL, &error))
+                                                    0, nullptr, nullptr, nullptr,
+                                                    nullptr, &error))
             {
                 msg_error(0, LOG_NOTICE, "Failed clearing stream player FIFO");
                 dbus_common_handle_dbus_error(&error, "Clear URLFIFO");
@@ -716,10 +716,10 @@ static void try_stop_stream(PlayAppStreamData &data, bool stay_in_app_mode)
         ? DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED
         : DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
 
-    GError *error = NULL;
+    GError *error = nullptr;
 
     if(!tdbus_splay_playback_call_stop_sync(dbus_get_streamplayer_playback_iface(),
-                                            NULL, &error))
+                                            nullptr, &error))
     {
         msg_error(0, LOG_NOTICE, "Failed stopping stream player");
         dbus_common_handle_dbus_error(&error, "Stop stream");
@@ -920,11 +920,11 @@ int Regs::PlayStream::DCP::write_78_start_play_stream_title(const uint8_t *data,
     if(!is_app_mode(play_stream_data.app.device_playmode))
     {
         GVariantDict empty;
-        g_variant_dict_init(&empty, NULL);
+        g_variant_dict_init(&empty, nullptr);
         tdbus_aupath_manager_call_request_source(dbus_audiopath_get_manager_iface(),
                                                  app_audio_source_id,
                                                  g_variant_dict_end(&empty),
-                                                 NULL, NULL, NULL);
+                                                 nullptr, nullptr, nullptr);
     }
 
     if(copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
@@ -1233,7 +1233,7 @@ static bool try_retrieve_cover_art(GVariant *stream_key,
         GVariantWrapper::get(known_hash),
         &error_code, &image_priority,
         &image_hash_variant, &image_data_variant,
-        NULL, &error);
+        nullptr, &error);
 
     if(dbus_common_handle_dbus_error(&error, "Get cover art picture") < 0)
         return picture.clear();
