@@ -709,7 +709,8 @@ static void try_start_stream(PlayAppStreamData &data,
     }
 }
 
-static void try_stop_stream(PlayAppStreamData &data, bool stay_in_app_mode)
+static void try_stop_stream(PlayAppStreamData &data, const char *reason,
+                            bool stay_in_app_mode)
 {
     data.device_playmode = stay_in_app_mode
         ? DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED
@@ -718,7 +719,7 @@ static void try_stop_stream(PlayAppStreamData &data, bool stay_in_app_mode)
     GError *error = nullptr;
 
     if(!tdbus_splay_playback_call_stop_sync(dbus_get_streamplayer_playback_iface(),
-                                            nullptr, &error))
+                                            reason, nullptr, &error))
     {
         msg_error(0, LOG_NOTICE, "Failed stopping stream player");
         dbus_common_handle_dbus_error(&error, "Stop stream");
@@ -968,7 +969,9 @@ int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, s
     else if(is_in_app_mode)
     {
         /* stop command */
-        try_stop_stream(play_stream_data.app, true);
+        try_stop_stream(play_stream_data.app,
+                        "empty URL written to reg 79 while in app mode",
+                        true);
     }
     else
         play_stream_data.app.pending_request = PendingAppRequest::STOP_KEEP_SELECTED;
@@ -1120,7 +1123,9 @@ void Regs::PlayStream::select_source()
 
       case PendingAppRequest::STOP_KEEP_SELECTED:
         msg_info("Processing pending stop request");
-        try_stop_stream(play_stream_data.app, true);
+        try_stop_stream(play_stream_data.app,
+                        "empty URL written to reg 79 while not in app mode",
+                        true);
         break;
     }
 
@@ -1146,8 +1151,15 @@ void Regs::PlayStream::deselect_source()
         break;
 
       case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
+        try_stop_stream(play_stream_data.app,
+                        "source deselected while waiting for start notification from player",
+                        false);
+        break;
+
       case DevicePlaymode::APP_IS_PLAYING:
-        try_stop_stream(play_stream_data.app, false);
+        try_stop_stream(play_stream_data.app,
+                        "source deselected while app is playing",
+                        false);
         break;
 
       case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:

@@ -7299,7 +7299,9 @@ static void stop_stream()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_NORMAL, "First stream URL (reg 79): <empty>");
     mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
-    mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+    mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(
+            TRUE, dbus_streamplayer_playback_iface_dummy,
+            "empty URL written to reg 79 while in app mode");
 
     static const uint8_t zero = 0;
     reg->write(&zero, sizeof(zero));
@@ -7367,7 +7369,9 @@ void test_start_stream_and_deselect_audio_source()
 
     mock_messages->expect_msg_info("Leave app mode");
     mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
-    mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+    mock_streamplayer_dbus->expect_tdbus_splay_playback_call_stop_sync(
+            TRUE, dbus_streamplayer_playback_iface_dummy,
+            "source deselected while waiting for start notification from player");
 
     Regs::PlayStream::deselect_source();
 

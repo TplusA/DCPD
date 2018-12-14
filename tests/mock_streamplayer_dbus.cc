@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -152,6 +152,16 @@ class MockStreamplayerDBus::Expectation
         data_.arg_object_ = static_cast<void *>(object);
     }
 
+    explicit Expectation(StreamplayerFn fn, bool retval, tdbussplayPlayback *object,
+                         const char *reason):
+        d(fn)
+    {
+        data_.ret_bool_ = retval;
+        data_.arg_object_ = static_cast<void *>(object);
+        cppcut_assert_not_null(reason);
+        data_.arg_string_ = reason;
+    }
+
     explicit Expectation(gboolean retval, tdbussplayURLFIFO *object,
                          gint16 arg_keep_first_n_entries,
                          guint expected_out_playing_id,
@@ -249,9 +259,9 @@ void MockStreamplayerDBus::expect_tdbus_splay_playback_call_start_sync(gboolean 
     expectations_->add(Expectation(StreamplayerFn::playback_call_start, retval, object));
 }
 
-void MockStreamplayerDBus::expect_tdbus_splay_playback_call_stop_sync(gboolean retval, tdbussplayPlayback *object)
+void MockStreamplayerDBus::expect_tdbus_splay_playback_call_stop_sync(gboolean retval, tdbussplayPlayback *object, const char *arg_reason)
 {
-    expectations_->add(Expectation(StreamplayerFn::playback_call_stop, retval, object));
+    expectations_->add(Expectation(StreamplayerFn::playback_call_stop, retval, object, arg_reason));
 }
 
 void MockStreamplayerDBus::expect_tdbus_splay_playback_call_pause_sync(gboolean retval, tdbussplayPlayback *object)
@@ -354,12 +364,15 @@ gboolean tdbus_splay_playback_call_start_sync(tdbussplayPlayback *proxy, GCancel
     return expect.d.ret_bool_;
 }
 
-gboolean tdbus_splay_playback_call_stop_sync(tdbussplayPlayback *proxy, GCancellable *cancellable, GError **error)
+gboolean tdbus_splay_playback_call_stop_sync(tdbussplayPlayback *proxy, const gchar *arg_reason, GCancellable *cancellable, GError **error)
 {
     const auto &expect(mock_streamplayer_dbus_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, StreamplayerFn::playback_call_stop);
     cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
+    cppcut_assert_not_null(arg_reason);
+    cut_assert_false(expect.d.arg_string_.empty());
+    cppcut_assert_equal(expect.d.arg_string_.c_str(), arg_reason);
 
     if(error != NULL)
         *error = NULL;
