@@ -89,7 +89,6 @@ enum class PendingAppRequest
     NONE,
     START,
     STOP_KEEP_SELECTED,
-    STOP_FOR_DESELECTION,
 };
 
 using AppStreamID = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
@@ -981,7 +980,6 @@ int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, s
 
       case PendingAppRequest::NONE:
       case PendingAppRequest::STOP_KEEP_SELECTED:
-      case PendingAppRequest::STOP_FOR_DESELECTION:
         clear_stream_info(play_stream_data.app.inbuffer_new_stream);
         break;
     }
@@ -1123,11 +1121,6 @@ void Regs::PlayStream::select_source()
       case PendingAppRequest::STOP_KEEP_SELECTED:
         msg_info("Processing pending stop request");
         try_stop_stream(play_stream_data.app, true);
-        break;
-
-      case PendingAppRequest::STOP_FOR_DESELECTION:
-        msg_info("Processing pending stop request and leaving app mode");
-        try_stop_stream(play_stream_data.app, false);
         break;
     }
 
