@@ -1,3 +1,16 @@
+2018-12-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.19 released.
+
+	* Networking: Reconnect to WLAN after passphrase has been changed on
+	  appliance side (e.g., after the WLAN passphrase has been changed).
+
+	* Logging: Send stop reason to stream player so that it can be emitted
+	  to the log.
+
+	* System update: Overwrite existing configuration files with versions
+	  from update packages (opkg --force-maintainer).
+
 2018-12-11  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.18 released.
