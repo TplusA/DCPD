@@ -118,7 +118,7 @@ then
 fi
 if test "x${REINSTALL}${INSTALL}" != 'x'
 then
-    $LOG /usr/bin/sudo /usr/bin/opkg install --force-downgrade --force-reinstall --force-overwrite --combine $REINSTALL $INSTALL || FAILED='yes'
+    $LOG /usr/bin/sudo /usr/bin/opkg install --force-downgrade --force-reinstall --force-overwrite --force-maintainer --combine $REINSTALL $INSTALL || FAILED='yes'
 fi
 
 $LOG /usr/bin/dbus-send --system --print-reply --dest=org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager.Reboot boolean:false || FAILED='yes'
