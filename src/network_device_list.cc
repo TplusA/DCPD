@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -22,11 +22,33 @@
 
 #include "network_device_list.hh"
 
+#include <algorithm>
+
 static void fixup_auto_select_devices(Connman::NetworkDeviceList &devices)
 {
     for(auto &d : devices)
         d.second->set_auto_select_for(d.second->technology_,
                                       devices.get_auto_select_mac_address(d.second->technology_));
+}
+
+void Connman::NetworkDeviceList::copy_from(const NetworkDeviceList &src, Technology filter)
+{
+    if(filter == Technology::UNKNOWN_TECHNOLOGY)
+        devices_ = src.devices_;
+    else
+    {
+        devices_.clear();
+        std::copy_if(
+            src.devices_.begin(), src.devices_.end(), std::inserter(devices_, devices_.end()),
+            [filter]
+            (const decltype(devices_)::value_type &kv) -> bool
+            {
+                return kv.second->technology_ == filter;
+            });
+    }
+
+    auto_select_mac_ethernet_ = src.auto_select_mac_ethernet_;
+    auto_select_mac_wlan_ = src.auto_select_mac_wlan_;
 }
 
 void Connman::NetworkDeviceList::set_auto_select_mac_address(Connman::Technology technology,

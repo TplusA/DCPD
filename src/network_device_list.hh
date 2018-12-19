@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -58,6 +58,9 @@ class NetworkDeviceList
         auto_select_mac_wlan_.unset();
         devices_.clear();
     }
+
+    void copy_from(const NetworkDeviceList &src,
+                   Technology filter = Technology::UNKNOWN_TECHNOLOGY);
 
     void set_auto_select_mac_address(Technology technology,
                                      const Address<AddressType::MAC> &mac_address);
