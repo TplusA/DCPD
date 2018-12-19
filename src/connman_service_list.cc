@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -22,11 +22,43 @@
 
 #include "connman_service_list.hh"
 
+#include <algorithm>
+
 void Connman::ServiceList::clear()
 {
     services_.clear();
     number_of_ethernet_services_ = 0;
     number_of_wlan_services_ = 0;
+}
+
+void Connman::ServiceList::copy_from(const ServiceList &src, Technology filter)
+{
+    switch(filter)
+    {
+      case Technology::UNKNOWN_TECHNOLOGY:
+        services_ = src.services_;
+        number_of_ethernet_services_ = src.number_of_ethernet_services_;
+        number_of_wlan_services_ = src.number_of_wlan_services_;
+        break;
+
+      case Technology::ETHERNET:
+      case Technology::WLAN:
+        clear();
+        std::copy_if(
+            src.services_.begin(), src.services_.end(), std::inserter(services_, services_.end()),
+            [filter]
+            (const decltype(services_)::value_type &kv) -> bool
+            {
+                return kv.second->get_technology() == filter;
+            });
+
+        if(filter == Technology::ETHERNET)
+            number_of_ethernet_services_ = services_.size();
+        else
+            number_of_wlan_services_ = services_.size();
+
+        break;
+    }
 }
 
 void Connman::ServiceList::erase(const std::string &name)
