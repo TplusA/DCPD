@@ -28,6 +28,7 @@ status_to_string
     "UNKNOWN",
     "PROBING_STATUS",
     "DISABLED",
+    "ACTIVATING",
     "ACTIVE",
 };
 
@@ -47,6 +48,7 @@ error_to_string
     "UNKNOWN",
     "DBUS_FAILURE",
     "BUSY",
+    "ALREADY_ACTIVATING",
     "ALREADY_ACTIVE",
     "ALREADY_DISABLED",
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -126,6 +126,7 @@ bool Regs::WLANAccessPoint::DCP::read_107_access_point(std::vector<uint8_t> &buf
         break;
 
       case Network::AccessPoint::Status::DISABLED:
+      case Network::AccessPoint::Status::ACTIVATING:
         buffer.push_back(0x02);
         break;
 

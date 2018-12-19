@@ -39,6 +39,7 @@ class AccessPoint
         UNKNOWN,
         PROBING_STATUS,
         DISABLED,
+        ACTIVATING,
         ACTIVE,
 
         LAST_STATUS = ACTIVE,
@@ -60,6 +61,7 @@ class AccessPoint
         UNKNOWN,
         DBUS_FAILURE,
         BUSY,
+        ALREADY_ACTIVATING, /*!< Activation request while activating */
         ALREADY_ACTIVE,     /*!< Activation request while active */
         ALREADY_DISABLED,   /*!< Deactivation request while disabled */
 

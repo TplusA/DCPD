@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -46,8 +46,8 @@ struct RequestDoneData
     void reset() { called_ = false; }
 
     void set(Network::AccessPoint::RequestResult result,
-                Network::AccessPoint::Error error,
-                Network::AccessPoint::Status status)
+             Network::AccessPoint::Error error,
+             Network::AccessPoint::Status status)
     {
         called_ = true;
         result_ = result;
@@ -374,11 +374,11 @@ TEST_CASE_FIXTURE(AccessPointModeTestsWifiPoweredFixture,
             done_data.set(result, error, status);
 
             /* AP status update follows request done notification */
-            CHECK(int(watched_status) == int(Network::AccessPoint::Status::DISABLED));
+            CHECK(int(watched_status) == int(Network::AccessPoint::Status::ACTIVATING));
         });
     CHECK(spawning);
 
-    REQUIRE(int(watched_status) == int(Network::AccessPoint::Status::DISABLED));
+    REQUIRE(int(watched_status) == int(Network::AccessPoint::Status::ACTIVATING));
     REQUIRE_FALSE(done_data.called_);
 
     /* simulate D-Bus method call completions from Connman */
@@ -512,6 +512,9 @@ TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
         new MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<bool>(
                 Connman::TechnologyPropertiesWIFI::Property::TETHERING, true));
 
+    mock_messages->expect(
+        new MockMessages::MsgInfo("Access point status DISABLED -> ACTIVATING", false));
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::DISABLED));
     CHECK(apman.activate("MyNet", "12345678"));
 
     /* simulate D-Bus method call completions from Connman */
@@ -525,12 +528,12 @@ TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
                                    "Access point spawn request result: OK (OK) -> ACTIVE",
                                    false));
     mock_messages->expect(
-        new MockMessages::MsgInfo("Access point status DISABLED -> ACTIVE", false));
+        new MockMessages::MsgInfo("Access point status ACTIVATING -> ACTIVE", false));
     mock_messages->expect(
         new MockMessages::MsgInfo("Access point SSID \"MyNet\"", false));
     mock_messages->expect(
         new MockMessages::MsgInfo("Access point passphrase \"12345678\"", false));
-    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::DISABLED));
+    CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::ACTIVATING));
     mock_techreg_wifi->simulate_send_property_over_dbus_done<bool>(
             Connman::TechnologyPropertiesWIFI::Property::TETHERING, false);
     CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::ACTIVE));
