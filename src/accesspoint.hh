@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -157,7 +157,8 @@ class AccessPoint
     void set_status(Status status);
     std::unique_ptr<RequestBase>
     figure_out_current_status(std::unique_ptr<RequestBase> request, bool &scheduled);
-    void spawn(std::unique_ptr<SpawnRequest> request);
+    void spawn(std::unique_ptr<SpawnRequest> request,
+               std::unique_lock<std::recursive_mutex> &ap_lock);
     void shutdown(std::unique_ptr<ShutdownRequest> request);
     void request_done(Connman::TechnologyPropertiesBase::StoreResult result,
                       bool is_tethering, Status status);

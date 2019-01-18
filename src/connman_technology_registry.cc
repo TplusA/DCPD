@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -161,6 +161,9 @@ void Connman::TechnologyPropertiesWIFI::register_property_watcher(WatcherFn &&fn
     }
 }
 
+/*
+ * GLib callback in D-Bus context
+ */
 template <typename T>
 void Connman::TechnologyPropertiesWIFI::send_property_over_dbus_done(
         GObject *source_object, GAsyncResult *res, void *user_data)

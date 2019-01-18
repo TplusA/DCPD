@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -168,14 +168,14 @@ void Network::AccessPoint::wifi_property_changed_notification(
         Connman::TechnologyPropertiesBase::StoreResult result,
         Connman::TechnologyPropertiesWIFI &wifi)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
-
     switch(property)
     {
       case Connman::TechnologyPropertiesWIFI::Property::TETHERING:
         {
             const bool is_tethering(wifi.get<Connman::TechnologyPropertiesWIFI::Property::TETHERING>());
             const auto status(is_tethering ? Status::ACTIVE : Status::DISABLED);
+
+            std::lock_guard<std::recursive_mutex> lock(lock_);
 
             if(dynamic_cast<const SpawnRequest *>(active_request_.get()) != nullptr)
                 request_done(result, is_tethering, status);
@@ -197,7 +197,8 @@ void Network::AccessPoint::wifi_property_changed_notification(
     }
 }
 
-void Network::AccessPoint::spawn(std::unique_ptr<SpawnRequest> request)
+void Network::AccessPoint::spawn(std::unique_ptr<SpawnRequest> request,
+                                 std::unique_lock<std::recursive_mutex> &ap_lock)
 {
     const auto *const req(request.get());
     active_request_ = std::move(request);
@@ -209,6 +210,11 @@ void Network::AccessPoint::spawn(std::unique_ptr<SpawnRequest> request)
     {
         action = "Obtain Connman technology properties";
         auto &wifi(tech_reg_.wifi());
+
+        /* we don't need our lock anymore; also avoids D-Bus deadlock in
+         * #Network::AccessPoint::wifi_property_changed_notification() */
+        ap_lock.unlock();
+
         action = "Set AP SSID";
         wifi.set<Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER>(std::string(req->ssid_));
         action = "Set AP passphrase";
@@ -285,7 +291,7 @@ Network::AccessPoint::figure_out_current_status(std::unique_ptr<Network::AccessP
 bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passphrase,
                                          DoneFn &&done_notification)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::unique_lock<std::recursive_mutex> lock(lock_);
 
     if(!started_)
     {
@@ -321,20 +327,24 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
 
     try
     {
-        spawn(std::move(request));
+        spawn(std::move(request), lock);
         return true;
     }
     catch(const AccessPointError &e)
     {
         msg_error(0, LOG_ERR, "%s", e.what());
 
+        lock.lock();
+
         auto req(std::move(active_request_));
 
         if(status_ == Status::PROBING_STATUS)
             set_status(Status::UNKNOWN);
 
-        req->done(RequestResult::FAILED, e.error_, status_);
-        req = nullptr;
+        lock.unlock();
+
+        if(req != nullptr)
+            req->done(RequestResult::FAILED, e.error_, status_);
     }
 
     return false;
