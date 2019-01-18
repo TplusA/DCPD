@@ -1,4 +1,4 @@
-dnl Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+dnl Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
 dnl
 dnl This file is part of DCPD.
 dnl
@@ -15,7 +15,7 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
 
 AC_PREREQ([2.69])
-AC_INIT([DCPD], [4.19], [r.tiemann@ta-hifi.com])
+AC_INIT([DCPD], [4.20], [r.tiemann@ta-hifi.com])
 AC_CONFIG_AUX_DIR([config])
 AM_INIT_AUTOMAKE([1.11 -Wall -Werror foreign])
 AM_SILENT_RULES([yes])

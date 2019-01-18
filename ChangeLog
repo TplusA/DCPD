@@ -1,3 +1,12 @@
+2019-01-23  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.20 released.
+
+	* Access point: Report cached wireless networks while in access point
+	  mode.
+
+	* Networking: Fix D-Bus deadlock on access point activation.
+
 2018-12-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.19 released.
@@ -851,4 +860,4 @@
 	* First release for testing.
 
 
-Copyright 2015, 2016, 2017, 2018 T+A elektroakustik GmbH & Co. KG
+Copyright 2015, 2016, 2017, 2018, 2019 T+A elektroakustik GmbH & Co. KG
