@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,8 +20,11 @@
 #define ACCESSPOINT_MANAGER_HH
 
 #include "accesspoint.hh"
+#include "connman_service_list.hh"
+#include "network_device_list.hh"
 
 #include <atomic>
+#include <mutex>
 
 namespace Network
 {
@@ -31,6 +34,10 @@ class AccessPointManager
   private:
     AccessPoint &ap_;
     std::atomic<AccessPoint::Status> ap_status_;
+
+    mutable std::mutex cache_lock_;
+    Connman::NetworkDeviceList cached_network_devices_;
+    Connman::ServiceList cached_network_services_;
 
   public:
     AccessPointManager(const AccessPointManager &) = delete;
@@ -50,6 +57,15 @@ class AccessPointManager
     bool activate(std::string &&ssid, std::string &&passphrase);
     bool deactivate();
     AccessPoint::Status get_status() const { return ap_status_; }
+
+    std::unique_lock<std::mutex> lock_cached() const { return std::unique_lock<std::mutex>(cache_lock_); }
+    const Connman::NetworkDeviceList &get_cached_network_devices() const { return cached_network_devices_; }
+    const Connman::ServiceList &get_cached_service_list() const { return cached_network_services_; }
+
+  private:
+    void status_watcher(Connman::TechnologyRegistry &reg,
+                        Network::AccessPoint::Status old_status,
+                        Network::AccessPoint::Status new_status);
 };
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,6 +28,7 @@ status_to_string
     "UNKNOWN",
     "PROBING_STATUS",
     "DISABLED",
+    "ACTIVATING",
     "ACTIVE",
 };
 
@@ -47,33 +48,64 @@ error_to_string
     "UNKNOWN",
     "DBUS_FAILURE",
     "BUSY",
+    "ALREADY_ACTIVATING",
     "ALREADY_ACTIVE",
     "ALREADY_DISABLED",
 };
 
-static void status_watcher(Connman::TechnologyRegistry &reg,
-                           Network::AccessPoint::Status old_status,
-                           Network::AccessPoint::Status new_status)
+void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &reg,
+                                                 Network::AccessPoint::Status old_status,
+                                                 Network::AccessPoint::Status new_status)
 {
     msg_info("Access point status %s -> %s",
              status_to_string[size_t(old_status)],
              status_to_string[size_t(new_status)]);
 
-    if(new_status != Network::AccessPoint::Status::ACTIVE)
+    if(old_status == new_status)
         return;
 
-    try
+    switch(new_status)
     {
-        const auto tech_lock(reg.locked());
+      case Network::AccessPoint::Status::UNKNOWN:
+      case Network::AccessPoint::Status::PROBING_STATUS:
+        break;
 
-        msg_info("Access point SSID \"%s\"",
-                 reg.wifi().get<Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER>().c_str());
-        msg_info("Access point passphrase \"%s\"",
-                 reg.wifi().get<Connman::TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE>().c_str());
-    }
-    catch(...)
-    {
-        msg_error(0, LOG_ERR, "Failed retrieving access point parameters");
+      case Network::AccessPoint::Status::DISABLED:
+        {
+            const std::lock_guard<std::mutex> lock(cache_lock_);
+            cached_network_devices_.clear();
+            cached_network_services_.clear();
+            break;
+        }
+
+      case Network::AccessPoint::Status::ACTIVATING:
+        {
+            const std::lock_guard<std::mutex> lock(cache_lock_);
+            const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+            const auto locked_services(Connman::ServiceList::get_singleton_const());
+
+            cached_network_devices_.copy_from(locked_devices.first);
+            cached_network_services_.copy_from(locked_services.first);
+        }
+
+        break;
+
+      case Network::AccessPoint::Status::ACTIVE:
+        try
+        {
+            const auto tech_lock(reg.locked());
+
+            msg_info("Access point SSID \"%s\"",
+                     reg.wifi().get<Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER>().c_str());
+            msg_info("Access point passphrase \"%s\"",
+                     reg.wifi().get<Connman::TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE>().c_str());
+        }
+        catch(...)
+        {
+            msg_error(0, LOG_ERR, "Failed retrieving access point parameters");
+        }
+
+        break;
     }
 }
 

@@ -208,6 +208,7 @@ void Network::AccessPoint::spawn(std::unique_ptr<SpawnRequest> request,
 
     try
     {
+        set_status(Status::ACTIVATING);
         action = "Obtain Connman technology properties";
         auto &wifi(tech_reg_.wifi());
 
@@ -313,7 +314,12 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
             return scheduled;
     }
 
-    if(status_ == Status::ACTIVE)
+    if(status_ == Status::ACTIVATING)
+    {
+        request->done(RequestResult::FAILED, Error::ALREADY_ACTIVATING, status_);
+        return false;
+    }
+    else if(status_ == Status::ACTIVE)
     {
         request->done(RequestResult::FAILED, Error::ALREADY_ACTIVE, status_);
         return false;

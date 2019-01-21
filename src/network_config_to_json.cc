@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -76,23 +76,33 @@ static void add_to_hash(MD5::Context &ctx, const Json::Value &obj, const char *f
         add_missing_to_hash(ctx);
 }
 
+enum class IsCached
+{
+    FRESH,
+    CACHED,
+    PHYSICALLY_AVAILABLE,
+};
+
 static void add_nic_entry(
         Json::Value &nics,
         const Connman::Address<Connman::AddressType::MAC> &mac,
         Connman::Technology technology, bool is_secondary,
-        const std::string *devname = nullptr)
+        IsCached is_cached, const std::string *devname = nullptr)
 {
     if(mac.empty())
         throw std::runtime_error("Need MAC to make NIC entry");
 
     if(nics.isMember(mac.get_string()))
     {
-        if(devname != nullptr)
+        if(devname != nullptr || is_cached == IsCached::PHYSICALLY_AVAILABLE)
         {
             auto &nic(nics[mac.get_string()]);
 
-            if(!nic.isMember("device_name"))
+            if(devname != nullptr && !nic.isMember("device_name"))
                 nic["device_name"] = *devname;
+
+            if(is_cached == IsCached::PHYSICALLY_AVAILABLE)
+                nic["cached"] = false;
         }
 
         return;
@@ -117,6 +127,7 @@ static void add_nic_entry(
     Json::Value nic;
 
     nic["technology"] = tech_name;
+    nic["cached"] = is_cached == IsCached::CACHED;
 
     if(is_secondary)
         nic["is_secondary"] = true;
@@ -131,13 +142,16 @@ static void add_nic_entry(
  * Add the up to two "primary" NICs.
  */
 static void add_nics_from_prefs(Json::Value &nics,
-                                const Connman::NetworkDeviceList &devices)
+                                const Connman::NetworkDeviceList &devices,
+                                bool is_cached)
 {
+    const auto is_cached_param(is_cached ? IsCached::CACHED : IsCached::FRESH);
+
     try
     {
         add_nic_entry(nics,
                       devices.get_auto_select_mac_address(Connman::Technology::ETHERNET),
-                      Connman::Technology::ETHERNET, false);
+                      Connman::Technology::ETHERNET, false, is_cached_param);
     }
     catch(const std::exception &e)
     {
@@ -148,7 +162,7 @@ static void add_nics_from_prefs(Json::Value &nics,
     {
         add_nic_entry(nics,
                       devices.get_auto_select_mac_address(Connman::Technology::WLAN),
-                      Connman::Technology::WLAN, false);
+                      Connman::Technology::WLAN, false, is_cached_param);
     }
     catch(const std::exception &e)
     {
@@ -160,8 +174,11 @@ static void add_nics_from_prefs(Json::Value &nics,
  * Add any NIC known from Connman (contains non-primary NICs as well).
  */
 static void add_nics_from_connman_devices(Json::Value &nics,
-                                          const Connman::NetworkDeviceList &devices)
+                                          const Connman::NetworkDeviceList &devices,
+                                          bool is_cached)
 {
+    const auto is_cached_param(is_cached ? IsCached::CACHED : IsCached::FRESH);
+
     for(const auto &dev : devices)
     {
         const Connman::NetworkDevice &d(*dev.second);
@@ -172,7 +189,7 @@ static void add_nics_from_connman_devices(Json::Value &nics,
         try
         {
             add_nic_entry(nics, d.mac_address_, d.technology_,
-                          !d.is_auto_selected_device());
+                          !d.is_auto_selected_device(), is_cached_param);
         }
         catch(const std::exception &e)
         {
@@ -193,7 +210,7 @@ static void add_nics_from_netlink(Json::Value &nics)
         try
         {
             add_nic_entry(nics, std::get<1>(dev), std::get<2>(dev), true,
-                          &std::get<0>(dev));
+                          IsCached::PHYSICALLY_AVAILABLE, &std::get<0>(dev));
         }
         catch(const std::exception &e)
         {
@@ -410,7 +427,7 @@ static std::string get_service_id(const std::string &path)
 
 static void add_services_from_connman(Json::Value &srv,
                                       std::vector<std::pair<std::string, MD5::Hash>> &service_hashes,
-                                      const Connman::ServiceList &services)
+                                      const Connman::ServiceList &services, bool is_cached)
 {
     for(const auto &service : services)
     {
@@ -421,6 +438,7 @@ static void add_services_from_connman(Json::Value &srv,
 
         Json::Value item;
         item["id"] = get_service_id(service.first);
+        item["cached"] = is_cached;
 
         add_to_hash(ctx, item, "id");
 
@@ -739,18 +757,18 @@ static std::string compute_version(
 std::string Network::configuration_to_json(const Connman::ServiceList &services,
                                            const Connman::NetworkDeviceList &devices,
                                            const std::string &have_version,
-                                           std::string &version)
+                                           bool is_cached, std::string &version)
 {
     Json::Value nics(Json::objectValue);
 
-    add_nics_from_prefs(nics, devices);
-    add_nics_from_connman_devices(nics, devices);
+    add_nics_from_prefs(nics, devices, is_cached);
+    add_nics_from_connman_devices(nics, devices, is_cached);
     add_nics_from_netlink(nics);
 
     std::vector<std::pair<std::string, MD5::Hash>> service_hashes;
 
     Json::Value srv(Json::objectValue);
-    add_services_from_connman(srv, service_hashes, services);
+    add_services_from_connman(srv, service_hashes, services, is_cached);
     add_services_from_prefs(srv, service_hashes, services);
 
     version = compute_version(nics, service_hashes);

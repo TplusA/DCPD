@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -62,10 +62,13 @@ test_access_point_SOURCES = \
     test_access_point.cc \
     mock_messages.hh mock_messages.cc \
     mock_connman_technology_registry.hh mock_connman_technology_registry.cc \
+    mock_os.hh mock_os.cc \
     mock_expectation.hh
 test_access_point_LDADD = \
     libtestrunner.la \
-    $(top_builddir)/src/libaccesspoint.la
+    $(top_builddir)/src/libaccesspoint.la \
+    $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libconnman_service.la
 test_access_point_CPPFLAGS = $(AM_CPPFLAGS)
 test_access_point_CXXFLAGS = $(AM_CXXFLAGS)
 

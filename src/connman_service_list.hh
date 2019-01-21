@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,7 +30,7 @@ namespace Connman
 class ServiceList
 {
   public:
-    using Map = std::map<std::string, std::unique_ptr<ServiceBase>>;
+    using Map = std::map<std::string, std::shared_ptr<ServiceBase>>;
 
   private:
     Map services_;
@@ -47,6 +47,8 @@ class ServiceList
     {}
 
     void clear();
+    void copy_from(const ServiceList &src,
+                   Technology filter = Technology::UNKNOWN_TECHNOLOGY);
     void erase(const std::string &name);
     bool insert(const char *name, ServiceData &&service_data,
                 Service<Technology::ETHERNET>::TechDataType &&ethernet_data);
