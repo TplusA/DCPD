@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,7 @@
 #include "dcpregs_upnpserver.hh"
 #include "dcpregs_status.hh"
 #include "network_config_to_json.hh"
+#include "accesspoint_manager.hh"
 #include "volume_control.hh"
 #include "smartphone_app_send.hh"
 #include "configproxy.h"
@@ -228,23 +229,19 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     return TRUE;
 }
 
-gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
-                                    GDBusMethodInvocation *invocation,
-                                    const gchar *have_version,
-                                    gpointer user_data)
+static void complete_network_get_all(tdbusdcpdNetwork *object,
+                                     GDBusMethodInvocation *invocation,
+                                     const Connman::ServiceList &services,
+                                     const Connman::NetworkDeviceList &devices,
+                                     const gchar *have_version, bool is_cached)
 {
-    const auto locked_services(Connman::ServiceList::get_singleton_const());
-    const auto &services(locked_services.first);
-
-    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
-    const auto &devices(locked_devices.first);
-
     std::string version;
 
     try
     {
         const auto json(Network::configuration_to_json(services, devices,
-                                                       have_version, version));
+                                                       have_version, is_cached,
+                                                       version));
 
         tdbus_dcpd_network_complete_get_all(object, invocation,
                                             version.c_str(), json.c_str());
@@ -253,7 +250,58 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
     {
         g_dbus_method_invocation_return_error(
             invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-            "Failed reading out configuration: \"%s\"", e.what());
+            "Failed reading out %sconfiguration: \"%s\"",
+            is_cached ? "cached " : "", e.what());
+    }
+}
+
+gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
+                                    GDBusMethodInvocation *invocation,
+                                    const gchar *have_version,
+                                    gpointer user_data)
+{
+    const auto &apman = *static_cast<const Network::AccessPointManager *>(user_data);
+
+    switch(apman.get_status())
+    {
+      case Network::AccessPoint::Status::UNKNOWN:
+        /* transient state, unlucky client should try again later */
+        g_dbus_method_invocation_return_error(
+            invocation, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+            "Failed reading out configuration in unknown state");
+        break;
+
+      case Network::AccessPoint::Status::PROBING_STATUS:
+        /* transient state, unlucky client should try again later */
+        g_dbus_method_invocation_return_error(
+            invocation, G_IO_ERROR, G_IO_ERROR_BUSY,
+            "Failed reading out configuration while probing AP status");
+        break;
+
+      case Network::AccessPoint::Status::DISABLED:
+        {
+            const auto locked_services(Connman::ServiceList::get_singleton_const());
+            const auto &services(locked_services.first);
+
+            const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+            const auto &devices(locked_devices.first);
+
+            complete_network_get_all(object, invocation,
+                                     services, devices, have_version, false);
+        }
+
+        break;
+
+      case Network::AccessPoint::Status::ACTIVATING:
+      case Network::AccessPoint::Status::ACTIVE:
+        {
+            const auto lock(apman.lock_cached());
+            complete_network_get_all(object, invocation,
+                                     apman.get_cached_service_list(),
+                                     apman.get_cached_network_devices(),
+                                     have_version, true);
+            break;
+        }
     }
 
     return TRUE;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -65,6 +65,7 @@ static struct
     bool connect_to_session_bus;
 
     struct ConfigurationManagementData *config_management_data;
+    struct AccessPointData *access_point_data;
 
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
@@ -256,7 +257,8 @@ static void bus_acquired(GDBusConnection *connection,
                          G_CALLBACK(dbusmethod_set_stream_info), NULL);
 
         g_signal_connect(dcpd_iface_data.network_config_iface, "handle-get-all",
-                         G_CALLBACK(dbusmethod_network_get_all), NULL);
+                         G_CALLBACK(dbusmethod_network_get_all),
+                         dcpd_iface_data.access_point_data);
         g_signal_connect(dcpd_iface_data.network_config_iface, "handle-set-service-configuration",
                          G_CALLBACK(dbusmethod_network_set_service_configuration), NULL);
 
@@ -578,6 +580,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
                void *appconn_data,
                struct DBusSignalManagerData *connman_data,
                struct ConfigurationManagementData *configuration_data,
+               struct AccessPointData *access_point_data,
                void (*content_manager_iface_available_notification)(bool),
                void (*credentials_read_iface_available_notification)(void))
 {
@@ -613,6 +616,7 @@ int dbus_setup(bool connect_to_session_bus, bool with_connman,
 
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
     dcpd_iface_data.config_management_data = configuration_data;
+    dcpd_iface_data.access_point_data = access_point_data;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     roonplayer_iface_data.connect_to_session_bus = connect_to_session_bus;

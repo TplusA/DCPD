@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,7 +28,7 @@ namespace Network
 std::string configuration_to_json(const Connman::ServiceList &services,
                                   const Connman::NetworkDeviceList &devices,
                                   const std::string &have_version,
-                                  std::string &version);
+                                  bool is_cached, std::string &version);
 
 }
 

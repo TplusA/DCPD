@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1413,12 +1413,15 @@ int main(int argc, char *argv[])
      */
     static Connman::TechnologyRegistry tech_reg;
     static Connman::WLANTools wlan_tools(tech_reg);
+    static Network::AccessPoint ap(tech_reg);
+    static Network::AccessPointManager apman(ap);
 
     main_loop_init(&parameters, config_manager, appconn, wlan_tools, &connman, &dot, is_upgrading);
 
     if(dbus_setup(parameters.connect_to_session_dbus,
                   parameters.with_connman, &appconn, connman,
                   reinterpret_cast<struct ConfigurationManagementData *>(&config_manager),
+                  reinterpret_cast<struct AccessPointData *>(&apman),
                   Regs::UPnPServer::connected,
                   Regs::AudioSources::check_external_service_credentials) < 0)
     {
@@ -1449,8 +1452,6 @@ int main(int argc, char *argv[])
             }
         });
 
-    static Network::AccessPoint ap(tech_reg);
-    static Network::AccessPointManager apman(ap);
     apman.start();
 
     Regs::WLANAccessPoint::init(apman, tech_reg);
