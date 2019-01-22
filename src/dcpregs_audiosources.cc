@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,12 +21,12 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "dcpregs_audiosources.hh"
-#include "dcpregs_common.h"
 #include "connman_service_list.hh"
 #include "registers_priv.hh"
 #include "register_response_writer.hh"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
+#include "string_trim.hh"
 #include "gvariantwrapper.hh"
 #include "maybe.hh"
 #include "messages.h"
@@ -1257,9 +1257,8 @@ static int queue_read_one_command(const uint8_t *data, size_t length)
 {
     const size_t original_length = length;
 
-    length = dcpregs_trim_trailing_zero_padding(data, length);
-
-    if(length == original_length || length == 0)
+    if(!Utils::trim_trailing_zero_padding(data, length) ||
+       length == original_length)
     {
         msg_error(EINVAL, LOG_ERR, "Non-empty audio source ID expected");
         return -1;

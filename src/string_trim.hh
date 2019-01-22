@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,16 +16,23 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif /* HAVE_CONFIG_H */
+#ifndef STRING_TRIM_HH
+#define STRING_TRIM_HH
 
-#include "dcpregs_common.h"
+#include <cinttypes>
+#include <cstddef>
 
-size_t dcpregs_trim_trailing_zero_padding(const uint8_t *data, size_t length)
+namespace Utils
+{
+
+static inline bool trim_trailing_zero_padding(const uint8_t *data, size_t &length)
 {
     while(length > 0 && data[length - 1] == '\0')
         --length;
 
-    return length;
+    return length > 0;
 }
+
+}
+
+#endif /* !STRING_TRIM_HH */

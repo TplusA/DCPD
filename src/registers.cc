@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -26,7 +26,6 @@
 #include "configproxy.h"
 
 #include "dcpdefs.h"
-#include "dcpregs_common.h"
 #include "dcpregs_drcp.h"
 #include "dcpregs_protolevel.hh"
 #include "dcpregs_appliance.hh"
@@ -44,6 +43,7 @@
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.hh"
 #include "dcpregs_status.hh"
+#include "string_trim.hh"
 
 #include <cstring>
 #include <cinttypes>
@@ -221,9 +221,7 @@ static ssize_t read_95_max_bitrate(uint8_t *response, size_t length)
 
 static int write_95_max_bitrate(const uint8_t *data, size_t length)
 {
-    length = dcpregs_trim_trailing_zero_padding(data, length);
-
-    if(length == 0)
+    if(!Utils::trim_trailing_zero_padding(data, length))
         return -1;
 
     static const char unlimited_value[] = "unlimited";

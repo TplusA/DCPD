@@ -21,7 +21,6 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "dcpregs_networkconfig.hh"
-#include "dcpregs_common.h"
 #include "network_status_bits.h"
 #include "registers_priv.hh"
 #include "connman_service_list.hh"
@@ -29,6 +28,7 @@
 #include "network_config_request.hh"
 #include "connman_scan.hh"
 #include "dbus_handlers_connman_manager.hh"
+#include "string_trim.hh"
 #include "shutdown_guard.h"
 
 #include <arpa/inet.h>
@@ -2075,13 +2075,8 @@ static int copy_ipv4_address(Maybe<std::string> &dest,
                              const uint8_t *const data, size_t length,
                              bool is_empty_ok)
 {
-    length = dcpregs_trim_trailing_zero_padding(data, length);
-
-    if(length == 0)
-    {
-        if(!is_empty_ok)
-            return -1;
-    }
+    if(!Utils::trim_trailing_zero_padding(data, length) && !is_empty_ok)
+        return -1;
 
     size_t i = 0;
     std::string addr;

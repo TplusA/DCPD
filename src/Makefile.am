@@ -102,7 +102,7 @@ dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 
 libregisters_la_SOURCES = \
     registers.cc registers.hh registers_priv.hh register_response_writer.hh \
-    dcpregs_common.c dcpregs_common.h \
+    string_trim.hh \
     dcpregs_drcp.c dcpregs_drcp.h \
     dcpregs_protolevel.cc dcpregs_protolevel.hh \
     dcpregs_appliance.cc dcpregs_appliance.hh \
