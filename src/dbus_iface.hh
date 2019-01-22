@@ -16,33 +16,28 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DBUS_IFACE_H
-#define DBUS_IFACE_H
-
-#include <stdbool.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#ifndef DBUS_IFACE_HH
+#define DBUS_IFACE_HH
 
 struct DBusSignalManagerData;
 struct ConfigurationManagementData;
 struct AccessPointData;
 
-int dbus_setup(bool connect_to_session_bus, bool with_connman,
-               void *appconn_data,
-               struct DBusSignalManagerData *connman_manager_data,
-               struct ConfigurationManagementData *configuration_data,
-               struct AccessPointData *access_point_data,
-               void (*content_manager_iface_available_notification)(bool),
-               void (*credentials_read_iface_available_notification)(void));
-void dbus_shutdown(void);
+namespace DBus
+{
 
-void dbus_lock_shutdown_sequence(const char *why);
-void dbus_unlock_shutdown_sequence(void);
+int setup(bool connect_to_session_bus, bool with_connman,
+          void *appconn_data,
+          struct DBusSignalManagerData *connman_manager_data,
+          struct ConfigurationManagementData *configuration_data,
+          struct AccessPointData *access_point_data,
+          void (*content_manager_iface_available_notification)(bool),
+          void (*credentials_read_iface_available_notification)());
+void shutdown();
 
-#ifdef __cplusplus
+void lock_shutdown_sequence(const char *why);
+void unlock_shutdown_sequence();
+
 }
-#endif
 
-#endif /* !DBUS_IFACE_H */
+#endif /* !DBUS_IFACE_HH */

@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -47,7 +47,7 @@ dcpd_SOURCES = \
     stream_id.h \
     coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
-    dbus_iface.c dbus_iface.h dbus_iface_deep.h \
+    dbus_iface.cc dbus_iface.hh dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.h connman_agent.h \
     dbus_handlers_connman_manager.h dbus_handlers_connman_manager_glue.h \
     configuration.cc configuration.hh configuration_base.hh configuration_changed.hh \

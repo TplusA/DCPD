@@ -28,7 +28,7 @@
 #include "messages_glib.h"
 #include "transactions.hh"
 #include "drcp.hh"
-#include "dbus_iface.h"
+#include "dbus_iface.hh"
 #include "dbus_handlers_connman_manager_glue.h"
 #include "registers.hh"
 #include "dcpregs_appliance.hh"
@@ -1418,12 +1418,12 @@ int main(int argc, char *argv[])
 
     main_loop_init(&parameters, config_manager, appconn, wlan_tools, &connman, &dot, is_upgrading);
 
-    if(dbus_setup(parameters.connect_to_session_dbus,
-                  parameters.with_connman, &appconn, connman,
-                  reinterpret_cast<struct ConfigurationManagementData *>(&config_manager),
-                  reinterpret_cast<struct AccessPointData *>(&apman),
-                  Regs::UPnPServer::connected,
-                  Regs::AudioSources::check_external_service_credentials) < 0)
+    if(DBus::setup(parameters.connect_to_session_dbus,
+                   parameters.with_connman, &appconn, connman,
+                   reinterpret_cast<struct ConfigurationManagementData *>(&config_manager),
+                   reinterpret_cast<struct AccessPointData *>(&apman),
+                   Regs::UPnPServer::connected,
+                   Regs::AudioSources::check_external_service_credentials) < 0)
     {
         shutdown(&files);
         return EXIT_FAILURE;
@@ -1469,7 +1469,7 @@ int main(int argc, char *argv[])
     if(parameters.with_connman)
         wlan_tools.power_on();
 
-    dbus_lock_shutdown_sequence("Notify SPI slave");
+    DBus::lock_shutdown_sequence("Notify SPI slave");
 
     Regs::Appliance::configure();
 
@@ -1482,8 +1482,8 @@ int main(int argc, char *argv[])
     appconn.close();
 
     shutdown(&files);
-    dbus_unlock_shutdown_sequence();
-    dbus_shutdown();
+    DBus::unlock_shutdown_sequence();
+    DBus::shutdown();
     Regs::deinit();
     network_prefs_deinit();
     configproxy_deinit();
