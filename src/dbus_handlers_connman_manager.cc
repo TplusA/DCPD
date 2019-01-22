@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,8 +20,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dbus_handlers_connman_manager.h"
-#include "dbus_handlers_connman_manager_glue.h"
+#include "dbus_handlers_connman_manager.hh"
 #include "dbus_iface_deep.h"
 #include "dcpregs_networkconfig.hh"
 #include "connman_scan.hh"
@@ -479,37 +478,37 @@ class WLANConnectionState
     }
 };
 
-class DBusSignalManagerData
+class Connman::WLANManager
 {
   public:
     std::recursive_mutex lock;
 
     bool is_disabled;
 
-    void (*schedule_connect_to_wlan)();
-    void (*schedule_refresh_connman_services)();
+    std::function<void()> schedule_connect_to_wlan;
+    std::function<void()> schedule_refresh_connman_services;
 
     WLANConnectionState wlan_connection_state;
 
     Connman::WLANTools *wlan_tools;
 
-    DBusSignalManagerData(const DBusSignalManagerData &) = delete;
-    DBusSignalManagerData &operator=(const DBusSignalManagerData &) = delete;
+    WLANManager(const WLANManager &) = delete;
+    WLANManager &operator=(const WLANManager &) = delete;
 
-    explicit DBusSignalManagerData():
+    explicit WLANManager():
         is_disabled(false),
         schedule_connect_to_wlan(nullptr),
         schedule_refresh_connman_services(nullptr),
         wlan_tools(nullptr)
     {}
 
-    void init(void (*schedule_connect_to_wlan_fn)(),
-              void (*schedule_refresh_connman_services_fn)(),
+    void init(std::function<void()> &&schedule_connect_to_wlan_fn,
+              std::function<void()> &&schedule_refresh_connman_services_fn,
               Connman::WLANTools *wlan, bool is_enabled)
     {
         is_disabled = !is_enabled;
-        schedule_connect_to_wlan = schedule_connect_to_wlan_fn;
-        schedule_refresh_connman_services = schedule_refresh_connman_services_fn;
+        schedule_connect_to_wlan = std::move(schedule_connect_to_wlan_fn);
+        schedule_refresh_connman_services = std::move(schedule_refresh_connman_services_fn);
         wlan_connection_state.reset();
         wlan_tools = wlan;
         Connman::ServiceList::get_singleton_for_update().first.clear();
@@ -566,35 +565,35 @@ static bool stop_wps(WLANConnectionState &state, bool emit_warning_if_idle)
 }
 
 static void service_connected(const std::string &service_name, bool succeeded,
-                              DBusSignalManagerData &data)
+                              Connman::WLANManager &wman)
 {
     {
-        std::lock_guard<std::recursive_mutex> lock(data.lock);
+        std::lock_guard<std::recursive_mutex> lock(wman.lock);
 
         if(succeeded)
         {
             msg_info("Connected to %s", service_name.c_str());
-            data.wlan_connection_state.finished_successfully();
+            wman.wlan_connection_state.finished_successfully();
         }
         else
         {
             msg_info("Failed connecting to %s", service_name.c_str());
-            data.wlan_connection_state.finished_with_failure();
+            wman.wlan_connection_state.finished_with_failure();
         }
     }
 
-    data.wlan_connection_state.reset();
-    data.schedule_refresh_connman_services();
+    wman.wlan_connection_state.reset();
+    wman.schedule_refresh_connman_services();
 }
 
-static void schedule_wlan_connect__unlocked(DBusSignalManagerData &data)
+static void schedule_wlan_connect__unlocked(Connman::WLANManager &wman)
 {
     log_assert(
-        data.wlan_connection_state.get_state() == WLANConnectionState::State::WAIT_FOR_REGISTRAR ||
-        data.wlan_connection_state.get_state() == WLANConnectionState::State::ABOUT_TO_CONNECT);
+        wman.wlan_connection_state.get_state() == WLANConnectionState::State::WAIT_FOR_REGISTRAR ||
+        wman.wlan_connection_state.get_state() == WLANConnectionState::State::ABOUT_TO_CONNECT);
 
-    data.wlan_tools->power_on();
-    data.schedule_connect_to_wlan();
+    wman.wlan_tools->power_on();
+    wman.schedule_connect_to_wlan();
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
               "***** Scheduled connect to WLAN *****");
@@ -649,32 +648,32 @@ static void store_wlan_config(const Connman::ServiceBase *service)
 }
 
 static void wps_connected(const std::string &service_name, bool succeeded,
-                          DBusSignalManagerData &data)
+                          Connman::WLANManager &wman)
 {
     {
         const auto locked_services(Connman::ServiceList::get_singleton_const());
         const auto &services(locked_services.first);
 
-        std::lock_guard<std::recursive_mutex> lock(data.lock);
+        std::lock_guard<std::recursive_mutex> lock(wman.lock);
 
         if(succeeded)
         {
             msg_info("Connected to %s via WPS", service_name.c_str());
             store_wlan_config(services[service_name]);
-            data.wlan_connection_state.finished_successfully();
+            wman.wlan_connection_state.finished_successfully();
         }
         else
         {
             msg_info("Failed connecting to %s via WPS", service_name.c_str());
-            data.wlan_connection_state.finished_with_failure();
+            wman.wlan_connection_state.finished_with_failure();
         }
     }
 
-    data.wlan_connection_state.reset();
+    wman.wlan_connection_state.reset();
     connman_agent_set_wps_mode(false);
 
     if(succeeded)
-        data.schedule_refresh_connman_services();
+        wman.schedule_refresh_connman_services();
 }
 
 static FindRegistrarResult find_wps_registrar(WLANConnectionState &state,
@@ -762,34 +761,34 @@ static FindRegistrarResult find_wps_registrar(WLANConnectionState &state,
 
 static void scan_for_wps_done(Connman::SiteSurveyResult result);
 
-bool dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
+bool Connman::connect_our_wlan(WLANManager &wman)
 {
-    std::lock_guard<std::recursive_mutex> lock(data->lock);
+    std::lock_guard<std::recursive_mutex> lock(wman.lock);
 
-    switch(data->wlan_connection_state.get_state())
+    switch(wman.wlan_connection_state.get_state())
     {
       case WLANConnectionState::State::WAIT_FOR_REGISTRAR:
         {
             const auto locked_services(Connman::ServiceList::get_singleton_const());
             const auto &services(locked_services.first);
 
-            switch(find_wps_registrar(data->wlan_connection_state, services))
+            switch(find_wps_registrar(wman.wlan_connection_state, services))
             {
               case FindRegistrarResult::NOT_FOUND:
-                if(data->wlan_tools == nullptr)
+                if(wman.wlan_tools == nullptr)
                 {
                     BUG("No WLAN tools");
                     break;
                 }
 
-                data->wlan_tools->start_site_survey(scan_for_wps_done);
+                wman.wlan_tools->start_site_survey(scan_for_wps_done);
                 return true;
 
               case FindRegistrarResult::FOUND:
                 return true;
 
               case FindRegistrarResult::TIMEOUT:
-                stop_wps(data->wlan_connection_state, true);
+                stop_wps(wman.wlan_connection_state, true);
                 break;
             }
 
@@ -797,19 +796,19 @@ bool dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
         }
 
       case WLANConnectionState::State::ABOUT_TO_CONNECT:
-        data->wlan_connection_state.start_connecting();
+        wman.wlan_connection_state.start_connecting();
 
-        if(data->wlan_connection_state.is_wps_mode())
-            return data->wlan_connection_state.try_connect(
-                [data] (const std::string &service_name, bool succeeded)
+        if(wman.wlan_connection_state.is_wps_mode())
+            return wman.wlan_connection_state.try_connect(
+                [&wman] (const std::string &service_name, bool succeeded)
                 {
-                    wps_connected(service_name, succeeded, *data);
+                    wps_connected(service_name, succeeded, wman);
                 });
         else
-            return data->wlan_connection_state.try_connect(
-                [data] (const std::string &service_name, bool succeeded)
+            return wman.wlan_connection_state.try_connect(
+                [&wman] (const std::string &service_name, bool succeeded)
                 {
-                    service_connected(service_name, succeeded, *data);
+                    service_connected(service_name, succeeded, wman);
                 });
 
       case WLANConnectionState::State::IDLE:
@@ -818,7 +817,7 @@ bool dbussignal_connman_manager_connect_our_wlan(DBusSignalManagerData *data)
       case WLANConnectionState::State::FAILED:
       case WLANConnectionState::State::ABORTED:
         BUG("Tried to connect to WLAN in state %d",
-            static_cast<int>(data->wlan_connection_state.get_state()));
+            static_cast<int>(wman.wlan_connection_state.get_state()));
         break;
     }
 
@@ -2051,12 +2050,12 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 }
 
 static void schedule_wlan_connect_if_necessary(bool is_necessary,
-                                               DBusSignalManagerData &data)
+                                               Connman::WLANManager &wman)
 {
-    std::lock_guard<std::recursive_mutex> lock(data.lock);
+    std::lock_guard<std::recursive_mutex> lock(wman.lock);
 
     if(is_necessary)
-        schedule_wlan_connect__unlocked(data);
+        schedule_wlan_connect__unlocked(wman);
 }
 
 static bool update_all_services(GVariant *all_services,
@@ -2076,7 +2075,7 @@ static bool update_all_services(GVariant *all_services,
     return true;
 }
 
-static void process_pending_changes(DBusSignalManagerData &data,
+static void process_pending_changes(Connman::WLANManager &wman,
                                     Connman::ServiceList &services,
                                     bool have_lost_active_ethernet_device,
                                     bool have_lost_active_wlan_device)
@@ -2090,8 +2089,8 @@ static void process_pending_changes(DBusSignalManagerData &data,
         do_process_pending_changes(services,
                                    have_lost_active_ethernet_device,
                                    have_lost_active_wlan_device,
-                                   data.wlan_connection_state,
-                                   data.wlan_tools,
+                                   wman.wlan_connection_state,
+                                   wman.wlan_tools,
                                    ethernet_prefs, wlan_prefs);
 
     if(handle != NULL)
@@ -2099,7 +2098,7 @@ static void process_pending_changes(DBusSignalManagerData &data,
 
     Regs::NetworkConfig::interfaces_changed();
 
-    schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection, data);
+    schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection, wman);
 }
 
 static const std::vector<std::string>
@@ -2129,8 +2128,8 @@ find_removed(const Connman::ServiceList &known_services, GVariant *all_services)
     return result;
 }
 
-static void refresh_services(DBusSignalManagerData &data, bool force_refresh_all,
-                             const char *context)
+static void do_refresh_services(Connman::WLANManager &wman, bool force_refresh_all,
+                                const char *context)
 {
     const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
@@ -2148,7 +2147,7 @@ static void refresh_services(DBusSignalManagerData &data, bool force_refresh_all
     {
         const std::vector<std::string> removed(std::move(find_removed(services, all_services)));
 
-        update_service_list(services, data.wlan_connection_state,
+        update_service_list(services, wman.wlan_connection_state,
                             removed,
                             have_lost_active_ethernet_device,
                             have_lost_active_wlan_device);
@@ -2158,21 +2157,21 @@ static void refresh_services(DBusSignalManagerData &data, bool force_refresh_all
                            context))
         g_variant_unref(all_services);
 
-    process_pending_changes(data, services,
+    process_pending_changes(wman, services,
                             have_lost_active_ethernet_device,
                             have_lost_active_wlan_device);
 }
 
-void dbussignal_connman_manager(GDBusProxy *proxy, const gchar *sender_name,
-                                const gchar *signal_name, GVariant *parameters,
-                                gpointer user_data)
+void Connman::dbussignal_connman_manager(struct _GDBusProxy *proxy, const char *sender_name,
+                                         const char *signal_name, struct _GVariant *parameters,
+                                         void *user_data)
 {
-    auto *data = static_cast<DBusSignalManagerData *>(user_data);
+    auto *wman = static_cast<Connman::WLANManager *>(user_data);
 
-    if(data != nullptr)
+    if(wman != nullptr)
     {
-        log_assert(!data->is_disabled);
-        refresh_services(*data, false, signal_name);
+        log_assert(!wman->is_disabled);
+        do_refresh_services(*wman, false, signal_name);
     }
     else
         BUG("Got no data in %s()", __func__);
@@ -2196,12 +2195,12 @@ static bool is_ssid_rejected(const std::string &ssid,
     return true;
 }
 
-static bool start_wps(DBusSignalManagerData &data,
+static bool start_wps(Connman::WLANManager &wman,
                       const Connman::ServiceList &services,
                       const char *network_name, const char *network_ssid,
                       const char *service_to_be_disabled)
 {
-    switch(data.wlan_connection_state.get_state())
+    switch(wman.wlan_connection_state.get_state())
     {
       case WLANConnectionState::State::IDLE:
         break;
@@ -2209,7 +2208,7 @@ static bool start_wps(DBusSignalManagerData &data,
       case WLANConnectionState::State::DONE:
       case WLANConnectionState::State::FAILED:
       case WLANConnectionState::State::ABORTED:
-        data.wlan_connection_state.reset();
+        wman.wlan_connection_state.reset();
         break;
 
       case WLANConnectionState::State::WAIT_FOR_REGISTRAR:
@@ -2230,13 +2229,13 @@ static bool start_wps(DBusSignalManagerData &data,
     const std::string service_to_be_disabled_copy(
             service_to_be_disabled != nullptr ? service_to_be_disabled : "");
 
-    data.wlan_connection_state.start_wps(
+    wman.wlan_connection_state.start_wps(
         [network_name_copy, network_ssid_copy]
         (const std::string &candidate)
         {
             return is_ssid_rejected(candidate, network_name_copy, network_ssid_copy);
         },
-        [&data, service_to_be_disabled_copy]
+        [&wman, service_to_be_disabled_copy]
         (const std::string &found_ssid, const Connman::ServiceList &service_list)
         {
             if(!service_to_be_disabled_copy.empty())
@@ -2247,28 +2246,28 @@ static bool start_wps(DBusSignalManagerData &data,
                     avoid_service(*service->second, service->first);
             }
 
-            schedule_wlan_connect__unlocked(data);
+            schedule_wlan_connect__unlocked(wman);
         });
 
-    return dbussignal_connman_manager_connect_our_wlan(&data);
+    return connect_our_wlan(wman);
 }
 
-static DBusSignalManagerData global_dbussignal_connman_manager_data;
+static Connman::WLANManager global_connman_wlan_manager;
 
-DBusSignalManagerData *
-dbussignal_connman_manager_init(void (*schedule_connect_to_wlan_fn)(),
-                                void (*schedule_refresh_connman_services_fn)(),
-                                Connman::WLANTools *wlan_tools, bool is_enabled)
+Connman::WLANManager *
+Connman::init_wlan_manager(std::function<void()> &&schedule_connect_to_wlan_fn,
+                           std::function<void()> &&schedule_refresh_connman_services_fn,
+                           Connman::WLANTools *wlan_tools, bool is_enabled)
 {
-    global_dbussignal_connman_manager_data.init(schedule_connect_to_wlan_fn,
-                                                schedule_refresh_connman_services_fn,
-                                                wlan_tools, is_enabled);
-    return &global_dbussignal_connman_manager_data;
+    global_connman_wlan_manager.init(std::move(schedule_connect_to_wlan_fn),
+                                     std::move(schedule_refresh_connman_services_fn),
+                                     wlan_tools, is_enabled);
+    return &global_connman_wlan_manager;
 }
 
 static void scan_for_wps_done(Connman::SiteSurveyResult result)
 {
-    std::lock_guard<std::recursive_mutex> lock(global_dbussignal_connman_manager_data.lock);
+    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
     switch(result)
     {
@@ -2282,15 +2281,15 @@ static void scan_for_wps_done(Connman::SiteSurveyResult result)
         msg_error(0, LOG_ERR,
                   "WLAN scan failed hard (%d), stopping WPS",
                   static_cast<int>(result));
-        stop_wps(global_dbussignal_connman_manager_data.wlan_connection_state, true);
+        stop_wps(global_connman_wlan_manager.wlan_connection_state, true);
         return;
     }
 
-    switch(global_dbussignal_connman_manager_data.wlan_connection_state.get_state())
+    switch(global_connman_wlan_manager.wlan_connection_state.get_state())
     {
       case WLANConnectionState::State::WAIT_FOR_REGISTRAR:
         msg_info("WLAN scan succeeded, now trying to connect to WPS registrar");
-        schedule_wlan_connect__unlocked(global_dbussignal_connman_manager_data);
+        schedule_wlan_connect__unlocked(global_connman_wlan_manager);
         break;
 
       case WLANConnectionState::State::ABOUT_TO_CONNECT:
@@ -2307,9 +2306,9 @@ static void scan_for_wps_done(Connman::SiteSurveyResult result)
     }
 }
 
-void dbussignal_connman_manager_about_to_connect_signals()
+void Connman::about_to_connect_dbus_signals()
 {
-    log_assert(!global_dbussignal_connman_manager_data.is_disabled);
+    log_assert(!global_connman_wlan_manager.is_disabled);
 
     const auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
@@ -2323,16 +2322,15 @@ void dbussignal_connman_manager_about_to_connect_signals()
     if(update_all_services(all_services, services, devices, true, "startup"))
         g_variant_unref(all_services);
 
-    process_pending_changes(global_dbussignal_connman_manager_data,
+    process_pending_changes(global_connman_wlan_manager,
                             services, false, false);
 }
 
-void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
-                                                   const char *service_to_be_disabled,
-                                                   bool immediate_activation,
-                                                   bool force_reconnect)
+void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
+                                 const char *service_to_be_disabled,
+                                 bool immediate_activation, bool force_reconnect)
 {
-    if(global_dbussignal_connman_manager_data.is_disabled)
+    if(global_connman_wlan_manager.is_disabled)
         return;
 
     if(tech == NWPREFSTECH_UNKNOWN)
@@ -2352,7 +2350,7 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    std::unique_lock<std::recursive_mutex> lock(global_dbussignal_connman_manager_data.lock);
+    std::unique_lock<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
     switch(tech)
     {
@@ -2382,11 +2380,11 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
             {
                 if(configure_our_wlan(static_cast<const Connman::Service<Connman::Technology::WLAN> &>(*our_service->second),
                                       our_service->first, wlan_prefs,
-                                      global_dbussignal_connman_manager_data.wlan_connection_state,
+                                      global_connman_wlan_manager.wlan_connection_state,
                                       true, immediate_activation, force_reconnect) &&
                    immediate_activation)
                 {
-                    global_dbussignal_connman_manager_data.wlan_connection_state.about_to_connect_to(
+                    global_connman_wlan_manager.wlan_connection_state.about_to_connect_to(
                         our_service->first, WLANConnectionState::Method::KNOWN_CREDENTIALS);
                     need_to_schedule_wlan_connection = true;
                 }
@@ -2410,33 +2408,32 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
     lock.unlock();
 
     schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
-                                       global_dbussignal_connman_manager_data);
+                                       global_connman_wlan_manager);
 }
 
-void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
-                                                       const char *network_ssid,
-                                                       const char *service_to_be_disabled)
+void Connman::connect_to_wps_service(const char *network_name, const char *network_ssid,
+                                     const char *service_to_be_disabled)
 {
-    if(global_dbussignal_connman_manager_data.is_disabled)
+    if(global_connman_wlan_manager.is_disabled)
         return;
 
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    std::lock_guard<std::recursive_mutex> lock(global_dbussignal_connman_manager_data.lock);
+    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
-    start_wps(global_dbussignal_connman_manager_data, services,
+    start_wps(global_connman_wlan_manager, services,
               network_name, network_ssid, service_to_be_disabled);
 }
 
-void dbussignal_connman_manager_cancel_wps()
+void Connman::cancel_wps()
 {
-    if(global_dbussignal_connman_manager_data.is_disabled)
+    if(global_connman_wlan_manager.is_disabled)
         return;
 
-    std::lock_guard<std::recursive_mutex> lock(global_dbussignal_connman_manager_data.lock);
+    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
-    stop_wps(global_dbussignal_connman_manager_data.wlan_connection_state, false);
+    stop_wps(global_connman_wlan_manager.wlan_connection_state, false);
 }
 
 static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s,
@@ -2469,16 +2466,16 @@ static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s
     return false;
 }
 
-bool dbussignal_connman_manager_is_connecting(bool *is_wps)
+bool Connman::is_connecting(bool *is_wps)
 {
-    log_assert(!global_dbussignal_connman_manager_data.is_disabled);
+    log_assert(!global_connman_wlan_manager.is_disabled);
 
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    auto &d(global_dbussignal_connman_manager_data);
+    auto &d(global_connman_wlan_manager);
 
-    std::lock_guard<std::recursive_mutex> lock(global_dbussignal_connman_manager_data.lock);
+    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
     *is_wps = d.wlan_connection_state.is_wps_mode();
 
@@ -2503,9 +2500,9 @@ bool dbussignal_connman_manager_is_connecting(bool *is_wps)
     return false;
 }
 
-void dbussignal_connman_manager_refresh_services(bool force_refresh_all)
+void Connman::refresh_services(bool force_refresh_all)
 {
-    if(!global_dbussignal_connman_manager_data.is_disabled)
-        refresh_services(global_dbussignal_connman_manager_data,
-                         force_refresh_all, __func__);
+    if(!global_connman_wlan_manager.is_disabled)
+        do_refresh_services(global_connman_wlan_manager,
+                            force_refresh_all, __func__);
 }

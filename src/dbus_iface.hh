@@ -19,18 +19,23 @@
 #ifndef DBUS_IFACE_HH
 #define DBUS_IFACE_HH
 
-struct DBusSignalManagerData;
-struct ConfigurationManagementData;
-struct AccessPointData;
+namespace Connman { class WLANManager; }
+namespace Configuration
+{
+    struct ApplianceValues;
+    template <typename ValuesT> class ConfigManager;
+}
+namespace Network { class AccessPointManager; }
+namespace Applink { class AppConnections; }
 
 namespace DBus
 {
 
 int setup(bool connect_to_session_bus, bool with_connman,
-          void *appconn_data,
-          struct DBusSignalManagerData *connman_manager_data,
-          struct ConfigurationManagementData *configuration_data,
-          struct AccessPointData *access_point_data,
+          Applink::AppConnections &appconn,
+          Connman::WLANManager &connman_wlan,
+          Configuration::ConfigManager<Configuration::ApplianceValues> &config_man,
+          Network::AccessPointManager &access_point,
           void (*content_manager_iface_available_notification)(bool),
           void (*credentials_read_iface_available_notification)());
 void shutdown();

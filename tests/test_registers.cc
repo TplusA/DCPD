@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -42,7 +42,7 @@
 #include "dcpregs_searchparameters.hh"
 #include "dcpregs_status.hh"
 #include "drcp_command_codes.h"
-#include "dbus_handlers_connman_manager_glue.h"
+#include "dbus_handlers_connman_manager.hh"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
 #include "stream_id.hh"
@@ -510,10 +510,9 @@ static CancelWPSData cancel_wps_data;
 
 /* Instead of writing a full mock for the ConnMan D-Bus API, we'll just have
  * this little function as a poor, but quick replacement */
-void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology tech,
-                                                   const char *service_to_be_disabled,
-                                                   bool immediate_activation,
-                                                   bool force_reconnect)
+void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
+                                 const char *service_to_be_disabled,
+                                 bool immediate_activation, bool force_reconnect)
 {
     connect_to_connman_service_data.called(tech, service_to_be_disabled,
                                            immediate_activation,
@@ -521,23 +520,22 @@ void dbussignal_connman_manager_connect_to_service(enum NetworkPrefsTechnology t
 }
 
 /* Another quick replacement for the Connman D-Bus API */
-void dbussignal_connman_manager_connect_to_wps_service(const char *network_name,
-                                                       const char *network_ssid,
-                                                       const char *service_to_be_disabled)
+void Connman::connect_to_wps_service(const char *network_name, const char *network_ssid,
+                                     const char *service_to_be_disabled)
 {
     connect_to_connman_service_data.called(network_name, network_ssid,
                                            service_to_be_disabled);
 }
 
 /* And another quick replacement. Should write a mock, right? */
-void dbussignal_connman_manager_cancel_wps()
+void Connman::cancel_wps()
 {
     cancel_wps_data.called();
 }
 
 /* Always tell caller that we are currently not in the progress of connecting
  * the service */
-bool dbussignal_connman_manager_is_connecting(bool *is_wps)
+bool Connman::is_connecting(bool *is_wps)
 {
     *is_wps = false;
     return false;

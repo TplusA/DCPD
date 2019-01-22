@@ -29,7 +29,7 @@
 #include "transactions.hh"
 #include "drcp.hh"
 #include "dbus_iface.hh"
-#include "dbus_handlers_connman_manager_glue.h"
+#include "dbus_handlers_connman_manager.hh"
 #include "registers.hh"
 #include "dcpregs_appliance.hh"
 #include "dcpregs_status.hh"
@@ -542,13 +542,13 @@ static void handle_register_change(unsigned int wait_result, int fd,
 }
 
 static void handle_connman_manager_events(unsigned int wait_result,
-                                          struct DBusSignalManagerData *data)
+                                          Connman::WLANManager &wman)
 {
     if((wait_result & WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED) != 0)
-        dbussignal_connman_manager_refresh_services();
+        Connman::refresh_services();
 
     if((wait_result & WAITEVENT_CONNECT_TO_WLAN_REQUESTED) != 0)
-        dbussignal_connman_manager_connect_our_wlan(data);
+        Connman::connect_our_wlan(wman);
 }
 
 static struct
@@ -730,7 +730,7 @@ static void handle_transaction_exception(DCPDState &state,
 static void main_loop(struct files *files,
                       struct dcp_over_tcp_data *dot,
                       Applink::AppConnections &appconn,
-                      struct DBusSignalManagerData *connman,
+                      Connman::WLANManager &connman,
                       int primitive_queue_fd, int register_changed_fd)
 {
     static struct DCPDState state;
@@ -898,7 +898,7 @@ static bool main_loop_init(const struct parameters *parameters,
                            Configuration::ConfigManager<Configuration::ApplianceValues> &config_manager,
                            Applink::AppConnections &appconn,
                            Connman::WLANTools &wlan_tools,
-                           struct DBusSignalManagerData **connman,
+                           Connman::WLANManager *&connman,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
     Regs::UPnPName::init();
@@ -927,10 +927,9 @@ static bool main_loop_init(const struct parameters *parameters,
     Regs::init(push_register_to_slave, &wlan_tools);
     Regs::FileTransfer::set_picture_provider(Regs::PlayStream::get_picture_provider());
 
-    *connman = dbussignal_connman_manager_init(try_connect_to_managed_wlan,
-                                               deferred_connman_refresh,
-                                               &wlan_tools,
-                                               parameters->with_connman);
+    connman = init_wlan_manager(try_connect_to_managed_wlan,
+                                deferred_connman_refresh,
+                                &wlan_tools, parameters->with_connman);
 
     /*
      * The port number is ASCII "TB" (meaning T + A + 1).
@@ -1391,7 +1390,7 @@ int main(int argc, char *argv[])
     /*!
      * Data for net.connman.Manager D-Bus signal handlers.
      */
-    static struct DBusSignalManagerData *connman;
+    static Connman::WLANManager *connman;
 
     /*!
      * Data for de.tahifi.Configuration interfaces.
@@ -1416,12 +1415,11 @@ int main(int argc, char *argv[])
     static Network::AccessPoint ap(tech_reg);
     static Network::AccessPointManager apman(ap);
 
-    main_loop_init(&parameters, config_manager, appconn, wlan_tools, &connman, &dot, is_upgrading);
+    main_loop_init(&parameters, config_manager, appconn, wlan_tools, connman, &dot, is_upgrading);
 
-    if(DBus::setup(parameters.connect_to_session_dbus,
-                   parameters.with_connman, &appconn, connman,
-                   reinterpret_cast<struct ConfigurationManagementData *>(&config_manager),
-                   reinterpret_cast<struct AccessPointData *>(&apman),
+    if(connman == nullptr ||
+       DBus::setup(parameters.connect_to_session_dbus, parameters.with_connman,
+                   appconn, *connman, config_manager, apman,
                    Regs::UPnPServer::connected,
                    Regs::AudioSources::check_external_service_credentials) < 0)
     {
@@ -1473,7 +1471,7 @@ int main(int argc, char *argv[])
 
     Regs::Appliance::configure();
 
-    main_loop(&files, &dot, appconn, connman,
+    main_loop(&files, &dot, appconn, *connman,
               primitive_queue_fd, register_changed_fd);
 
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutting down");

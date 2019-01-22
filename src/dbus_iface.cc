@@ -23,7 +23,7 @@
 #include "dbus_iface.hh"
 #include "dbus_iface_deep.h"
 #include "dbus_handlers.h"
-#include "dbus_handlers_connman_manager.h"
+#include "dbus_handlers_connman_manager.hh"
 #include "dbus_handlers_connman_agent.h"
 #include "dbus_common.h"
 #include "dcpd_dbus.h"
@@ -64,8 +64,8 @@ static struct
 {
     bool connect_to_session_bus;
 
-    struct ConfigurationManagementData *config_management_data;
-    struct AccessPointData *access_point_data;
+    Configuration::ConfigManager<Configuration::ApplianceValues> *config_man;
+    Network::AccessPointManager *access_point;
 
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
@@ -109,7 +109,7 @@ static struct airable_iface_data
 {
     bool connect_to_session_bus;
     tdbusAirable *airable_sec_iface;
-    void *appconn_data;
+    Applink::AppConnections *appconn;
 }
 airable_iface_data;
 
@@ -258,7 +258,7 @@ static void bus_acquired(GDBusConnection *connection,
 
         g_signal_connect(dcpd_iface_data.network_config_iface, "handle-get-all",
                          G_CALLBACK(dbusmethod_network_get_all),
-                         dcpd_iface_data.access_point_data);
+                         dcpd_iface_data.access_point);
         g_signal_connect(dcpd_iface_data.network_config_iface, "handle-set-service-configuration",
                          G_CALLBACK(dbusmethod_network_set_service_configuration), nullptr);
 
@@ -285,13 +285,13 @@ static void bus_acquired(GDBusConnection *connection,
                          G_CALLBACK(dbusmethod_configproxy_register), nullptr);
         g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-keys",
                          G_CALLBACK(dbusmethod_config_get_all_keys),
-                         dcpd_iface_data.config_management_data);
+                         dcpd_iface_data.config_man);
         g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-value",
                          G_CALLBACK(dbusmethod_config_get_value),
-                         dcpd_iface_data.config_management_data);
+                         dcpd_iface_data.config_man);
         g_signal_connect(dcpd_iface_data.configuration_read_iface, "handle-get-all-values",
                          G_CALLBACK(dbusmethod_config_get_all_values),
-                         dcpd_iface_data.config_management_data);
+                         dcpd_iface_data.config_man);
 
         g_signal_connect(dcpd_iface_data.debug_logging_iface,
                          "handle-debug-level",
@@ -359,7 +359,7 @@ static void created_airable_proxy(GObject *source_object, GAsyncResult *res,
 
     if(dbus_common_handle_dbus_error(&error, "Create Airable sec proxy") == 0)
         g_signal_connect(data->airable_sec_iface, "g-signal",
-                         G_CALLBACK(dbussignal_airable), data->appconn_data);
+                         G_CALLBACK(dbussignal_airable), data->appconn);
 }
 
 static void created_cred_read_proxy(GObject *source_object, GAsyncResult *res,
@@ -577,10 +577,10 @@ static const struct dbussignal_shutdown_iface logind_shutdown_functions =
 static struct dbus_process_data process_data;
 
 int DBus::setup(bool connect_to_session_bus, bool with_connman,
-                void *appconn_data,
-                struct DBusSignalManagerData *connman_data,
-                struct ConfigurationManagementData *configuration_data,
-                struct AccessPointData *access_point_data,
+                Applink::AppConnections &appconn,
+                Connman::WLANManager &connman_wlan,
+                Configuration::ConfigManager<Configuration::ApplianceValues> &config_man,
+                Network::AccessPointManager &access_point,
                 void (*content_manager_iface_available_notification)(bool),
                 void (*credentials_read_iface_available_notification)())
 {
@@ -615,13 +615,13 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
     }
 
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
-    dcpd_iface_data.config_management_data = configuration_data;
-    dcpd_iface_data.access_point_data = access_point_data;
+    dcpd_iface_data.config_man = &config_man;
+    dcpd_iface_data.access_point = &access_point;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     roonplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     airable_iface_data.connect_to_session_bus = connect_to_session_bus;
-    airable_iface_data.appconn_data = appconn_data;
+    airable_iface_data.appconn = &appconn;
     artcache_iface_data.connect_to_session_bus = connect_to_session_bus;
     audiopath_iface_data.connect_to_session_bus = connect_to_session_bus;
     gerbera_iface_data.connect_to_session_bus = connect_to_session_bus;
@@ -716,9 +716,10 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
     {
         log_assert(connman_iface_data.connman_manager_iface != nullptr);
 
-        dbussignal_connman_manager_about_to_connect_signals();
+        Connman::about_to_connect_dbus_signals();
         g_signal_connect(connman_iface_data.connman_manager_iface, "g-signal",
-                         G_CALLBACK(dbussignal_connman_manager), connman_data);
+                         G_CALLBACK(Connman::dbussignal_connman_manager),
+                         &connman_wlan);
     }
 
     log_assert(login1_iface_data.login1_manager_iface != nullptr);

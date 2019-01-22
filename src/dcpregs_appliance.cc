@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,7 +21,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "dcpregs_appliance.hh"
-#include "dbus_handlers_connman_manager_glue.h"
+#include "dbus_handlers_connman_manager.hh"
 #include "network_device_list.hh"
 #include "dcpregs_networkconfig.hh"
 #include "configproxy.h"
@@ -244,7 +244,7 @@ bool Regs::Appliance::init()
 
 void Regs::Appliance::configure()
 {
-    dbussignal_connman_manager_refresh_services(true);
+    Connman::refresh_services(true);
 }
 
 ssize_t Regs::Appliance::DCP::read_87_appliance_id(uint8_t *response, size_t length)

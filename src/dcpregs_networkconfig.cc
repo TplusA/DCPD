@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,7 +28,7 @@
 #include "network_device_list.hh"
 #include "network_config_request.hh"
 #include "connman_scan.hh"
-#include "dbus_handlers_connman_manager_glue.h"
+#include "dbus_handlers_connman_manager.hh"
 #include "shutdown_guard.h"
 
 #include <arpa/inet.h>
@@ -1397,18 +1397,18 @@ static bool process_config_request_from_spi_slave(
     switch(wps_mode)
     {
       case Network::WPSMode::INVALID:
-        dbussignal_connman_manager_cancel_wps();
+        Connman::cancel_wps();
         break;
 
       case Network::WPSMode::NONE:
-        dbussignal_connman_manager_connect_to_service(map_network_technology(tech),
-                                                      current_wlan_service_name.data(),
-                                                      true, have_new_wlan_passphrase);
+        Connman::connect_to_service(map_network_technology(tech),
+                                    current_wlan_service_name.data(),
+                                    true, have_new_wlan_passphrase);
         return true;
 
       case Network::WPSMode::DIRECT:
         log_assert(tech == Connman::Technology::WLAN);
-        dbussignal_connman_manager_connect_to_wps_service(
+        Connman::connect_to_wps_service(
             wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
             wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
             current_wlan_service_name.data());
@@ -1416,12 +1416,12 @@ static bool process_config_request_from_spi_slave(
 
       case Network::WPSMode::SCAN:
         log_assert(tech == Connman::Technology::WLAN);
-        dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
-                                                          current_wlan_service_name.data());
+        Connman::connect_to_wps_service(nullptr, nullptr,
+                                        current_wlan_service_name.data());
         return true;
 
       case Network::WPSMode::ABORT:
-        dbussignal_connman_manager_cancel_wps();
+        Connman::cancel_wps();
         return true;
     }
 
@@ -1617,22 +1617,22 @@ static bool process_external_config_request(
     {
       case Network::WPSMode::INVALID:
         if(immediate_activation)
-            dbussignal_connman_manager_cancel_wps();
+            Connman::cancel_wps();
 
         break;
 
       case Network::WPSMode::NONE:
-        dbussignal_connman_manager_connect_to_service(map_network_technology(target_tech),
-                                                      current_wlan_service_name.data(),
-                                                      immediate_activation,
-                                                      have_new_wlan_passphrase);
+        Connman::connect_to_service(map_network_technology(target_tech),
+                                    current_wlan_service_name.data(),
+                                    immediate_activation,
+                                    have_new_wlan_passphrase);
         return true;
 
       case Network::WPSMode::DIRECT:
         log_assert(target_tech == Connman::Technology::WLAN);
 
         if(immediate_activation)
-            dbussignal_connman_manager_connect_to_wps_service(
+            Connman::connect_to_wps_service(
                 wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
                 wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
                 current_wlan_service_name.data());
@@ -1643,14 +1643,14 @@ static bool process_external_config_request(
         log_assert(target_tech == Connman::Technology::WLAN);
 
         if(immediate_activation)
-            dbussignal_connman_manager_connect_to_wps_service(nullptr, nullptr,
-                                                              current_wlan_service_name.data());
+            Connman::connect_to_wps_service(nullptr, nullptr,
+                                            current_wlan_service_name.data());
 
         return true;
 
       case Network::WPSMode::ABORT:
         if(immediate_activation)
-            dbussignal_connman_manager_cancel_wps();
+            Connman::cancel_wps();
 
         return true;
     }
@@ -1777,7 +1777,7 @@ static void fill_network_status_register_response(uint8_t *response)
     }
 
     bool is_wps;
-    bool is_connecting = dbussignal_connman_manager_is_connecting(&is_wps);
+    bool is_connecting = Connman::is_connecting(&is_wps);
 
     if(is_connecting)
         response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;
