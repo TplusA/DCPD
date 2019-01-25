@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -59,14 +59,14 @@ class FillBufferData
     {}
 
     explicit FillBufferData(const char *data, int err, int ret,
-                            bool suppress_eagain_error = false):
+                            bool suppress_eagain_error = true):
         data_(data),
         errno_value_(err),
         return_value_(ret),
         suppress_eagain_error_(suppress_eagain_error)
     {}
 
-    void set(const char *data, int err, int ret, bool suppress_eagain_error = false)
+    void set(const char *data, int err, int ret, bool suppress_eagain_error = true)
     {
         data_ = data;
         errno_value_ = err;

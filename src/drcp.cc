@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -49,7 +49,7 @@ bool Drcp::read_xml(int in_fd, std::string &xml_string, const size_t expected_si
     {
         const size_t old_pos(pos);
         const int ret = os_try_read_to_buffer(&xml_string[0], expected_size,
-                                              &pos, in_fd, false);
+                                              &pos, in_fd, true);
 
         if(ret > 0)
             continue;
