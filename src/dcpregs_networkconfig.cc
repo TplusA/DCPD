@@ -26,6 +26,7 @@
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
 #include "network_config_request.hh"
+#include "accesspoint_manager.hh"
 #include "connman_scan.hh"
 #include "dbus_handlers_connman_manager.hh"
 #include "string_trim.hh"
@@ -1540,10 +1541,62 @@ static bool check_back_with_existing_devices(
     return false;
 }
 
+static bool connect_to_chosen_service(Network::WPSMode wps_mode,
+                                      bool immediate_activation,
+                                      Connman::Technology target_tech,
+                                      const char *service_to_be_disabled,
+                                      bool have_new_wlan_passphrase,
+                                      const std::string *const wps_network_name,
+                                      const std::string *const wps_network_ssid)
+{
+    switch(wps_mode)
+    {
+      case Network::WPSMode::INVALID:
+        if(immediate_activation)
+            Connman::cancel_wps();
+
+        break;
+
+      case Network::WPSMode::NONE:
+        Connman::connect_to_service(map_network_technology(target_tech),
+                                    service_to_be_disabled, immediate_activation,
+                                    have_new_wlan_passphrase);
+        return true;
+
+      case Network::WPSMode::DIRECT:
+        log_assert(target_tech == Connman::Technology::WLAN);
+
+        if(immediate_activation)
+            Connman::connect_to_wps_service(
+                wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
+                wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
+                service_to_be_disabled);
+
+        return true;
+
+      case Network::WPSMode::SCAN:
+        log_assert(target_tech == Connman::Technology::WLAN);
+
+        if(immediate_activation)
+            Connman::connect_to_wps_service(nullptr, nullptr, service_to_be_disabled);
+
+        return true;
+
+      case Network::WPSMode::ABORT:
+        if(immediate_activation)
+            Connman::cancel_wps();
+
+        return true;
+    }
+
+    return false;
+}
+
 static bool process_external_config_request(
         Network::ConfigRequest &config_request,
         const Connman::Address<Connman::AddressType::MAC> &mac,
-        Connman::Technology target_tech, ShutdownGuard &shutdown_guard)
+        Connman::Technology target_tech, Network::AccessPointManager &apman,
+        ShutdownGuard &shutdown_guard)
 {
     bool is_device_with_given_mac_present;
 
@@ -1613,49 +1666,41 @@ static bool process_external_config_request(
         break;
     }
 
-    switch(wps_mode)
+    /* work around problems with capturing by move and keeping the resulting
+     * lambda movable */
+    std::shared_ptr<std::string> wps_network_name_s = std::move(wps_network_name);
+    std::shared_ptr<std::string> wps_network_ssid_s = std::move(wps_network_ssid);
+
+    if(immediate_activation)
     {
-      case Network::WPSMode::INVALID:
-        if(immediate_activation)
-            Connman::cancel_wps();
+        auto connect_later =
+            [wps_mode, immediate_activation, target_tech,
+             current_wlan_service_name, have_new_wlan_passphrase,
+             wps_network_name_s, wps_network_ssid_s]
+            (Network::AccessPoint::RequestResult result,
+             Network::AccessPoint::Error error,
+             Network::AccessPoint::Status status)
+            {
+                if(result == Network::AccessPoint::RequestResult::OK &&
+                   status == Network::AccessPoint::Status::DISABLED)
+                {
+                    connect_to_chosen_service(wps_mode, immediate_activation, target_tech,
+                                              current_wlan_service_name.data(),
+                                              have_new_wlan_passphrase,
+                                              wps_network_name_s.get(),
+                                              wps_network_ssid_s.get());
+                }
+            };
 
-        break;
-
-      case Network::WPSMode::NONE:
-        Connman::connect_to_service(map_network_technology(target_tech),
-                                    current_wlan_service_name.data(),
-                                    immediate_activation,
-                                    have_new_wlan_passphrase);
-        return true;
-
-      case Network::WPSMode::DIRECT:
-        log_assert(target_tech == Connman::Technology::WLAN);
-
-        if(immediate_activation)
-            Connman::connect_to_wps_service(
-                wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
-                wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
-                current_wlan_service_name.data());
-
-        return true;
-
-      case Network::WPSMode::SCAN:
-        log_assert(target_tech == Connman::Technology::WLAN);
-
-        if(immediate_activation)
-            Connman::connect_to_wps_service(nullptr, nullptr,
-                                            current_wlan_service_name.data());
-
-        return true;
-
-      case Network::WPSMode::ABORT:
-        if(immediate_activation)
-            Connman::cancel_wps();
-
-        return true;
+        if(apman.deactivate(std::move(connect_later)))
+            return true;
     }
 
-    return false;
+    return connect_to_chosen_service(wps_mode, immediate_activation, target_tech,
+                                     current_wlan_service_name.data(),
+                                     have_new_wlan_passphrase,
+                                     wps_network_name_s.get(),
+                                     wps_network_ssid_s.get());
 }
 
 static NetworkConfigWriteData nwconfig_write_data;
@@ -1678,7 +1723,7 @@ void Regs::NetworkConfig::deinit()
 bool Regs::NetworkConfig::request_configuration_for_mac(
         Network::ConfigRequest &config_request,
         const Connman::Address<Connman::AddressType::MAC> &mac,
-        Connman::Technology tech)
+        Connman::Technology tech, Network::AccessPointManager &apman)
 {
     if(config_request.empty())
     {
@@ -1687,7 +1732,7 @@ bool Regs::NetworkConfig::request_configuration_for_mac(
     }
 
     const auto lock(nwconfig_write_data.lock());
-    return process_external_config_request(config_request, mac, tech,
+    return process_external_config_request(config_request, mac, tech, apman,
                                            nwstatus_data->shutdown_guard());
 }
 

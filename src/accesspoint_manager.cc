@@ -165,10 +165,10 @@ bool Network::AccessPointManager::activate(std::string &&ssid, std::string &&pas
         });
 }
 
-bool Network::AccessPointManager::deactivate()
+bool Network::AccessPointManager::deactivate(AccessPoint::DoneFn &&done)
 {
     return ap_.shutdown_request(
-        [this]
+        [this, done]
         (Network::AccessPoint::RequestResult result, Network::AccessPoint::Error error,
          Network::AccessPoint::Status status)
         {
@@ -184,5 +184,8 @@ bool Network::AccessPointManager::deactivate()
                           result_to_string[size_t(result)],
                           error_to_string[size_t(error)],
                           status_to_string[size_t(status)]);
+
+            if(done != nullptr)
+                done(result, error, status);
         });
 }

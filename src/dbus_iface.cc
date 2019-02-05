@@ -260,7 +260,8 @@ static void bus_acquired(GDBusConnection *connection,
                          G_CALLBACK(dbusmethod_network_get_all),
                          dcpd_iface_data.access_point);
         g_signal_connect(dcpd_iface_data.network_config_iface, "handle-set-service-configuration",
-                         G_CALLBACK(dbusmethod_network_set_service_configuration), nullptr);
+                         G_CALLBACK(dbusmethod_network_set_service_configuration),
+                         dcpd_iface_data.access_point);
 
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-selected",
                          G_CALLBACK(dbusmethod_audiopath_source_selected), nullptr);
