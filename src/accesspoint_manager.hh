@@ -55,7 +55,7 @@ class AccessPointManager
     }
 
     bool activate(std::string &&ssid, std::string &&passphrase);
-    bool deactivate();
+    bool deactivate(AccessPoint::DoneFn &&done = nullptr);
     AccessPoint::Status get_status() const { return ap_status_; }
 
     std::unique_lock<std::mutex> lock_cached() const { return std::unique_lock<std::mutex>(cache_lock_); }
