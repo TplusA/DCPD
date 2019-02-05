@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,6 +20,8 @@
 #define DCPREGS_NETWORKCONFIG_HH
 
 #include "network_config_request.hh"
+
+namespace Network { class AccessPointManager; }
 
 /*!
  * \addtogroup registers
@@ -45,7 +47,8 @@ void set_primary_technology(Connman::Technology tech);
 
 bool request_configuration_for_mac(Network::ConfigRequest &config_request,
                                    const Connman::Address<Connman::AddressType::MAC> &mac,
-                                   Connman::Technology tech);
+                                   Connman::Technology tech,
+                                   Network::AccessPointManager &apman);
 
 /*!
  * Report change of networking interfaces.

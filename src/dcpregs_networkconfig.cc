@@ -26,6 +26,7 @@
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
 #include "network_config_request.hh"
+#include "accesspoint_manager.hh"
 #include "connman_scan.hh"
 #include "dbus_handlers_connman_manager.hh"
 #include "string_trim.hh"
@@ -1545,8 +1546,8 @@ static bool connect_to_chosen_service(Network::WPSMode wps_mode,
                                       Connman::Technology target_tech,
                                       const char *service_to_be_disabled,
                                       bool have_new_wlan_passphrase,
-                                      std::unique_ptr<std::string> wps_network_name,
-                                      std::unique_ptr<std::string> wps_network_ssid)
+                                      const std::string *const wps_network_name,
+                                      const std::string *const wps_network_ssid)
 {
     switch(wps_mode)
     {
@@ -1594,7 +1595,8 @@ static bool connect_to_chosen_service(Network::WPSMode wps_mode,
 static bool process_external_config_request(
         Network::ConfigRequest &config_request,
         const Connman::Address<Connman::AddressType::MAC> &mac,
-        Connman::Technology target_tech, ShutdownGuard &shutdown_guard)
+        Connman::Technology target_tech, Network::AccessPointManager &apman,
+        ShutdownGuard &shutdown_guard)
 {
     bool is_device_with_given_mac_present;
 
@@ -1664,11 +1666,41 @@ static bool process_external_config_request(
         break;
     }
 
+    /* work around problems with capturing by move and keeping the resulting
+     * lambda movable */
+    std::shared_ptr<std::string> wps_network_name_s = std::move(wps_network_name);
+    std::shared_ptr<std::string> wps_network_ssid_s = std::move(wps_network_ssid);
+
+    if(immediate_activation)
+    {
+        auto connect_later =
+            [wps_mode, immediate_activation, target_tech,
+             current_wlan_service_name, have_new_wlan_passphrase,
+             wps_network_name_s, wps_network_ssid_s]
+            (Network::AccessPoint::RequestResult result,
+             Network::AccessPoint::Error error,
+             Network::AccessPoint::Status status)
+            {
+                if(result == Network::AccessPoint::RequestResult::OK &&
+                   status == Network::AccessPoint::Status::DISABLED)
+                {
+                    connect_to_chosen_service(wps_mode, immediate_activation, target_tech,
+                                              current_wlan_service_name.data(),
+                                              have_new_wlan_passphrase,
+                                              wps_network_name_s.get(),
+                                              wps_network_ssid_s.get());
+                }
+            };
+
+        if(apman.deactivate(std::move(connect_later)))
+            return true;
+    }
+
     return connect_to_chosen_service(wps_mode, immediate_activation, target_tech,
                                      current_wlan_service_name.data(),
                                      have_new_wlan_passphrase,
-                                     std::move(wps_network_name),
-                                     std::move(wps_network_ssid));
+                                     wps_network_name_s.get(),
+                                     wps_network_ssid_s.get());
 }
 
 static NetworkConfigWriteData nwconfig_write_data;
@@ -1691,7 +1723,7 @@ void Regs::NetworkConfig::deinit()
 bool Regs::NetworkConfig::request_configuration_for_mac(
         Network::ConfigRequest &config_request,
         const Connman::Address<Connman::AddressType::MAC> &mac,
-        Connman::Technology tech)
+        Connman::Technology tech, Network::AccessPointManager &apman)
 {
     if(config_request.empty())
     {
@@ -1700,7 +1732,7 @@ bool Regs::NetworkConfig::request_configuration_for_mac(
     }
 
     const auto lock(nwconfig_write_data.lock());
-    return process_external_config_request(config_request, mac, tech,
+    return process_external_config_request(config_request, mac, tech, apman,
                                            nwstatus_data->shutdown_guard());
 }
 

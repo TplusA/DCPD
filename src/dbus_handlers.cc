@@ -638,7 +638,9 @@ dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
     if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY && has_wlan_settings)
         tech = Connman::Technology::WLAN;
 
-    if(Regs::NetworkConfig::request_configuration_for_mac(req, mac, tech))
+    auto &apman = *static_cast<Network::AccessPointManager *>(user_data);
+
+    if(Regs::NetworkConfig::request_configuration_for_mac(req, mac, tech, apman))
         tdbus_dcpd_network_complete_set_service_configuration(object, invocation);
     else
         g_dbus_method_invocation_return_error(
