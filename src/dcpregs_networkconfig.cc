@@ -1540,6 +1540,57 @@ static bool check_back_with_existing_devices(
     return false;
 }
 
+static bool connect_to_chosen_service(Network::WPSMode wps_mode,
+                                      bool immediate_activation,
+                                      Connman::Technology target_tech,
+                                      const char *service_to_be_disabled,
+                                      bool have_new_wlan_passphrase,
+                                      std::unique_ptr<std::string> wps_network_name,
+                                      std::unique_ptr<std::string> wps_network_ssid)
+{
+    switch(wps_mode)
+    {
+      case Network::WPSMode::INVALID:
+        if(immediate_activation)
+            Connman::cancel_wps();
+
+        break;
+
+      case Network::WPSMode::NONE:
+        Connman::connect_to_service(map_network_technology(target_tech),
+                                    service_to_be_disabled, immediate_activation,
+                                    have_new_wlan_passphrase);
+        return true;
+
+      case Network::WPSMode::DIRECT:
+        log_assert(target_tech == Connman::Technology::WLAN);
+
+        if(immediate_activation)
+            Connman::connect_to_wps_service(
+                wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
+                wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
+                service_to_be_disabled);
+
+        return true;
+
+      case Network::WPSMode::SCAN:
+        log_assert(target_tech == Connman::Technology::WLAN);
+
+        if(immediate_activation)
+            Connman::connect_to_wps_service(nullptr, nullptr, service_to_be_disabled);
+
+        return true;
+
+      case Network::WPSMode::ABORT:
+        if(immediate_activation)
+            Connman::cancel_wps();
+
+        return true;
+    }
+
+    return false;
+}
+
 static bool process_external_config_request(
         Network::ConfigRequest &config_request,
         const Connman::Address<Connman::AddressType::MAC> &mac,
@@ -1613,49 +1664,11 @@ static bool process_external_config_request(
         break;
     }
 
-    switch(wps_mode)
-    {
-      case Network::WPSMode::INVALID:
-        if(immediate_activation)
-            Connman::cancel_wps();
-
-        break;
-
-      case Network::WPSMode::NONE:
-        Connman::connect_to_service(map_network_technology(target_tech),
-                                    current_wlan_service_name.data(),
-                                    immediate_activation,
-                                    have_new_wlan_passphrase);
-        return true;
-
-      case Network::WPSMode::DIRECT:
-        log_assert(target_tech == Connman::Technology::WLAN);
-
-        if(immediate_activation)
-            Connman::connect_to_wps_service(
-                wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
-                wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
-                current_wlan_service_name.data());
-
-        return true;
-
-      case Network::WPSMode::SCAN:
-        log_assert(target_tech == Connman::Technology::WLAN);
-
-        if(immediate_activation)
-            Connman::connect_to_wps_service(nullptr, nullptr,
-                                            current_wlan_service_name.data());
-
-        return true;
-
-      case Network::WPSMode::ABORT:
-        if(immediate_activation)
-            Connman::cancel_wps();
-
-        return true;
-    }
-
-    return false;
+    return connect_to_chosen_service(wps_mode, immediate_activation, target_tech,
+                                     current_wlan_service_name.data(),
+                                     have_new_wlan_passphrase,
+                                     std::move(wps_network_name),
+                                     std::move(wps_network_ssid));
 }
 
 static NetworkConfigWriteData nwconfig_write_data;
