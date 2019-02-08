@@ -286,7 +286,7 @@ class WLANConnectionState
         log_assert(!service_name.empty());
 
         msg_info("About to connect to WLAN \"%s\" %s",
-                 service_name.c_str(), connection_method_to_string(method_));
+                 service_name.c_str(), connection_method_to_string(method));
 
         state_ = State::ABOUT_TO_CONNECT;
         method_ = method;
