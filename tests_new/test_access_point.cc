@@ -214,12 +214,12 @@ TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
 
     ap.register_status_watcher(
         [this, &called]
-        (Connman::TechnologyRegistry &tech_reg,
+        (Connman::TechnologyRegistry &tr,
          Network::AccessPoint::Status old_status,
          Network::AccessPoint::Status new_status)
         {
             called = true;
-            CHECK(&tech_reg == &this->tech_reg);
+            CHECK(&tr == &this->tech_reg);
             CHECK(old_status == Network::AccessPoint::Status::UNKNOWN);
             CHECK(new_status == Network::AccessPoint::Status::UNKNOWN);
         });
@@ -244,7 +244,7 @@ TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
 
     ap.register_status_watcher(
         [&watched_status]
-        (Connman::TechnologyRegistry &tech_reg,
+        (Connman::TechnologyRegistry &tr,
          Network::AccessPoint::Status old_status,
          Network::AccessPoint::Status new_status)
         {
@@ -341,7 +341,7 @@ TEST_CASE_FIXTURE(AccessPointModeTestsWifiPoweredFixture,
 
     ap.register_status_watcher(
         [&watched_status]
-        (Connman::TechnologyRegistry &tech_reg,
+        (Connman::TechnologyRegistry &tr,
          Network::AccessPoint::Status old_status,
          Network::AccessPoint::Status new_status)
         {

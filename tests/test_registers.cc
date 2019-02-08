@@ -10465,7 +10465,7 @@ void test_audio_source_request_option_parser()
 
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
-            dbus_audiopath_manager_iface_dummy, asrc, player, true, false,
+            dbus_audiopath_manager_iface_dummy, asrc, player, true, nullptr,
             std::move(request_data));
 
     reg->write(reinterpret_cast<const uint8_t *>(asrc_with_options.c_str()), asrc_with_options.length() + 1);
