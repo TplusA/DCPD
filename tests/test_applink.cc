@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -569,7 +569,7 @@ void test_put_single_answer_into_output_queue_and_remove()
                        [] (int) { ++notifications; },
                        [] (int, bool) { cut_fail("unexpected call"); });
     static const std::string command("Testing");
-    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), default_peer_fd);
+    mock_os->expect_os_write_from_buffer(0, 0, false, command.size(), default_peer_fd);
     peer.send_to_queue(default_peer_fd, std::string(command));
     cppcut_assert_equal(size_t(1), notifications);
     cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
@@ -594,7 +594,7 @@ void test_put_multiple_answers_into_output_queue_and_remove()
 
     for(const auto &cmd : commands)
     {
-        mock_os->expect_os_write_from_buffer(0, 0, cmd.c_str(), cmd.size(), default_peer_fd);
+        mock_os->expect_os_write_from_buffer(0, 0, false, cmd.size(), default_peer_fd);
         cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
     }
 
@@ -1048,7 +1048,7 @@ void test_sending_broadcast_answer_to_single_peer()
 
     check_and_reset_queue_size(peer_fd, 1);
 
-    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), peer_fd);
+    mock_os->expect_os_write_from_buffer(0, 0, false, command.size(), peer_fd);
     connections->process_out_queue();
 }
 
@@ -1078,9 +1078,9 @@ void test_sending_broadcast_answer_to_multiple_peers()
     check_and_reset_queue_size(berta, 1, true);
     check_and_reset_queue_size(chuck, 1, true);
 
-    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), anton);
-    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), berta);
-    mock_os->expect_os_write_from_buffer(0, 0, command.c_str(), command.size(), chuck);
+    mock_os->expect_os_write_from_buffer(0, 0, false, command.size(), anton);
+    mock_os->expect_os_write_from_buffer(0, 0, false, command.size(), berta);
+    mock_os->expect_os_write_from_buffer(0, 0, false, command.size(), chuck);
     connections->process_out_queue();
 }
 
