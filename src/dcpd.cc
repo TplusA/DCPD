@@ -133,6 +133,10 @@ ssize_t (*os_read)(int fd, void *dest, size_t count) = read;
 ssize_t (*os_write)(int fd, const void *buf, size_t count) = write;
 int (*os_poll)(struct pollfd *fds, nfds_t nfds, int timeout) = poll;
 
+#if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
+thread_local LoggedLock::Context LoggedLock::context;
+#endif
+
 /*!
  * Global flag that gets cleared in the SIGTERM signal handler.
  *
@@ -972,6 +976,8 @@ static int setup(const struct parameters *parameters, struct files *files,
 
     log_version_info();
 
+    LoggedLock::set_context_name("Main");
+
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "Attempting to open named pipes");
 
     files->dcpspi_fifo.in_fd =
@@ -1243,6 +1249,8 @@ static bool delay_seconds(int seconds)
 
 static void *update_watchdog_main(void *user_data)
 {
+    LoggedLock::set_context_name("Update watchdog");
+
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "UPDOG: Update in progress, watching opkg");
 
