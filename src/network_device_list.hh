@@ -20,10 +20,10 @@
 #define NETWORK_DEVICE_LIST_HH
 
 #include "network_device.hh"
+#include "logged_lock.hh"
 
 #include <map>
 #include <memory>
-#include <mutex>
 
 namespace Connman
 {
@@ -91,10 +91,10 @@ class NetworkDeviceList
     Map::iterator begin() { return devices_.begin(); }
     Map::iterator end() { return devices_.end(); }
 
-    static std::pair<const NetworkDeviceList &, std::unique_lock<std::recursive_mutex>>
+    static std::pair<const NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
     get_singleton_const();
 
-    static std::pair<NetworkDeviceList &, std::unique_lock<std::recursive_mutex>>
+    static std::pair<NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
     get_singleton_for_update();
 
   private:

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,11 +21,11 @@
 
 #include "network.h"
 #include "applink.hh"
+#include "logged_lock.hh"
 
 #include <string>
 #include <deque>
 #include <map>
-#include <mutex>
 #include <functional>
 
 namespace Applink
@@ -36,7 +36,7 @@ class Peer
   private:
     struct SendQueue
     {
-        std::mutex lock_;
+        LoggedLock::Mutex lock_;
         std::deque<std::string> queue_;
         const std::function<void(int)> &notify_have_outgoing_fn_;
         std::function<void(int, bool)> notify_peer_died_fn_;
@@ -45,7 +45,9 @@ class Peer
                            std::function<void(int, bool)> &&died_notification):
             notify_have_outgoing_fn_(out_notification),
             notify_peer_died_fn_(died_notification)
-        {}
+        {
+            LoggedLock::configure(lock_, "Applink::Peer::SendQueue", MESSAGE_LEVEL_DEBUG);
+        }
     };
 
     InputBuffer input_buffer_;
@@ -75,7 +77,7 @@ class Peer
 class AppConnections
 {
   private:
-    std::mutex lock_;
+    LoggedLock::Mutex lock_;
     int server_fd_;
 
     const std::function<void(int)> send_queue_filled_notification_fn_;
@@ -95,7 +97,9 @@ class AppConnections
     explicit AppConnections(std::function<void(int)> &&send_notification_fn):
         server_fd_(-1),
         send_queue_filled_notification_fn_(std::move(send_notification_fn))
-    {}
+    {
+        LoggedLock::configure(lock_, "Applink::AppConnections", MESSAGE_LEVEL_DEBUG);
+    }
 
     bool listen(uint16_t port);
     void close();

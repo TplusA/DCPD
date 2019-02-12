@@ -481,7 +481,7 @@ class WLANConnectionState
 class Connman::WLANManager
 {
   public:
-    std::recursive_mutex lock;
+    LoggedLock::RecMutex lock;
 
     bool is_disabled;
 
@@ -500,7 +500,9 @@ class Connman::WLANManager
         schedule_connect_to_wlan(nullptr),
         schedule_refresh_connman_services(nullptr),
         wlan_tools(nullptr)
-    {}
+    {
+        LoggedLock::configure(lock, "Connman::WLANManager", MESSAGE_LEVEL_DEBUG);
+    }
 
     void init(std::function<void()> &&schedule_connect_to_wlan_fn,
               std::function<void()> &&schedule_refresh_connman_services_fn,
@@ -568,7 +570,7 @@ static void service_connected(const std::string &service_name, bool succeeded,
                               Connman::WLANManager &wman)
 {
     {
-        std::lock_guard<std::recursive_mutex> lock(wman.lock);
+        std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
         if(succeeded)
         {
@@ -654,7 +656,7 @@ static void wps_connected(const std::string &service_name, bool succeeded,
         const auto locked_services(Connman::ServiceList::get_singleton_const());
         const auto &services(locked_services.first);
 
-        std::lock_guard<std::recursive_mutex> lock(wman.lock);
+        std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
         if(succeeded)
         {
@@ -763,7 +765,7 @@ static void scan_for_wps_done(Connman::SiteSurveyResult result);
 
 bool Connman::connect_our_wlan(WLANManager &wman)
 {
-    std::lock_guard<std::recursive_mutex> lock(wman.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
     switch(wman.wlan_connection_state.get_state())
     {
@@ -2052,7 +2054,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 static void schedule_wlan_connect_if_necessary(bool is_necessary,
                                                Connman::WLANManager &wman)
 {
-    std::lock_guard<std::recursive_mutex> lock(wman.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
     if(is_necessary)
         schedule_wlan_connect__unlocked(wman);
@@ -2267,7 +2269,7 @@ Connman::init_wlan_manager(std::function<void()> &&schedule_connect_to_wlan_fn,
 
 static void scan_for_wps_done(Connman::SiteSurveyResult result)
 {
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
 
     switch(result)
     {
@@ -2350,7 +2352,7 @@ void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    std::unique_lock<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
 
     switch(tech)
     {
@@ -2420,7 +2422,7 @@ void Connman::connect_to_wps_service(const char *network_name, const char *netwo
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
 
     start_wps(global_connman_wlan_manager, services,
               network_name, network_ssid, service_to_be_disabled);
@@ -2431,7 +2433,7 @@ void Connman::cancel_wps()
     if(global_connman_wlan_manager.is_disabled)
         return;
 
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
 
     stop_wps(global_connman_wlan_manager.wlan_connection_state, false);
 }
@@ -2475,7 +2477,7 @@ bool Connman::is_connecting(bool *is_wps)
 
     auto &d(global_connman_wlan_manager);
 
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
 
     *is_wps = d.wlan_connection_state.is_wps_mode();
 

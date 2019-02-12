@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -29,7 +29,6 @@
 
 #include <fstream>
 #include <cstring>
-#include <mutex>
 
 static const char service_prefix[] = "/net/connman/service/";
 
@@ -277,7 +276,7 @@ struct network_prefs
     enum NetworkPrefsTechnology technology;
 };
 
-static struct
+struct NetworkPrefsData
 {
     const char *preferences_path;
     const char *preferences_filename;
@@ -285,15 +284,28 @@ static struct
     /* TODO: There should be a std::unique_lock in #network_prefs_handle, and
      *       the #network_prefs_handle should be allocated dynamically as a
      *       proper object. */
-    std::mutex lock;
+    LoggedLock::Mutex lock;
     bool is_writable;
     struct ini_file file;
 
     struct network_prefs_handle handle;
     struct network_prefs network_ethernet_prefs;
     struct network_prefs network_wlan_prefs;
-}
-networkprefs_data;
+
+    NetworkPrefsData():
+        preferences_path(nullptr),
+        preferences_filename(nullptr),
+        is_writable(false),
+        file{0},
+        handle{0},
+        network_ethernet_prefs{0},
+        network_wlan_prefs{0}
+    {
+        LoggedLock::configure(lock, "NetworkPrefsData", MESSAGE_LEVEL_DEBUG);
+    }
+};
+
+static NetworkPrefsData networkprefs_data;
 
 enum NetworkPrefsTechnology
 network_prefs_get_technology_by_prefs(const struct network_prefs *prefs)

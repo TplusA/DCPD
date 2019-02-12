@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,24 +24,33 @@
 #include "registers_priv.hh"
 #include "connman_scan.hh"
 #include "connman_iter.h"
+#include "logged_lock.hh"
 #include "messages.h"
 
 #include <sstream>
 #include <cstring>
-#include <mutex>
 
-static struct
+struct WLANSurveyData
 {
     /* must be a recursive mutex because sometimes the survey-done callback is
      * called from our own context while we are holding the lock, sometimes
      * its called from another context */
-    std::recursive_mutex lock;
+    LoggedLock::RecMutex lock;
 
     bool survey_in_progress;
     Connman::SiteSurveyResult last_result;
     Connman::WLANTools *wlan;
-}
-nwwlan_survey_data;
+
+    WLANSurveyData():
+        survey_in_progress(false),
+        last_result(Connman::SiteSurveyResult::OK),
+        wlan(nullptr)
+    {
+        LoggedLock::configure(lock, "WLANSurveyData", MESSAGE_LEVEL_DEBUG);
+    }
+};
+
+static WLANSurveyData nwwlan_survey_data;
 
 enum WifiServiceType
 {
@@ -62,7 +71,7 @@ void Regs::WLANSurvey::deinit() {}
 static void survey_done(Connman::SiteSurveyResult result)
 {
     {
-    std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);
 
     if(!nwwlan_survey_data.survey_in_progress)
         BUG("Got WLAN survey done notification, but didn't start any");
@@ -97,7 +106,7 @@ int Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey(const uint8_t *data,
     if(data_length_is_unexpected(length, 0))
         return -1;
 
-    std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);
 
     if(nwwlan_survey_data.wlan == nullptr)
     {
@@ -302,7 +311,7 @@ bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(std::vector<uint8_
 {
     log_assert(buffer.empty());
 
-    std::lock_guard<std::recursive_mutex> lock(nwwlan_survey_data.lock);
+    std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);
 
     switch(nwwlan_survey_data.last_result)
     {

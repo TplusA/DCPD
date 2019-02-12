@@ -124,22 +124,27 @@ size_t Connman::ServiceList::number_of_services() const
 struct ServiceListData
 {
     Connman::ServiceList services;
-    std::recursive_mutex lock;
+    LoggedLock::RecMutex lock;
+
+    ServiceListData()
+    {
+        LoggedLock::configure(lock, "ServiceListData", MESSAGE_LEVEL_DEBUG);
+    }
 };
 
 /* a locking wrapper around our global service list */
 static ServiceListData connman_service_list_singleton;
 
-std::pair<const Connman::ServiceList &, std::unique_lock<std::recursive_mutex>>
+std::pair<const Connman::ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
 Connman::ServiceList::get_singleton_const()
 {
     return std::make_pair(std::cref(connman_service_list_singleton.services),
-                          std::move(std::unique_lock<std::recursive_mutex>(connman_service_list_singleton.lock)));
+                          std::move(LoggedLock::UniqueLock<LoggedLock::RecMutex>(connman_service_list_singleton.lock)));
 }
 
-std::pair<Connman::ServiceList &, std::unique_lock<std::recursive_mutex>>
+std::pair<Connman::ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
 Connman::ServiceList::get_singleton_for_update()
 {
     return std::make_pair(std::ref(connman_service_list_singleton.services),
-                          std::move(std::unique_lock<std::recursive_mutex>(connman_service_list_singleton.lock)));
+                          std::move(LoggedLock::UniqueLock<LoggedLock::RecMutex>(connman_service_list_singleton.lock)));
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -41,7 +41,7 @@ static bool enable_wifi_if_necessary(Connman::TechnologyRegistry &reg, bool is_p
 class WifiScanner
 {
   private:
-    std::mutex lock_;
+    LoggedLock::Mutex lock_;
     std::vector<Connman::SiteSurveyDoneFn> callbacks_;
     Connman::TechnologyRegistry *tech_reg_;
     int remaining_tries_;
@@ -55,7 +55,9 @@ class WifiScanner
     explicit WifiScanner():
         tech_reg_(nullptr),
         remaining_tries_(0)
-    {}
+    {
+        LoggedLock::configure(lock_, "WifiScanner", MESSAGE_LEVEL_DEBUG);
+    }
 
     /*!
      * Initiate WLAN scan or take a free ride with ongoing scan.
@@ -67,7 +69,7 @@ class WifiScanner
         log_assert(object_path != nullptr);
         log_assert(callback != nullptr);
 
-        std::lock_guard<std::mutex> lock(lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
         if(tech_reg_ != nullptr)
         {
@@ -138,7 +140,7 @@ class WifiScanner
     static void done_callback(GObject *source_object, GAsyncResult *res, gpointer user_data)
     {
         auto *const scanner = static_cast<WifiScanner *>(user_data);
-        std::lock_guard<std::mutex> lock(scanner->lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(scanner->lock_);
         scanner->done(source_object, res);
     }
 
@@ -192,7 +194,7 @@ class WifiScanner
     static gboolean timed_scan(gpointer user_data)
     {
         auto *const scanner = static_cast<WifiScanner *>(user_data);
-        std::lock_guard<std::mutex> lock(scanner->lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(scanner->lock_);
 
         try
         {

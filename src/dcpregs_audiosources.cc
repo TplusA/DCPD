@@ -37,7 +37,6 @@
 #include <deque>
 #include <functional>
 #include <algorithm>
-#include <mutex>
 
 enum class AudioSourceState
 {
@@ -450,7 +449,7 @@ class ExternalServiceState
 class SelectedSource
 {
   private:
-    mutable std::recursive_mutex lock_;
+    mutable LoggedLock::RecMutex lock_;
 
     SelectionState state_;
     const AudioSource *selected_;
@@ -472,11 +471,13 @@ class SelectedSource
         pending_(nullptr),
         cancel_(nullptr),
         is_test_mode_(false)
-    {}
+    {
+        LoggedLock::configure(lock_, "SelectedSource", MESSAGE_LEVEL_DEBUG);
+    }
 
     void reset()
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
         state_ = SelectionState::IDLE;
         selected_ = nullptr;
         selected_is_half_selected_ = false;
@@ -487,45 +488,45 @@ class SelectedSource
 
     void set_unit_test_mode() { is_test_mode_ = true; }
 
-    std::unique_lock<std::recursive_mutex> lock()
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> lock()
     {
-        return std::unique_lock<std::recursive_mutex>(lock_);
+        return LoggedLock::UniqueLock<LoggedLock::RecMutex>(lock_);
     }
 
     const AudioSource *get_half_or_full() const
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return selected_;
     }
 
     const AudioSource *get(bool &is_half_selected) const
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
         is_half_selected = selected_is_half_selected_;
         return selected_;
     }
 
     const SelectionState get_state() const
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return state_;
     }
 
     bool is_pending(const AudioSource &src) const
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return state_ == SelectionState::PENDING && &src == pending_;
     }
 
     bool is_selecting(const AudioSource &src) const
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return state_ == SelectionState::SELECTING && &src == pending_;
     }
 
     GVariantWrapper take_pending_request_data()
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
         log_assert(pending_request_data_ != nullptr);
         auto result(std::move(pending_request_data_));
         return result;
@@ -534,7 +535,7 @@ class SelectedSource
     void start_request(const AudioSource &src, GVariantWrapper &&request_data,
                        bool try_switch_now)
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
 
         switch(state_)
         {
@@ -571,7 +572,7 @@ class SelectedSource
 
     void start_pending()
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
 
         log_assert(state_ == SelectionState::PENDING);
         log_assert(pending_ != nullptr);
@@ -581,7 +582,7 @@ class SelectedSource
 
     bool selected_notification(const AudioSource &src, bool is_deferred)
     {
-        std::lock_guard<std::recursive_mutex> l(lock_);
+        std::lock_guard<LoggedLock::RecMutex> l(lock_);
 
         const bool changed = selected_ != &src;
 
@@ -655,7 +656,7 @@ class SelectedSource
             return;
         }
 
-        std::lock_guard<std::recursive_mutex> lock(sel->lock_);
+        std::lock_guard<LoggedLock::RecMutex> lock(sel->lock_);
 
         log_assert(sel->state_ == SelectionState::SELECTING);
         log_assert(sel->cancel_ != nullptr);
@@ -683,30 +684,33 @@ class SlavePushCommandQueue
     using Item = std::pair<const GetAudioSourcesCommand, const std::string>;
 
   private:
-    std::mutex lock_;
+    LoggedLock::Mutex lock_;
     std::deque<Item> queue_;
 
   public:
     SlavePushCommandQueue(const SlavePushCommandQueue &) = delete;
     SlavePushCommandQueue &operator=(const SlavePushCommandQueue &) = delete;
 
-    explicit SlavePushCommandQueue() {}
+    explicit SlavePushCommandQueue()
+    {
+        LoggedLock::configure(lock_, "SlavePushCommandQueue", MESSAGE_LEVEL_DEBUG);
+    }
 
     void add(GetAudioSourcesCommand command)
     {
-        std::lock_guard<std::mutex> lock(lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
         push_and_notify(std::move(std::make_pair(command, std::move(std::string()))));
     }
 
     void add(GetAudioSourcesCommand command, std::string &&str)
     {
-        std::lock_guard<std::mutex> lock(lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
         push_and_notify(std::move(std::make_pair(command, std::move(str))));
     }
 
     Item take()
     {
-        std::lock_guard<std::mutex> lock(lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
         if(queue_.empty())
         {
@@ -722,7 +726,7 @@ class SlavePushCommandQueue
 
     void reset()
     {
-        std::lock_guard<std::mutex> lock(lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
         queue_.clear();
     }
 
@@ -740,7 +744,7 @@ class AudioSourceData
     static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 12;
 
   private:
-    std::mutex lock_;
+    LoggedLock::Mutex lock_;
 
     std::array<AudioSource, NUMBER_OF_DEFAULT_SOURCES> default_sources_;
     std::vector<AudioSource> extra_sources_;
@@ -753,7 +757,9 @@ class AudioSourceData
 
     explicit AudioSourceData(std::array<AudioSource, NUMBER_OF_DEFAULT_SOURCES> &&default_sources):
         default_sources_(std::move(default_sources))
-    {}
+    {
+        LoggedLock::configure(lock_, "AudioSourceData", MESSAGE_LEVEL_DEBUG);
+    }
 
     void reset(const std::array<const AudioSourceState, NUMBER_OF_DEFAULT_SOURCES> &is_dead)
     {
@@ -766,9 +772,9 @@ class AudioSourceData
 
     void set_unit_test_mode() { selected_.set_unit_test_mode(); }
 
-    std::unique_lock<std::mutex> lock()
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock()
     {
-        return std::unique_lock<std::mutex>(lock_);
+        return LoggedLock::UniqueLock<LoggedLock::Mutex>(lock_);
     }
 
   private:

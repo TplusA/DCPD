@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -49,14 +49,14 @@ TechnologyPropertiesWIFI::~TechnologyPropertiesWIFI() {};
 template <>
 void TechnologyPropertiesWIFI::send_property_over_dbus<bool>(Property key, const bool &value)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
     MockConnmanTechnologyRegistry::Wifi::singleton->check_next<MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<bool>>(key, value);
 }
 
 template <>
 void TechnologyPropertiesWIFI::send_property_over_dbus<std::string>(Property key, const std::string &value)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
     MockConnmanTechnologyRegistry::Wifi::singleton->check_next<MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<std::string>>(key, value);
 }
 
@@ -64,7 +64,7 @@ void TechnologyPropertiesWIFI::send_property_over_dbus<std::string>(Property key
 
 void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&path)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     proxy_ = MockConnmanTechnologyRegistry::Wifi::singleton->check_next<MockConnmanTechnologyRegistry::Wifi::SetDBusObjectPath>(path);
     dbus_object_path_ = std::move(path);
@@ -74,7 +74,7 @@ void Connman::TechnologyPropertiesWIFI::register_property_watcher(WatcherFn &&fn
 {
     if(fn != nullptr)
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         watchers_.emplace_back(fn);
     }
 }

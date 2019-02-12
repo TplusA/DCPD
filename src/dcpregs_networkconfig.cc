@@ -100,7 +100,7 @@ class ConfigRequestEditState
 class NetworkConfigWriteData
 {
   private:
-    std::mutex commit_configuration_lock_;
+    LoggedLock::Mutex commit_configuration_lock_;
 
     ConfigRequestEditState edit_state_;
     Network::ConfigRequest config_request_;
@@ -110,6 +110,12 @@ class NetworkConfigWriteData
     Maybe<std::string> ipv4_dns_server2_;
 
   public:
+    NetworkConfigWriteData()
+    {
+        LoggedLock::configure(commit_configuration_lock_, "NetworkConfigWriteData",
+                              MESSAGE_LEVEL_DEBUG);
+    }
+
     void init()
     {
         edit_state_.cancel();
@@ -118,9 +124,9 @@ class NetworkConfigWriteData
         ipv4_dns_server2_.set_unknown();
     }
 
-    std::unique_lock<std::mutex> lock()
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock()
     {
-        return std::unique_lock<std::mutex>(commit_configuration_lock_);
+        return LoggedLock::UniqueLock<LoggedLock::Mutex>(commit_configuration_lock_);
     }
 
     bool may_change_config() const

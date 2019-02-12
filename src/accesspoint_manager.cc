@@ -72,7 +72,7 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 
       case Network::AccessPoint::Status::DISABLED:
         {
-            const std::lock_guard<std::mutex> lock(cache_lock_);
+            const std::lock_guard<LoggedLock::Mutex> lock(cache_lock_);
             cached_network_devices_.clear();
             cached_network_services_.clear();
             break;
@@ -80,7 +80,7 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 
       case Network::AccessPoint::Status::ACTIVATING:
         {
-            const std::lock_guard<std::mutex> lock(cache_lock_);
+            const std::lock_guard<LoggedLock::Mutex> lock(cache_lock_);
             const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
             const auto locked_services(Connman::ServiceList::get_singleton_const());
 
@@ -112,6 +112,8 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 Network::AccessPointManager::AccessPointManager(Network::AccessPoint &ap):
     ap_(ap)
 {
+    LoggedLock::configure(cache_lock_, "Network::AccessPointManager", MESSAGE_LEVEL_DEBUG);
+
     ap_.register_status_watcher(
         [this]
         (Connman::TechnologyRegistry &reg,

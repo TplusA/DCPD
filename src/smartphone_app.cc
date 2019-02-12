@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -32,7 +32,7 @@
 
 void Applink::Peer::send_to_queue(int fd, std::string &&command)
 {
-    std::lock_guard<std::mutex> lock(send_queue_.lock_);
+    std::lock_guard<LoggedLock::Mutex> lock(send_queue_.lock_);
     send_queue_.queue_.emplace_back(command);
     send_queue_.notify_have_outgoing_fn_(fd);
 }
@@ -42,7 +42,7 @@ bool Applink::Peer::send_one_from_queue_to_peer(int fd)
     std::string command;
 
     {
-        std::lock_guard<std::mutex> lock(send_queue_.lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(send_queue_.lock_);
 
         if(send_queue_.queue_.empty())
             return false;
@@ -141,12 +141,12 @@ bool Applink::AppConnections::handle_new_peer(int server_fd)
             std::move(Network::DispatchHandlers(
                 [this] (int peer_fd_arg)
                 {
-                    std::lock_guard<std::mutex> lock(lock_);
+                    std::lock_guard<LoggedLock::Mutex> lock(lock_);
                     return peers_[peer_fd_arg]->handle_incoming_data(peer_fd_arg);
                 },
                 [this] (int peer_fd_arg)
                 {
-                    std::lock_guard<std::mutex> lock(lock_);
+                    std::lock_guard<LoggedLock::Mutex> lock(lock_);
                     handle_peer_died(peer_fd_arg);
                 }
             ))))
@@ -167,7 +167,7 @@ void Applink::AppConnections::handle_peer_died(int peer_fd)
 
 bool Applink::AppConnections::listen(uint16_t port)
 {
-    std::lock_guard<std::mutex> lock(lock_);
+    std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(server_fd_ >= 0)
     {
@@ -187,7 +187,7 @@ bool Applink::AppConnections::listen(uint16_t port)
             std::move(Network::DispatchHandlers(
                 [this] (int server_fd_arg)
                 {
-                    std::lock_guard<std::mutex> lock2(lock_);
+                    std::lock_guard<LoggedLock::Mutex> lock2(lock_);
                     return handle_new_peer(server_fd_arg);
                 },
                 [this] (int server_fd_arg)
@@ -475,7 +475,7 @@ bool Applink::Peer::handle_incoming_data(int fd)
 
 void Applink::AppConnections::process_out_queue()
 {
-    std::lock_guard<std::mutex> lock(lock_);
+    std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(peers_.empty())
         return;
@@ -494,7 +494,7 @@ void Applink::AppConnections::process_out_queue()
 
 void Applink::AppConnections::send_to_all_peers(std::string &&command)
 {
-    std::lock_guard<std::mutex> lock(lock_);
+    std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(peers_.empty())
         return;
@@ -505,7 +505,7 @@ void Applink::AppConnections::send_to_all_peers(std::string &&command)
 
 void Applink::AppConnections::close()
 {
-    std::lock_guard<std::mutex> lock(lock_);
+    std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(server_fd_ >= 0)
     {

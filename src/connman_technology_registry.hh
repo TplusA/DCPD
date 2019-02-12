@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,8 +21,8 @@
 
 #include "connman_property_cache.hh"
 #include "messages.h"
+#include "logged_lock.hh"
 
-#include <mutex>
 #include <vector>
 #include <array>
 #include <memory>
@@ -77,9 +77,12 @@ class TechnologyPropertiesBase
 
   protected:
     std::string dbus_object_path_;
-    mutable std::recursive_mutex lock_;
+    mutable LoggedLock::RecMutex lock_;
 
-    explicit TechnologyPropertiesBase() = default;
+    explicit TechnologyPropertiesBase()
+    {
+        LoggedLock::configure(lock_, "Connman::TechnologyPropertiesBase", MESSAGE_LEVEL_DEBUG);
+    }
 
   public:
     TechnologyPropertiesBase(const TechnologyPropertiesBase &) = delete;
@@ -96,7 +99,7 @@ class TechnologyPropertiesBase
                                        void *user_data)
     {
         auto *const p = static_cast<TechnologyPropertiesBase *>(user_data);
-        std::lock_guard<std::recursive_mutex> lock(p->lock_);
+        std::lock_guard<LoggedLock::RecMutex> lock(p->lock_);
         p->technology_signal(proxy, sender_name, signal_name, parameters);
     }
 
@@ -178,7 +181,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
 
     bool available() const final override
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return proxy_ != nullptr;
     }
 
@@ -189,14 +192,14 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     template <Property property, typename traits = CacheType::ValueTraits<property>>
     const typename traits::Type &get() const
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return cache_.lookup<property>();
     }
 
     template <Property property, typename traits = CacheType::ValueTraits<property>>
     void set(typename traits::Type &&value)
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
         if(!ensure_dbus_proxy())
             throw TechnologyRegistryUnavailableError();
@@ -209,7 +212,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     template <typename T>
     void cache_value_by_name(const char *name, T &&value)
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
         const auto &it(std::find(Containers::keys.begin(), Containers::keys.end(), name));
         if(it == Containers::keys.end())
@@ -226,7 +229,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     {
         try
         {
-            std::lock_guard<std::recursive_mutex> lock(lock_);
+            std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
             if(is_dbus_failure)
             {
@@ -325,16 +328,20 @@ class TechnologyRegistry
 {
   private:
     TechnologyPropertiesWIFI wifi_properties_;
-    mutable std::recursive_mutex lock_;
+    mutable LoggedLock::RecMutex lock_;
 
   public:
     TechnologyRegistry(const TechnologyRegistry &) = delete;
     TechnologyRegistry &operator=(const TechnologyRegistry &) = delete;
-    explicit TechnologyRegistry() = default;
 
-    std::unique_lock<std::recursive_mutex> locked() const
+    explicit TechnologyRegistry()
     {
-        return std::unique_lock<std::recursive_mutex>(lock_);
+        LoggedLock::configure(lock_, "Connman::TechnologyRegistry", MESSAGE_LEVEL_DEBUG);
+    }
+
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> locked() const
+    {
+        return LoggedLock::UniqueLock<LoggedLock::RecMutex>(lock_);
     }
 
     void connect_to_connman(const void *data = nullptr);

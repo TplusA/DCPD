@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,7 +28,7 @@ bool Network::Dispatcher::add_connection(int fd, DispatchHandlers &&handlers)
 {
     log_assert(fd >= 0);
 
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(connections_.find(fd) != connections_.end())
     {
@@ -45,7 +45,7 @@ bool Network::Dispatcher::remove_connection(int fd)
 {
     log_assert(fd >= 0);
 
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     auto it(connections_.find(fd));
 
@@ -67,7 +67,7 @@ size_t Network::Dispatcher::process(const struct pollfd *fds) const
 {
     log_assert(fds != nullptr);
 
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     size_t dispatched = 0;
     const size_t last = connections_.size();
@@ -106,7 +106,7 @@ size_t Network::Dispatcher::scatter_fds(struct pollfd *fds, short events) const
 {
     log_assert(fds != nullptr);
 
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     size_t i = 0;
 

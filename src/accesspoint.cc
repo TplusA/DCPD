@@ -57,6 +57,8 @@ Network::AccessPoint::AccessPoint(Connman::TechnologyRegistry &reg):
     started_(false),
     status_(Status::UNKNOWN)
 {
+    LoggedLock::configure(lock_, "Network::AccessPoint", MESSAGE_LEVEL_DEBUG);
+
     tech_reg_.register_property_watcher(
         [this]
         (Connman::TechnologyPropertiesWIFI::Property property,
@@ -77,7 +79,7 @@ Network::AccessPoint::AccessPoint(Connman::TechnologyRegistry &reg):
 
 void Network::AccessPoint::start()
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(started_)
     {
@@ -114,7 +116,7 @@ void Network::AccessPoint::start()
 
 void Network::AccessPoint::register_status_watcher(StatusFn &&fn)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
     status_watchers_.emplace_back(fn);
     status_watchers_.back()(tech_reg_, status_, status_);
 }
@@ -175,7 +177,7 @@ void Network::AccessPoint::wifi_property_changed_notification(
             const bool is_tethering(wifi.get<Connman::TechnologyPropertiesWIFI::Property::TETHERING>());
             const auto status(is_tethering ? Status::ACTIVE : Status::DISABLED);
 
-            std::lock_guard<std::recursive_mutex> lock(lock_);
+            std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
             if(dynamic_cast<const SpawnRequest *>(active_request_.get()) != nullptr)
                 request_done(result, is_tethering, status);
@@ -198,7 +200,7 @@ void Network::AccessPoint::wifi_property_changed_notification(
 }
 
 void Network::AccessPoint::spawn(std::unique_ptr<SpawnRequest> request,
-                                 std::unique_lock<std::recursive_mutex> &ap_lock)
+                                 LoggedLock::UniqueLock<LoggedLock::RecMutex> &ap_lock)
 {
     const auto *const req(request.get());
     active_request_ = std::move(request);
@@ -292,7 +294,7 @@ Network::AccessPoint::figure_out_current_status(std::unique_ptr<Network::AccessP
 bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passphrase,
                                          DoneFn &&done_notification)
 {
-    std::unique_lock<std::recursive_mutex> lock(lock_);
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(lock_);
 
     if(!started_)
     {
@@ -358,7 +360,7 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
 
 bool Network::AccessPoint::shutdown_request(DoneFn &&done_notification)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(!started_)
     {

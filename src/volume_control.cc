@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -289,6 +289,7 @@ std::unique_ptr<Mixer::VolumeControl> &Mixer::VolumeControls::lookup_rw(uint16_t
 
 Mixer::VolumeControls::VolumeControls(std::unique_ptr<VolumeControl> predefined_master)
 {
+    LoggedLock::configure(lock_, "Mixer::VolumeControls", MESSAGE_LEVEL_DEBUG);
     if(predefined_master != nullptr)
         controls_.emplace_back(std::move(predefined_master));
 }
@@ -462,9 +463,9 @@ const Mixer::VolumeControl *Mixer::VolumeControls::get_master() const
 static Mixer::VolumeControls
 global_volume_controls(std::unique_ptr<Mixer::VolumeControl>(new Mixer::VolumeControl(1, nullptr)));
 
-std::pair<Mixer::VolumeControls *const, std::unique_lock<std::mutex>>
+std::pair<Mixer::VolumeControls *const, LoggedLock::UniqueLock<LoggedLock::Mutex>>
 Mixer::VolumeControls::get_singleton()
 {
     return std::make_pair(&global_volume_controls,
-                          std::unique_lock<std::mutex>(global_volume_controls.lock_));
+                          LoggedLock::UniqueLock<LoggedLock::Mutex>(global_volume_controls.lock_));
 }
