@@ -28,6 +28,7 @@ bool Network::Dispatcher::add_connection(int fd, DispatchHandlers &&handlers)
 {
     log_assert(fd >= 0);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(connections_.find(fd) != connections_.end())
@@ -45,6 +46,7 @@ bool Network::Dispatcher::remove_connection(int fd)
 {
     log_assert(fd >= 0);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     auto it(connections_.find(fd));
@@ -67,6 +69,7 @@ size_t Network::Dispatcher::process(const struct pollfd *fds) const
 {
     log_assert(fds != nullptr);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     size_t dispatched = 0;
@@ -106,6 +109,7 @@ size_t Network::Dispatcher::scatter_fds(struct pollfd *fds, short events) const
 {
     log_assert(fds != nullptr);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     size_t i = 0;

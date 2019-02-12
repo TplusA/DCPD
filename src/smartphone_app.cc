@@ -32,6 +32,7 @@
 
 void Applink::Peer::send_to_queue(int fd, std::string &&command)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lock(send_queue_.lock_);
     send_queue_.queue_.emplace_back(command);
     send_queue_.notify_have_outgoing_fn_(fd);
@@ -42,6 +43,7 @@ bool Applink::Peer::send_one_from_queue_to_peer(int fd)
     std::string command;
 
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(send_queue_.lock_);
 
         if(send_queue_.queue_.empty())
@@ -141,11 +143,13 @@ bool Applink::AppConnections::handle_new_peer(int server_fd)
             std::move(Network::DispatchHandlers(
                 [this] (int peer_fd_arg)
                 {
+                    LOGGED_LOCK_CONTEXT_HINT;
                     std::lock_guard<LoggedLock::Mutex> lock(lock_);
                     return peers_[peer_fd_arg]->handle_incoming_data(peer_fd_arg);
                 },
                 [this] (int peer_fd_arg)
                 {
+                    LOGGED_LOCK_CONTEXT_HINT;
                     std::lock_guard<LoggedLock::Mutex> lock(lock_);
                     handle_peer_died(peer_fd_arg);
                 }
@@ -167,6 +171,7 @@ void Applink::AppConnections::handle_peer_died(int peer_fd)
 
 bool Applink::AppConnections::listen(uint16_t port)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(server_fd_ >= 0)
@@ -475,6 +480,7 @@ bool Applink::Peer::handle_incoming_data(int fd)
 
 void Applink::AppConnections::process_out_queue()
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(peers_.empty())
@@ -494,6 +500,7 @@ void Applink::AppConnections::process_out_queue()
 
 void Applink::AppConnections::send_to_all_peers(std::string &&command)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(peers_.empty())
@@ -505,6 +512,7 @@ void Applink::AppConnections::send_to_all_peers(std::string &&command)
 
 void Applink::AppConnections::close()
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     if(server_fd_ >= 0)

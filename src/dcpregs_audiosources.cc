@@ -477,6 +477,7 @@ class SelectedSource
 
     void reset()
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
         state_ = SelectionState::IDLE;
         selected_ = nullptr;
@@ -495,12 +496,14 @@ class SelectedSource
 
     const AudioSource *get_half_or_full() const
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return selected_;
     }
 
     const AudioSource *get(bool &is_half_selected) const
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
         is_half_selected = selected_is_half_selected_;
         return selected_;
@@ -508,24 +511,28 @@ class SelectedSource
 
     const SelectionState get_state() const
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return state_;
     }
 
     bool is_pending(const AudioSource &src) const
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return state_ == SelectionState::PENDING && &src == pending_;
     }
 
     bool is_selecting(const AudioSource &src) const
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
         return state_ == SelectionState::SELECTING && &src == pending_;
     }
 
     GVariantWrapper take_pending_request_data()
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
         log_assert(pending_request_data_ != nullptr);
         auto result(std::move(pending_request_data_));
@@ -535,6 +542,7 @@ class SelectedSource
     void start_request(const AudioSource &src, GVariantWrapper &&request_data,
                        bool try_switch_now)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
 
         switch(state_)
@@ -572,6 +580,7 @@ class SelectedSource
 
     void start_pending()
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
 
         log_assert(state_ == SelectionState::PENDING);
@@ -582,6 +591,7 @@ class SelectedSource
 
     bool selected_notification(const AudioSource &src, bool is_deferred)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
 
         const bool changed = selected_ != &src;
@@ -656,6 +666,7 @@ class SelectedSource
             return;
         }
 
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(sel->lock_);
 
         log_assert(sel->state_ == SelectionState::SELECTING);
@@ -698,18 +709,21 @@ class SlavePushCommandQueue
 
     void add(GetAudioSourcesCommand command)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
         push_and_notify(std::move(std::make_pair(command, std::move(std::string()))));
     }
 
     void add(GetAudioSourcesCommand command, std::string &&str)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
         push_and_notify(std::move(std::make_pair(command, std::move(str))));
     }
 
     Item take()
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
         if(queue_.empty())
@@ -726,6 +740,7 @@ class SlavePushCommandQueue
 
     void reset()
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
         queue_.clear();
     }
@@ -854,6 +869,7 @@ class AudioSourceData
                               GVariantWrapper &&request_data,
                               bool try_switch_now)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         auto l(selected_.lock());
 
         switch(selected_.get_state())
@@ -922,6 +938,7 @@ class AudioSourceData
             g_free(source_name);
         }
 
+        LOGGED_LOCK_CONTEXT_HINT;
         auto l(selected_.lock());
 
         if(selected_.is_pending(src))
@@ -1101,6 +1118,7 @@ static bool check_network_requirements(const AudioSource &asrc)
         return true;
 
     const bool is_lan_sufficient(!asrc.check_any_flag(AudioSource::REQUIRES_INTERNET));
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_list(Connman::ServiceList::get_singleton_const());
 
     for(const auto &s : locked_list.first)
@@ -1183,6 +1201,7 @@ ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *respon
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 80 handler %p %zu", response, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     auto lock(audio_source_data->lock());
     const auto queue_item(push_80_command_queue->take());
     const GetAudioSourcesCommand &command(queue_item.first);
@@ -1319,6 +1338,7 @@ ssize_t Regs::AudioSources::DCP::read_81_current_audio_source(uint8_t *response,
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 81 handler %p %zu", response, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     auto lock(audio_source_data->lock());
 
     const AudioSource *src =audio_source_data->get_selected().get_half_or_full();
@@ -1471,6 +1491,7 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
                                                   ? AudioSourceEnableRequest::KEEP_AS_IS
                                                   : parse_enable_request(data[i + 1]));
 
+    LOGGED_LOCK_CONTEXT_HINT;
     auto lock(audio_source_data->lock());
 
     const AudioSource *src =
@@ -1533,6 +1554,7 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
 
 void Regs::AudioSources::source_available(const char *source_id)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     auto lock(audio_source_data->lock());
 
     AudioSource *src = audio_source_data->lookup(source_id);
@@ -1547,6 +1569,7 @@ void Regs::AudioSources::source_available(const char *source_id)
 void Regs::AudioSources::selected_source(const char *source_id,
                                          bool is_deferred)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     auto lock(audio_source_data->lock());
 
     AudioSource *src = audio_source_data->lookup(source_id);

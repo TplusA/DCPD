@@ -133,6 +133,7 @@ void Connman::TechnologyPropertiesWIFI::technology_signal(
 
 void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&p)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(proxy_ != nullptr)
@@ -147,6 +148,7 @@ void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&p)
 
 tdbusconnmanTechnology *Connman::TechnologyPropertiesWIFI::get_dbus_proxy()
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(lock_);
     ensure_dbus_proxy();
     return proxy_;
@@ -156,6 +158,7 @@ void Connman::TechnologyPropertiesWIFI::register_property_watcher(WatcherFn &&fn
 {
     if(fn != nullptr)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         watchers_.emplace_back(fn);
     }

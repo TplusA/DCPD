@@ -774,6 +774,7 @@ void Regs::PlayStream::late_init()
 
 void Regs::PlayStream::deinit()
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
     play_stream_data.other.tracked_stream_key.clear();
     play_stream_data.other.current_cover_art.clear();
@@ -881,6 +882,7 @@ ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, s
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
     return copy_string_to_slave(play_stream_data.other.current_stream_information.meta_data,
                                 (char *)response, length);
@@ -890,6 +892,7 @@ ssize_t Regs::PlayStream::DCP::read_76_current_stream_url(uint8_t *response, siz
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
     return copy_string_to_slave(play_stream_data.other.current_stream_information.url,
                                 (char *)response, length);
@@ -921,6 +924,7 @@ int Regs::PlayStream::DCP::write_78_start_play_stream_title(const uint8_t *data,
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 78 handler %p %zu", data, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
@@ -947,6 +951,7 @@ int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, s
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 79 handler %p %zu", data, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     const bool is_in_app_mode = is_app_mode(play_stream_data.app.device_playmode);
@@ -1006,6 +1011,7 @@ ssize_t Regs::PlayStream::DCP::read_210_current_cover_art_hash(uint8_t *response
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     const size_t len =
@@ -1033,6 +1039,7 @@ int Regs::PlayStream::DCP::write_238_next_stream_title(const uint8_t *data, size
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 238 handler %p %zu", data, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
@@ -1055,6 +1062,7 @@ int Regs::PlayStream::DCP::write_239_next_stream_url(const uint8_t *data, size_t
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 239 handler %p %zu", data, length);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
@@ -1096,6 +1104,7 @@ ssize_t Regs::PlayStream::DCP::read_239_next_stream_url(uint8_t *response, size_
 
 void Regs::PlayStream::select_source()
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(is_app_mode(play_stream_data.app.device_playmode))
@@ -1140,6 +1149,7 @@ void Regs::PlayStream::select_source()
 
 void Regs::PlayStream::deselect_source()
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
@@ -1187,6 +1197,7 @@ void Regs::PlayStream::set_title_and_url(ID::Stream stream_id,
               "Received explicit title and URL information for stream %u",
               stream_id.get_raw_id());
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     log_assert(stream_id.get_source() != STREAM_ID_SOURCE_INVALID);
@@ -1337,6 +1348,7 @@ static inline void notify_cover_art_changed()
 void Regs::PlayStream::start_notification(ID::Stream stream_id,
                                           void *stream_key_variant)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     play_stream_data.other.tracked_stream_key.set(
@@ -1433,6 +1445,7 @@ void Regs::PlayStream::start_notification(ID::Stream stream_id,
 
 void Regs::PlayStream::stop_notification()
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     play_stream_data.other.tracked_stream_key.clear();
@@ -1456,6 +1469,7 @@ void Regs::PlayStream::stop_notification()
 
 void Regs::PlayStream::cover_art_notification(void *stream_key_variant)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     const GVariantWrapper wrapped_val(static_cast<GVariant *>(stream_key_variant),

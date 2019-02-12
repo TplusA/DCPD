@@ -64,6 +64,7 @@ int Regs::ApplianceVolumeControl::DCP::write_64_volume_control(const uint8_t *da
         return -1;
     }
 
+    LOGGED_LOCK_CONTEXT_HINT;
     auto controls(Mixer::VolumeControls::get_singleton());
     auto master_id = controls.first->get_master_id();
 
@@ -168,6 +169,7 @@ ssize_t Regs::ApplianceVolumeControl::DCP::read_64_volume_control(uint8_t *respo
     if(length < 2)
         return -1;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     auto controls(Mixer::VolumeControls::get_singleton());
     auto *master = controls.first->get_master();
 

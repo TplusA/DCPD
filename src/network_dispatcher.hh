@@ -82,6 +82,7 @@ class Dispatcher
 
     size_t get_number_of_fds() const
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return connections_.size();
     }

@@ -99,6 +99,7 @@ class TechnologyPropertiesBase
                                        void *user_data)
     {
         auto *const p = static_cast<TechnologyPropertiesBase *>(user_data);
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(p->lock_);
         p->technology_signal(proxy, sender_name, signal_name, parameters);
     }
@@ -181,6 +182,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
 
     bool available() const final override
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return proxy_ != nullptr;
     }
@@ -192,6 +194,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     template <Property property, typename traits = CacheType::ValueTraits<property>>
     const typename traits::Type &get() const
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return cache_.lookup<property>();
     }
@@ -199,6 +202,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     template <Property property, typename traits = CacheType::ValueTraits<property>>
     void set(typename traits::Type &&value)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
         if(!ensure_dbus_proxy())
@@ -212,6 +216,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     template <typename T>
     void cache_value_by_name(const char *name, T &&value)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
         const auto &it(std::find(Containers::keys.begin(), Containers::keys.end(), name));
@@ -229,6 +234,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     {
         try
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
             if(is_dbus_failure)

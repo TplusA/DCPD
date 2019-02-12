@@ -403,6 +403,7 @@ open_prefs_write_defaults_if_necessary(bool is_writable,
         {
             if(try_count == 0)
             {
+                LOGGED_LOCK_CONTEXT_HINT;
                 const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
                 const auto &devices(locked_devices.first);
 
@@ -486,6 +487,7 @@ void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_pat
                   "WLAN MAC %s", wlan_mac.get_string().c_str());
 
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
         auto &devices(locked_devices.first);
 
@@ -494,6 +496,7 @@ void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_pat
     }
 
     /* patch changed MAC addresses into the configuration file */
+    LOGGED_LOCK_CONTEXT_HINT;
     networkprefs_data.lock.lock();
 
     struct network_prefs *ethernet_prefs;
@@ -505,6 +508,7 @@ void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_pat
 
     if(prefs == nullptr)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         networkprefs_data.lock.unlock();
         return;
     }
@@ -525,6 +529,7 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
                                                     struct network_prefs **ethernet,
                                                     struct network_prefs **wlan)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     networkprefs_data.lock.lock();
 
     bool dummy;
@@ -534,6 +539,7 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
 
     if(prefs == nullptr)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         networkprefs_data.lock.unlock();
         return nullptr;
     }
@@ -571,6 +577,7 @@ static struct network_prefs_handle *open_prefs_file(bool is_writable,
      * the networking adapter could be supported by allowing the user to copy
      * configuration settings.
      */
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
     const auto &devices(locked_devices.first);
 
@@ -616,6 +623,7 @@ void network_prefs_close(struct network_prefs_handle *handle)
     networkprefs_data.network_ethernet_prefs.section = NULL;
     networkprefs_data.network_wlan_prefs.section = NULL;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     networkprefs_data.lock.unlock();
 }
 
@@ -633,6 +641,7 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
 
     struct network_prefs *prefs = NULL;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
     const auto &devices(locked_devices.first);
     Connman::Technology connman_tech = Connman::Technology::UNKNOWN_TECHNOLOGY;
@@ -1298,6 +1307,7 @@ static void delete_old_config_files(const char *connman_config_path,
 
 void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
     const auto &devices(locked_devices.first);
     const auto ethernet_mac(devices.get_auto_select_mac_address(Connman::Technology::ETHERNET));

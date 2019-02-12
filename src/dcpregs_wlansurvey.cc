@@ -71,6 +71,7 @@ void Regs::WLANSurvey::deinit() {}
 static void survey_done(Connman::SiteSurveyResult result)
 {
     {
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);
 
     if(!nwwlan_survey_data.survey_in_progress)
@@ -106,6 +107,7 @@ int Regs::WLANSurvey::DCP::write_104_start_wlan_site_survey(const uint8_t *data,
     if(data_length_is_unexpected(length, 0))
         return -1;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);
 
     if(nwwlan_survey_data.wlan == nullptr)
@@ -311,6 +313,7 @@ bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(std::vector<uint8_
 {
     log_assert(buffer.empty());
 
+    LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);
 
     switch(nwwlan_survey_data.last_result)

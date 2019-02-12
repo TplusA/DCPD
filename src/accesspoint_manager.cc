@@ -72,6 +72,7 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 
       case Network::AccessPoint::Status::DISABLED:
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const std::lock_guard<LoggedLock::Mutex> lock(cache_lock_);
             cached_network_devices_.clear();
             cached_network_services_.clear();
@@ -80,8 +81,11 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 
       case Network::AccessPoint::Status::ACTIVATING:
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const std::lock_guard<LoggedLock::Mutex> lock(cache_lock_);
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto locked_services(Connman::ServiceList::get_singleton_const());
 
             cached_network_devices_.copy_from(locked_devices.first);
@@ -93,6 +97,7 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
       case Network::AccessPoint::Status::ACTIVE:
         try
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto tech_lock(reg.locked());
 
             msg_info("Access point SSID \"%s\"",

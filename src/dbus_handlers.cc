@@ -280,9 +280,11 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
 
       case Network::AccessPoint::Status::DISABLED:
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto locked_services(Connman::ServiceList::get_singleton_const());
             const auto &services(locked_services.first);
 
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
             const auto &devices(locked_devices.first);
 
@@ -295,6 +297,7 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
       case Network::AccessPoint::Status::ACTIVATING:
       case Network::AccessPoint::Status::ACTIVE:
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto lock(apman.lock_cached());
             complete_network_get_all(object, invocation,
                                      apman.get_cached_service_list(),
@@ -712,6 +715,7 @@ gboolean dbusmethod_mixer_get_controls(tdbusmixerVolume *object,
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a(qssddddddy)"));
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto &controls(Mixer::VolumeControls::get_singleton());
 
     for(const auto &ctrl : *controls.first)
@@ -743,6 +747,7 @@ gboolean dbusmethod_mixer_get_master(tdbusmixerVolume *object,
                                      GDBusMethodInvocation *invocation,
                                      gpointer user_data)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto &controls(Mixer::VolumeControls::get_singleton());
     const auto *const master(controls.first->get_master());
 
@@ -782,6 +787,7 @@ gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
                               guint16 id, gdouble volume, gboolean is_muted,
                               gpointer user_data)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     switch(Mixer::VolumeControls::get_singleton().first->request(id, volume, is_muted))
     {
       case Mixer::VolumeControls::Result::OK:
@@ -806,6 +812,7 @@ gboolean dbusmethod_mixer_get(tdbusmixerVolume *object,
 {
     const Mixer::VolumeSettings *values;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     switch(Mixer::VolumeControls::get_singleton().first->get_current_values(id, values))
     {
       case Mixer::VolumeControls::Result::OK:
