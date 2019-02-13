@@ -335,11 +335,13 @@ class WLANConnectionState
             state_ = State::DONE;
     }
 
-    bool finished_with_failure(const std::string &object_path)
+    bool finished_removed_with_failure(const std::string &object_path)
     {
         if(candidate_ != nullptr &&
            candidate_->get_service_name() == object_path)
         {
+            /* we wanted to connect to this service, but it has just been
+             * removed from Connman's service list */
             finished_with_failure();
             return true;
         }
@@ -1547,7 +1549,7 @@ static void update_service_list(Connman::ServiceList &known_services,
 
           case WLANConnectionState::State::ABOUT_TO_CONNECT:
           case WLANConnectionState::State::CONNECTING:
-            if(wlan_connection_state.finished_with_failure(name))
+            if(wlan_connection_state.finished_removed_with_failure(name))
                 wlan_connection_state.reset();
 
             break;
