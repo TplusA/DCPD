@@ -24,6 +24,8 @@
 
 #include "mock_connman_technology_registry.hh"
 
+#if !LOGGED_LOCKS_ENABLED
+
 #include <iostream>
 
 MockConnmanTechnologyRegistry::Wifi::Mock *MockConnmanTechnologyRegistry::Wifi::singleton = nullptr;
@@ -127,3 +129,5 @@ void Connman::TechnologyRegistry::connect_to_connman(const void *data)
                                              std::string(sd.wifi_tethering_passphrase));
     }
 }
+
+#endif /* !LOGGED_LOCKS_ENABLED */

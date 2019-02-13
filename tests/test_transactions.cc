@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -38,6 +38,15 @@
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
+
+#if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
+thread_local LoggedLock::Context LoggedLock::context;
+#endif
+
+ssize_t (*os_read)(int fd, void *dest, size_t count) = nullptr;
+ssize_t (*os_write)(int fd, const void *buf, size_t count) = nullptr;
+
+#if !LOGGED_LOCKS_ENABLED
 
 /*!
  * \addtogroup dcp_transaction_tests Unit tests
@@ -100,9 +109,6 @@ class read_data_t
         partial_.push_back(read_data_partial_t(std::vector<uint8_t>(data, data + data_size), err, ret));
     }
 };
-
-ssize_t (*os_read)(int fd, void *dest, size_t count) = nullptr;
-ssize_t (*os_write)(int fd, const void *buf, size_t count) = nullptr;
 
 GVariant *configuration_get_key(const char *key)
 {
@@ -2341,3 +2347,5 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
 };
 
 /*!@}*/
+
+#endif /* !LOGGED_LOCKS_ENABLED  */

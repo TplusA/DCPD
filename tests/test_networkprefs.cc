@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,12 @@
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
+
+#if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
+thread_local LoggedLock::Context LoggedLock::context;
+#endif
+
+#if !LOGGED_LOCKS_ENABLED
 
 namespace networkprefs_tests
 {
@@ -805,3 +811,5 @@ void test_migration_replaces_existing_manual_configuration_data()
 }
 
 }
+
+#endif /* !LOGGED_LOCKS_ENABLED */

@@ -27,6 +27,8 @@
 #include "mock_connman_technology_registry.hh"
 #include "mock_messages.hh"
 
+#if !LOGGED_LOCKS_ENABLED
+
 TEST_SUITE_BEGIN("Access point mode management");
 
 struct RequestDoneData
@@ -563,3 +565,5 @@ TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
 }
 
 TEST_SUITE_END();
+
+#endif /* !LOGGED_LOCKS_ENABLED */

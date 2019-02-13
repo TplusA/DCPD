@@ -38,6 +38,12 @@
  */
 #include "dbus_common.c"
 
+#if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
+thread_local LoggedLock::Context LoggedLock::context;
+#endif
+
+#if !LOGGED_LOCKS_ENABLED
+
 struct fill_buffer_data_t
 {
     std::string data_;
@@ -1228,3 +1234,5 @@ void test_variable_requested_by_two_concurrent_peers()
 }
 
 }
+
+#endif /* !LOGGED_LOCKS_ENABLED  */
