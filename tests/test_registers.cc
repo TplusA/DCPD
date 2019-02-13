@@ -45,6 +45,7 @@
 #include "dbus_handlers_connman_manager.hh"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
+#include "mainloop.hh"
 #include "stream_id.hh"
 #include "actor_id.h"
 #include "md5.hh"
@@ -78,6 +79,8 @@
 #if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
 thread_local LoggedLock::Context LoggedLock::context;
 #endif
+
+MainLoop::Queue MainLoop::detail::queued_work;
 
 /*!
  * \addtogroup registers_tests Unit tests

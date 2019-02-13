@@ -25,6 +25,7 @@
 #include "connman_address.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
+#include "mainloop.hh"
 #include "gvariantwrapper.hh"
 #include "messages.h"
 
@@ -129,6 +130,22 @@ void Connman::TechnologyPropertiesWIFI::technology_signal(
     else
         msg_error(ENOSYS, LOG_NOTICE, "Got unknown signal %s.%s from %s",
                   iface_name, signal_name, sender_name);
+}
+
+void Connman::TechnologyPropertiesWIFI::notify_watchers(Property property, StoreResult result)
+{
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
+
+    MainLoop::post(
+        [this, property, result] ()
+        {
+            LOGGED_LOCK_CONTEXT_HINT;
+            std::lock_guard<LoggedLock::Mutex> lk(watchers_lock_);
+
+            for(const auto &fn : watchers_)
+                fn(property, result, *this);
+        });
 }
 
 void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&p)

@@ -24,6 +24,8 @@
 
 #include "mock_connman_technology_registry.hh"
 
+#include "mainloop.hh"
+
 #if !LOGGED_LOCKS_ENABLED
 
 #include <iostream>
@@ -93,6 +95,20 @@ void Connman::TechnologyPropertiesWIFI::technology_signal(
         _GVariant *parameters)
 {
     FAIL("unexpected call");
+}
+
+void Connman::TechnologyPropertiesWIFI::notify_watchers(Property property, StoreResult result)
+{
+    std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
+
+    MainLoop::post(
+        [this, property, result] ()
+        {
+            std::lock_guard<LoggedLock::Mutex> lk(watchers_lock_);
+
+            for(const auto &fn : watchers_)
+                fn(property, result, *this);
+        });
 }
 
 void Connman::TechnologyRegistry::connect_to_connman(const void *data)

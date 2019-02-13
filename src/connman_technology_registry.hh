@@ -297,14 +297,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
      *     Must be called without holding
      *     #Connman::TechnologyPropertiesBase::lock_.
      */
-    void notify_watchers(Property property, StoreResult result)
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
-
-        for(const auto &fn : watchers_)
-            fn(property, result, *this);
-    }
+    void notify_watchers(Property property, StoreResult result);
 
     void technology_signal(struct _GDBusProxy *proxy,
                            const char *sender_name, const char *signal_name,
