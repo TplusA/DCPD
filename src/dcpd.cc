@@ -24,6 +24,7 @@
 #include "dcp_over_tcp.h"
 #include "smartphone_app.hh"
 #include "network_dispatcher.hh"
+#include "mainloop.hh"
 #include "messages.h"
 #include "messages_glib.h"
 #include "transactions.hh"
@@ -76,12 +77,14 @@
 #define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 10)
 #define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 11)
 #define WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED    (1U << 12)
+#define WAITEVENT_QUEUED_WORK_AVAILABLE                 (1U << 13)
 
 enum PrimitiveQueueCommand
 {
     PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
     PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
     PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES,
+    PRIMITIVE_QUEUECMD_PROCESS_QUEUED_WORK,
 };
 
 /*!
@@ -357,6 +360,10 @@ static unsigned int handle_primqueue_events(int fd, short revents)
                   case PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES:
                     result |= WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED;
                     break;
+
+                  case PRIMITIVE_QUEUECMD_PROCESS_QUEUED_WORK:
+                    result |= WAITEVENT_QUEUED_WORK_AVAILABLE;
+                    break;
                 }
             }
 
@@ -521,6 +528,19 @@ static bool handle_reopen_connections(unsigned int wait_result,
     return true;
 }
 
+MainLoop::Queue MainLoop::detail::queued_work;
+
+static void handle_queued_work(unsigned int wait_result)
+{
+    if((wait_result & WAITEVENT_QUEUED_WORK_AVAILABLE) == 0)
+        return;
+
+    const auto work(MainLoop::detail::queued_work.take());
+
+    for(const auto &fn : work)
+        fn();
+}
+
 static void handle_register_change(unsigned int wait_result, int fd,
                                    DCPDState &state)
 {
@@ -619,6 +639,12 @@ static void primitive_queue_send(const enum PrimitiveQueueCommand cmd, const cha
         msg_error(0, LOG_ERR,
                   "Wrote %zd bytes instead of 1 while queuing command for %s",
                   ret, what);
+}
+
+void MainLoop::detail::notify_main_loop()
+{
+    primitive_queue_send(PRIMITIVE_QUEUECMD_PROCESS_QUEUED_WORK,
+                         "processing queued work");
 }
 
 static void process_smartphone_outgoing_queue(int fd)
@@ -800,6 +826,8 @@ static void main_loop(struct files *files,
             keep_running = false;
             continue;
         }
+
+        handle_queued_work(wait_result);
 
         handle_register_change(wait_result, register_changed_fd, state);
 

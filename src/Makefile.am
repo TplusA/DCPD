@@ -23,7 +23,7 @@ bin_PROGRAMS = dcpd
 dcpd_SOURCES = \
     dcpd.cc os.c os.h named_pipe.c named_pipe.h \
     registers.hh registers_priv.hh register_response_writer.hh \
-    dcp_over_tcp.c dcp_over_tcp.h logged_lock.hh \
+    dcp_over_tcp.c dcp_over_tcp.h mainloop.hh logged_lock.hh \
     smartphone_app_send.cc smartphone_app_send.hh smartphone_app.hh \
     actor_id.h \
     applink.hh applink_variables.hh \
