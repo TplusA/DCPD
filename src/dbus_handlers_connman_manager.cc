@@ -2096,6 +2096,9 @@ static void process_pending_changes(Connman::WLANManager &wman,
     struct network_prefs_handle *handle =
         network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
 
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
+
     const bool need_to_schedule_wlan_connection =
         do_process_pending_changes(services,
                                    have_lost_active_ethernet_device,
@@ -2159,6 +2162,9 @@ static void do_refresh_services(Connman::WLANManager &wman, bool force_refresh_a
     if(all_services != nullptr)
     {
         const std::vector<std::string> removed(std::move(find_removed(services, all_services)));
+
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
         update_service_list(services, wman.wlan_connection_state,
                             removed,
