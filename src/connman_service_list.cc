@@ -135,15 +135,13 @@ struct ServiceListData
 /* a locking wrapper around our global service list */
 static ServiceListData connman_service_list_singleton;
 
-std::pair<const Connman::ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
-Connman::ServiceList::get_singleton_const()
+Connman::ServiceList::LockedConstSingleton Connman::ServiceList::get_singleton_const()
 {
     return std::make_pair(std::cref(connman_service_list_singleton.services),
                           std::move(LoggedLock::UniqueLock<LoggedLock::RecMutex>(connman_service_list_singleton.lock)));
 }
 
-std::pair<Connman::ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
-Connman::ServiceList::get_singleton_for_update()
+Connman::ServiceList::LockedSingleton Connman::ServiceList::get_singleton_for_update()
 {
     return std::make_pair(std::ref(connman_service_list_singleton.services),
                           std::move(LoggedLock::UniqueLock<LoggedLock::RecMutex>(connman_service_list_singleton.lock)));

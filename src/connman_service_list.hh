@@ -76,11 +76,13 @@ class ServiceList
     Map::iterator begin() { return services_.begin(); }
     Map::iterator end() { return services_.end(); }
 
-    static std::pair<const ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
-    get_singleton_const();
+    using LockedConstSingleton =
+        std::pair<const ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>;
+    using LockedSingleton =
+        std::pair<ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>;
 
-    static std::pair<ServiceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
-    get_singleton_for_update();
+    static LockedConstSingleton get_singleton_const();
+    static LockedSingleton get_singleton_for_update();
 };
 
 }

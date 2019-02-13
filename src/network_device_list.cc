@@ -185,14 +185,14 @@ struct NetworkDeviceListData
 /* a locking wrapper around our global network device list */
 static NetworkDeviceListData connman_network_device_list_singleton;
 
-std::pair<const Connman::NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
+Connman::NetworkDeviceList::LockedConstSingleton
 Connman::NetworkDeviceList::get_singleton_const()
 {
     return std::make_pair(std::cref(connman_network_device_list_singleton.devices),
                           std::move(LoggedLock::UniqueLock<LoggedLock::RecMutex>(connman_network_device_list_singleton.lock)));
 }
 
-std::pair<Connman::NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
+Connman::NetworkDeviceList::LockedSingleton
 Connman::NetworkDeviceList::get_singleton_for_update()
 {
     return std::make_pair(std::ref(connman_network_device_list_singleton.devices),

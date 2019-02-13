@@ -91,11 +91,13 @@ class NetworkDeviceList
     Map::iterator begin() { return devices_.begin(); }
     Map::iterator end() { return devices_.end(); }
 
-    static std::pair<const NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
-    get_singleton_const();
+    using LockedConstSingleton =
+        std::pair<const NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>;
+    using LockedSingleton =
+        std::pair<NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>;
 
-    static std::pair<NetworkDeviceList &, LoggedLock::UniqueLock<LoggedLock::RecMutex>>
-    get_singleton_for_update();
+    static LockedConstSingleton get_singleton_const();
+    static LockedSingleton get_singleton_for_update();
 
   private:
     Map::const_iterator find(const std::string &mac_address) const { return devices_.find(mac_address); }
