@@ -1811,6 +1811,10 @@ static void fill_network_status_register_response(uint8_t *response)
     response[1] = NETWORK_STATUS_DEVICE_NONE;
     response[2] = NETWORK_STATUS_CONNECTION_NONE;
 
+    /* we must do this before locking the service list below */
+    bool is_wps;
+    bool is_connecting = Connman::is_connecting(&is_wps);
+
     LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
@@ -1838,9 +1842,6 @@ static void fill_network_status_register_response(uint8_t *response)
             response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
         }
     }
-
-    bool is_wps;
-    bool is_connecting = Connman::is_connecting(&is_wps);
 
     if(is_connecting)
         response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;

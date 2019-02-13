@@ -84,9 +84,9 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
             LOGGED_LOCK_CONTEXT_HINT;
             const std::lock_guard<LoggedLock::Mutex> lock(cache_lock_);
             LOGGED_LOCK_CONTEXT_HINT;
-            const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
-            LOGGED_LOCK_CONTEXT_HINT;
             const auto locked_services(Connman::ServiceList::get_singleton_const());
+            LOGGED_LOCK_CONTEXT_HINT;
+            const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
 
             cached_network_devices_.copy_from(locked_devices.first);
             cached_network_services_.copy_from(locked_services.first);
