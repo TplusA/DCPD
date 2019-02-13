@@ -355,7 +355,7 @@ static unsigned int handle_primqueue_events(int fd, short revents)
                     break;
 
                   case PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES:
-                    result |= WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED;;
+                    result |= WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED;
                     break;
                 }
             }
