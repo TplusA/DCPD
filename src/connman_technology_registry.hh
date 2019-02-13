@@ -169,12 +169,18 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
   private:
     CacheType cache_;
     struct _tdbusconnmanTechnology *proxy_;
+
+    LoggedLock::Mutex watchers_lock_;
     std::vector<WatcherFn> watchers_;
 
   public:
     explicit TechnologyPropertiesWIFI():
         proxy_(nullptr)
-    {}
+    {
+        LoggedLock::configure(watchers_lock_,
+                              "Connman::TechnologyPropertiesWIFI::watchers_",
+                              MESSAGE_LEVEL_DEBUG);
+    }
 
     virtual ~TechnologyPropertiesWIFI();
 
@@ -217,7 +223,7 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     void cache_value_by_name(const char *name, T &&value)
     {
         LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
+        LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(lock_);
 
         const auto &it(std::find(Containers::keys.begin(), Containers::keys.end(), name));
         if(it == Containers::keys.end())
@@ -226,7 +232,11 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
             static_cast<Property>(std::distance(Containers::keys.begin(), it));
         if(cache_.do_set<T>(property, PropertyAccess::READ_ONLY, std::move(value),
                             PropertyCacheWriteRequest::STORE_IN_CACHE))
+        {
+            LOGGED_LOCK_CONTEXT_HINT;
+            lock.unlock();
             notify_watchers(property, TechnologyPropertiesBase::StoreResult::UPDATE_NOTIFICATION);
+        }
     }
 
     template <typename T>
@@ -235,17 +245,27 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
         try
         {
             LOGGED_LOCK_CONTEXT_HINT;
-            std::lock_guard<LoggedLock::RecMutex> lock(lock_);
+            LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(lock_);
 
             if(is_dbus_failure)
             {
                 cache_.do_rollback<T>(property);
+                LOGGED_LOCK_CONTEXT_HINT;
+                lock.unlock();
                 notify_watchers(property, TechnologyPropertiesBase::StoreResult::DBUS_FAILURE);
             }
             else if(cache_.do_commit<T>(property))
+            {
+                LOGGED_LOCK_CONTEXT_HINT;
+                lock.unlock();
                 notify_watchers(property, TechnologyPropertiesBase::StoreResult::COMMITTED_AND_UPDATED);
+            }
             else
+            {
+                LOGGED_LOCK_CONTEXT_HINT;
+                lock.unlock();
                 notify_watchers(property, TechnologyPropertiesBase::StoreResult::COMMITTED_UNCHANGED);
+            }
         }
         catch(const Connman::TechnologyPropertiesWIFI::Exceptions::NotPending &e)
         {
@@ -270,8 +290,18 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     static void send_property_over_dbus_done(struct _GObject *source_object,
                                              struct _GAsyncResult *res, void *user_data);
 
+    /*!
+     * Notify all registered watchers about property change.
+     *
+     * \note
+     *     Must be called without holding
+     *     #Connman::TechnologyPropertiesBase::lock_.
+     */
     void notify_watchers(Property property, StoreResult result)
     {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
+
         for(const auto &fn : watchers_)
             fn(property, result, *this);
     }

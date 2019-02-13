@@ -159,7 +159,7 @@ void Connman::TechnologyPropertiesWIFI::register_property_watcher(WatcherFn &&fn
     if(fn != nullptr)
     {
         LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
+        std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
         watchers_.emplace_back(fn);
     }
 }
