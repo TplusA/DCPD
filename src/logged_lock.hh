@@ -447,16 +447,17 @@ class UniqueLock
     MutexType &logged_mutex_;
     std::unique_lock<typename MTraits::StdMutexType> lock_;
     const char *lock_name_;
+    bool moved_from_;
 
   public:
     UniqueLock(const UniqueLock &) = delete;
     UniqueLock &operator=(const UniqueLock &) = delete;
-    UniqueLock(UniqueLock &&) = default;
 
     explicit UniqueLock(MutexType &mutex):
         logged_mutex_(mutex),
         lock_(logged_mutex_.get_raw_mutex(false), std::defer_lock),
-        lock_name_(logged_mutex_.get_name())
+        lock_name_(logged_mutex_.get_name()),
+        moved_from_(false)
     {
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: create, attempt to lock %s",
@@ -467,15 +468,30 @@ class UniqueLock
     explicit UniqueLock(MutexType &mutex, std::defer_lock_t t):
         logged_mutex_(mutex),
         lock_(logged_mutex_.get_raw_mutex(false), t),
-        lock_name_(logged_mutex_.get_name())
+        lock_name_(logged_mutex_.get_name()),
+        moved_from_(false)
     {
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: created with unlocked %s",
                   get_context_hints().c_str(), this, lock_name_);
     }
 
+    UniqueLock(UniqueLock &&src):
+        logged_mutex_(src.logged_mutex_),
+        lock_(std::move(src.lock_)),
+        lock_name_(src.lock_name_),
+        moved_from_(src.moved_from_)
+    {
+        src.moved_from_ = true;
+        msg_vinfo(logged_mutex_.get_log_level(), "<%s> UniqueLock %p: moved to %p",
+                  get_context_hints().c_str(), &src, this);
+    }
+
     ~UniqueLock()
     {
+        if(moved_from_)
+            return;
+
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: destroy with %s owned by <%08lx>",
                   get_context_hints().c_str(), this, lock_name_, get_mutex_owner());
