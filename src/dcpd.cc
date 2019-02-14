@@ -24,6 +24,7 @@
 #include "dcp_over_tcp.h"
 #include "smartphone_app.hh"
 #include "network_dispatcher.hh"
+#include "mainloop.hh"
 #include "messages.h"
 #include "messages_glib.h"
 #include "transactions.hh"
@@ -76,12 +77,14 @@
 #define WAITEVENT_SMARTPHONE_QUEUE_HAS_COMMANDS         (1U << 10)
 #define WAITEVENT_CONNECT_TO_WLAN_REQUESTED             (1U << 11)
 #define WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED    (1U << 12)
+#define WAITEVENT_QUEUED_WORK_AVAILABLE                 (1U << 13)
 
 enum PrimitiveQueueCommand
 {
     PRIMITIVE_QUEUECMD_PROCESS_APP_QUEUE,
     PRIMITIVE_QUEUECMD_CONNECT_TO_MANAGED_WLAN,
     PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES,
+    PRIMITIVE_QUEUECMD_PROCESS_QUEUED_WORK,
 };
 
 /*!
@@ -132,6 +135,10 @@ struct DCPDState
 ssize_t (*os_read)(int fd, void *dest, size_t count) = read;
 ssize_t (*os_write)(int fd, const void *buf, size_t count) = write;
 int (*os_poll)(struct pollfd *fds, nfds_t nfds, int timeout) = poll;
+
+#if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
+thread_local LoggedLock::Context LoggedLock::context;
+#endif
 
 /*!
  * Global flag that gets cleared in the SIGTERM signal handler.
@@ -351,7 +358,11 @@ static unsigned int handle_primqueue_events(int fd, short revents)
                     break;
 
                   case PRIMITIVE_QUEUECMD_REFRESH_CONNMAN_SERVICES:
-                    result |= WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED;;
+                    result |= WAITEVENT_REFRESH_CONNMAN_SERVICES_REQUESTED;
+                    break;
+
+                  case PRIMITIVE_QUEUECMD_PROCESS_QUEUED_WORK:
+                    result |= WAITEVENT_QUEUED_WORK_AVAILABLE;
                     break;
                 }
             }
@@ -517,6 +528,19 @@ static bool handle_reopen_connections(unsigned int wait_result,
     return true;
 }
 
+MainLoop::Queue MainLoop::detail::queued_work;
+
+static void handle_queued_work(unsigned int wait_result)
+{
+    if((wait_result & WAITEVENT_QUEUED_WORK_AVAILABLE) == 0)
+        return;
+
+    const auto work(MainLoop::detail::queued_work.take());
+
+    for(const auto &fn : work)
+        fn();
+}
+
 static void handle_register_change(unsigned int wait_result, int fd,
                                    DCPDState &state)
 {
@@ -615,6 +639,12 @@ static void primitive_queue_send(const enum PrimitiveQueueCommand cmd, const cha
         msg_error(0, LOG_ERR,
                   "Wrote %zd bytes instead of 1 while queuing command for %s",
                   ret, what);
+}
+
+void MainLoop::detail::notify_main_loop()
+{
+    primitive_queue_send(PRIMITIVE_QUEUECMD_PROCESS_QUEUED_WORK,
+                         "processing queued work");
 }
 
 static void process_smartphone_outgoing_queue(int fd)
@@ -797,6 +827,8 @@ static void main_loop(struct files *files,
             continue;
         }
 
+        handle_queued_work(wait_result);
+
         handle_register_change(wait_result, register_changed_fd, state);
 
         handle_connman_manager_events(wait_result, connman);
@@ -971,6 +1003,8 @@ static int setup(const struct parameters *parameters, struct files *files,
     }
 
     log_version_info();
+
+    LoggedLock::set_context_name("Main");
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "Attempting to open named pipes");
 
@@ -1243,6 +1277,8 @@ static bool delay_seconds(int seconds)
 
 static void *update_watchdog_main(void *user_data)
 {
+    LoggedLock::set_context_name("Update watchdog");
+
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "UPDOG: Update in progress, watching opkg");
 

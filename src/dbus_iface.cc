@@ -38,6 +38,7 @@
 #include "gerbera_dbus.h"
 #include "logind_dbus.h"
 #include "systemd_dbus.h"
+#include "logged_lock.hh"
 #include "messages.h"
 
 #include <string.h>
@@ -171,6 +172,8 @@ systemd1_iface_data;
 
 static gpointer process_dbus(gpointer user_data)
 {
+    LoggedLock::set_context_name("D-Bus I/O");
+
     auto *data = static_cast<struct dbus_process_data *>(user_data);
 
     log_assert(data->loop != nullptr);

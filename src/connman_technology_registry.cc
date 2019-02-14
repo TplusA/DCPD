@@ -25,6 +25,7 @@
 #include "connman_address.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
+#include "mainloop.hh"
 #include "gvariantwrapper.hh"
 #include "messages.h"
 
@@ -131,9 +132,26 @@ void Connman::TechnologyPropertiesWIFI::technology_signal(
                   iface_name, signal_name, sender_name);
 }
 
+void Connman::TechnologyPropertiesWIFI::notify_watchers(Property property, StoreResult result)
+{
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
+
+    MainLoop::post(
+        [this, property, result] ()
+        {
+            LOGGED_LOCK_CONTEXT_HINT;
+            std::lock_guard<LoggedLock::Mutex> lk(watchers_lock_);
+
+            for(const auto &fn : watchers_)
+                fn(property, result, *this);
+        });
+}
+
 void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&p)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(proxy_ != nullptr)
     {
@@ -147,7 +165,8 @@ void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&p)
 
 tdbusconnmanTechnology *Connman::TechnologyPropertiesWIFI::get_dbus_proxy()
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
     ensure_dbus_proxy();
     return proxy_;
 }
@@ -156,7 +175,8 @@ void Connman::TechnologyPropertiesWIFI::register_property_watcher(WatcherFn &&fn
 {
     if(fn != nullptr)
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
         watchers_.emplace_back(fn);
     }
 }

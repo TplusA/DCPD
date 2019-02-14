@@ -174,22 +174,27 @@ Connman::NetworkDeviceList::insert(Connman::Technology technology,
 struct NetworkDeviceListData
 {
     Connman::NetworkDeviceList devices;
-    std::recursive_mutex lock;
+    LoggedLock::RecMutex lock;
+
+    NetworkDeviceListData()
+    {
+        LoggedLock::configure(lock, "NetworkDeviceListData", MESSAGE_LEVEL_DEBUG);
+    }
 };
 
 /* a locking wrapper around our global network device list */
 static NetworkDeviceListData connman_network_device_list_singleton;
 
-std::pair<const Connman::NetworkDeviceList &, std::unique_lock<std::recursive_mutex>>
+Connman::NetworkDeviceList::LockedConstSingleton
 Connman::NetworkDeviceList::get_singleton_const()
 {
     return std::make_pair(std::cref(connman_network_device_list_singleton.devices),
-                          std::move(std::unique_lock<std::recursive_mutex>(connman_network_device_list_singleton.lock)));
+                          std::move(LoggedLock::UniqueLock<LoggedLock::RecMutex>(connman_network_device_list_singleton.lock)));
 }
 
-std::pair<Connman::NetworkDeviceList &, std::unique_lock<std::recursive_mutex>>
+Connman::NetworkDeviceList::LockedSingleton
 Connman::NetworkDeviceList::get_singleton_for_update()
 {
     return std::make_pair(std::ref(connman_network_device_list_singleton.devices),
-                          std::move(std::unique_lock<std::recursive_mutex>(connman_network_device_list_singleton.lock)));
+                          std::move(LoggedLock::UniqueLock<LoggedLock::RecMutex>(connman_network_device_list_singleton.lock)));
 }

@@ -65,6 +65,7 @@ static constexpr uint16_t APPLIANCE_STATUS_BIT_IS_VALID         = (1U << 15);
 
 static void set_device_id_by_mac(const Connman::Technology tech)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
     auto &devices(locked_devices.first);
 
@@ -190,7 +191,7 @@ struct ApplianceData
     bool is_initialized;
     ApplianceID id;
 
-    std::mutex lock;
+    LoggedLock::Mutex lock;
     Maybe<bool> cached_standby_state;
 
     uint16_t request_control_mask;
@@ -204,7 +205,9 @@ struct ApplianceData
         id(ApplianceID::UNDEFINED),
         request_control_mask(0),
         request_control_bits(0)
-    {}
+    {
+        LoggedLock::configure(lock, "ApplianceData", MESSAGE_LEVEL_DEBUG);
+    }
 };
 
 static ApplianceData global_appliance_data;
@@ -213,7 +216,8 @@ bool Regs::Appliance::init()
 {
     Regs::NetworkConfig::init();
 
-    std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(global_appliance_data.lock);
 
     char appliance_id[64];
     auto prev_id = global_appliance_data.id;
@@ -327,7 +331,8 @@ int Regs::Appliance::DCP::write_18_appliance_status(const uint8_t *data, size_t 
                       status);
 
     {
-        std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(global_appliance_data.lock);
 
         old_power_state =
             standby_state_flag_to_dbus_value(global_appliance_data.cached_standby_state);
@@ -358,7 +363,8 @@ ssize_t Regs::Appliance::DCP::read_19_appliance_control(uint8_t *response, size_
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 19 handler %p %zu", response, length);
 
-    std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(global_appliance_data.lock);
 
     if(length < register_size)
         return -1;
@@ -386,7 +392,8 @@ ssize_t Regs::Appliance::DCP::read_19_appliance_control(uint8_t *response, size_
 
 uint8_t Regs::Appliance::get_standby_state_for_dbus()
 {
-    std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(global_appliance_data.lock);
     return uint8_t(standby_state_flag_to_dbus_value(global_appliance_data.cached_standby_state));
 }
 
@@ -413,7 +420,8 @@ bool Regs::Appliance::request_standby_state(uint8_t state, uint8_t &current_stat
         if(!is_pending)
             return true;
 
-        std::lock_guard<std::mutex> lock(global_appliance_data.lock);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(global_appliance_data.lock);
         const bool is_notification_needed = global_appliance_data.request_control_mask == 0;
 
         global_appliance_data.request_control_mask |= APPLIANCE_STATUS_BIT_IS_IN_STANDBY;

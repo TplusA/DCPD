@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -21,8 +21,8 @@
 
 #include "connman_property_cache.hh"
 #include "messages.h"
+#include "logged_lock.hh"
 
-#include <mutex>
 #include <vector>
 #include <array>
 #include <memory>
@@ -77,9 +77,12 @@ class TechnologyPropertiesBase
 
   protected:
     std::string dbus_object_path_;
-    mutable std::recursive_mutex lock_;
+    mutable LoggedLock::RecMutex lock_;
 
-    explicit TechnologyPropertiesBase() = default;
+    explicit TechnologyPropertiesBase()
+    {
+        LoggedLock::configure(lock_, "Connman::TechnologyPropertiesBase", MESSAGE_LEVEL_DEBUG);
+    }
 
   public:
     TechnologyPropertiesBase(const TechnologyPropertiesBase &) = delete;
@@ -96,7 +99,8 @@ class TechnologyPropertiesBase
                                        void *user_data)
     {
         auto *const p = static_cast<TechnologyPropertiesBase *>(user_data);
-        std::lock_guard<std::recursive_mutex> lock(p->lock_);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(p->lock_);
         p->technology_signal(proxy, sender_name, signal_name, parameters);
     }
 
@@ -165,12 +169,18 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
   private:
     CacheType cache_;
     struct _tdbusconnmanTechnology *proxy_;
+
+    LoggedLock::Mutex watchers_lock_;
     std::vector<WatcherFn> watchers_;
 
   public:
     explicit TechnologyPropertiesWIFI():
         proxy_(nullptr)
-    {}
+    {
+        LoggedLock::configure(watchers_lock_,
+                              "Connman::TechnologyPropertiesWIFI::watchers_",
+                              MESSAGE_LEVEL_DEBUG);
+    }
 
     virtual ~TechnologyPropertiesWIFI();
 
@@ -178,7 +188,8 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
 
     bool available() const final override
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return proxy_ != nullptr;
     }
 
@@ -189,14 +200,16 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     template <Property property, typename traits = CacheType::ValueTraits<property>>
     const typename traits::Type &get() const
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return cache_.lookup<property>();
     }
 
     template <Property property, typename traits = CacheType::ValueTraits<property>>
     void set(typename traits::Type &&value)
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
         if(!ensure_dbus_proxy())
             throw TechnologyRegistryUnavailableError();
@@ -209,7 +222,8 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     template <typename T>
     void cache_value_by_name(const char *name, T &&value)
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        LOGGED_LOCK_CONTEXT_HINT;
+        LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(lock_);
 
         const auto &it(std::find(Containers::keys.begin(), Containers::keys.end(), name));
         if(it == Containers::keys.end())
@@ -218,7 +232,11 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
             static_cast<Property>(std::distance(Containers::keys.begin(), it));
         if(cache_.do_set<T>(property, PropertyAccess::READ_ONLY, std::move(value),
                             PropertyCacheWriteRequest::STORE_IN_CACHE))
+        {
+            LOGGED_LOCK_CONTEXT_HINT;
+            lock.unlock();
             notify_watchers(property, TechnologyPropertiesBase::StoreResult::UPDATE_NOTIFICATION);
+        }
     }
 
     template <typename T>
@@ -226,17 +244,28 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     {
         try
         {
-            std::lock_guard<std::recursive_mutex> lock(lock_);
+            LOGGED_LOCK_CONTEXT_HINT;
+            LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(lock_);
 
             if(is_dbus_failure)
             {
                 cache_.do_rollback<T>(property);
+                LOGGED_LOCK_CONTEXT_HINT;
+                lock.unlock();
                 notify_watchers(property, TechnologyPropertiesBase::StoreResult::DBUS_FAILURE);
             }
             else if(cache_.do_commit<T>(property))
+            {
+                LOGGED_LOCK_CONTEXT_HINT;
+                lock.unlock();
                 notify_watchers(property, TechnologyPropertiesBase::StoreResult::COMMITTED_AND_UPDATED);
+            }
             else
+            {
+                LOGGED_LOCK_CONTEXT_HINT;
+                lock.unlock();
                 notify_watchers(property, TechnologyPropertiesBase::StoreResult::COMMITTED_UNCHANGED);
+            }
         }
         catch(const Connman::TechnologyPropertiesWIFI::Exceptions::NotPending &e)
         {
@@ -261,11 +290,14 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
     static void send_property_over_dbus_done(struct _GObject *source_object,
                                              struct _GAsyncResult *res, void *user_data);
 
-    void notify_watchers(Property property, StoreResult result)
-    {
-        for(const auto &fn : watchers_)
-            fn(property, result, *this);
-    }
+    /*!
+     * Notify all registered watchers about property change.
+     *
+     * \note
+     *     Must be called without holding
+     *     #Connman::TechnologyPropertiesBase::lock_.
+     */
+    void notify_watchers(Property property, StoreResult result);
 
     void technology_signal(struct _GDBusProxy *proxy,
                            const char *sender_name, const char *signal_name,
@@ -325,16 +357,20 @@ class TechnologyRegistry
 {
   private:
     TechnologyPropertiesWIFI wifi_properties_;
-    mutable std::recursive_mutex lock_;
+    mutable LoggedLock::RecMutex lock_;
 
   public:
     TechnologyRegistry(const TechnologyRegistry &) = delete;
     TechnologyRegistry &operator=(const TechnologyRegistry &) = delete;
-    explicit TechnologyRegistry() = default;
 
-    std::unique_lock<std::recursive_mutex> locked() const
+    explicit TechnologyRegistry()
     {
-        return std::unique_lock<std::recursive_mutex>(lock_);
+        LoggedLock::configure(lock_, "Connman::TechnologyRegistry", MESSAGE_LEVEL_DEBUG);
+    }
+
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> locked() const
+    {
+        return LoggedLock::UniqueLock<LoggedLock::RecMutex>(lock_);
     }
 
     void connect_to_connman(const void *data = nullptr);

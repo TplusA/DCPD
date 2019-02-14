@@ -57,6 +57,8 @@ Network::AccessPoint::AccessPoint(Connman::TechnologyRegistry &reg):
     started_(false),
     status_(Status::UNKNOWN)
 {
+    LoggedLock::configure(lock_, "Network::AccessPoint", MESSAGE_LEVEL_DEBUG);
+
     tech_reg_.register_property_watcher(
         [this]
         (Connman::TechnologyPropertiesWIFI::Property property,
@@ -77,7 +79,8 @@ Network::AccessPoint::AccessPoint(Connman::TechnologyRegistry &reg):
 
 void Network::AccessPoint::start()
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(started_)
     {
@@ -85,6 +88,7 @@ void Network::AccessPoint::start()
         return;
     }
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto tech_lock(tech_reg_.locked());
 
     try
@@ -114,7 +118,8 @@ void Network::AccessPoint::start()
 
 void Network::AccessPoint::register_status_watcher(StatusFn &&fn)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
     status_watchers_.emplace_back(fn);
     status_watchers_.back()(tech_reg_, status_, status_);
 }
@@ -175,7 +180,8 @@ void Network::AccessPoint::wifi_property_changed_notification(
             const bool is_tethering(wifi.get<Connman::TechnologyPropertiesWIFI::Property::TETHERING>());
             const auto status(is_tethering ? Status::ACTIVE : Status::DISABLED);
 
-            std::lock_guard<std::recursive_mutex> lock(lock_);
+            LOGGED_LOCK_CONTEXT_HINT;
+            std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
             if(dynamic_cast<const SpawnRequest *>(active_request_.get()) != nullptr)
                 request_done(result, is_tethering, status);
@@ -198,11 +204,12 @@ void Network::AccessPoint::wifi_property_changed_notification(
 }
 
 void Network::AccessPoint::spawn(std::unique_ptr<SpawnRequest> request,
-                                 std::unique_lock<std::recursive_mutex> &ap_lock)
+                                 LoggedLock::UniqueLock<LoggedLock::RecMutex> &ap_lock)
 {
     const auto *const req(request.get());
     active_request_ = std::move(request);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto tech_lock(tech_reg_.locked());
     const char *action = nullptr;
 
@@ -214,6 +221,7 @@ void Network::AccessPoint::spawn(std::unique_ptr<SpawnRequest> request,
 
         /* we don't need our lock anymore; also avoids D-Bus deadlock in
          * #Network::AccessPoint::wifi_property_changed_notification() */
+        LOGGED_LOCK_CONTEXT_HINT;
         ap_lock.unlock();
 
         action = "Set AP SSID";
@@ -233,6 +241,7 @@ void Network::AccessPoint::shutdown(std::unique_ptr<ShutdownRequest> request)
 {
     active_request_ = std::move(request);
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto tech_lock(tech_reg_.locked());
     const char *action = nullptr;
 
@@ -258,6 +267,7 @@ Network::AccessPoint::figure_out_current_status(std::unique_ptr<Network::AccessP
                                                 bool &scheduled)
 {
     scheduled = false;
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto tech_lock(tech_reg_.locked());
 
     try
@@ -292,7 +302,8 @@ Network::AccessPoint::figure_out_current_status(std::unique_ptr<Network::AccessP
 bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passphrase,
                                          DoneFn &&done_notification)
 {
-    std::unique_lock<std::recursive_mutex> lock(lock_);
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(lock_);
 
     if(!started_)
     {
@@ -340,6 +351,7 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
     {
         msg_error(0, LOG_ERR, "%s", e.what());
 
+        LOGGED_LOCK_CONTEXT_HINT;
         lock.lock();
 
         auto req(std::move(active_request_));
@@ -347,6 +359,7 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
         if(status_ == Status::PROBING_STATUS)
             set_status(Status::UNKNOWN);
 
+        LOGGED_LOCK_CONTEXT_HINT;
         lock.unlock();
 
         if(req != nullptr)
@@ -358,7 +371,8 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
 
 bool Network::AccessPoint::shutdown_request(DoneFn &&done_notification)
 {
-    std::lock_guard<std::recursive_mutex> lock(lock_);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(lock_);
 
     if(!started_)
     {

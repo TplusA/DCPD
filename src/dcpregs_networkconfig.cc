@@ -100,7 +100,7 @@ class ConfigRequestEditState
 class NetworkConfigWriteData
 {
   private:
-    std::mutex commit_configuration_lock_;
+    LoggedLock::Mutex commit_configuration_lock_;
 
     ConfigRequestEditState edit_state_;
     Network::ConfigRequest config_request_;
@@ -110,6 +110,12 @@ class NetworkConfigWriteData
     Maybe<std::string> ipv4_dns_server2_;
 
   public:
+    NetworkConfigWriteData()
+    {
+        LoggedLock::configure(commit_configuration_lock_, "NetworkConfigWriteData",
+                              MESSAGE_LEVEL_DEBUG);
+    }
+
     void init()
     {
         edit_state_.cancel();
@@ -118,9 +124,9 @@ class NetworkConfigWriteData
         ipv4_dns_server2_.set_unknown();
     }
 
-    std::unique_lock<std::mutex> lock()
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock()
     {
-        return std::unique_lock<std::mutex>(commit_configuration_lock_);
+        return LoggedLock::UniqueLock<LoggedLock::Mutex>(commit_configuration_lock_);
     }
 
     bool may_change_config() const
@@ -737,6 +743,7 @@ static uint8_t map_dhcp_method(const Connman::DHCPV4Method method)
 
 static bool query_dhcp_mode(const ConfigRequestEditState &edit)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *service(get_connman_service_data(edit, services));
@@ -770,6 +777,7 @@ static bool handle_set_dhcp_mode(Network::ConfigRequest &req,
     else if(!req.ipv4_address_.is_known() && !req.ipv4_netmask_.is_known() &&
             !req.ipv4_gateway_.is_known())
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
         const auto &devices(locked_devices.first);
 
@@ -807,6 +815,7 @@ static bool handle_set_static_ipv4_config(const Network::ConfigRequest &req,
                                       req.ipv4_gateway_.get().c_str());
     else
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
         const auto &devices(locked_devices.first);
 
@@ -834,6 +843,7 @@ static bool handle_set_dns_servers(const Network::ConfigRequest &req,
                                       servers.size() > 1 ? servers[1].c_str() : "");
     else
     {
+        LOGGED_LOCK_CONTEXT_HINT;
         const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
         const auto &devices(locked_devices.first);
 
@@ -1150,6 +1160,7 @@ modify_network_configuration(
     if(!edit.is_in_edit_mode())
         return Network::WPSMode::INVALID;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *service(get_connman_service_data(edit, services));
@@ -1322,6 +1333,7 @@ static bool should_auto_switch_to_wlan(Connman::Technology active_tech,
     if(req.wlan_security_mode_ != "wps")
         return false;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
@@ -1367,6 +1379,7 @@ static bool process_config_request_from_spi_slave(
         cfg_wd.switch_technology(Connman::Technology::WLAN);
 
     {
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
     const auto &devices(locked_devices.first);
 
@@ -1502,6 +1515,7 @@ static bool check_back_with_existing_devices(
         bool &is_device_with_given_mac_present,
         Connman::Technology &target_tech)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
     const auto &devices(locked_devices.first);
     const auto device(devices[mac]);
@@ -1731,6 +1745,7 @@ bool Regs::NetworkConfig::request_configuration_for_mac(
         return true;
     }
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto lock(nwconfig_write_data.lock());
     return process_external_config_request(config_request, mac, tech, apman,
                                            nwstatus_data->shutdown_guard());
@@ -1761,6 +1776,7 @@ int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, si
     else if(nwconfig_write_data.get_configuration_request().when_ != Network::ConfigRequest::ApplyWhen::NOW)
         BUG("Unexpected network configuration request application time point");
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto lock(nwconfig_write_data.lock());
     return process_config_request_from_spi_slave(nwconfig_write_data,
                 nwstatus_data->shutdown_guard(),
@@ -1780,6 +1796,7 @@ int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, 
     if(data[0] != 0)
         return -1;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const auto tech =
@@ -1794,6 +1811,11 @@ static void fill_network_status_register_response(uint8_t *response)
     response[1] = NETWORK_STATUS_DEVICE_NONE;
     response[2] = NETWORK_STATUS_CONNECTION_NONE;
 
+    /* we must do this before locking the service list below */
+    bool is_wps;
+    bool is_connecting = Connman::is_connecting(&is_wps);
+
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *fallback_service_data;
@@ -1820,9 +1842,6 @@ static void fill_network_status_register_response(uint8_t *response)
             response[2] |= NETWORK_STATUS_CONNECTION_CONNECTED;
         }
     }
-
-    bool is_wps;
-    bool is_connecting = Connman::is_connecting(&is_wps);
 
     if(is_connecting)
         response[2] |= NETWORK_STATUS_CONNECTION_CONNECTING;
@@ -1875,6 +1894,7 @@ ssize_t Regs::NetworkConfig::DCP::read_51_mac_address(uint8_t *response, size_t 
     if(length < Connman::AddressTraits<Connman::AddressType::MAC>::ADDRESS_STRING_LENGTH_MAX)
         return -1;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *service;
@@ -1956,6 +1976,7 @@ read_out_parameter(const ConfigRequestEditState &edit,
                    Connman::Technology required_technology,
                    uint8_t *response, size_t max_response_length)
 {
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
     const Connman::ServiceBase *service(get_connman_service_data(edit, services));

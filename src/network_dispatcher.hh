@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,7 +19,8 @@
 #ifndef NETWORK_DISPATCHER_HH
 #define NETWORK_DISPATCHER_HH
 
-#include <mutex>
+#include "logged_lock.hh"
+
 #include <functional>
 #include <unordered_map>
 
@@ -47,14 +48,17 @@ struct DispatchHandlers
 class Dispatcher
 {
   private:
-    mutable std::recursive_mutex lock_;
+    mutable LoggedLock::RecMutex lock_;
     std::unordered_map<int, DispatchHandlers> connections_;
 
   public:
     Dispatcher(const Dispatcher &) = delete;
     Dispatcher &operator=(const Dispatcher &) = delete;
 
-    explicit Dispatcher() {}
+    explicit Dispatcher()
+    {
+        LoggedLock::configure(lock_, "Network::Dispatcher", MESSAGE_LEVEL_DEBUG);
+    }
 
     /*!
      * Function required by unit tests for initializing static data.
@@ -78,7 +82,8 @@ class Dispatcher
 
     size_t get_number_of_fds() const
     {
-        std::lock_guard<std::recursive_mutex> lock(lock_);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(lock_);
         return connections_.size();
     }
 

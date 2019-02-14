@@ -286,7 +286,7 @@ class WLANConnectionState
         log_assert(!service_name.empty());
 
         msg_info("About to connect to WLAN \"%s\" %s",
-                 service_name.c_str(), connection_method_to_string(method_));
+                 service_name.c_str(), connection_method_to_string(method));
 
         state_ = State::ABOUT_TO_CONNECT;
         method_ = method;
@@ -335,11 +335,13 @@ class WLANConnectionState
             state_ = State::DONE;
     }
 
-    bool finished_with_failure(const std::string &object_path)
+    bool finished_removed_with_failure(const std::string &object_path)
     {
         if(candidate_ != nullptr &&
            candidate_->get_service_name() == object_path)
         {
+            /* we wanted to connect to this service, but it has just been
+             * removed from Connman's service list */
             finished_with_failure();
             return true;
         }
@@ -481,7 +483,7 @@ class WLANConnectionState
 class Connman::WLANManager
 {
   public:
-    std::recursive_mutex lock;
+    LoggedLock::RecMutex lock;
 
     bool is_disabled;
 
@@ -500,7 +502,9 @@ class Connman::WLANManager
         schedule_connect_to_wlan(nullptr),
         schedule_refresh_connman_services(nullptr),
         wlan_tools(nullptr)
-    {}
+    {
+        LoggedLock::configure(lock, "Connman::WLANManager", MESSAGE_LEVEL_DEBUG);
+    }
 
     void init(std::function<void()> &&schedule_connect_to_wlan_fn,
               std::function<void()> &&schedule_refresh_connman_services_fn,
@@ -511,6 +515,7 @@ class Connman::WLANManager
         schedule_refresh_connman_services = std::move(schedule_refresh_connman_services_fn);
         wlan_connection_state.reset();
         wlan_tools = wlan;
+        LOGGED_LOCK_CONTEXT_HINT;
         Connman::ServiceList::get_singleton_for_update().first.clear();
     }
 };
@@ -568,7 +573,8 @@ static void service_connected(const std::string &service_name, bool succeeded,
                               Connman::WLANManager &wman)
 {
     {
-        std::lock_guard<std::recursive_mutex> lock(wman.lock);
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
         if(succeeded)
         {
@@ -651,10 +657,12 @@ static void wps_connected(const std::string &service_name, bool succeeded,
                           Connman::WLANManager &wman)
 {
     {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
+
+        LOGGED_LOCK_CONTEXT_HINT;
         const auto locked_services(Connman::ServiceList::get_singleton_const());
         const auto &services(locked_services.first);
-
-        std::lock_guard<std::recursive_mutex> lock(wman.lock);
 
         if(succeeded)
         {
@@ -763,12 +771,14 @@ static void scan_for_wps_done(Connman::SiteSurveyResult result);
 
 bool Connman::connect_our_wlan(WLANManager &wman)
 {
-    std::lock_guard<std::recursive_mutex> lock(wman.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
     switch(wman.wlan_connection_state.get_state())
     {
       case WLANConnectionState::State::WAIT_FOR_REGISTRAR:
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto locked_services(Connman::ServiceList::get_singleton_const());
             const auto &services(locked_services.first);
 
@@ -1539,7 +1549,7 @@ static void update_service_list(Connman::ServiceList &known_services,
 
           case WLANConnectionState::State::ABOUT_TO_CONNECT:
           case WLANConnectionState::State::CONNECTING:
-            if(wlan_connection_state.finished_with_failure(name))
+            if(wlan_connection_state.finished_removed_with_failure(name))
                 wlan_connection_state.reset();
 
             break;
@@ -1883,7 +1893,8 @@ static void survey_after_suspend(Connman::SiteSurveyResult result)
  * generalized approach that allows multiple configurations would actually
  * simplify things a lot, both for the software and for the end user.
  */
-static bool do_process_pending_changes(Connman::ServiceList &known_services,
+static bool do_process_pending_changes(LoggedLock::UniqueLock<LoggedLock::RecMutex> &&wman_lock,
+                                       Connman::ServiceList::LockedSingleton &&locked_services,
                                        bool have_lost_active_ethernet_device,
                                        bool have_lost_active_wlan_device,
                                        WLANConnectionState &wlan_connection_state,
@@ -1894,8 +1905,8 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
     if(have_lost_active_wlan_device)
         wlan_connection_state.reset();
 
-    ignore_inactive_services_on_wrong_interfaces(known_services);
-    disconnect_active_services_on_wrong_interfaces(known_services);
+    ignore_inactive_services_on_wrong_interfaces(locked_services.first);
+    disconnect_active_services_on_wrong_interfaces(locked_services.first);
 
     char configured_ethernet_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
     char configured_wlan_service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
@@ -1915,15 +1926,15 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
     /* up to two services known by Connman for which the user also has provided
      * configuration data */
     auto our_ethernet(have_ethernet_service_prefs
-                      ? known_services.find(configured_ethernet_service_name)
-                      : known_services.end());
+                      ? locked_services.first.find(configured_ethernet_service_name)
+                      : locked_services.first.end());
     auto our_wlan(have_wlan_service_prefs
-                  ? known_services.find(configured_wlan_service_name)
-                  : known_services.end());
+                  ? locked_services.first.find(configured_wlan_service_name)
+                  : locked_services.first.end());
 
     if(wlan_connection_state.is_wps_mode())
     {
-        if(our_ethernet != known_services.end())
+        if(our_ethernet != locked_services.first.end())
         {
             /* cable was plugged, taking precedence over WLAN */
             stop_wps(wlan_connection_state, true);
@@ -1931,15 +1942,15 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 
         /* do not interfere with Connman */
         configured_wlan_service_name[0] = '\0';
-        our_wlan = known_services.end();
+        our_wlan = locked_services.first.end();
     }
 
     disconnect_nonmatching_active_services_on_our_interface(
-            known_services,
-            our_ethernet != known_services.end()
+            locked_services.first,
+            our_ethernet != locked_services.first.end()
             ? our_ethernet->first
             : configured_ethernet_service_name,
-            our_wlan != known_services.end()
+            our_wlan != locked_services.first.end()
             ? our_wlan->first
             : configured_wlan_service_name);
 
@@ -1948,22 +1959,22 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
      * services left for further configuration */
 
     const bool consider_wlan_connection =
-        our_ethernet != known_services.end()
+        our_ethernet != locked_services.first.end()
         ? process_our_ethernet_service(*our_ethernet->second, our_ethernet->first,
                                        ethernet_prefs)
         : true;
 
     const bool want_to_switch_to_wlan =
-        our_wlan != known_services.end()
+        our_wlan != locked_services.first.end()
         ? process_our_wlan_service(*our_wlan->second, our_wlan->first,
                                    consider_wlan_connection,
                                    have_lost_active_ethernet_device,
                                    wlan_connection_state, wlan_prefs)
         : false;
 
-    ignore_wlan_services_on_our_interfaces(known_services);
+    ignore_wlan_services_on_our_interfaces(locked_services.first);
 
-    bug_if_not_processed(known_services);
+    bug_if_not_processed(locked_services.first);
 
     if(!want_to_switch_to_wlan)
     {
@@ -1974,7 +1985,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
             /* we didn't want to switch to WLAN in the first place, but we are
              * allowed to because there is no Ethernet connection; also, we
              * have a set of WLAN configuration data */
-           if(known_services.number_of_wlan_services() == 0)
+           if(locked_services.first.number_of_wlan_services() == 0)
            {
                /* there are no known WLANs, maybe because the WLAN adapter
                 * is in suspend mode */
@@ -1986,7 +1997,7 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 
            /* switch to WLAN if there is a network matching our WLAN
             * configuration */
-           revised_decision = our_wlan != known_services.end();
+           revised_decision = our_wlan != locked_services.first.end();
         }
 
         if(!revised_decision)
@@ -1999,7 +2010,10 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
      * it by hand.
      */
 
-    log_assert(our_wlan != known_services.end());
+    log_assert(our_wlan != locked_services.first.end());
+
+    LOGGED_LOCK_CONTEXT_HINT;
+    locked_services.second.unlock();
 
     /* powering on is the least we should do so that ConnMan can find WLAN
      * networks, manual connect may or may not be necessary (see below) */
@@ -2052,7 +2066,8 @@ static bool do_process_pending_changes(Connman::ServiceList &known_services,
 static void schedule_wlan_connect_if_necessary(bool is_necessary,
                                                Connman::WLANManager &wman)
 {
-    std::lock_guard<std::recursive_mutex> lock(wman.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
 
     if(is_necessary)
         schedule_wlan_connect__unlocked(wman);
@@ -2076,7 +2091,8 @@ static bool update_all_services(GVariant *all_services,
 }
 
 static void process_pending_changes(Connman::WLANManager &wman,
-                                    Connman::ServiceList &services,
+                                    LoggedLock::UniqueLock<LoggedLock::RecMutex> &&wman_lock,
+                                    Connman::ServiceList::LockedSingleton &&locked_services,
                                     bool have_lost_active_ethernet_device,
                                     bool have_lost_active_wlan_device)
 {
@@ -2086,7 +2102,7 @@ static void process_pending_changes(Connman::WLANManager &wman,
         network_prefs_open_ro(&ethernet_prefs, &wlan_prefs);
 
     const bool need_to_schedule_wlan_connection =
-        do_process_pending_changes(services,
+        do_process_pending_changes(std::move(wman_lock), std::move(locked_services),
                                    have_lost_active_ethernet_device,
                                    have_lost_active_wlan_device,
                                    wman.wlan_connection_state,
@@ -2131,10 +2147,15 @@ find_removed(const Connman::ServiceList &known_services, GVariant *all_services)
 static void do_refresh_services(Connman::WLANManager &wman, bool force_refresh_all,
                                 const char *context)
 {
-    const auto locked_services(Connman::ServiceList::get_singleton_for_update());
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> wman_lock(wman.lock);
+
+    LOGGED_LOCK_CONTEXT_HINT;
+    auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
 
-    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    LOGGED_LOCK_CONTEXT_HINT;
+    auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
     auto &devices(locked_devices.first);
 
     GVariant *all_services =
@@ -2147,6 +2168,9 @@ static void do_refresh_services(Connman::WLANManager &wman, bool force_refresh_a
     {
         const std::vector<std::string> removed(std::move(find_removed(services, all_services)));
 
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::RecMutex> lock(wman.lock);
+
         update_service_list(services, wman.wlan_connection_state,
                             removed,
                             have_lost_active_ethernet_device,
@@ -2157,7 +2181,11 @@ static void do_refresh_services(Connman::WLANManager &wman, bool force_refresh_a
                            context))
         g_variant_unref(all_services);
 
-    process_pending_changes(wman, services,
+    LOGGED_LOCK_CONTEXT_HINT;
+    locked_devices.second.unlock();
+
+    process_pending_changes(wman, std::move(wman_lock),
+                            std::move(locked_services),
                             have_lost_active_ethernet_device,
                             have_lost_active_wlan_device);
 }
@@ -2267,7 +2295,8 @@ Connman::init_wlan_manager(std::function<void()> &&schedule_connect_to_wlan_fn,
 
 static void scan_for_wps_done(Connman::SiteSurveyResult result)
 {
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
 
     switch(result)
     {
@@ -2310,10 +2339,15 @@ void Connman::about_to_connect_dbus_signals()
 {
     log_assert(!global_connman_wlan_manager.is_disabled);
 
-    const auto locked_services(Connman::ServiceList::get_singleton_for_update());
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> wman_lock(global_connman_wlan_manager.lock);
+
+    LOGGED_LOCK_CONTEXT_HINT;
+    auto locked_services(Connman::ServiceList::get_singleton_for_update());
     auto &services(locked_services.first);
 
-    const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
+    LOGGED_LOCK_CONTEXT_HINT;
+    auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
     auto &devices(locked_devices.first);
 
     GVariant *all_services =
@@ -2322,8 +2356,11 @@ void Connman::about_to_connect_dbus_signals()
     if(update_all_services(all_services, services, devices, true, "startup"))
         g_variant_unref(all_services);
 
-    process_pending_changes(global_connman_wlan_manager,
-                            services, false, false);
+    LOGGED_LOCK_CONTEXT_HINT;
+    locked_devices.second.unlock();
+
+    process_pending_changes(global_connman_wlan_manager, std::move(wman_lock),
+                            std::move(locked_services), false, false);
 }
 
 void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
@@ -2344,13 +2381,15 @@ void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
     if(handle == NULL)
         return;
 
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
+
     char service_name[NETWORK_PREFS_SERVICE_NAME_BUFFER_SIZE];
     bool need_to_schedule_wlan_connection = false;
 
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
-
-    std::unique_lock<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
     switch(tech)
     {
@@ -2405,6 +2444,7 @@ void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
             avoid_service(*service->second, service->first);
     }
 
+    LOGGED_LOCK_CONTEXT_HINT;
     lock.unlock();
 
     schedule_wlan_connect_if_necessary(need_to_schedule_wlan_connection,
@@ -2417,10 +2457,12 @@ void Connman::connect_to_wps_service(const char *network_name, const char *netwo
     if(global_connman_wlan_manager.is_disabled)
         return;
 
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
+
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
-
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
     start_wps(global_connman_wlan_manager, services,
               network_name, network_ssid, service_to_be_disabled);
@@ -2431,7 +2473,8 @@ void Connman::cancel_wps()
     if(global_connman_wlan_manager.is_disabled)
         return;
 
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
 
     stop_wps(global_connman_wlan_manager.wlan_connection_state, false);
 }
@@ -2470,12 +2513,14 @@ bool Connman::is_connecting(bool *is_wps)
 {
     log_assert(!global_connman_wlan_manager.is_disabled);
 
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
+
+    LOGGED_LOCK_CONTEXT_HINT;
     const auto locked_services(Connman::ServiceList::get_singleton_const());
     const auto &services(locked_services.first);
 
     auto &d(global_connman_wlan_manager);
-
-    std::lock_guard<std::recursive_mutex> lock(global_connman_wlan_manager.lock);
 
     *is_wps = d.wlan_connection_state.is_wps_mode();
 

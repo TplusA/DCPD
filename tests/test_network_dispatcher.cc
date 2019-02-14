@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,6 +28,12 @@
 
 #include "mock_messages.hh"
 #include "mock_os.hh"
+
+#if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
+thread_local LoggedLock::Context LoggedLock::context;
+#endif
+
+#if !LOGGED_LOCKS_ENABLED
 
 /*!
  * \addtogroup network_dispatcher_tests Unit tests
@@ -450,3 +456,5 @@ void test_registered_callbacks_are_called_after_reg_unreg()
 }
 
 /*!@}*/
+
+#endif /* !LOGGED_LOCKS_ENABLED  */

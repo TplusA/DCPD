@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,9 +28,9 @@
 #include "de_tahifi_artcache_errors.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
+#include "logged_lock.hh"
 #include "messages.h"
 
-#include <mutex>
 #include <algorithm>
 
 constexpr const char *ArtCache::ReadError::names_[];
@@ -738,14 +738,20 @@ static void registered_audio_source(GObject *source_object, GAsyncResult *res,
     Regs::AudioSources::fetch_audio_paths();
 }
 
-static struct
+struct PlayStreamData
 {
-    std::mutex lock;
+    LoggedLock::Mutex lock;
 
     PlayAppStreamData app;
     PlayAnyStreamData other;
-}
-play_stream_data;
+
+    PlayStreamData()
+    {
+        LoggedLock::configure(lock, "PlayStreamData", MESSAGE_LEVEL_DEBUG);
+    }
+};
+
+static PlayStreamData play_stream_data;
 
 static const char app_audio_source_id[] = "strbo.plainurl";
 
@@ -768,7 +774,8 @@ void Regs::PlayStream::late_init()
 
 void Regs::PlayStream::deinit()
 {
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
     play_stream_data.other.tracked_stream_key.clear();
     play_stream_data.other.current_cover_art.clear();
 }
@@ -875,7 +882,8 @@ ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, s
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
     return copy_string_to_slave(play_stream_data.other.current_stream_information.meta_data,
                                 (char *)response, length);
 }
@@ -884,7 +892,8 @@ ssize_t Regs::PlayStream::DCP::read_76_current_stream_url(uint8_t *response, siz
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
     return copy_string_to_slave(play_stream_data.other.current_stream_information.url,
                                 (char *)response, length);
 }
@@ -915,7 +924,8 @@ int Regs::PlayStream::DCP::write_78_start_play_stream_title(const uint8_t *data,
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 78 handler %p %zu", data, length);
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -941,7 +951,8 @@ int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, s
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 79 handler %p %zu", data, length);
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     const bool is_in_app_mode = is_app_mode(play_stream_data.app.device_playmode);
 
@@ -1000,7 +1011,8 @@ ssize_t Regs::PlayStream::DCP::read_210_current_cover_art_hash(uint8_t *response
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     const size_t len =
         play_stream_data.other.current_cover_art.copy_hash(response, length);
@@ -1027,7 +1039,8 @@ int Regs::PlayStream::DCP::write_238_next_stream_title(const uint8_t *data, size
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 238 handler %p %zu", data, length);
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -1049,7 +1062,8 @@ int Regs::PlayStream::DCP::write_239_next_stream_url(const uint8_t *data, size_t
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 239 handler %p %zu", data, length);
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -1090,7 +1104,8 @@ ssize_t Regs::PlayStream::DCP::read_239_next_stream_url(uint8_t *response, size_
 
 void Regs::PlayStream::select_source()
 {
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -1134,7 +1149,8 @@ void Regs::PlayStream::select_source()
 
 void Regs::PlayStream::deselect_source()
 {
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     if(!is_app_mode(play_stream_data.app.device_playmode))
     {
@@ -1181,7 +1197,8 @@ void Regs::PlayStream::set_title_and_url(ID::Stream stream_id,
               "Received explicit title and URL information for stream %u",
               stream_id.get_raw_id());
 
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     log_assert(stream_id.get_source() != STREAM_ID_SOURCE_INVALID);
 
@@ -1331,7 +1348,8 @@ static inline void notify_cover_art_changed()
 void Regs::PlayStream::start_notification(ID::Stream stream_id,
                                           void *stream_key_variant)
 {
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     play_stream_data.other.tracked_stream_key.set(
             std::move(GVariantWrapper(static_cast<GVariant *>(stream_key_variant),
@@ -1427,7 +1445,8 @@ void Regs::PlayStream::start_notification(ID::Stream stream_id,
 
 void Regs::PlayStream::stop_notification()
 {
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     play_stream_data.other.tracked_stream_key.clear();
     play_stream_data.other.current_cover_art.clear();
@@ -1450,7 +1469,8 @@ void Regs::PlayStream::stop_notification()
 
 void Regs::PlayStream::cover_art_notification(void *stream_key_variant)
 {
-    std::lock_guard<std::mutex> lk(play_stream_data.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
 
     const GVariantWrapper wrapped_val(static_cast<GVariant *>(stream_key_variant),
                                       GVariantWrapper::Transfer::JUST_MOVE);
@@ -1468,21 +1488,21 @@ void Regs::PlayStream::cover_art_notification(void *stream_key_variant)
 class PictureProvider: public CoverArt::PictureProviderIface
 {
   private:
-    std::mutex &lock_;
+    LoggedLock::Mutex &lock_;
     const CoverArt::Picture &picture_;
 
   public:
     PictureProvider(const PictureProvider &) = delete;
     PictureProvider &operator=(const PictureProvider &) = delete;
 
-    explicit PictureProvider(std::mutex &lock, const CoverArt::Picture &picture):
+    explicit PictureProvider(LoggedLock::Mutex &lock, const CoverArt::Picture &picture):
         lock_(lock),
         picture_(picture)
     {}
 
     bool copy_picture(CoverArt::Picture &dest) const override
     {
-        std::lock_guard<std::mutex> lk(lock_);
+        std::lock_guard<LoggedLock::Mutex> lk(lock_);
         dest = picture_;
 
         return dest.is_available();

@@ -72,7 +72,8 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 
       case Network::AccessPoint::Status::DISABLED:
         {
-            const std::lock_guard<std::mutex> lock(cache_lock_);
+            LOGGED_LOCK_CONTEXT_HINT;
+            const std::lock_guard<LoggedLock::Mutex> lock(cache_lock_);
             cached_network_devices_.clear();
             cached_network_services_.clear();
             break;
@@ -80,9 +81,12 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 
       case Network::AccessPoint::Status::ACTIVATING:
         {
-            const std::lock_guard<std::mutex> lock(cache_lock_);
-            const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
+            LOGGED_LOCK_CONTEXT_HINT;
+            const std::lock_guard<LoggedLock::Mutex> lock(cache_lock_);
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto locked_services(Connman::ServiceList::get_singleton_const());
+            LOGGED_LOCK_CONTEXT_HINT;
+            const auto locked_devices(Connman::NetworkDeviceList::get_singleton_const());
 
             cached_network_devices_.copy_from(locked_devices.first);
             cached_network_services_.copy_from(locked_services.first);
@@ -93,6 +97,7 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
       case Network::AccessPoint::Status::ACTIVE:
         try
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto tech_lock(reg.locked());
 
             msg_info("Access point SSID \"%s\"",
@@ -112,6 +117,8 @@ void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &re
 Network::AccessPointManager::AccessPointManager(Network::AccessPoint &ap):
     ap_(ap)
 {
+    LoggedLock::configure(cache_lock_, "Network::AccessPointManager", MESSAGE_LEVEL_DEBUG);
+
     ap_.register_status_watcher(
         [this]
         (Connman::TechnologyRegistry &reg,

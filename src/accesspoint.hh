@@ -23,7 +23,6 @@
 #include "connman_technology_registry.hh"
 
 #include <functional>
-#include <mutex>
 #include <vector>
 #include <string>
 #include <memory>
@@ -128,7 +127,7 @@ class AccessPoint
         {}
     };
 
-    std::recursive_mutex lock_;
+    LoggedLock::RecMutex lock_;
 
     Connman::TechnologyRegistry &tech_reg_;
     bool started_;
@@ -160,7 +159,7 @@ class AccessPoint
     std::unique_ptr<RequestBase>
     figure_out_current_status(std::unique_ptr<RequestBase> request, bool &scheduled);
     void spawn(std::unique_ptr<SpawnRequest> request,
-               std::unique_lock<std::recursive_mutex> &ap_lock);
+               LoggedLock::UniqueLock<LoggedLock::RecMutex> &ap_lock);
     void shutdown(std::unique_ptr<ShutdownRequest> request);
     void request_done(Connman::TechnologyPropertiesBase::StoreResult result,
                       bool is_tethering, Status status);

@@ -133,6 +133,7 @@ bool Regs::WLANAccessPoint::DCP::read_107_access_point(std::vector<uint8_t> &buf
       case Network::AccessPoint::Status::ACTIVE:
         try
         {
+            LOGGED_LOCK_CONTEXT_HINT;
             const auto tech_lock(dcpregs_technology_registry->locked());
             const auto &wifi(dcpregs_technology_registry->wifi());
 

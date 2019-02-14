@@ -22,9 +22,9 @@
 #include "accesspoint.hh"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
+#include "logged_lock.hh"
 
 #include <atomic>
-#include <mutex>
 
 namespace Network
 {
@@ -35,7 +35,7 @@ class AccessPointManager
     AccessPoint &ap_;
     std::atomic<AccessPoint::Status> ap_status_;
 
-    mutable std::mutex cache_lock_;
+    mutable LoggedLock::Mutex cache_lock_;
     Connman::NetworkDeviceList cached_network_devices_;
     Connman::ServiceList cached_network_services_;
 
@@ -58,7 +58,7 @@ class AccessPointManager
     bool deactivate(AccessPoint::DoneFn &&done = nullptr);
     AccessPoint::Status get_status() const { return ap_status_; }
 
-    std::unique_lock<std::mutex> lock_cached() const { return std::unique_lock<std::mutex>(cache_lock_); }
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock_cached() const { return LoggedLock::UniqueLock<LoggedLock::Mutex>(cache_lock_); }
     const Connman::NetworkDeviceList &get_cached_network_devices() const { return cached_network_devices_; }
     const Connman::ServiceList &get_cached_service_list() const { return cached_network_services_; }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,9 +20,9 @@
 #define VOLUME_CONTROL_HH
 
 #include "maybe.hh"
+#include "logged_lock.hh"
 
 #include <memory>
-#include <mutex>
 #include <vector>
 
 namespace Mixer
@@ -145,7 +145,7 @@ class VolumeControls
     };
 
   private:
-    mutable std::mutex lock_;
+    mutable LoggedLock::Mutex lock_;
     std::vector<std::unique_ptr<VolumeControl>> controls_;
 
   public:
@@ -154,7 +154,7 @@ class VolumeControls
 
     explicit VolumeControls(std::unique_ptr<VolumeControl> predefined_master);
 
-    static std::pair<VolumeControls *const, std::unique_lock<std::mutex>> get_singleton();
+    static std::pair<VolumeControls *const, LoggedLock::UniqueLock<LoggedLock::Mutex>> get_singleton();
 
     /* replace properties of given control */
     Result replace_control_properties(uint16_t id,
