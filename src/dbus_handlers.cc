@@ -29,6 +29,7 @@
 #include "dcpregs_playstream.hh"
 #include "dcpregs_upnpserver.hh"
 #include "dcpregs_status.hh"
+#include "mainloop.hh"
 #include "network_config_to_json.hh"
 #include "accesspoint_manager.hh"
 #include "volume_control.hh"
@@ -590,6 +591,53 @@ static bool determine_tech_and_mac_from_service_name(
     }
 }
 
+/*!
+ * Wrapper for non-movable objects that should be move captured by a lambda.
+ *
+ * This is primarily needed for C++ 98 stuff that only knows about swap() and
+ * nothing about move semantics.
+ *
+ * In addition, in case the lambda must be stored in a std::function, this
+ * class implements a copy constructor which throws when invoked. This operator
+ * is required by std::function because by standard std::function is copyable.
+ * Thus, by throwing at runtime, we avoid accidental deep copies of large
+ * objects when we really wanted pure move. This also allows move-only objects
+ * being passed to std::function objects.
+ */
+template <typename T>
+class MoveToFunction
+{
+  private:
+    T value_;
+
+  public:
+    MoveToFunction &operator=(const MoveToFunction &) = delete;
+
+    MoveToFunction(const MoveToFunction &)
+    {
+        throw std::runtime_error("MoveToFunction objects shall not be copied");
+    }
+
+    MoveToFunction(MoveToFunction &&src)
+    {
+        std::swap(value_, src.value_);
+    }
+
+    MoveToFunction &operator=(MoveToFunction &&src)
+    {
+        std::swap(value_, src.value_);
+        return *this;
+    }
+
+    explicit MoveToFunction(T &value)
+    {
+        std::swap(value_, value);
+    }
+
+    const T &get() const { return value_; }
+    T &get() { return value_; }
+};
+
 gboolean
 dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
                                              GDBusMethodInvocation *invocation,
@@ -610,45 +658,53 @@ dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
                                                  tech, mac))
         return TRUE;
 
-    Network::ConfigRequest req;
-    bool has_wlan_settings;
+    MoveToFunction<Json::Value> json_moved(json);
 
-    try
-    {
-        has_wlan_settings =
-            set_network_service_configuration(invocation, json,
-                                              tech, req, mac);
-    }
-    catch(const std::runtime_error &e)
-    {
-        /* some data is missing or unexpected */
-        return TRUE;
-    }
-    catch(const std::domain_error &e)
-    {
-        /* bad MAC address */
-        return TRUE;
-    }
+    MainLoop::post(
+        [object, invocation, user_data, tech,
+         mac(std::move(mac)), json(std::move(json_moved))]
+        () mutable
+        {
+            Network::ConfigRequest req;
+            bool has_wlan_settings;
 
-    if(mac.empty())
-    {
-        g_dbus_method_invocation_return_error(
-            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-            "MAC address unknown");
-        return TRUE;
-    }
+            try
+            {
+                has_wlan_settings =
+                    set_network_service_configuration(invocation, json.get(),
+                                                      tech, req, mac);
+            }
+            catch(const std::runtime_error &e)
+            {
+                /* some data is missing or unexpected */
+                return;
+            }
+            catch(const std::domain_error &e)
+            {
+                /* bad MAC address */
+                return;
+            }
 
-    if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY && has_wlan_settings)
-        tech = Connman::Technology::WLAN;
+            if(mac.empty())
+            {
+                g_dbus_method_invocation_return_error(
+                    invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                    "MAC address unknown");
+                return;
+            }
 
-    auto &apman = *static_cast<Network::AccessPointManager *>(user_data);
+            if(tech == Connman::Technology::UNKNOWN_TECHNOLOGY && has_wlan_settings)
+                tech = Connman::Technology::WLAN;
 
-    if(Regs::NetworkConfig::request_configuration_for_mac(req, mac, tech, apman))
-        tdbus_dcpd_network_complete_set_service_configuration(object, invocation);
-    else
-        g_dbus_method_invocation_return_error(
-            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-            "Invalid configuration request");
+            auto &apman = *static_cast<Network::AccessPointManager *>(user_data);
+
+            if(Regs::NetworkConfig::request_configuration_for_mac(req, mac, tech, apman))
+                tdbus_dcpd_network_complete_set_service_configuration(object, invocation);
+            else
+                g_dbus_method_invocation_return_error(
+                    invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                    "Invalid configuration request");
+        });
 
     return TRUE;
 }
