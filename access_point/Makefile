@@ -8,4 +8,4 @@ clean:
 	rm -f *.pdf
 
 .sdiag.pdf:
-	seqdiag -T pdf $<
+	seqdiag -T pdf -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf $<
