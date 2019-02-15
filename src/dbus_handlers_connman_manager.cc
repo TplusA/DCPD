@@ -28,6 +28,7 @@
 #include "connman_common.h"
 #include "connman_service_list.hh"
 #include "network_device_list.hh"
+#include "mainloop.hh"
 #include "dbus_common.h"
 
 #include <functional>
@@ -2199,7 +2200,10 @@ void Connman::dbussignal_connman_manager(struct _GDBusProxy *proxy, const char *
     if(wman != nullptr)
     {
         log_assert(!wman->is_disabled);
-        do_refresh_services(*wman, false, signal_name);
+        std::string context(signal_name);
+        MainLoop::post(
+            [wman, signal_name(std::move(context))] ()
+            { do_refresh_services(*wman, false, signal_name.c_str()); });
     }
     else
         BUG("Got no data in %s()", __func__);
