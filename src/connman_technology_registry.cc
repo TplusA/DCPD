@@ -134,14 +134,11 @@ void Connman::TechnologyPropertiesWIFI::technology_signal(
 
 void Connman::TechnologyPropertiesWIFI::notify_watchers(Property property, StoreResult result)
 {
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
-
     MainLoop::post(
         [this, property, result] ()
         {
             LOGGED_LOCK_CONTEXT_HINT;
-            std::lock_guard<LoggedLock::Mutex> lk(watchers_lock_);
+            std::lock_guard<LoggedLock::Mutex> lock(watchers_lock_);
 
             for(const auto &fn : watchers_)
                 fn(property, result, *this);
