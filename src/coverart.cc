@@ -39,7 +39,7 @@ static const uint8_t *extract_data(const GVariantWrapper &container,
         g_variant_get_fixed_array(GVariantWrapper::get(container),
                                   &len, sizeof(uint8_t));
 
-    const auto *key = static_cast<const uint8_t *>(bytes);
+    const uint8_t *key = static_cast<const uint8_t *>(bytes);
 
     if(key != nullptr && len != expected_length)
     {
