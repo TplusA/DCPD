@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -235,14 +235,19 @@ static const char *get_service_basename(const char *full_service_name,
                                         size_t *tech_length)
 {
     const char *const before_service = strrchr(full_service_name, '/');
-    const char *const service = before_service + 1;
-    const char *const after_tech = (before_service != NULL) ? strchr(service, '_') : NULL;
+
+    if(before_service == NULL)
+        return NULL;
+
+    const char *const service = &before_service[1];
+    const char *const after_tech = strchr(service, '_');
+
+    if(after_tech == NULL)
+        return NULL;
 
     *tech_length = after_tech - service;
 
-    return before_service != NULL && after_tech != NULL && *tech_length > 0
-        ? service
-        : NULL;
+    return *tech_length > 0 ? service : NULL;
 }
 
 static const char *delete_service_configuration(const char *full_service_name)
@@ -687,7 +692,7 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     {
         unref_collected_requests(requests);
 
-        if(/* cppcheck-suppress knownConditionTrueFalse */ prefsfile != NULL)
+        if(prefsfile != NULL)
             network_prefs_close(prefsfile);
 
         return TRUE;
