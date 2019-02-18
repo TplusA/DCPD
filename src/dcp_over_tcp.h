@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -41,7 +41,7 @@ extern "C" {
 int dot_init(struct dcp_over_tcp_data *dot);
 void dot_handle_incoming(struct dcp_over_tcp_data *dot);
 void dot_handle_outgoing(struct dcp_over_tcp_data *dot,
-                         bool can_read, bool peer_died);
+                         bool can_read_from_peer, bool peer_died);
 void dot_close_peer(struct dcp_over_tcp_data *dot);
 void dot_close(struct dcp_over_tcp_data *dot);
 
