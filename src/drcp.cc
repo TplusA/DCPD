@@ -134,7 +134,6 @@ bool Drcp::read_size_from_fd(int in_fd, size_t &expected_size,
 
             if(eol < &buffer[buffer_pos])
             {
-                expecting_size_value = false;
                 number_string = &buffer[token_start_pos];
                 *eol = '\0';
                 token_start_pos += eol - number_string + 1;
