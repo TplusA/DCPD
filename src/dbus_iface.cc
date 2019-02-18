@@ -24,7 +24,7 @@
 #include "dbus_iface_deep.h"
 #include "dbus_handlers.h"
 #include "dbus_handlers_connman_manager.hh"
-#include "dbus_handlers_connman_agent.h"
+#include "dbus_handlers_connman_agent.hh"
 #include "dbus_common.h"
 #include "dcpd_dbus.h"
 #include "streamplayer_dbus.h"

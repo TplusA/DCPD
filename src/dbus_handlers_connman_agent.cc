@@ -20,16 +20,25 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include "dbus_handlers_connman_agent.h"
+#include "dbus_handlers_connman_agent.hh"
 #include "connman_agent.h"
 #include "networkprefs.h"
+#include "gvariantwrapper.hh"
 #include "messages.h"
 
-#include <string.h>
-#include <inttypes.h>
+#include <array>
+#include <algorithm>
+#include <iterator>
+#include <cstring>
 
+/*
+ * Use this when generating errors in Connman agent error domain (for GLib).
+ */
 #define NET_CONNMAN_AGENT_ERROR (net_connman_agent_error_quark())
 
+/*
+ * Error codes for Connman agent domain (for GLib).
+ */
 enum NetConnmanAgentError
 {
     NET_CONNMAN_AGENT_ERROR_CANCELED,
@@ -39,6 +48,9 @@ enum NetConnmanAgentError
     NET_CONNMAN_AGENT_N_ERRORS,
 };
 
+/*
+ * Error strings for error codes in Connman agent error domain (for GLib).
+ */
 static const GDBusErrorEntry net_connman_agent_error_entries[] =
 {
     { NET_CONNMAN_AGENT_ERROR_CANCELED,       "net.connman.Agent.Error.Canceled" },
@@ -49,6 +61,9 @@ static const GDBusErrorEntry net_connman_agent_error_entries[] =
 
 G_STATIC_ASSERT(G_N_ELEMENTS(net_connman_agent_error_entries) == NET_CONNMAN_AGENT_N_ERRORS);
 
+/*
+ * Connman agent error domain (for GLib).
+ */
 static GQuark net_connman_agent_error_quark(void)
 {
     static volatile gsize quark_volatile = 0;
@@ -66,63 +81,74 @@ struct AgentData
 
 static struct AgentData global_agent_data;
 
-enum RequestID
+template <typename T, size_t N>
+static T string_to_enum_id(const std::array<const std::string, N> &table,
+                           const char *string, const T fallback)
+{
+    const auto it =
+        std::find_if(std::next(table.begin()), table.end(),
+            [&string] (const std::string &id) { return id == string; });
+
+    return it != table.end() ? T(std::distance(table.begin(), it)) : fallback;
+}
+
+enum class RequestID
 {
     /*! Any request not understood by the parser is mapped to this ID */
-    REQUEST_UNKNOWN,
+    UNKNOWN,
 
     /*! Need name of hidden network */
-    REQUEST_NAME,
+    NAME,
 
-    /*! Need SSID of hidden network as an alternative to #REQUEST_NAME */
-    REQUEST_SSID,
+    /*! Need SSID of hidden network as an alternative to #RequestID::NAME */
+    SSID,
 
     /*! Username for EAP authentication */
-    REQUEST_IDENTITY,
+    IDENTITY,
 
     /*! Passphrase for WEP, PSK, etc. */
-    REQUEST_PASSPHRASE,
+    PASSPHRASE,
 
     /*! Passphrase that was tried, but failed (passphrase changed or wrong) */
-    REQUEST_PREVIOUS_PASSPHRASE,
+    PREVIOUS_PASSPHRASE,
 
     /*! Request use of WPS */
-    REQUEST_WPS_PIN,
+    WPS_PIN,
 
     /*! Username for WISPr authentication */
-    REQUEST_USERNAME,
+    USERNAME,
 
     /*! Password for WISPr authentication */
-    REQUEST_PASSWORD,
+    PASSWORD,
 
     /*! Stable name for last ID */
-    REQUEST_LAST_REQUEST_ID = REQUEST_PASSWORD,
+    LAST_REQUEST_ID = PASSWORD,
 };
 
-enum RequestRequirement
+enum class RequestRequirement
 {
     /*! Special ID to express that there was no request for a #RequestID */
-    REQREQ_NOT_REQUESTED,
+    NOT_REQUESTED,
 
     /*! Answer to request is mandatory, or the request must fail */
-    REQREQ_MANDATORY,
+    MANDATORY,
 
     /*! Answer to request is optional, information not required for success */
-    REQREQ_OPTIONAL,
+    OPTIONAL,
 
     /*! Requested field is an alternative to another field */
-    REQREQ_ALTERNATE,
+    ALTERNATE,
 
     /*! Field contains information and can be safely ignored */
-    REQREQ_INFORMATIONAL,
+    INFORMATIONAL,
 
     /*! Stable name for last ID */
-    REQREQ_LAST_REQUEST_REQUIREMENT = REQREQ_INFORMATIONAL,
+    LAST_REQUEST_REQUIREMENT = INFORMATIONAL,
 };
 
-static const char *const request_string_ids[] =
+static const std::array<const std::string, size_t(RequestID::LAST_REQUEST_ID) + 1> request_string_ids
 {
-    NULL,
+    "*UNKNOWN*",
     "Name",
     "SSID",
     "Identity",
@@ -133,59 +159,56 @@ static const char *const request_string_ids[] =
     "Password",
 };
 
-static enum RequestID string_to_request_id(const char *string)
+static RequestID string_to_request_id(const char *string)
 {
-    G_STATIC_ASSERT(G_N_ELEMENTS(request_string_ids) == REQUEST_LAST_REQUEST_ID + 1);
-
-    for(enum RequestID i = 1; i <= REQUEST_LAST_REQUEST_ID; ++i)
-    {
-        if(strcmp(request_string_ids[i], string) == 0)
-            return i;
-    }
-
-    return REQUEST_UNKNOWN;
+    return string_to_enum_id(request_string_ids, string, RequestID::UNKNOWN);
 }
 
-static const char *request_id_to_string(const enum RequestID id)
+static const std::string &request_id_to_string(const RequestID id)
 {
-    const char *result = request_string_ids[id];
-    return result != NULL ? result : "*UNKNOWN*";
+    return request_string_ids[size_t(id)];
 }
 
-static enum RequestRequirement string_to_request_requirement(const char *string)
+static RequestRequirement string_to_request_requirement(const char *string)
 {
-    static const char *const string_ids[] =
+    static const std::array<const std::string, size_t(RequestRequirement::LAST_REQUEST_REQUIREMENT) + 1> string_ids
     {
-        NULL,
+        "*UNKNOWN*",
         "mandatory",
         "optional",
         "alternate",
         "informational",
     };
 
-    G_STATIC_ASSERT(G_N_ELEMENTS(string_ids) == REQREQ_LAST_REQUEST_REQUIREMENT + 1);
-
-    for(enum RequestRequirement i = 1; i <= REQREQ_LAST_REQUEST_REQUIREMENT; ++i)
-    {
-        if(strcmp(string_ids[i], string) == 0)
-            return i;
-    }
-
-    return REQREQ_NOT_REQUESTED;
+    return string_to_enum_id(string_ids, string, RequestRequirement::NOT_REQUESTED);
 }
 
-struct Request
+class Request
 {
-    enum RequestRequirement requirement;
+  public:
+    RequestRequirement requirement;
     uint32_t alternates;
-    GVariant *variant;
+    GVariantWrapper variant;
     bool is_answered;
+
+    Request(const Request &) = delete;
+    Request(Request &&) = default;
+    Request &operator=(const Request &) = delete;
+    Request &operator=(Request &&) = default;
+
+    explicit Request():
+        requirement(RequestRequirement::NOT_REQUESTED),
+        alternates(0),
+        is_answered(false)
+    {}
 };
+
+using AllRequests = std::array<Request, size_t(RequestID::LAST_REQUEST_ID) + 1>;
 
 static bool send_error_if_possible(GDBusMethodInvocation *invocation,
                                    const char *error_message)
 {
-    if(error_message == NULL)
+    if(error_message == nullptr)
         return false;
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG,
@@ -232,31 +255,31 @@ gboolean dbusmethod_connman_agent_release(tdbusconnmanAgent *object,
 }
 
 static const char *get_service_basename(const char *full_service_name,
-                                        size_t *tech_length)
+                                        size_t &tech_length)
 {
     const char *const before_service = strrchr(full_service_name, '/');
 
-    if(before_service == NULL)
-        return NULL;
+    if(before_service == nullptr)
+        return nullptr;
 
     const char *const service = &before_service[1];
     const char *const after_tech = strchr(service, '_');
 
-    if(after_tech == NULL)
-        return NULL;
+    if(after_tech == nullptr)
+        return nullptr;
 
-    *tech_length = after_tech - service;
+    tech_length = after_tech - service;
 
-    return *tech_length > 0 ? service : NULL;
+    return tech_length > 0 ? service : nullptr;
 }
 
 static const char *delete_service_configuration(const char *full_service_name)
 {
     size_t tech_length;
     const char *const service = get_service_basename(full_service_name,
-                                                     &tech_length);
+                                                     tech_length);
 
-    if(service == NULL)
+    if(service == nullptr)
         return "Malformed service name, cannot delete";
 
     const enum NetworkPrefsTechnology tech =
@@ -272,7 +295,7 @@ static const char *delete_service_configuration(const char *full_service_name)
     struct network_prefs *np;
     struct network_prefs_handle *prefsfile = network_prefs_open_rw(&np, &np);
 
-    if(prefsfile == NULL)
+    if(prefsfile == nullptr)
         return "Failed reading network preferences, cannot delete service";
 
     const bool succeeded =
@@ -281,7 +304,7 @@ static const char *delete_service_configuration(const char *full_service_name)
 
     network_prefs_close(prefsfile);
 
-    return succeeded ? NULL : "Failed removing service from preferences";
+    return succeeded ? nullptr : "Failed removing service from preferences";
 }
 
 gboolean dbusmethod_connman_agent_report_error(tdbusconnmanAgent *object,
@@ -298,7 +321,7 @@ gboolean dbusmethod_connman_agent_report_error(tdbusconnmanAgent *object,
     {
         const char *error_message = delete_service_configuration(arg_service);
 
-        if(error_message != NULL)
+        if(error_message != nullptr)
             msg_error(0, LOG_NOTICE, "Error deleting configuration for %s: %s",
                       arg_service, error_message);
     }
@@ -336,37 +359,30 @@ gboolean dbusmethod_connman_agent_request_browser(tdbusconnmanAgent *object,
     return TRUE;
 }
 
-static void unref_collected_requests(struct Request *requests)
+static void unref_collected_requests(AllRequests &requests)
 {
-    for(enum RequestID i = 0; i <= REQUEST_LAST_REQUEST_ID; ++i)
-    {
-        if(requests[i].variant != NULL)
-        {
-            g_variant_unref(requests[i].variant);
-            requests[i].variant = NULL;
-        }
-    }
+    for(auto &req : requests)
+        req.variant = GVariantWrapper();
 }
 
-static const char *fill_in_request_requirement(struct Request *request,
+static const char *fill_in_request_requirement(Request &request,
                                                GVariant *value)
 {
-    if(request->requirement != REQREQ_NOT_REQUESTED)
+    if(request.requirement != RequestRequirement::NOT_REQUESTED)
         return "Duplicate request requirement";
 
-    request->requirement =
-        string_to_request_requirement(g_variant_get_string(value, NULL));
+    request.requirement =
+        string_to_request_requirement(g_variant_get_string(value, nullptr));
 
-    if(request->requirement == REQREQ_NOT_REQUESTED)
+    if(request.requirement == RequestRequirement::NOT_REQUESTED)
         return "Unknown request requirement";
 
-    return NULL;
+    return nullptr;
 }
 
-static const char *fill_in_alternates(struct Request *request,
-                                      GVariant *value)
+static const char *fill_in_alternates(Request &request, GVariant *value)
 {
-    if(request->alternates != 0)
+    if(request.alternates != 0)
         return "Duplicate request alternates specification";
 
     GVariantIter alternates_iter;
@@ -376,81 +392,77 @@ static const char *fill_in_alternates(struct Request *request,
 
     while(g_variant_iter_next(&alternates_iter, "&s", &alternate))
     {
-        const enum RequestID request_id = string_to_request_id(alternate);
+        const RequestID request_id = string_to_request_id(alternate);
 
-        if(request_id == REQUEST_UNKNOWN)
+        if(request_id == RequestID::UNKNOWN)
             return "Unknown request alternate";
 
-        const uint32_t mask = (1U << (request_id - 1));
+        const uint32_t mask = (1U << (uint32_t(request_id) - 1));
 
-        if((request->alternates & mask) != 0)
+        if((request.alternates & mask) != 0)
             return "Duplicate request alternate field";
 
-        request->alternates |= mask;
+        request.alternates |= mask;
     }
 
-    if(request->alternates == 0)
+    if(request.alternates == 0)
         return "Empty request alternates specification";
 
-    return NULL;
+    return nullptr;
 }
 
-static const char *collect_requests(struct Request *requests, GVariant *request)
+static const char *collect_requests(AllRequests &requests, GVariant *request)
 {
     GVariantIter request_iter;
     g_variant_iter_init(&request_iter, request);
 
-    const char *return_string = NULL;
+    const char *return_string = nullptr;
 
     const gchar *request_key;
-    GVariant *request_details;
+    GVariant *request_details_variant;
 
-    while(return_string == NULL &&
-          g_variant_iter_next(&request_iter, "{&sv}", &request_key, &request_details))
+    while(return_string == nullptr &&
+          g_variant_iter_next(&request_iter, "{&sv}",
+                              &request_key, &request_details_variant))
     {
-        const enum RequestID request_id = string_to_request_id(request_key);
+        GVariantWrapper request_details(request_details_variant, GVariantWrapper::Transfer::JUST_MOVE);
+        const RequestID request_id = string_to_request_id(request_key);
 
-        if(request_id == REQUEST_UNKNOWN)
+        if(request_id == RequestID::UNKNOWN)
         {
             return_string = "Unknown request";
-            goto error_request;
+            continue;
         }
 
-        if(requests[request_id].variant != NULL)
+        auto &req(requests[size_t(request_id)]);
+
+        if(req.variant != nullptr)
         {
             return_string = "Duplicate request";
-            goto error_request;
+            continue;
         }
 
         GVariantIter detail_iter;
-        g_variant_iter_init(&detail_iter, request_details);
+        g_variant_iter_init(&detail_iter, GVariantWrapper::get(request_details));
 
         const gchar *detail_key;
         GVariant *detail_value;
 
-        while(return_string == NULL &&
+        while(return_string == nullptr &&
               g_variant_iter_next(&detail_iter, "{&sv}", &detail_key, &detail_value))
         {
             if(strcmp(detail_key, "Requirement") == 0)
-                return_string = fill_in_request_requirement(&requests[request_id],
-                                                            detail_value);
+                return_string = fill_in_request_requirement(req, detail_value);
             else if(strcmp(detail_key, "Alternates") == 0)
-                return_string = fill_in_alternates(&requests[request_id],
-                                                   detail_value);
+                return_string = fill_in_alternates(req, detail_value);
 
             g_variant_unref(detail_value);
         }
 
-        if(requests[request_id].requirement != REQREQ_NOT_REQUESTED)
-        {
-            g_variant_ref(request_details);
-            requests[request_id].variant = request_details;
-        }
-        else if(return_string == NULL)
+        if(req.requirement != RequestRequirement::NOT_REQUESTED)
+            req.variant = request_details;
+        else if(return_string == nullptr)
             return_string = "Missing request requirement";
-
-error_request:
-        g_variant_unref(request_details);
     }
 
     return return_string;
@@ -459,7 +471,7 @@ error_request:
 static const char *wps_get_passphrase(void)
 {
     /* maybe in a distant future we'll support preset passphrases for WPS */
-    return NULL;
+    return nullptr;
 }
 
 static const char *wps_get_pin(void)
@@ -469,97 +481,93 @@ static const char *wps_get_pin(void)
 }
 
 static bool insert_answer(GVariantBuilder *result_builder,
-                          struct Request *request, enum RequestID request_id,
+                          Request &request, RequestID request_id,
                           const struct network_prefs *preferences)
 {
     /* must match #RequestID enumeration */
-    static const char *(*const prefgetters[])(const struct network_prefs *) =
+    static const std::array<const char *(* const)(const struct network_prefs *),
+                            size_t(RequestID::LAST_REQUEST_ID) + 1> prefgetters
     {
-        NULL,
+        nullptr,
         network_prefs_get_name,
         network_prefs_get_ssid,
-        NULL,
+        nullptr,
         network_prefs_get_passphrase,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
     };
-
-    G_STATIC_ASSERT(G_N_ELEMENTS(prefgetters) == REQUEST_LAST_REQUEST_ID + 1);
 
     /* must match #RequestID enumeration */
-    static const char *(*const wpsgetters[])(void) =
+    static const std::array<const char *(*const)(), size_t(RequestID::LAST_REQUEST_ID) + 1> wpsgetters
     {
-        NULL,
-        NULL,
-        NULL,
-        NULL,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
         wps_get_passphrase,
-        NULL,
+        nullptr,
         wps_get_pin,
-        NULL,
-        NULL,
+        nullptr,
+        nullptr,
     };
 
-    G_STATIC_ASSERT(G_N_ELEMENTS(wpsgetters) == REQUEST_LAST_REQUEST_ID + 1);
+    log_assert(!request.is_answered);
 
-    log_assert(request != NULL);
-    log_assert(!request->is_answered);
-
-    if((preferences != NULL && prefgetters[request_id] == NULL) ||
-       (preferences == NULL && wpsgetters[request_id] == NULL))
+    if((preferences != nullptr && prefgetters[size_t(request_id)] == nullptr) ||
+       (preferences == nullptr && wpsgetters[size_t(request_id)] == nullptr))
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "ConnMan request %s not supported",
-                  request_id_to_string(request_id));
+                  request_id_to_string(request_id).c_str());
         return false;
     }
 
-    const char *const value = preferences != NULL
-        ? prefgetters[request_id](preferences)
-        : wpsgetters[request_id]();
+    const char *const value = preferences != nullptr
+        ? prefgetters[size_t(request_id)](preferences)
+        : wpsgetters[size_t(request_id)]();
 
-    if(value == NULL)
+    if(value == nullptr)
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "Have no answer for ConnMan request %s",
-                  request_id_to_string(request_id));
+                  request_id_to_string(request_id).c_str());
         return false;
     }
 
     g_variant_builder_add(result_builder, "{sv}",
-                          request_string_ids[request_id],
+                          request_string_ids[size_t(request_id)],
                           g_variant_new_string(value));
-    request->is_answered = true;
+    request.is_answered = true;
 
     return true;
 }
 
 static bool insert_alternate_answer(GVariantBuilder *result_builder,
-                                    struct Request *requests,
-                                    enum RequestID related_id,
+                                    AllRequests &requests,
+                                    RequestID related_id,
                                     const struct network_prefs *preferences)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE,
               "FIND ALTERNATE answer for unanswered request %s",
-              request_id_to_string(related_id));
+              request_id_to_string(related_id).c_str());
 
-    if(requests[related_id].alternates != 0)
+    if(requests[size_t(related_id)].alternates != 0)
     {
-        enum RequestID alternate_id = REQUEST_UNKNOWN;
+        auto alternate_id = RequestID::UNKNOWN;
 
-        for(uint32_t alternates = requests[related_id].alternates;
+        for(uint32_t alternates = requests[size_t(related_id)].alternates;
             alternates != 0;
             alternates >>= 1)
         {
-            ++alternate_id;
+            alternate_id = RequestID(size_t(alternate_id) + 1);
 
             if((alternates & 1U) == 0)
                 continue;
 
-            log_assert(alternate_id <= REQUEST_LAST_REQUEST_ID);
+            log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
 
-            if(insert_answer(result_builder, &requests[alternate_id],
+            if(insert_answer(result_builder, requests[size_t(alternate_id)],
                              alternate_id, preferences))
                 return true;
             else
@@ -569,40 +577,40 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
     }
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %s",
-              request_id_to_string(related_id));
+              request_id_to_string(related_id).c_str());
 
     return false;
 }
 
-static void wipe_out_alternates(struct Request *requests, enum RequestID related_id)
+static void wipe_out_alternates(AllRequests &requests, RequestID related_id)
 {
-    uint32_t alternates = requests[related_id].alternates;
+    uint32_t alternates = requests[size_t(related_id)].alternates;
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "WIPE OUT alternates 0x%08x for %s",
-              alternates, request_id_to_string(related_id));
+              alternates, request_id_to_string(related_id).c_str());
 
     if(alternates == 0)
         return;
 
-    requests[related_id].alternates = 0;
+    requests[size_t(related_id)].alternates = 0;
 
-    enum RequestID alternate_id = REQUEST_UNKNOWN;
+    auto alternate_id = RequestID::UNKNOWN;
 
     for(/* nothing */; alternates != 0; alternates >>= 1)
     {
-        ++alternate_id;
+        alternate_id = RequestID(size_t(alternate_id) + 1);
 
         if((alternates & 1U) == 0)
             continue;
 
-        log_assert(alternate_id <= REQUEST_LAST_REQUEST_ID);
+        log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
 
         msg_vinfo(MESSAGE_LEVEL_TRACE,
                   "Wipe out alternate %s for processed %s",
-                  request_id_to_string(alternate_id),
-                  request_id_to_string(related_id));
+                  request_id_to_string(alternate_id).c_str(),
+                  request_id_to_string(related_id).c_str());
 
-        requests[alternate_id].requirement = REQREQ_NOT_REQUESTED;
+        requests[size_t(alternate_id)].requirement = RequestRequirement::NOT_REQUESTED;
         wipe_out_alternates(requests, alternate_id);
     }
 }
@@ -612,15 +620,15 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
                              const struct network_prefs **preferences,
                              const char *full_service_name)
 {
-    *preferences = NULL;
+    *preferences = nullptr;
 
     size_t tech_length;
     const char *const service = get_service_basename(full_service_name,
-                                                     &tech_length);
+                                                     tech_length);
 
-    if(service == NULL)
+    if(service == nullptr)
     {
-        *prefsfile = NULL;
+        *prefsfile = nullptr;
         return "Malformed service name";
     }
 
@@ -633,17 +641,17 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
         *prefsfile = network_prefs_open_ro(&dummy, &prefs);
     else
     {
-        *prefsfile = NULL;
+        *prefsfile = nullptr;
         return "Technology unknown";
     }
 
-    if(*prefsfile == NULL)
+    if(*prefsfile == nullptr)
         return "Failed reading network preferences";
 
-    if(prefs == NULL)
+    if(prefs == nullptr)
     {
         network_prefs_close(*prefsfile);
-        *prefsfile = NULL;
+        *prefsfile = nullptr;
         return "Network preferences not found for service name";
     }
 
@@ -655,13 +663,13 @@ find_preferences_for_service(struct network_prefs_handle **prefsfile,
     if(network_prefs_generate_service_name(prefs, buffer, sizeof(buffer), true) == 0)
     {
         network_prefs_close(*prefsfile);
-        *prefsfile = NULL;
+        *prefsfile = nullptr;
         return "Network preferences incomplete";
     }
 
     *preferences = prefs;
 
-    return NULL;
+    return nullptr;
 }
 
 gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
@@ -674,17 +682,17 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "Got request for service \"%s\"", arg_service);
 
-    struct network_prefs_handle *prefsfile = NULL;
-    const struct network_prefs *preferences = NULL;
+    struct network_prefs_handle *prefsfile = nullptr;
+    const struct network_prefs *preferences = nullptr;
 
     const char *error_message = global_agent_data.is_wps_mode
-        ? NULL
+        ? nullptr
         : find_preferences_for_service(&prefsfile, &preferences, arg_service);
 
     if(send_error_if_possible(invocation, error_message))
         return TRUE;
 
-    struct Request requests[REQUEST_LAST_REQUEST_ID + 1] = {{ 0 }};
+    AllRequests requests;
 
     error_message = collect_requests(requests, arg_fields);
 
@@ -692,7 +700,7 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     {
         unref_collected_requests(requests);
 
-        if(prefsfile != NULL)
+        if(prefsfile != nullptr)
             network_prefs_close(prefsfile);
 
         return TRUE;
@@ -703,37 +711,40 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
 
     /* fill in the mandatory requests first, fall back to alternate requests if
      * necessary, fail if not possible */
-    for(enum RequestID i = 0; error_message == NULL && i <= REQUEST_LAST_REQUEST_ID; ++i)
+    for(size_t i = 0;
+        error_message == nullptr && i <= size_t(RequestID::LAST_REQUEST_ID);
+        ++i)
     {
-        struct Request *const request = &requests[i];
+        auto &request = requests[i];
+        auto request_id = RequestID(i);
 
-        switch(request->requirement)
+        switch(request.requirement)
         {
-          case REQREQ_NOT_REQUESTED:
-          case REQREQ_ALTERNATE:
-          case REQREQ_INFORMATIONAL:
+          case RequestRequirement::NOT_REQUESTED:
+          case RequestRequirement::ALTERNATE:
+          case RequestRequirement::INFORMATIONAL:
             continue;
 
-          case REQREQ_MANDATORY:
-          case REQREQ_OPTIONAL:
-            if(!insert_answer(&result_builder, request, i, preferences) &&
-               !insert_alternate_answer(&result_builder, requests, i, preferences))
+          case RequestRequirement::MANDATORY:
+          case RequestRequirement::OPTIONAL:
+            if(!insert_answer(&result_builder, request, request_id, preferences) &&
+               !insert_alternate_answer(&result_builder, requests, request_id, preferences))
             {
-                if(request->requirement == REQREQ_MANDATORY)
+                if(request.requirement == RequestRequirement::MANDATORY)
                 {
                     msg_error(0, LOG_ERR,
                               "Answer to mandatory request %s not known",
-                              request_id_to_string(i));
+                              request_id_to_string(request_id).c_str());
                     error_message = "Answer to mandatory request unknown";
                 }
                 else
                     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                               "Answer to optional request %s not known",
-                              request_id_to_string(i));
+                              request_id_to_string(request_id).c_str());
             }
 
-            if(error_message == NULL)
-                wipe_out_alternates(requests, i);
+            if(error_message == nullptr)
+                wipe_out_alternates(requests, request_id);
 
             break;
         }
@@ -743,7 +754,7 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
 
     unref_collected_requests(requests);
 
-    if(prefsfile != NULL)
+    if(prefsfile != nullptr)
         network_prefs_close(prefsfile);
 
     if(send_error_if_possible(invocation, error_message))

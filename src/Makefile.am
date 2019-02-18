@@ -48,7 +48,7 @@ dcpd_SOURCES = \
     coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
     dbus_iface.cc dbus_iface.hh dbus_iface_deep.h \
-    dbus_handlers.h dbus_handlers_connman_agent.h connman_agent.h \
+    dbus_handlers.h dbus_handlers_connman_agent.hh connman_agent.h \
     dbus_handlers_connman_manager.hh \
     configuration.cc configuration.hh configuration_base.hh configuration_changed.hh \
     configuration_settings.hh inifile.h \
@@ -175,7 +175,7 @@ libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.cc dbus_handlers.h \
-    dbus_handlers_connman_agent.c dbus_handlers_connman_agent.h connman_agent.h \
+    dbus_handlers_connman_agent.cc dbus_handlers_connman_agent.hh connman_agent.h \
     dbus_handlers_connman_manager.cc dbus_handlers_connman_manager.hh \
     network_config_to_json.cc network_config_to_json.hh \
     networkprefs.h \

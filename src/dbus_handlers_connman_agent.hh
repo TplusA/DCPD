@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DBUS_HANDLERS_CONNMAN_AGENT_H
-#define DBUS_HANDLERS_CONNMAN_AGENT_H
+#ifndef DBUS_HANDLERS_CONNMAN_AGENT_HH
+#define DBUS_HANDLERS_CONNMAN_AGENT_HH
 
 #include "connman_dbus.h"
 
@@ -71,4 +71,4 @@ gboolean dbusmethod_connman_agent_cancel(tdbusconnmanAgent *object,
 
 /*!@}*/
 
-#endif /* !DBUS_HANDLERS_CONNMAN_AGENT_H */
+#endif /* !DBUS_HANDLERS_CONNMAN_AGENT_HH */
