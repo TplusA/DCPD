@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -435,12 +435,12 @@ static void reset_xmodem_state_for_cover_art(bool is_error)
 
     reset_state(filetransfer_data.xmodem_status, is_error);
 
-    auto &data(filetransfer_data.xmodem_status.src_data.coverart);
-
     if(filetransfer_data.picture_provider == nullptr)
         BUG("No picture provider configured");
     else
     {
+        auto &data(filetransfer_data.xmodem_status.src_data.coverart);
+
         if(!filetransfer_data.picture_provider->copy_picture(data.picture))
             msg_info("No cover art available");
         else
