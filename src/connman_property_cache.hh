@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -201,12 +201,13 @@ class PropertyCache
     template <typename T>
     bool do_commit(Property property)
     {
-        PropertyContainer<T> &c(store_);
-        const auto &key(PropertyContainers::keys[size_t(property)]);
         bool result = false;
 
         try
         {
+            PropertyContainer<T> &c(store_);
+            const auto &key(PropertyContainers::keys[size_t(property)]);
+
             if(c.values.find(key) == c.values.end() ||
                c.values[key] != c.pending.at(key))
             {
