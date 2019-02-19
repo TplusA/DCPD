@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,6 +25,7 @@
 #include "messages.h"
 
 #include <array>
+#include <algorithm>
 
 static const char system_language_code_key[]     = "@drcpd::i18n:language_code";
 static const char system_language_variant_key[]  = "@drcpd::i18n:country_code";
@@ -139,13 +140,13 @@ static void fixup_empty_airable_language_code(std::string &airable_lc,
 
     if(!system_lc.empty())
     {
-        for(const auto &supported : { "de", "en", "es", "fr", "it", })
+        static const std::array<const char *const, 5> supported { "de", "en", "es", "fr", "it", };
+
+        if(std::any_of(supported.begin(), supported.end(),
+            [&system_lc] (const char *lang) { return system_lc == lang; }))
         {
-            if(system_lc == supported)
-            {
-                airable_lc = system_lc;
-                return;
-            }
+            airable_lc = system_lc;
+            return;
         }
     }
 

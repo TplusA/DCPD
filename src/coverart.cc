@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -39,7 +39,7 @@ static const uint8_t *extract_data(const GVariantWrapper &container,
         g_variant_get_fixed_array(GVariantWrapper::get(container),
                                   &len, sizeof(uint8_t));
 
-    const auto *key = static_cast<const uint8_t *>(bytes);
+    const uint8_t *key = static_cast<const uint8_t *>(bytes);
 
     if(key != nullptr && len != expected_length)
     {
@@ -163,7 +163,7 @@ size_t CoverArt::Picture::copy_hash(uint8_t *buffer, size_t buffer_size) const
     return HASH_SIZE;
 }
 
-void CoverArt::generate_stream_key_for_app(CoverArt::StreamKey &key,
+void CoverArt::generate_stream_key_for_app(CoverArt::StreamKey &stream_key,
                                            const std::string &url)
 {
     MD5::Context ctx;
@@ -172,5 +172,5 @@ void CoverArt::generate_stream_key_for_app(CoverArt::StreamKey &key,
     MD5::Hash hash;
     MD5::finish(ctx, hash);
 
-    std::copy(hash.begin(), hash.end(), &key.key_[0]);
+    std::copy(hash.begin(), hash.end(), &stream_key.key_[0]);
 }

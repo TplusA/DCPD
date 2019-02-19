@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -20,7 +20,11 @@
 #define DCPREGS_FILETRANSFER_HH
 
 #include "de_tahifi_lists_errors.h"
-#include "coverart.hh"
+
+#include <cinttypes>
+#include <cstdlib>
+
+namespace CoverArt { class PictureProviderIface; }
 
 /*!
  * \addtogroup registers

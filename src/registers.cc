@@ -690,14 +690,14 @@ const Regs::Register *Regs::lookup(uint8_t register_number)
     return nullptr;
 }
 
-static Regs::PrivateData config;
+static Regs::PrivateData registers_private_config;
 
 const Regs::PrivateData &Regs::get_data()
 {
-    return config;
+    return registers_private_config;
 }
 
 Regs::PrivateData &Regs::get_nonconst_data()
 {
-    return config;
+    return registers_private_config;
 }

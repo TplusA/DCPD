@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -433,7 +433,7 @@ class ServiceNameComponents
     {}
 
   public:
-    static ServiceNameComponents from_service_name(const char *name);
+    static ServiceNameComponents from_service_name(const char *service_name);
 };
 
 }

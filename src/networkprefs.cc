@@ -1004,12 +1004,7 @@ static char *generate_network_config_file_name(const char *connman_config_path,
     char *const dest =
         filename + prefix_length + 1 + cfg_template.replacement_start_offset;
 
-    /* Justification for the suppression below: \c nullptr dereference is
-     * actually not possible because \c is_wired is true if and only if
-     * \p ethernet_mac is not \c nullptr, and we can only come to this point if
-     * \c is_wired is true, implying we have a valid pointer here. */
-    const auto mac_string(// cppcheck-suppress nullPointer
-                          ethernet_mac->get_string());
+    const auto mac_string(ethernet_mac->get_string());
 
     for(size_t i = 0, j = 0; i < 6 * 2; i += 2, j += 3)
     {

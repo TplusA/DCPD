@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -22,11 +22,12 @@
 
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
-#include "messages.h"
+#include "coverart.hh"
 #include "dbus_iface_deep.h"
 #include "registers_priv.hh"
 #include "xmodem.h"
 #include "inifile.h"
+#include "logged_lock.hh"
 #include "shutdown_guard.h"
 
 #include <cstring>
@@ -55,34 +56,57 @@ enum XModemSource
     XMODEM_SOURCE_COVER_ART,
 };
 
-struct XmodemSourceDBusDLData
+class XmodemSourceDBusDLData
 {
+  public:
     /*! Full path of the temporary file currently being transferred. */
     char *path;
 
     /*! Mapped file currently being transferred. */
     struct os_mapped_file_data mapped_file;
+
+    XmodemSourceDBusDLData(const XmodemSourceDBusDLData &) = delete;
+    XmodemSourceDBusDLData(XmodemSourceDBusDLData &&) = default;
+    XmodemSourceDBusDLData &operator=(const XmodemSourceDBusDLData &) = delete;
+    XmodemSourceDBusDLData &operator=(XmodemSourceDBusDLData &&) = default;
+
+    explicit XmodemSourceDBusDLData():
+        path(nullptr),
+        mapped_file{-1, nullptr, 0}
+    {}
 };
 
-struct XModemSourceCoverArtData
+class XModemSourceCoverArtData
 {
+  public:
     bool in_progress;
 
     /*! Contains data stored in RAM, type enforced by XMODEM interface */
     struct os_mapped_file_data dummy_file;
     CoverArt::Picture picture;
+
+    XModemSourceCoverArtData(const XModemSourceCoverArtData &) = delete;
+    XModemSourceCoverArtData(XModemSourceCoverArtData &&) = default;
+    XModemSourceCoverArtData &operator=(const XModemSourceCoverArtData &) = delete;
+    XModemSourceCoverArtData &operator=(XModemSourceCoverArtData &&) = default;
+
+    explicit XModemSourceCoverArtData():
+        in_progress(false),
+        dummy_file{-1, nullptr, 0}
+    {}
 };
 
-struct XModemStatus
+class XModemStatus
 {
-    GMutex lock;
+  public:
+    LoggedLock::Mutex lock;
 
     XModemSource source;
 
     struct
     {
-        struct XmodemSourceDBusDLData   dbusdl;
-        struct XModemSourceCoverArtData coverart;
+        XmodemSourceDBusDLData   dbusdl;
+        XModemSourceCoverArtData coverart;
     }
     src_data;
 
@@ -96,6 +120,18 @@ struct XModemStatus
      *     #XMODEM_PROGRESS_RATE_LIMIT
      */
     int progress_rate_limit;
+
+    XModemStatus(const XModemStatus &) = delete;
+    XModemStatus(XModemStatus &&) = default;
+    XModemStatus &operator=(const XModemStatus &) = delete;
+    XModemStatus &operator=(XModemStatus &&) = default;
+
+    explicit XModemStatus():
+        source(XMODEM_SOURCE_NONE),
+        progress_rate_limit(0)
+    {
+        LoggedLock::configure(lock, "XModemStatus", MESSAGE_LEVEL_DEBUG);
+    }
 };
 
 template <XModemSource SRC>
@@ -258,16 +294,18 @@ struct XModemStatusTraits<XMODEM_SOURCE_COVER_ART>
     }
 };
 
-struct FileTransferData
+class FileTransferData
 {
+  public:
     struct ShutdownGuard *shutdown_guard;
 
     char url[MAXIMUM_URL_LENGTH + 1];
     const CoverArt::PictureProviderIface *picture_provider;
 
-    struct
+    class DownloadStatus
     {
-        GMutex lock;
+      public:
+        LoggedLock::Mutex lock;
 
         /*! Transfer ID as returned by D-Bus DL, 0 for no transfer. */
         uint32_t xfer_id;
@@ -291,13 +329,49 @@ struct FileTransferData
          * false, and #percent is equal to 100.
          */
         uint8_t result;
-    }
-    download_status;
 
-    struct XModemStatus xmodem_status;
+        DownloadStatus(const DownloadStatus &) = delete;
+        DownloadStatus(DownloadStatus &&) = default;
+        DownloadStatus &operator=(const DownloadStatus &) = delete;
+        DownloadStatus &operator=(DownloadStatus &&) = default;
+
+        explicit DownloadStatus():
+            xfer_id(0),
+            is_in_progress(false),
+            percent(0),
+            result(0)
+        {
+            LoggedLock::configure(lock, "FileTransferData::DownloadStatus",
+                                  MESSAGE_LEVEL_DEBUG);
+        }
+    };
+
+    DownloadStatus download_status;
+    XModemStatus xmodem_status;
+
+    FileTransferData(const FileTransferData &) = delete;
+    FileTransferData(FileTransferData &&) = default;
+    FileTransferData &operator=(const FileTransferData &) = delete;
+    FileTransferData &operator=(FileTransferData &&) = default;
+
+    explicit FileTransferData():
+        shutdown_guard(shutdown_guard_alloc("filetransfer")),
+        url{0},
+        picture_provider(nullptr)
+    {}
+
+    ~FileTransferData()
+    {
+        if(shutdown_guard != nullptr)
+            shutdown_guard_free(&shutdown_guard);
+
+        XModemStatusTraits<XMODEM_SOURCE_NONE>::free_resources(xmodem_status);
+        XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::free_resources(xmodem_status);
+        XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::free_resources(xmodem_status);
+    }
 };
 
-static struct FileTransferData filetransfer_data;
+static std::unique_ptr<FileTransferData> filetransfer_data;
 
 static int handle_dbus_error(GError **error)
 {
@@ -320,22 +394,22 @@ static int handle_dbus_error(GError **error)
  */
 static void request_cancel_transfer_if_necessary()
 {
-    if(!filetransfer_data.download_status.is_in_progress)
+    if(!filetransfer_data->download_status.is_in_progress)
         return;
 
     GError *error = NULL;
 
     if(tdbus_file_transfer_call_cancel_sync(dbus_get_file_transfer_iface(),
-                                            filetransfer_data.download_status.xfer_id,
+                                            filetransfer_data->download_status.xfer_id,
                                             NULL, &error))
     {
-        filetransfer_data.download_status.xfer_id = 0;
-        filetransfer_data.download_status.is_in_progress = false;
+        filetransfer_data->download_status.xfer_id = 0;
+        filetransfer_data->download_status.is_in_progress = false;
     }
     else
     {
         msg_error(0, LOG_ERR, "Failed canceling download %u",
-                  filetransfer_data.download_status.xfer_id);
+                  filetransfer_data->download_status.xfer_id);
     }
 
     (void)handle_dbus_error(&error);
@@ -343,15 +417,16 @@ static void request_cancel_transfer_if_necessary()
 
 static void cleanup_transfer()
 {
-    g_mutex_lock(&filetransfer_data.download_status.lock);
-    request_cancel_transfer_if_necessary();
-    filetransfer_data.download_status.xfer_id = 0;
-    filetransfer_data.download_status.is_in_progress = false;
-    filetransfer_data.download_status.percent = UINT8_MAX;
-    filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_OK;
-    g_mutex_unlock(&filetransfer_data.download_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(filetransfer_data->download_status.lock);
 
-    filetransfer_data.url[0] = '\0';
+    request_cancel_transfer_if_necessary();
+    filetransfer_data->download_status.xfer_id = 0;
+    filetransfer_data->download_status.is_in_progress = false;
+    filetransfer_data->download_status.percent = UINT8_MAX;
+    filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_OK;
+
+    filetransfer_data->url[0] = '\0';
 }
 
 static bool is_xmodem_transfer_in_progress(const XModemStatus &status)
@@ -373,7 +448,7 @@ static bool is_xmodem_transfer_in_progress(const XModemStatus &status)
 
 static void reset_state(XModemStatus &status, bool is_error)
 {
-    if(is_xmodem_transfer_in_progress(filetransfer_data.xmodem_status))
+    if(is_xmodem_transfer_in_progress(filetransfer_data->xmodem_status))
     {
         if(is_error)
             msg_error(0, LOG_WARNING, "Aborting XMODEM transfer");
@@ -381,75 +456,74 @@ static void reset_state(XModemStatus &status, bool is_error)
             msg_info("Finished XMODEM transfer");
     }
 
-    switch(filetransfer_data.xmodem_status.source)
+    switch(filetransfer_data->xmodem_status.source)
     {
       case XMODEM_SOURCE_NONE:
-        XModemStatusTraits<XMODEM_SOURCE_NONE>::reset_state(filetransfer_data.xmodem_status);
+        XModemStatusTraits<XMODEM_SOURCE_NONE>::reset_state(filetransfer_data->xmodem_status);
         break;
 
       case XMODEM_SOURCE_DBUSDL:
-        XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::reset_state(filetransfer_data.xmodem_status);
+        XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::reset_state(filetransfer_data->xmodem_status);
         break;
 
       case XMODEM_SOURCE_COVER_ART:
-        XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::reset_state(filetransfer_data.xmodem_status);
+        XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::reset_state(filetransfer_data->xmodem_status);
         break;
     }
 
-    filetransfer_data.xmodem_status.source = XMODEM_SOURCE_NONE;
+    filetransfer_data->xmodem_status.source = XMODEM_SOURCE_NONE;
 
-    xmodem_init(&filetransfer_data.xmodem_status.xm_ctx, NULL);
+    xmodem_init(&filetransfer_data->xmodem_status.xm_ctx, NULL);
 }
 
 static void reset_xmodem_state_generic(bool is_error)
 {
-    g_mutex_lock(&filetransfer_data.xmodem_status.lock);
-    reset_state(filetransfer_data.xmodem_status, is_error);
-    g_mutex_unlock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(filetransfer_data->xmodem_status.lock);
+    reset_state(filetransfer_data->xmodem_status, is_error);
 }
 
 static void reset_xmodem_state_for_dbusdl(const char *path, bool is_error)
 {
-    g_mutex_lock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(filetransfer_data->xmodem_status.lock);
 
-    reset_state(filetransfer_data.xmodem_status, is_error);
+    reset_state(filetransfer_data->xmodem_status, is_error);
 
-    if(path != nullptr)
-    {
-        auto &data(filetransfer_data.xmodem_status.src_data.dbusdl);
+    if(path == nullptr)
+        return;
 
-        data.path = strdup(path);
+    auto &data(filetransfer_data->xmodem_status.src_data.dbusdl);
 
-        if(data.path == nullptr)
-            msg_out_of_memory("Path string");
+    data.path = strdup(path);
 
-        filetransfer_data.xmodem_status.source = XMODEM_SOURCE_DBUSDL;
-    }
+    if(data.path == nullptr)
+        msg_out_of_memory("Path string");
 
-    g_mutex_unlock(&filetransfer_data.xmodem_status.lock);
+    filetransfer_data->xmodem_status.source = XMODEM_SOURCE_DBUSDL;
 }
 
 static void reset_xmodem_state_for_cover_art(bool is_error)
 {
-    g_mutex_lock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(filetransfer_data->xmodem_status.lock);
 
-    reset_state(filetransfer_data.xmodem_status, is_error);
+    reset_state(filetransfer_data->xmodem_status, is_error);
 
-    auto &data(filetransfer_data.xmodem_status.src_data.coverart);
-
-    if(filetransfer_data.picture_provider == nullptr)
-        BUG("No picture provider configured");
-    else
+    if(filetransfer_data->picture_provider == nullptr)
     {
-        if(!filetransfer_data.picture_provider->copy_picture(data.picture))
-            msg_info("No cover art available");
-        else
-            dump_picture_hash("Copied from provider", data.picture.get_hash_bytes());
-
-        filetransfer_data.xmodem_status.source = XMODEM_SOURCE_COVER_ART;
+        BUG("No picture provider configured");
+        return;
     }
 
-    g_mutex_unlock(&filetransfer_data.xmodem_status.lock);
+    auto &data(filetransfer_data->xmodem_status.src_data.coverart);
+
+    if(!filetransfer_data->picture_provider->copy_picture(data.picture))
+        msg_info("No cover art available");
+    else
+        dump_picture_hash("Copied from provider", data.picture.get_hash_bytes());
+
+    filetransfer_data->xmodem_status.source = XMODEM_SOURCE_COVER_ART;
 }
 
 static bool data_length_is_unexpected(size_t length, size_t expected)
@@ -479,14 +553,16 @@ static bool data_length_is_in_unexpected_range(size_t length,
 
 static int try_start_download_file()
 {
-    if(filetransfer_data.url[0] == '\0')
+    if(filetransfer_data->url[0] == '\0')
     {
         msg_error(EINVAL, LOG_NOTICE, "Download URL not configured");
         return -1;
     }
 
-    g_mutex_lock(&filetransfer_data.download_status.lock);
-    filetransfer_data.download_status.percent = UINT8_MAX;
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(filetransfer_data->download_status.lock);
+
+    filetransfer_data->download_status.percent = UINT8_MAX;
 
     GError *error = NULL;
 
@@ -497,20 +573,18 @@ static int try_start_download_file()
      *        limiting.
      */
     if(tdbus_file_transfer_call_download_sync(dbus_get_file_transfer_iface(),
-                                              filetransfer_data.url,
+                                              filetransfer_data->url,
                                               20,
-                                              &filetransfer_data.download_status.xfer_id,
+                                              &filetransfer_data->download_status.xfer_id,
                                               NULL, &error) &&
-       filetransfer_data.download_status.xfer_id != 0)
+       filetransfer_data->download_status.xfer_id != 0)
     {
         msg_info("Download started, transfer ID %u",
-                 filetransfer_data.download_status.xfer_id);
-        filetransfer_data.download_status.is_in_progress = true;
+                 filetransfer_data->download_status.xfer_id);
+        filetransfer_data->download_status.is_in_progress = true;
     }
     else
-        filetransfer_data.download_status.is_in_progress = false;
-
-    g_mutex_unlock(&filetransfer_data.download_status.lock);
+        filetransfer_data->download_status.is_in_progress = false;
 
     return handle_dbus_error(&error);
 }
@@ -529,7 +603,7 @@ static int try_start_xmodem()
 {
     cleanup_transfer();
 
-    if(is_xmodem_transfer_in_progress(filetransfer_data.xmodem_status))
+    if(is_xmodem_transfer_in_progress(filetransfer_data->xmodem_status))
     {
         msg_info("XMODEM transfer in progress, not restarting");
         return 1;
@@ -537,26 +611,25 @@ static int try_start_xmodem()
 
     int ret = -1;
 
-    g_mutex_lock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock(filetransfer_data->xmodem_status.lock);
 
-    log_assert(filetransfer_data.xmodem_status.xm_ctx.buffer_data.tx_offset == 0);
+    log_assert(filetransfer_data->xmodem_status.xm_ctx.buffer_data.tx_offset == 0);
 
-    switch(filetransfer_data.xmodem_status.source)
+    switch(filetransfer_data->xmodem_status.source)
     {
       case XMODEM_SOURCE_NONE:
-        ret = XModemStatusTraits<XMODEM_SOURCE_NONE>::try_start(filetransfer_data.xmodem_status);
+        ret = XModemStatusTraits<XMODEM_SOURCE_NONE>::try_start(filetransfer_data->xmodem_status);
         break;
 
       case XMODEM_SOURCE_DBUSDL:
-        ret = XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::try_start(filetransfer_data.xmodem_status);
+        ret = XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::try_start(filetransfer_data->xmodem_status);
         break;
 
       case XMODEM_SOURCE_COVER_ART:
-        ret = XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::try_start(filetransfer_data.xmodem_status);
+        ret = XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::try_start(filetransfer_data->xmodem_status);
         break;
     }
-
-    g_mutex_unlock(&filetransfer_data.xmodem_status.lock);
 
     if(ret == 0)
         msg_info("Ready for XMODEM");
@@ -869,7 +942,7 @@ static int try_start_system_update()
  */
 static int do_write_download_control(const uint8_t *data)
 {
-    if(shutdown_guard_is_shutting_down_unlocked(filetransfer_data.shutdown_guard))
+    if(shutdown_guard_is_shutting_down_unlocked(filetransfer_data->shutdown_guard))
     {
         msg_info("Not transferring files during shutdown.");
         return -1;
@@ -883,7 +956,7 @@ static int do_write_download_control(const uint8_t *data)
         if(ret == 0)
         {
             /* report 0% progress */
-            filetransfer_data.xmodem_status.progress_rate_limit = XMODEM_PROGRESS_RATE_LIMIT;
+            filetransfer_data->xmodem_status.progress_rate_limit = XMODEM_PROGRESS_RATE_LIMIT;
             Regs::get_data().register_changed_notification_fn(41);
         }
         else if(ret > 0)
@@ -937,48 +1010,48 @@ int Regs::FileTransfer::DCP::write_40_download_control(const uint8_t *data, size
     if(data_length_is_unexpected(length, 2))
         return -1;
 
-    shutdown_guard_lock(filetransfer_data.shutdown_guard);
+    shutdown_guard_lock(filetransfer_data->shutdown_guard);
     int ret = do_write_download_control(data);
-    shutdown_guard_unlock(filetransfer_data.shutdown_guard);
+    shutdown_guard_unlock(filetransfer_data->shutdown_guard);
 
     return ret;
 }
 
 static void fill_download_status_from_download(uint8_t *response)
 {
-    if(filetransfer_data.download_status.is_in_progress)
+    if(filetransfer_data->download_status.is_in_progress)
     {
         response[0] = HCR_STATUS_CATEGORY_PROGRESS;
         response[1] =
-            (filetransfer_data.download_status.percent < UINT8_MAX)
-            ? filetransfer_data.download_status.percent
+            (filetransfer_data->download_status.percent < UINT8_MAX)
+            ? filetransfer_data->download_status.percent
             : 0;
     }
     else
     {
         response[0] = HCR_STATUS_CATEGORY_DOWNLOAD;
-        response[1] = filetransfer_data.download_status.result;
+        response[1] = filetransfer_data->download_status.result;
     }
 }
 
 static void fill_download_status_from_xmodem(uint8_t *response)
 {
-    if(is_xmodem_transfer_in_progress(filetransfer_data.xmodem_status))
+    if(is_xmodem_transfer_in_progress(filetransfer_data->xmodem_status))
     {
         response[0] = HCR_STATUS_CATEGORY_PROGRESS;
 
-        switch(filetransfer_data.xmodem_status.source)
+        switch(filetransfer_data->xmodem_status.source)
         {
           case XMODEM_SOURCE_NONE:
-            response[1] = XModemStatusTraits<XMODEM_SOURCE_NONE>::get_progress(filetransfer_data.xmodem_status);
+            response[1] = XModemStatusTraits<XMODEM_SOURCE_NONE>::get_progress(filetransfer_data->xmodem_status);
             break;
 
           case XMODEM_SOURCE_DBUSDL:
-            response[1] = XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::get_progress(filetransfer_data.xmodem_status);
+            response[1] = XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::get_progress(filetransfer_data->xmodem_status);
             break;
 
           case XMODEM_SOURCE_COVER_ART:
-            response[1] = XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::get_progress(filetransfer_data.xmodem_status);
+            response[1] = XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::get_progress(filetransfer_data->xmodem_status);
             break;
         }
     }
@@ -996,21 +1069,20 @@ ssize_t Regs::FileTransfer::DCP::read_41_download_status(uint8_t *response, size
     if(data_length_is_unexpected(length, 2))
         return -1;
 
-    g_mutex_lock(&filetransfer_data.download_status.lock);
-    g_mutex_lock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock_dl(filetransfer_data->download_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    std::lock_guard<LoggedLock::Mutex> lock_xm(filetransfer_data->xmodem_status.lock);
 
-    if(filetransfer_data.download_status.xfer_id != 0)
+    if(filetransfer_data->download_status.xfer_id != 0)
         fill_download_status_from_download(response);
-    else if(is_xmodem_transfer_in_progress(filetransfer_data.xmodem_status))
+    else if(is_xmodem_transfer_in_progress(filetransfer_data->xmodem_status))
         fill_download_status_from_xmodem(response);
     else
     {
         response[0] = HCR_STATUS_CATEGORY_GENERIC;
         response[1] = HCR_STATUS_GENERIC_OK;
     }
-
-    g_mutex_unlock(&filetransfer_data.xmodem_status.lock);
-    g_mutex_unlock(&filetransfer_data.download_status.lock);
 
     return length;
 }
@@ -1022,17 +1094,18 @@ ssize_t Regs::FileTransfer::DCP::read_44_xmodem_data(uint8_t *response, size_t l
     if(data_length_is_in_unexpected_range(length, 1, 3 + 128 + 2))
         return -1;
 
-    g_mutex_lock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock(filetransfer_data->xmodem_status.lock);
 
     bool was_successful = false;
 
-    if(!is_xmodem_transfer_in_progress(filetransfer_data.xmodem_status))
+    if(!is_xmodem_transfer_in_progress(filetransfer_data->xmodem_status))
         msg_error(EINVAL, LOG_ERR, "No XMODEM transfer going on");
     else
     {
         const uint8_t *block;
         const ssize_t buffer_size =
-            xmodem_get_block(&filetransfer_data.xmodem_status.xm_ctx, &block);
+            xmodem_get_block(&filetransfer_data->xmodem_status.xm_ctx, &block);
 
         if(buffer_size <= 0)
             msg_error(EINVAL, LOG_ERR, "No data to send via XMODEM");
@@ -1049,9 +1122,9 @@ ssize_t Regs::FileTransfer::DCP::read_44_xmodem_data(uint8_t *response, size_t l
                 msg_vinfo(MESSAGE_LEVEL_DIAG,
                           "Send %zu bytes of XMODEM data, command 0x%02x, block %u",
                           length, response[0], response[1]);
-                if(--filetransfer_data.xmodem_status.progress_rate_limit <= 0)
+                if(--filetransfer_data->xmodem_status.progress_rate_limit <= 0)
                 {
-                    filetransfer_data.xmodem_status.progress_rate_limit = XMODEM_PROGRESS_RATE_LIMIT;
+                    filetransfer_data->xmodem_status.progress_rate_limit = XMODEM_PROGRESS_RATE_LIMIT;
                     Regs::get_data().register_changed_notification_fn(41);
                 }
             }
@@ -1061,13 +1134,14 @@ ssize_t Regs::FileTransfer::DCP::read_44_xmodem_data(uint8_t *response, size_t l
                 msg_vinfo(MESSAGE_LEVEL_DIAG, "Send 1 byte of XMODEM data");
 
                 /* report 100% progress */
-                filetransfer_data.xmodem_status.progress_rate_limit = 0;
+                filetransfer_data->xmodem_status.progress_rate_limit = 0;
                 Regs::get_data().register_changed_notification_fn(41);
             }
         }
     }
 
-    g_mutex_unlock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    lock.unlock();
 
     if(!was_successful)
     {
@@ -1094,15 +1168,16 @@ int Regs::FileTransfer::DCP::write_45_xmodem_command(const uint8_t *data, size_t
         return -1;
     }
 
-    g_mutex_lock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock(filetransfer_data->xmodem_status.lock);
 
     bool was_successful = false;
     bool is_end_of_transmission = false;
 
-    if(is_xmodem_transfer_in_progress(filetransfer_data.xmodem_status))
+    if(is_xmodem_transfer_in_progress(filetransfer_data->xmodem_status))
     {
         const enum XModemResult result =
-            xmodem_process(&filetransfer_data.xmodem_status.xm_ctx, command);
+            xmodem_process(&filetransfer_data->xmodem_status.xm_ctx, command);
 
         switch(result)
         {
@@ -1135,7 +1210,8 @@ int Regs::FileTransfer::DCP::write_45_xmodem_command(const uint8_t *data, size_t
     else
         msg_error(EINVAL, LOG_ERR, "No XMODEM transfer going on");
 
-    g_mutex_unlock(&filetransfer_data.xmodem_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    lock.unlock();
 
     if(!was_successful || is_end_of_transmission)
         reset_xmodem_state_generic(!was_successful);
@@ -1387,7 +1463,7 @@ int Regs::FileTransfer::DCP::write_209_download_url(const uint8_t *data, size_t 
 
     if(length == 0)
     {
-        filetransfer_data.url[0] = '\0';
+        filetransfer_data->url[0] = '\0';
         msg_vinfo(MESSAGE_LEVEL_DEBUG, "Cleared URL");
         return 0;
     }
@@ -1411,10 +1487,10 @@ int Regs::FileTransfer::DCP::write_209_download_url(const uint8_t *data, size_t 
 
     data += 8;
     length -= 8;
-    memcpy(filetransfer_data.url, data, length);
-    filetransfer_data.url[length] = '\0';
+    memcpy(filetransfer_data->url, data, length);
+    filetransfer_data->url[length] = '\0';
 
-    msg_info("Set URL \"%s\"", filetransfer_data.url);
+    msg_info("Set URL \"%s\"", filetransfer_data->url);
 
     return 0;
 }
@@ -1428,19 +1504,21 @@ void Regs::FileTransfer::progress_notification(uint32_t xfer_id,
         ? (uint8_t)(100.0 * ((double)tick / (double)total_ticks))
         : 100;
 
-    g_mutex_lock(&filetransfer_data.download_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock(filetransfer_data->download_status.lock);
 
-    if(filetransfer_data.download_status.is_in_progress &&
-       filetransfer_data.download_status.xfer_id == xfer_id)
+    if(filetransfer_data->download_status.is_in_progress &&
+       filetransfer_data->download_status.xfer_id == xfer_id)
     {
-        if(filetransfer_data.download_status.percent != percent)
+        if(filetransfer_data->download_status.percent != percent)
         {
-            filetransfer_data.download_status.percent = percent;
+            filetransfer_data->download_status.percent = percent;
             changed = true;
         }
     }
 
-    g_mutex_unlock(&filetransfer_data.download_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    lock.unlock();
 
     if(changed)
         Regs::get_data().register_changed_notification_fn(41);
@@ -1452,14 +1530,15 @@ void Regs::FileTransfer::done_notification(uint32_t xfer_id,
 {
     bool changed = false;
 
-    g_mutex_lock(&filetransfer_data.download_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    LoggedLock::UniqueLock<LoggedLock::Mutex> lock(filetransfer_data->download_status.lock);
 
-    if(filetransfer_data.download_status.is_in_progress &&
-       filetransfer_data.download_status.xfer_id == xfer_id)
+    if(filetransfer_data->download_status.is_in_progress &&
+       filetransfer_data->download_status.xfer_id == xfer_id)
     {
-        filetransfer_data.download_status.is_in_progress = false;
-        filetransfer_data.download_status.percent = 100;
-        filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_OK;
+        filetransfer_data->download_status.is_in_progress = false;
+        filetransfer_data->download_status.percent = 100;
+        filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_OK;
 
         switch(error)
         {
@@ -1471,11 +1550,11 @@ void Regs::FileTransfer::done_notification(uint32_t xfer_id,
           case LIST_ERROR_PROTOCOL:
           case LIST_ERROR_INCONSISTENT:
           case LIST_ERROR_NOT_SUPPORTED:
-            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_CRC_ERROR;
+            filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_CRC_ERROR;
             break;
 
           case LIST_ERROR_NET_IO:
-            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_NETWORK_ERROR;
+            filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_NETWORK_ERROR;
             break;
 
           case LIST_ERROR_INVALID_ID:
@@ -1485,21 +1564,21 @@ void Regs::FileTransfer::done_notification(uint32_t xfer_id,
           case LIST_ERROR_INVALID_STRBO_URL:
           case LIST_ERROR_NOT_FOUND:
           case LIST_ERROR_EMPTY:
-            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_FILE_NOT_FOUND;
+            filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_FILE_NOT_FOUND;
             break;
 
           case LIST_ERROR_INTERNAL:
-            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_OUT_OF_MEMORY;
+            filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_OUT_OF_MEMORY;
             break;
 
           case LIST_ERROR_PHYSICAL_MEDIA_IO:
-            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_USB_MEDIA_ERROR;
+            filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_USB_MEDIA_ERROR;
             break;
 
           case LIST_ERROR_OUT_OF_RANGE:
           case LIST_ERROR_OVERFLOWN:
           case LIST_ERROR_UNDERFLOWN:
-            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_DECRYPTION_ERROR;
+            filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_DECRYPTION_ERROR;
             break;
 
           case LIST_ERROR_BUSY_500:
@@ -1509,7 +1588,7 @@ void Regs::FileTransfer::done_notification(uint32_t xfer_id,
           case LIST_ERROR_BUSY_5000:
           case LIST_ERROR_BUSY:
             BUG("List broker is busy, should retry download");
-            filetransfer_data.download_status.result = HCR_STATUS_DOWNLOAD_NETWORK_ERROR;
+            filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_NETWORK_ERROR;
             break;
         }
 
@@ -1533,7 +1612,8 @@ void Regs::FileTransfer::done_notification(uint32_t xfer_id,
         }
     }
 
-    g_mutex_unlock(&filetransfer_data.download_status.lock);
+    LOGGED_LOCK_CONTEXT_HINT;
+    lock.unlock();
 
     if(changed)
         Regs::get_data().register_changed_notification_fn(41);
@@ -1543,33 +1623,21 @@ void Regs::FileTransfer::done_notification(uint32_t xfer_id,
 
 void Regs::FileTransfer::prepare_for_shutdown()
 {
-    if(shutdown_guard_down(filetransfer_data.shutdown_guard))
+    if(shutdown_guard_down(filetransfer_data->shutdown_guard))
         DCP::write_209_download_url(NULL, 0);
 }
 
 void Regs::FileTransfer::init()
 {
-    memset(&filetransfer_data, 0, sizeof(filetransfer_data));
-    g_mutex_init(&filetransfer_data.download_status.lock);
-    g_mutex_init(&filetransfer_data.xmodem_status.lock);
-    filetransfer_data.xmodem_status.source = XMODEM_SOURCE_NONE;
-    filetransfer_data.xmodem_status.src_data.dbusdl.mapped_file.fd = -1;
-    filetransfer_data.xmodem_status.src_data.coverart.dummy_file.fd = -1;
-    filetransfer_data.shutdown_guard = shutdown_guard_alloc("filetransfer");
+    filetransfer_data = std::make_unique<FileTransferData>();
 }
 
 void Regs::FileTransfer::set_picture_provider(const CoverArt::PictureProviderIface &provider)
 {
-    filetransfer_data.picture_provider = &provider;
+    filetransfer_data->picture_provider = &provider;
 }
 
 void Regs::FileTransfer::deinit()
 {
-    g_mutex_clear(&filetransfer_data.download_status.lock);
-    g_mutex_clear(&filetransfer_data.xmodem_status.lock);
-    shutdown_guard_free(&filetransfer_data.shutdown_guard);
-
-    XModemStatusTraits<XMODEM_SOURCE_NONE>::free_resources(filetransfer_data.xmodem_status);
-    XModemStatusTraits<XMODEM_SOURCE_DBUSDL>::free_resources(filetransfer_data.xmodem_status);
-    XModemStatusTraits<XMODEM_SOURCE_COVER_ART>::free_resources(filetransfer_data.xmodem_status);
+    filetransfer_data = nullptr;
 }
