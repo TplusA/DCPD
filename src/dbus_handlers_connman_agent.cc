@@ -536,7 +536,7 @@ static bool insert_answer(GVariantBuilder *result_builder,
     }
 
     g_variant_builder_add(result_builder, "{sv}",
-                          request_string_ids[size_t(request_id)],
+                          request_id_to_string(request_id).c_str(),
                           g_variant_new_string(value));
     request.is_answered = true;
 
