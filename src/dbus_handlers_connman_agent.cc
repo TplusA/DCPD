@@ -460,7 +460,7 @@ static const char *collect_requests(AllRequests &requests, GVariant *request)
         }
 
         if(req.requirement != RequestRequirement::NOT_REQUESTED)
-            req.variant = request_details;
+            req.variant = std::move(request_details);
         else if(return_string == nullptr)
             return_string = "Missing request requirement";
     }
