@@ -1,3 +1,16 @@
+2019-02-20  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.21 released.
+
+	* Access point: When new WLAN settings are sent and the sender
+	  requests to have these settings applied immediately, then the access
+	  point is teared down and a regular WLAN connection is established.
+
+	* Access point: Fixed many lockup situations and instabilities.
+
+	* Networking: Avoid WLAN survey timeouts and other spurious timeouts
+	  due to internal communication deadlocks.
+
 2019-01-23  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.20 released.
