@@ -125,14 +125,10 @@ int Regs::ApplianceVolumeControl::DCP::write_64_volume_control(const uint8_t *da
                 break;
             }
 
-            auto properties = std::unique_ptr<Mixer::VolumeControlProperties>(
-                new Mixer::VolumeControlProperties("Master",
-                                                    Mixer::VolumeScale(params[0]),
-                                                    volume_min_fp.to_double(),
-                                                    volume_max_fp.to_double(),
-                                                    volume_step,
-                                                    db_min_fp.to_double(),
-                                                    db_max_fp.to_double()));
+            auto properties = std::make_unique<Mixer::VolumeControlProperties>(
+                    "Master", Mixer::VolumeScale(params[0]),
+                    volume_min_fp.to_double(), volume_max_fp.to_double(),
+                    volume_step, db_min_fp.to_double(), db_max_fp.to_double());
 
             if(properties == nullptr)
             {
@@ -463,7 +459,7 @@ const Mixer::VolumeControl *Mixer::VolumeControls::get_master() const
  * such that accesses to register 64 can be recognized as an error.
  */
 static Mixer::VolumeControls
-global_volume_controls(std::unique_ptr<Mixer::VolumeControl>(new Mixer::VolumeControl(1, nullptr)));
+global_volume_controls(std::make_unique<Mixer::VolumeControl>(1, nullptr));
 
 std::pair<Mixer::VolumeControls *const, LoggedLock::UniqueLock<LoggedLock::Mutex>>
 Mixer::VolumeControls::get_singleton()

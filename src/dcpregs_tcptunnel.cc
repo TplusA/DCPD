@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -188,7 +188,7 @@ class AllTunnels
         if(it != tunnels_.end())
             return nullptr;
 
-        tunnels_.emplace(port, std::unique_ptr<TcpTunnel>(new TcpTunnel(port, server_fd)));
+        tunnels_.emplace(port, std::make_unique<TcpTunnel>(port, server_fd));
 
         if(tunnels_[port] == nullptr)
         {

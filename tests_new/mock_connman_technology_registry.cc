@@ -128,7 +128,7 @@ void Connman::TechnologyRegistry::connect_to_connman(const void *data)
 
     const char path[] = "mock_wifi_path";
     MockConnmanTechnologyRegistry::Wifi::singleton->expect(
-        new MockConnmanTechnologyRegistry::Wifi::SetDBusObjectPath(path, sd.wifi_tech_proxy));
+        std::make_unique<MockConnmanTechnologyRegistry::Wifi::SetDBusObjectPath>(path, sd.wifi_tech_proxy));
     wifi_properties_.set_dbus_object_path(path);
     MockConnmanTechnologyRegistry::Wifi::singleton->done();
 

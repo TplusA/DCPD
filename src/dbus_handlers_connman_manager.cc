@@ -291,7 +291,7 @@ class WLANConnectionState
 
         state_ = State::ABOUT_TO_CONNECT;
         method_ = method;
-        candidate_.reset(new WLANConnection(std::string(service_name)));
+        candidate_ = std::make_unique<WLANConnection>(std::string(service_name));
     }
 
     void start_connecting()

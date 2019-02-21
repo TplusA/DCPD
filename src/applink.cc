@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -258,7 +258,7 @@ Applink::InputBuffer::parse_line(const size_t begin_pos, Applink::ParserResult &
         return nullptr;
     }
 
-    auto command = std::unique_ptr<Applink::Command>(new Applink::Command(token_equals(ctx, "GET")));
+    auto command = std::make_unique<Applink::Command>(token_equals(ctx, "GET"));
 
     if(command == nullptr)
     {

@@ -991,9 +991,9 @@ static AudioSourceState is_service_unlocked(const AudioSource &src)
 
 void Regs::AudioSources::init()
 {
-    push_80_command_queue.reset(new SlavePushCommandQueue);
-    global_external_service_state.reset(new ExternalServiceState);
-    audio_source_data.reset(new AudioSourceData(
+    push_80_command_queue = std::make_unique<SlavePushCommandQueue>();
+    global_external_service_state = std::make_unique<ExternalServiceState>();
+    audio_source_data = std::make_unique<AudioSourceData, std::array<AudioSource, AudioSourceData::NUMBER_OF_DEFAULT_SOURCES>>(
     {
         AudioSource("strbo.usb",      "USB devices",             AudioSource::IS_BROWSABLE),
         AudioSource("strbo.upnpcm",   "UPnP media servers",      AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_LAN),
@@ -1016,7 +1016,7 @@ void Regs::AudioSources::init()
         AudioSource("roon",           "Roon Ready",              AudioSource::REQUIRES_LAN,
                     nullptr, try_invoke_roon, true),
         AudioSource("",               "Inactive",                0),
-    }));
+    });
 
     audio_source_data->for_each([] (AudioSource &src)
     {

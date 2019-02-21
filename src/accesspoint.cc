@@ -312,9 +312,9 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
         return false;
     }
 
-    std::unique_ptr<SpawnRequest> request(
-            new SpawnRequest(std::move(ssid), std::move(passphrase),
-                             std::move(done_notification)));
+    auto request =
+        std::make_unique<SpawnRequest>(std::move(ssid), std::move(passphrase),
+                                       std::move(done_notification));
 
     if(status_ == Status::UNKNOWN)
     {
@@ -381,7 +381,7 @@ bool Network::AccessPoint::shutdown_request(DoneFn &&done_notification)
         return false;
     }
 
-    std::unique_ptr<ShutdownRequest> request(new ShutdownRequest(std::move(done_notification)));
+    auto request(std::make_unique<ShutdownRequest>(std::move(done_notification)));
 
     if(status_ == Status::UNKNOWN)
     {

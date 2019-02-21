@@ -82,12 +82,12 @@ bool Applink::AppConnections::add_new_peer(int peer_fd)
         return false;
     }
 
-    peers_.emplace(peer_fd, std::unique_ptr<Applink::Peer>(new Applink::Peer(
+    peers_.emplace(peer_fd, std::make_unique<Applink::Peer>(
                                 peer_fd, send_queue_filled_notification_fn_,
                                 [this] (int fd, bool cleanly_closed)
                                 {
                                     close_and_forget_peer(fd);
-                                })));
+                                }));
 
     if(peers_.find(peer_fd) == peers_.end())
     {

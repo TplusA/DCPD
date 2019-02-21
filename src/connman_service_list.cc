@@ -93,8 +93,8 @@ bool Connman::ServiceList::insert(const char *name, ServiceData &&service_data,
     if(services_.find(name) != services_.end())
         return false;
 
-    services_[name].reset(new Service<Technology::ETHERNET>(std::move(service_data),
-                                                            std::move(ethernet_data)));
+    services_[name] = std::make_unique<Service<Technology::ETHERNET>>(std::move(service_data),
+                                                                      std::move(ethernet_data));
 
     ++number_of_ethernet_services_;
 
@@ -107,8 +107,8 @@ bool Connman::ServiceList::insert(const char *name, ServiceData &&service_data,
     if(services_.find(name) != services_.end())
         return false;
 
-    services_[name].reset(new Service<Technology::WLAN>(std::move(service_data),
-                                                        std::move(wlan_data)));
+    services_[name] = std::make_unique<Service<Technology::WLAN>>(std::move(service_data),
+                                                                  std::move(wlan_data));
 
     ++number_of_wlan_services_;
 

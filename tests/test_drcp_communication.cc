@@ -95,7 +95,7 @@ void cut_setup()
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
-    fill_buffer_data.reset(new FillBufferData);
+    fill_buffer_data = std::make_unique<FillBufferData>();
     fill_buffer_data_second_try.reset(nullptr);
 }
 
@@ -214,7 +214,7 @@ void test_read_drcp_size_header_from_empty_input()
     mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header_second_try);
 
     fill_buffer_data->set("", 0, 0, true);
-    fill_buffer_data_second_try.reset(new FillBufferData("Size: 15\n", 0, 0, true));
+    fill_buffer_data_second_try = std::make_unique<FillBufferData>("Size: 15\n", 0, 0, true);
 
     size_t size = 0;
     std::string buffer;
@@ -241,7 +241,7 @@ void test_read_drcp_size_header_with_incomplete_size_token()
     mock_os->expect_os_try_read_to_buffer_callback(0, fill_buffer_with_header_second_try);
 
     fill_buffer_data->set("Si", 0, 0, true);
-    fill_buffer_data_second_try.reset(new FillBufferData("ze: 4\n", 0, 0, true));
+    fill_buffer_data_second_try = std::make_unique<FillBufferData>("ze: 4\n", 0, 0, true);
 
     size_t size = 0;
     std::string buffer;
@@ -272,7 +272,7 @@ void test_read_drcp_size_header_with_incomplete_size_value()
 
     static const char input_string[] = "Size: 5";
     fill_buffer_data->set(input_string, 0, 0, true);
-    fill_buffer_data_second_try.reset(new FillBufferData("10\n", 0, 0, true));
+    fill_buffer_data_second_try = std::make_unique<FillBufferData>("10\n", 0, 0, true);
 
     size_t size = 0;
     std::string buffer;

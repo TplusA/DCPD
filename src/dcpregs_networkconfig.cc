@@ -1098,12 +1098,10 @@ handle_set_wireless_config(Network::ConfigRequest &req,
 
       case Network::WPSMode::DIRECT:
         if(req.wlan_ssid_ascii_ != "")
-            out_wps_network_name =
-                std::unique_ptr<std::string>(new std::string(req.wlan_ssid_ascii_.get()));
+            out_wps_network_name = std::make_unique<std::string>(req.wlan_ssid_ascii_.get());
 
         if(req.wlan_ssid_hex_ != "")
-            out_wps_network_ssid =
-                std::unique_ptr<std::string>(new std::string(req.wlan_ssid_hex_.get()));
+            out_wps_network_ssid = std::make_unique<std::string>(req.wlan_ssid_hex_.get());
 
         break;
     }
@@ -1726,7 +1724,7 @@ void Regs::NetworkConfig::init()
         return;
 
     nwconfig_write_data.init();
-    nwstatus_data.reset(new NetworkStatusData());
+    nwstatus_data = std::make_unique<NetworkStatusData>();
 }
 
 void Regs::NetworkConfig::deinit()

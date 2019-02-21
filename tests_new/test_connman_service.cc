@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -112,8 +112,8 @@ class ConnmanMACAddressTestsFixture
 
   public:
     explicit ConnmanMACAddressTestsFixture():
-        mock_messages(new MockMessages::Mock),
-        mock_os(new MockOS::Mock)
+        mock_messages(std::make_unique<MockMessages::Mock>()),
+        mock_os(std::make_unique<MockOS::Mock>())
     {
         MockMessages::singleton = mock_messages.get();
         MockOS::singleton = mock_os.get();
