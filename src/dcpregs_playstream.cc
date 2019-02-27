@@ -237,14 +237,6 @@ struct PlayAppStreamData
     }
 };
 
-enum class CoverArtDataState
-{
-    COVER_ART_HAVE_NOTHING,
-    COVER_ART_HAVE_TRACKED_STREAM_KEY,
-    COVER_ART_PENDING,
-    COVER_ART_AVAILABLE,
-};
-
 struct PlayAnyStreamData
 {
   private:
