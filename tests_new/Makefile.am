@@ -20,7 +20,8 @@ if WITH_DOCTEST
 check_PROGRAMS = \
     test_connman_service \
     test_connman_property_cache \
-    test_access_point
+    test_access_point \
+    test_plainplayer
 
 TESTS = run_tests.sh
 
@@ -71,6 +72,17 @@ test_access_point_LDADD = \
     $(top_builddir)/src/libconnman_service.la
 test_access_point_CPPFLAGS = $(AM_CPPFLAGS)
 test_access_point_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_plainplayer_SOURCES = \
+    test_plainplayer.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_os.hh mock_os.cc \
+    mock_expectation.hh
+test_plainplayer_LDADD = \
+    libtestrunner.la \
+    $(top_builddir)/src/libplainplayer.la
+test_plainplayer_CPPFLAGS = $(AM_CPPFLAGS)
+test_plainplayer_CXXFLAGS = $(AM_CXXFLAGS)
 
 doctest: $(check_PROGRAMS)
 	for p in $(check_PROGRAMS); do \
