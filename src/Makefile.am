@@ -34,7 +34,7 @@ dcpd_SOURCES = \
     drcp.hh drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_status.hh \
+    dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_stream_speed.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_upnpserver.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
     dcpregs_accesspoint.hh \
@@ -116,6 +116,7 @@ libregisters_la_SOURCES = \
     dcpregs_tcptunnel.cc dcpregs_tcptunnel.hh \
     dcpregs_audiosources.cc dcpregs_audiosources.hh \
     dcpregs_playstream.cc dcpregs_playstream.hh \
+    dcpregs_stream_speed.cc dcpregs_stream_speed.hh \
     dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
     dcpregs_searchparameters.cc dcpregs_searchparameters.hh \
     dcpregs_status.hh \
@@ -187,6 +188,7 @@ libdbus_handlers_la_SOURCES = \
     dcpregs_filetransfer.hh \
     dcpregs_audiosources.hh \
     dcpregs_playstream.hh \
+    dcpregs_stream_speed.hh \
     dcpregs_status.hh
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 libdbus_handlers_la_CXXFLAGS = $(AM_CXXFLAGS)

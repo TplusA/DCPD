@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -47,7 +47,6 @@ void cover_art_notification(void *stream_key_variant);
 
 namespace DCP
 {
-int write_73_seek_or_set_speed(const uint8_t *data, size_t length);
 ssize_t read_75_current_stream_title(uint8_t *response, size_t length);
 ssize_t read_76_current_stream_url(uint8_t *response, size_t length);
 int write_78_start_play_stream_title(const uint8_t *data, size_t length);

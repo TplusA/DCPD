@@ -40,6 +40,7 @@
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_volume.hh"
 #include "dcpregs_playstream.hh"
+#include "dcpregs_stream_speed.hh"
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.hh"
 #include "dcpregs_status.hh"
