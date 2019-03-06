@@ -38,8 +38,8 @@ void init();
 void late_init();
 void deinit();
 
-void select_source();
-void deselect_source();
+void audio_source_selected();
+void audio_source_deselected();
 void set_title_and_url(ID::Stream stream_id, std::string &&title, std::string &&url);
 void start_notification(ID::Stream stream_id, void *stream_key_variant);
 void stop_notification();
