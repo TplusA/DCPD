@@ -25,6 +25,7 @@
 #include "dcpregs_playstream.hh"
 #include "dcpregs_audiosources.hh"
 #include "plainplayer.hh"
+#include "coverart.hh"
 #include "registers_priv.hh"
 #include "de_tahifi_artcache_errors.hh"
 #include "dbus_common.h"
@@ -303,7 +304,9 @@ static bool try_retrieve_cover_art(GVariant *stream_key,
     return should_clear_picture ? picture.clear() : retval;
 }
 
-class StreamingRegisters: public CoverArt::PictureProviderIface
+class StreamingRegisters:
+    public Regs::PlayStream::StreamingRegistersIface,
+    public CoverArt::PictureProviderIface
 {
   private:
     mutable LoggedLock::Mutex lock_;
@@ -363,36 +366,18 @@ class StreamingRegisters: public CoverArt::PictureProviderIface
     Maybe<std::pair<Regs::PlayStream::StreamInfo, bool>> play_request_input_buffer_;
 
   public:
-    StreamingRegisters(const StreamingRegisters &) = delete;
-    StreamingRegisters(StreamingRegisters &&) = default;
-    StreamingRegisters &operator=(const StreamingRegisters &) = delete;
-    StreamingRegisters &operator=(StreamingRegisters &&) = default;
-
     explicit StreamingRegisters():
-        player_notifications_(nullptr)
+        player_(Regs::PlayStream::make_player()),
+        player_notifications_(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player_.get()))
     {
         LoggedLock::configure(lock_, "StreamingRegisters", MESSAGE_LEVEL_DEBUG);
     }
 
-    void reset(bool deinit = false)
-    {
-        if(deinit)
-        {
-            player_ = nullptr;
-            player_notifications_ = nullptr;
-        }
-        else
-        {
-            player_ = Regs::PlayStream::make_player();
-            player_notifications_ =
-                dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player_.get());
-        }
+    void late_init() override;
 
-        tracked_stream_key_.clear();
-        current_cover_art_.clear();
-        stream_info_output_buffer_.clear();
-        stream_info_input_buffer_.clear();
-        play_request_input_buffer_.set_unknown();
+    const CoverArt::PictureProviderIface &get_picture_provider() const override
+    {
+        return *this;
     }
 
     void with_current_stream_information(const std::function<void(const BufferedStreamInfo &)> &apply)
@@ -827,6 +812,12 @@ class StreamingRegisters: public CoverArt::PictureProviderIface
     }
 };
 
+std::unique_ptr<Regs::PlayStream::StreamingRegistersIface>
+Regs::PlayStream::mk_streaming_registers()
+{
+    return std::make_unique<StreamingRegisters>();
+}
+
 static size_t copy_string_to_slave(const std::string &src,
                                    char *const dest, size_t dest_size)
 {
@@ -883,6 +874,14 @@ static void registered_audio_source(GObject *source_object, GAsyncResult *res,
     Regs::AudioSources::fetch_audio_paths();
 }
 
+void StreamingRegisters::late_init()
+{
+    tdbus_aupath_manager_call_register_source(
+        dbus_audiopath_get_manager_iface(), app_audio_source_id,
+        "Streams pushed by smartphone app", "strbo", "/de/tahifi/Dcpd",
+        nullptr, registered_audio_source, this);
+}
+
 static std::tuple<std::string, const size_t, const size_t>
 tokenize_meta_data(const std::string &src)
 {
@@ -918,71 +917,11 @@ tokenize_meta_data(const std::string &src)
     return std::make_tuple(std::move(dest), artist, album);
 }
 
-static StreamingRegisters streaming_registers;
+static StreamingRegisters *dcpregs_streaming_registers;
 
-/*
- * TODO: Get rid of this init function, avoid the singleton entirely.
- */
-void Regs::PlayStream::init()
+void Regs::PlayStream::DCP::init(StreamingRegistersIface &regs)
 {
-    streaming_registers.reset();
-}
-
-/*
- * TODO: Get rid of this deinit function, avoid the singleton entirely.
- */
-void Regs::PlayStream::deinit()
-{
-    streaming_registers.reset(true);
-}
-
-void Regs::PlayStream::late_init()
-{
-    tdbus_aupath_manager_call_register_source(dbus_audiopath_get_manager_iface(),
-                                              app_audio_source_id,
-                                              "Streams pushed by smartphone app",
-                                              "strbo",
-                                              "/de/tahifi/Dcpd",
-                                              nullptr,
-                                              registered_audio_source,
-                                              &streaming_registers);
-}
-
-void Regs::PlayStream::audio_source_selected()
-{
-    streaming_registers.audio_source_selected();
-}
-
-void Regs::PlayStream::audio_source_deselected()
-{
-    streaming_registers.audio_source_deselected();
-}
-
-void Regs::PlayStream::set_title_and_url(ID::Stream stream_id,
-                                         std::string &&title, std::string &&url)
-{
-    streaming_registers.set_title_and_url(stream_id, std::move(title), std::move(url));
-}
-
-void Regs::PlayStream::start_notification(ID::Stream stream_id,
-                                          void *stream_key_variant)
-{
-    streaming_registers.start_notification(stream_id, stream_key_variant);
-}
-
-void Regs::PlayStream::stop_notification()
-{
-    streaming_registers.stop_notification();
-}
-
-void Regs::PlayStream::cover_art_notification(void *stream_key_variant)
-{
-    streaming_registers.cover_art_notification(stream_key_variant);
-}
-
-const CoverArt::PictureProviderIface &Regs::PlayStream::get_picture_provider()
-{
-    return streaming_registers;
+    dcpregs_streaming_registers = static_cast<StreamingRegisters *>(&regs);
 }
 
 ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, size_t length)
@@ -990,7 +929,7 @@ ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, s
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
 
     size_t result;
-    streaming_registers.with_current_stream_information(
+    dcpregs_streaming_registers->with_current_stream_information(
         [response, length, &result]
         (const auto &info)
         {
@@ -1004,7 +943,7 @@ ssize_t Regs::PlayStream::DCP::read_76_current_stream_url(uint8_t *response, siz
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
 
     size_t result;
-    streaming_registers.with_current_stream_information(
+    dcpregs_streaming_registers->with_current_stream_information(
         [response, length, &result]
         (const auto &info)
         {
@@ -1030,10 +969,9 @@ int Regs::PlayStream::DCP::write_78_start_play_stream_title(const uint8_t *data,
     std::string title(d);
 
     dump_meta_data(artist, album, title, register_description);
-    streaming_registers.store_meta_data_for_first_stream(std::move(artist),
-                                                         std::move(album),
-                                                         std::move(title),
-                                                         std::move(meta_data));
+    dcpregs_streaming_registers->store_meta_data_for_first_stream(
+        std::move(artist), std::move(album), std::move(title),
+        std::move(meta_data));
 
     return 0;
 }
@@ -1048,10 +986,10 @@ int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, s
     if(copy_string_data(url, data, length, register_description))
     {
         dump_plain_url(url, register_description);
-        streaming_registers.start_first_stream(std::move(url));
+        dcpregs_streaming_registers->start_first_stream(std::move(url));
     }
     else
-        streaming_registers.stop_playing("empty URL written to reg 79");
+        dcpregs_streaming_registers->stop_playing("empty URL written to reg 79");
 
     return 0;
 }
@@ -1079,10 +1017,9 @@ int Regs::PlayStream::DCP::write_238_next_stream_title(const uint8_t *data, size
     std::string title(d);
 
     dump_meta_data(artist, album, title, register_description);
-    streaming_registers.store_meta_data_for_next_stream(std::move(artist),
-                                                        std::move(album),
-                                                        std::move(title),
-                                                        std::move(meta_data));
+    dcpregs_streaming_registers->store_meta_data_for_next_stream(
+        std::move(artist), std::move(album), std::move(title),
+        std::move(meta_data));
 
     return 0;
 }
@@ -1097,7 +1034,7 @@ int Regs::PlayStream::DCP::write_239_next_stream_url(const uint8_t *data, size_t
     if(copy_string_data(url, data, length, register_description))
     {
         dump_plain_url(url, register_description);
-        streaming_registers.push_next_stream(std::move(url));
+        dcpregs_streaming_registers->push_next_stream(std::move(url));
     }
     else
         APPLIANCE_BUG("Empty URL written to reg 239");
@@ -1116,7 +1053,7 @@ ssize_t Regs::PlayStream::DCP::read_210_current_cover_art_hash(uint8_t *response
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
 
     size_t len;
-    streaming_registers.with_current_cover_art(
+    dcpregs_streaming_registers->with_current_cover_art(
         [response, length, &len] (const auto &cover_art)
         {
             len = cover_art.copy_hash(response, length);

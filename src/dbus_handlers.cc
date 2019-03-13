@@ -181,14 +181,16 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
         uint16_t stream_id = g_variant_get_uint16(val);
         g_variant_unref(val);
 
-        Regs::PlayStream::start_notification(ID::Stream::make_from_raw_id(stream_id),
-                                             g_variant_get_child_value(parameters, 1));
+        auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+        regs.start_notification(ID::Stream::make_from_raw_id(stream_id),
+                                g_variant_get_child_value(parameters, 1));
     }
     else if(strcmp(signal_name, "Stopped") == 0 ||
             strcmp(signal_name, "StoppedWithError") == 0)
     {
         /* stream stopped playing */
-        Regs::PlayStream::stop_notification();
+        auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+        regs.stop_notification();
     }
     else if(strcmp(signal_name, "MetaDataChanged") == 0 ||
             strcmp(signal_name, "PositionChanged") == 0 ||
@@ -205,7 +207,8 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
 gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     GDBusMethodInvocation *invocation,
                                     guint16 raw_stream_id,
-                                    const gchar *title, const gchar *url)
+                                    const gchar *title, const gchar *url,
+                                    gpointer user_data)
 {
     auto id(ID::Stream::make_from_raw_id(raw_stream_id));
 
@@ -223,7 +226,8 @@ gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
     if(clear_info)
         id = ID::Stream::make_complete(id.get_source(), STREAM_ID_COOKIE_INVALID);
 
-    Regs::PlayStream::set_title_and_url(id, title, url);
+    auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+    regs.set_title_and_url(id, title, url);
 
     tdbus_dcpd_playback_complete_set_stream_info(object, invocation);
 
@@ -747,7 +751,8 @@ gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
                                               gpointer user_data)
 {
     msg_info("Selected source \"%s\"", source_id);
-    Regs::PlayStream::audio_source_selected();
+    auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+    regs.audio_source_selected();
     tdbus_aupath_source_complete_selected(object, invocation);
     return TRUE;
 }
@@ -759,7 +764,8 @@ gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
                                                 gpointer user_data)
 {
     msg_info("Deselected source \"%s\"", source_id);
-    Regs::PlayStream::audio_source_deselected();
+    auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+    regs.audio_source_deselected();
     tdbus_aupath_source_complete_deselected(object, invocation);
     return TRUE;
 }
@@ -977,13 +983,14 @@ void dbussignal_artcache_monitor(GDBusProxy *proxy, const gchar *sender_name,
                                  gpointer user_data)
 {
     static const char iface_name[] = "de.tahifi.ArtCache.Monitor";
+    auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
 
     if(strcmp(signal_name, "Associated") == 0)
         check_parameter_assertions(parameters, 2);
     else if(strcmp(signal_name, "Removed") == 0)
     {
         check_parameter_assertions(parameters, 1);
-        Regs::PlayStream::cover_art_notification(g_variant_get_child_value(parameters, 0));
+        regs.cover_art_notification(g_variant_get_child_value(parameters, 0));
     }
     else if(strcmp(signal_name, "Added") == 0)
     {
@@ -997,14 +1004,14 @@ void dbussignal_artcache_monitor(GDBusProxy *proxy, const gchar *sender_name,
                       &stream_key_variant, &stream_key_priority, &is_updated);
 
         if(is_updated)
-            Regs::PlayStream::cover_art_notification(stream_key_variant);
+            regs.cover_art_notification(stream_key_variant);
         else
             g_variant_unref(stream_key_variant);
     }
     else if(strcmp(signal_name, "Failed") == 0)
     {
         check_parameter_assertions(parameters, 3);
-        Regs::PlayStream::cover_art_notification(g_variant_get_child_value(parameters, 0));
+        regs.cover_art_notification(g_variant_get_child_value(parameters, 0));
     }
     else
         unknown_signal(iface_name, signal_name, sender_name);

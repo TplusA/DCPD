@@ -67,6 +67,7 @@ static struct
 
     Configuration::ConfigManager<Configuration::ApplianceValues> *config_man;
     Network::AccessPointManager *access_point;
+    Regs::PlayStream::StreamingRegistersIface *streaming_regs;
 
     tdbusdcpdPlayback *playback_iface;
     tdbusdcpdViews *views_iface;
@@ -257,7 +258,8 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.debug_logging_config_iface = tdbus_debug_logging_config_skeleton_new();
 
         g_signal_connect(dcpd_iface_data.playback_iface, "handle-set-stream-info",
-                         G_CALLBACK(dbusmethod_set_stream_info), nullptr);
+                         G_CALLBACK(dbusmethod_set_stream_info),
+                         dcpd_iface_data.streaming_regs);
 
         g_signal_connect(dcpd_iface_data.network_config_iface, "handle-get-all",
                          G_CALLBACK(dbusmethod_network_get_all),
@@ -267,9 +269,11 @@ static void bus_acquired(GDBusConnection *connection,
                          dcpd_iface_data.access_point);
 
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-selected",
-                         G_CALLBACK(dbusmethod_audiopath_source_selected), nullptr);
+                         G_CALLBACK(dbusmethod_audiopath_source_selected),
+                         dcpd_iface_data.streaming_regs);
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-deselected",
-                         G_CALLBACK(dbusmethod_audiopath_source_deselected), nullptr);
+                         G_CALLBACK(dbusmethod_audiopath_source_deselected),
+                         dcpd_iface_data.streaming_regs);
 
         g_signal_connect(dcpd_iface_data.mixer_volume_iface, "handle-get-controls",
                          G_CALLBACK(dbusmethod_mixer_get_controls), nullptr);
@@ -585,6 +589,7 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
                 Connman::WLANManager &connman_wlan,
                 Configuration::ConfigManager<Configuration::ApplianceValues> &config_man,
                 Network::AccessPointManager &access_point,
+                Regs::PlayStream::StreamingRegistersIface &streaming_regs,
                 void (*content_manager_iface_available_notification)(bool),
                 void (*credentials_read_iface_available_notification)())
 {
@@ -621,6 +626,7 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
     dcpd_iface_data.connect_to_session_bus = connect_to_session_bus;
     dcpd_iface_data.config_man = &config_man;
     dcpd_iface_data.access_point = &access_point;
+    dcpd_iface_data.streaming_regs = &streaming_regs;
     filetransfer_iface_data.connect_to_session_bus = connect_to_session_bus;
     streamplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
     roonplayer_iface_data.connect_to_session_bus = connect_to_session_bus;
@@ -708,13 +714,16 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
                      G_CALLBACK(dbussignal_file_transfer), nullptr);
 
     g_signal_connect(streamplayer_iface_data.playback_iface, "g-signal",
-                     G_CALLBACK(dbussignal_splay_playback), nullptr);
+                     G_CALLBACK(dbussignal_splay_playback),
+                     dcpd_iface_data.streaming_regs);
 
     g_signal_connect(roonplayer_iface_data.playback_iface, "g-signal",
-                     G_CALLBACK(dbussignal_splay_playback), nullptr);
+                     G_CALLBACK(dbussignal_splay_playback),
+                     dcpd_iface_data.streaming_regs);
 
     g_signal_connect(artcache_iface_data.artcache_monitor_iface, "g-signal",
-                     G_CALLBACK(dbussignal_artcache_monitor), nullptr);
+                     G_CALLBACK(dbussignal_artcache_monitor),
+                     dcpd_iface_data.streaming_regs);
 
     if(connman_iface_data.is_enabled)
     {
