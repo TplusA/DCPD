@@ -63,15 +63,9 @@ class Fixture
     void activate_player()
     {
         player->activate([] () {});
-        dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get())->audio_source_selected();
+        player->notifications().audio_source_selected();
     }
 };
-
-TEST_CASE_FIXTURE(Fixture,
-                  "Player implements notification interface")
-{
-    CHECK(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()) != nullptr);
-}
 
 TEST_CASE_FIXTURE(Fixture,
                   "Player activation selects the plain URL audio source")
@@ -149,8 +143,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK_FALSE(player->is_active());
     activate_player();
     CHECK(player->is_active());
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    notify->audio_source_deselected();
+    player->notifications().audio_source_deselected();
     CHECK_FALSE(player->is_active());
 }
 
@@ -161,8 +154,7 @@ TEST_CASE_FIXTURE(Fixture,
             "artist", "album", "title", "alttrack", "url now");
 
     player->activate([] () {});
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    notify->audio_source_selected();
+    player->notifications().audio_source_selected();
 
     bool has_started = false;
     auto id(Regs::PlayStream::PlainPlayer::StreamID::make_invalid());
@@ -195,8 +187,7 @@ TEST_CASE_FIXTURE(Fixture,
             "artist_2", "album_2", "title_2", "alttrack_2", "url now_2");
 
     player->activate([] () {});
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    notify->audio_source_selected();
+    player->notifications().audio_source_selected();
 
     /* start for the first time */
     bool has_started_1 = false;
@@ -244,7 +235,7 @@ TEST_CASE_FIXTURE(Fixture,
 
     /* second track plays, first went down the drain */
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 258", false);
-    CHECK(notify->started(id_2) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(id_2) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "artist_2");
 }
@@ -275,8 +266,7 @@ TEST_CASE_FIXTURE(Fixture,
                         }));
     CHECK_FALSE(has_started);
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    notify->audio_source_selected();
+    player->notifications().audio_source_selected();
     REQUIRE(has_started);
     CHECK(was_first);
     CHECK_FALSE(was_start_requested);
@@ -286,8 +276,7 @@ TEST_CASE_FIXTURE(Fixture,
                   "Start notification for same stream is treated as resume from pause")
 {
     player->activate([] () {});
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    notify->audio_source_selected();
+    player->notifications().audio_source_selected();
 
     auto id(Regs::PlayStream::PlainPlayer::StreamID::make_invalid());
     CHECK(player->start(Regs::PlayStream::StreamInfo("a", "b", "c", "d", "e"),
@@ -301,8 +290,8 @@ TEST_CASE_FIXTURE(Fixture,
     REQUIRE(id.get().is_valid());
 
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
-    CHECK(notify->started(id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::CONTINUE_FROM_PAUSE);
+    CHECK(player->notifications().started(id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::CONTINUE_FROM_PAUSE);
 }
 
 TEST_CASE_FIXTURE(Fixture,
@@ -332,9 +321,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(pushed_id.get().is_valid());
     auto current_id(pushed_id);
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
 
     CHECK(player->next(Regs::PlayStream::StreamInfo("f", "g", "h", "i", "j")));
@@ -346,7 +334,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(current_id == pushed_id);
 
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 258", false);
-    CHECK(notify->started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
+    CHECK(player->notifications().started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
     mock_messages->done();
 
     CHECK(pushed_artist == "f");
@@ -383,9 +371,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(player->next(Regs::PlayStream::StreamInfo("f", "g", "h", "i", "j")));
     CHECK(pushed_artist == "a");
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
 
     CHECK(pushed_artist == "f");
@@ -396,7 +383,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(current_id == pushed_id);
 
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 258", false);
-    CHECK(notify->started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
+    CHECK(player->notifications().started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
     mock_messages->done();
 
     CHECK(pushed_artist == "f");
@@ -436,9 +423,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(player->next(Regs::PlayStream::StreamInfo("k", "l", "m", "n", "o")));
     CHECK(pushed_artist == "a");
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
 
     CHECK(pushed_artist == "k");
@@ -449,7 +435,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(current_id == pushed_id);
 
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 258", false);
-    CHECK(notify->started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
+    CHECK(player->notifications().started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
     mock_messages->done();
 
     CHECK(pushed_artist == "k");
@@ -485,15 +471,14 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(pushed_id.get().is_valid());
     auto current_id(pushed_id);
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a1");
 
     /* stream stopped without explicit stop request from user */
-    CHECK(notify->stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
+    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 
     /* we are late, but we can still continue with playing the next stream */
@@ -505,7 +490,7 @@ TEST_CASE_FIXTURE(Fixture,
 
     CHECK_FALSE(player->get_current_stream_info().is_known());
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 258", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
     mock_messages->done();
     CHECK(current_id == pushed_id);
     REQUIRE(player->get_current_stream_info().is_known());
@@ -538,9 +523,8 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a1");
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
     CHECK(current_id == pushed_id);
     REQUIRE(player->get_current_stream_info().is_known());
@@ -554,7 +538,7 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a1");
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 258", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
     mock_messages->done();
     CHECK(current_id == pushed_id);
     REQUIRE(player->get_current_stream_info().is_known());
@@ -568,7 +552,7 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a2");
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 259", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
     mock_messages->done();
     CHECK(current_id == pushed_id);
     REQUIRE(player->get_current_stream_info().is_known());
@@ -582,13 +566,13 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a3");
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 260", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON);
     mock_messages->done();
     CHECK(current_id == pushed_id);
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a4");
 
-    CHECK(notify->stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
+    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
     CHECK(current_id == pushed_id);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 }
@@ -617,9 +601,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(pushed_id.get().is_valid());
     auto current_id(pushed_id);
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a1");
@@ -629,7 +612,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(was_called);
 
     /* stream stopped after explicit stop request from user */
-    CHECK(notify->stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
+    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 
     /* no luck... */
@@ -664,9 +647,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(pushed_id.get().is_valid());
     auto current_id(pushed_id);
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
-    CHECK(notify->started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a1");
@@ -685,7 +667,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(player->get_current_stream_info()->artist_ == "a1");
 
     /* stream stopped after explicit stop request from user */
-    CHECK(notify->stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
+    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 }
 
@@ -695,8 +677,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_CRIT,
             "BUG: App stream stopped in unexpected state DESELECTED", false);
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    CHECK(notify->stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
+    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
 }
 
 TEST_CASE_FIXTURE(Fixture,
@@ -704,8 +685,7 @@ TEST_CASE_FIXTURE(Fixture,
 {
     activate_player();
 
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    CHECK(notify->stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED);
+    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED);
 }
 
 TEST_CASE_FIXTURE(Fixture,
@@ -714,8 +694,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_CRIT,
             "BUG: App stream 257 started in unexpected state DESELECTED", false);
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    CHECK(notify->started(Regs::PlayStream::PlainPlayer::StreamID::make()) == Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE);
+    CHECK(player->notifications().started(Regs::PlayStream::PlainPlayer::StreamID::make()) == Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE);
 }
 
 TEST_CASE_FIXTURE(Fixture,
@@ -726,8 +705,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_CRIT,
             "BUG: App stream 261 started in unexpected state STOPPED", false);
-    auto *const notify(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player.get()));
-    CHECK(notify->started(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE);
+    CHECK(player->notifications().started(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE);
 }
 
 TEST_SUITE_END();

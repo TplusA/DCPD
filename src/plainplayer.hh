@@ -62,6 +62,8 @@ class StreamInfo
     {}
 };
 
+class PlainPlayerNotifications;
+
 /*!
  * Control interface to plain URL player.
  */
@@ -174,7 +176,15 @@ class PlainPlayer
      */
     virtual bool stop(const std::function<bool()> &stop_stream) = 0;
 
+    /*!
+     * Return copy of information about currently playing stream, if any.
+     */
     virtual const Maybe<Regs::PlayStream::StreamInfo> &get_current_stream_info() const = 0;
+
+    /*!
+     * Get reference to notification interface for this player.
+     */
+    virtual PlainPlayerNotifications &notifications() = 0;
 };
 
 /*!

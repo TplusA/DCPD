@@ -317,7 +317,6 @@ class StreamingRegisters:
      * This handles registers 78, 79, 238, and 239.
      */
     std::unique_ptr<Regs::PlayStream::PlainPlayer> player_;
-    Regs::PlayStream::PlainPlayerNotifications *player_notifications_;
 
     /*!
      * The cover art meta data of the currently playing stream, if any.
@@ -367,8 +366,7 @@ class StreamingRegisters:
 
   public:
     explicit StreamingRegisters():
-        player_(Regs::PlayStream::make_player()),
-        player_notifications_(dynamic_cast<Regs::PlayStream::PlainPlayerNotifications *>(player_.get()))
+        player_(Regs::PlayStream::make_player())
     {
         LoggedLock::configure(lock_, "StreamingRegisters", MESSAGE_LEVEL_DEBUG);
     }
@@ -398,14 +396,14 @@ class StreamingRegisters:
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        player_notifications_->audio_source_selected();
+        player_->notifications().audio_source_selected();
     }
 
     void audio_source_deselected()
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        player_notifications_->audio_source_deselected();
+        player_->notifications().audio_source_deselected();
     }
 
     /*!
@@ -566,7 +564,7 @@ class StreamingRegisters:
         bool stream_is_a_new_one = true;
         if(app_stream_id.get().is_valid())
         {
-            switch(player_notifications_->started(app_stream_id))
+            switch(player_->notifications().started(app_stream_id))
             {
               case Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED:
               case Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON:
@@ -589,7 +587,7 @@ class StreamingRegisters:
         {
             BUG("Non-app stream %u started while plain URL player is selected",
                 stream_id.get_raw_id());
-            player_notifications_->audio_source_deselected();
+            player_->notifications().audio_source_deselected();
             notify_app_playback_stopped();
         }
 
@@ -633,7 +631,7 @@ class StreamingRegisters:
         tracked_stream_key_.clear();
         current_cover_art_.clear();
 
-        switch(player_notifications_->stopped())
+        switch(player_->notifications().stopped())
         {
           case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED:
             msg_info("Stream player stopped playing app stream (requested)");

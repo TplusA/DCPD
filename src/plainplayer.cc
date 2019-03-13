@@ -103,6 +103,11 @@ class Player:
         return current_stream_;
     }
 
+    virtual PlainPlayerNotifications &notifications() override
+    {
+        return *this;
+    }
+
   private:
     void do_start(Regs::PlayStream::StreamInfo &&stream,
                   const PushStreamFunction &push_stream)
