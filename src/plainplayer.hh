@@ -246,7 +246,7 @@ class PlainPlayerNotifications
     /*!
      * The player has stopped playing.
      */
-    virtual StopResult stopped() = 0;
+    virtual StopResult stopped(PlainPlayer::StreamID stream_id) = 0;
 };
 
 /*!

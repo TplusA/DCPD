@@ -189,8 +189,12 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
             strcmp(signal_name, "StoppedWithError") == 0)
     {
         /* stream stopped playing */
+        GVariant *val = g_variant_get_child_value(parameters, 0);
+        uint16_t stream_id = g_variant_get_uint16(val);
+        g_variant_unref(val);
+
         auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
-        regs.stop_notification();
+        regs.stop_notification(ID::Stream::make_from_raw_id(stream_id));
     }
     else if(strcmp(signal_name, "MetaDataChanged") == 0 ||
             strcmp(signal_name, "PositionChanged") == 0 ||

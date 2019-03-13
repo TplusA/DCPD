@@ -478,7 +478,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(player->get_current_stream_info()->artist_ == "a1");
 
     /* stream stopped without explicit stop request from user */
-    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
+    CHECK(player->notifications().stopped(current_id) == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 
     /* we are late, but we can still continue with playing the next stream */
@@ -572,7 +572,7 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a4");
 
-    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
+    CHECK(player->notifications().stopped(current_id) == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY);
     CHECK(current_id == pushed_id);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 }
@@ -612,7 +612,7 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(was_called);
 
     /* stream stopped after explicit stop request from user */
-    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
+    CHECK(player->notifications().stopped(current_id) == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 
     /* no luck... */
@@ -667,17 +667,23 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(player->get_current_stream_info()->artist_ == "a1");
 
     /* stream stopped after explicit stop request from user */
-    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
+    CHECK(player->notifications().stopped(current_id) == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED);
     CHECK_FALSE(player->get_current_stream_info().is_known());
 }
 
 TEST_CASE_FIXTURE(Fixture,
-                  "Notification about stopped stream while deselected causes log entry")
+                  "Notification about stopped app stream while deselected causes log entry")
 {
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_CRIT,
-            "BUG: App stream stopped in unexpected state DESELECTED", false);
-    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
+            "BUG: App stream 261 stopped in unexpected state DESELECTED", false);
+    CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
+}
+
+TEST_CASE_FIXTURE(Fixture,
+                  "Notification about stopped invalid stream while deselected is ignored")
+{
+    CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make_invalid()) == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
 }
 
 TEST_CASE_FIXTURE(Fixture,
@@ -685,7 +691,7 @@ TEST_CASE_FIXTURE(Fixture,
 {
     activate_player();
 
-    CHECK(player->notifications().stopped() == Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED);
+    CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED);
 }
 
 TEST_CASE_FIXTURE(Fixture,

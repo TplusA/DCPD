@@ -623,31 +623,40 @@ class StreamingRegisters:
             notify_cover_art_changed();
     }
 
-    void stop_notification()
+    void stop_notification(ID::Stream stream_id)
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
+        const auto app_stream_id =
+            Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
+
         tracked_stream_key_.clear();
         current_cover_art_.clear();
 
-        switch(player_->notifications().stopped())
+        const auto stopped_result = player_->notifications().stopped(app_stream_id);
+        if(app_stream_id.get().is_valid())
         {
-          case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED:
-            msg_info("Stream player stopped playing app stream (requested)");
-            notify_app_playback_stopped();
-            break;
+            switch(stopped_result)
+            {
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED:
+                msg_info("Stream player stopped playing app stream %u (requested)",
+                         stream_id.get_raw_id());
+                notify_app_playback_stopped();
+                break;
 
-          case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY:
-            msg_info("Stream player stopped playing app stream (external cause)");
-            notify_app_playback_stopped();
-            break;
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY:
+                msg_info("Stream player stopped playing app stream %u (external cause)",
+                         stream_id.get_raw_id());
+                notify_app_playback_stopped();
+                break;
 
-          case Regs::PlayStream::PlainPlayerNotifications::StopResult::PUSHED_NEXT:
-          case Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED:
-          case Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE:
-          case Regs::PlayStream::PlainPlayerNotifications::StopResult::FAILED:
-            break;
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::PUSHED_NEXT:
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED:
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE:
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::FAILED:
+                break;
+            }
         }
 
         const auto update = stream_info_output_buffer_.clear();

@@ -7347,10 +7347,11 @@ void test_start_stream_stop_stream_and_deselect_audio_source()
     mock_messages->check();
     expect_current_title_and_url("Test stream", "http://app-provided.url.org/stream.flac");
 
-    mock_messages->expect_msg_info("Stream player stopped playing app stream (external cause)");
+    mock_messages->expect_msg_info_formatted(
+            "Stream player stopped playing app stream 257 (external cause)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
                                     "Send title and URL to SPI slave");
-    streaming_regs->stop_notification();
+    streaming_regs->stop_notification(OurStream::make().get());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
 
     streaming_regs->audio_source_deselected();
@@ -7378,10 +7379,11 @@ void test_try_start_stream_and_quickly_deselect_audio_source()
     mock_messages->check();
     expect_current_title_and_url("", "");
 
-    mock_messages->expect_msg_info("Stream player stopped playing app stream (external cause)");
+    mock_messages->expect_msg_info_formatted(
+            "Stream player stopped playing app stream 257 (external cause)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
                                     "Suppress sending title and URL to SPI slave");
-    streaming_regs->stop_notification();
+    streaming_regs->stop_notification(OurStream::make().get());
     register_changed_data->check(std::array<uint8_t, 1>{79});
 
     streaming_regs->audio_source_deselected();
@@ -7417,9 +7419,9 @@ void test_start_stream_and_deselect_audio_source()
     streaming_regs->audio_source_deselected();
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
-        "BUG: App stream stopped in unexpected state DESELECTED");
+        "BUG: App stream 257 stopped in unexpected state DESELECTED");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    streaming_regs->stop_notification();
+    streaming_regs->stop_notification(OurStream::make().get());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     expect_current_title_and_url("", "");
 }
@@ -7838,9 +7840,10 @@ static void start_stop_single_stream(bool with_notifications)
 
     if(with_notifications)
     {
-        mock_messages->expect_msg_info("Stream player stopped playing app stream (requested)");
+        mock_messages->expect_msg_info_formatted(
+                "Stream player stopped playing app stream 257 (requested)");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-        streaming_regs->stop_notification();
+        streaming_regs->stop_notification(stream_id.get());
         register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
         mock_messages->check();
         expect_current_title_and_url("", "");
@@ -7877,10 +7880,11 @@ void test_quick_start_stop_single_stream()
     register_changed_data->check(std::array<uint8_t, 1>{210});
     expect_current_title_and_url("", "");
 
-    mock_messages->expect_msg_info("Stream player stopped playing app stream (requested)");
+    mock_messages->expect_msg_info_formatted(
+            "Stream player stopped playing app stream 257 (requested)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
                                     "Suppress sending title and URL to SPI slave");
-    streaming_regs->stop_notification();
+    streaming_regs->stop_notification(OurStream::make().get());
     register_changed_data->check(std::array<uint8_t, 1>{79});
     expect_current_title_and_url("", "");
 }
@@ -8018,9 +8022,10 @@ void test_start_stream_and_queue_next()
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 
     /* after a while, the stream may finish */
-    mock_messages->expect_msg_info("Stream player stopped playing app stream (external cause)");
+    mock_messages->expect_msg_info_formatted(
+            "Stream player stopped playing app stream 258 (external cause)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    streaming_regs->stop_notification();
+    streaming_regs->stop_notification(stream_id_second.get());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 }
@@ -8090,9 +8095,10 @@ void test_play_multiple_tracks_in_a_row()
     }
 
     /* after a while, the last stream finishes playing */
-    mock_messages->expect_msg_info("Stream player stopped playing app stream (external cause)");
+    mock_messages->expect_msg_info_formatted(
+            "Stream player stopped playing app stream 261 (external cause)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    streaming_regs->stop_notification();
+    streaming_regs->stop_notification(next_stream_id.get());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 }
@@ -8178,9 +8184,10 @@ void test_queue_next_after_stop_notification_is_not_ignored()
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
 
     /* the stream finishes... */
-    mock_messages->expect_msg_info("Stream player stopped playing app stream (external cause)");
+    mock_messages->expect_msg_info_formatted(
+            "Stream player stopped playing app stream 257 (external cause)");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    streaming_regs->stop_notification();
+    streaming_regs->stop_notification(stream_id_first.get());
     register_changed_data->check(std::array<uint8_t, 3>{79, 75, 76});
     expect_current_title_and_url("", "");
 

@@ -55,7 +55,7 @@ class StreamingRegistersIface
     virtual void audio_source_deselected() = 0;
     virtual void set_title_and_url(ID::Stream stream_id, std::string &&title, std::string &&url) = 0;
     virtual void start_notification(ID::Stream stream_id, void *stream_key_variant) = 0;
-    virtual void stop_notification() = 0;
+    virtual void stop_notification(ID::Stream stream_id) = 0;
     virtual void cover_art_notification(void *stream_key_variant) = 0;
 };
 

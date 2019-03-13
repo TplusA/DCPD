@@ -96,7 +96,7 @@ class Player:
     void audio_source_selected() override;
     void audio_source_deselected() override;
     StartResult started(StreamID stream_id) override;
-    StopResult stopped() override;
+    StopResult stopped(StreamID stream_id) override;
 
     const Maybe<Regs::PlayStream::StreamInfo> &get_current_stream_info() const override
     {
@@ -418,13 +418,17 @@ Player::started(StreamID stream_id)
     return StartResult::WRONG_STATE;
 }
 
-Regs::PlayStream::PlainPlayerNotifications::StopResult Player::stopped()
+Regs::PlayStream::PlainPlayerNotifications::StopResult
+Player::stopped(StreamID stream_id)
 {
     switch(state_)
     {
       case State::DESELECTED:
       case State::DESELECTED_AWAITING_SELECTION:
-        BUG("App stream stopped in unexpected state %s", to_string(state_));
+        if(stream_id.get().is_valid())
+            BUG("App stream %u stopped in unexpected state %s",
+                stream_id.get().get_raw_id(), to_string(state_));
+
         break;
 
       case State::STOPPED:
@@ -441,6 +445,13 @@ Regs::PlayStream::PlainPlayerNotifications::StopResult Player::stopped()
 
       case State::PLAYING_REQUESTED:
       case State::PLAYING:
+        if(stream_id.get().is_valid() &&
+           currently_playing_stream_id_.get().is_valid() &&
+           stream_id != currently_playing_stream_id_)
+            BUG("App stream %u stopped, but current stream ID should be %u",
+                stream_id.get().get_raw_id(),
+                currently_playing_stream_id_.get().get_raw_id());
+
         current_stream_.set_unknown();
         currently_playing_stream_id_ = StreamID::make_invalid();
 
