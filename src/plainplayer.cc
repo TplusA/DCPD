@@ -374,13 +374,13 @@ Player::started(StreamID stream_id)
       case State::PLAYING:
       case State::PLAYING_BUT_STOPPED:
         if(currently_playing_stream_id_ == stream_id)
-            return Regs::PlayStream::PlainPlayerNotifications::StartResult::CONTINUE_FROM_PAUSE;
+            return StartResult::CONTINUE_FROM_PAUSE;
 
         if(!waiting_for_stream_id_.get().is_valid())
         {
             BUG("App stream %u started while not waiting for any stream",
                 stream_id.get().get_raw_id());
-            return Regs::PlayStream::PlainPlayerNotifications::StartResult::UNEXPECTED_START;
+            return StartResult::UNEXPECTED_START;
         }
 
         if(waiting_for_stream_id_ != stream_id)
@@ -388,7 +388,7 @@ Player::started(StreamID stream_id)
             msg_info("App stream %u started, but we are waiting for %u",
                      stream_id.get().get_raw_id(),
                      waiting_for_stream_id_.get().get_raw_id());
-            return Regs::PlayStream::PlainPlayerNotifications::StartResult::UNEXPECTED_STREAM_ID;
+            return StartResult::UNEXPECTED_STREAM_ID;
         }
 
         msg_info("Next app stream %u", stream_id.get().get_raw_id());
@@ -399,7 +399,7 @@ Player::started(StreamID stream_id)
         if(state_ == State::PLAYING || state_ == State::PLAYING_BUT_STOPPED)
         {
             current_stream_ = std::move(next_stream_);
-            return Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON;
+            return StartResult::PLAYING_ON;
         }
 
         state_ = State::PLAYING;
@@ -407,10 +407,10 @@ Player::started(StreamID stream_id)
         if(next_stream_.is_known())
             do_push_next();
 
-        return Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED;
+        return StartResult::STARTED;
     }
 
-    return Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE;
+    return StartResult::WRONG_STATE;
 }
 
 Regs::PlayStream::PlainPlayerNotifications::StopResult Player::stopped()
@@ -424,7 +424,7 @@ Regs::PlayStream::PlainPlayerNotifications::StopResult Player::stopped()
 
       case State::STOPPED:
       case State::PLAYING_BUT_STOPPED:
-        return Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED;
+        return StopResult::ALREADY_STOPPED;
 
       case State::STOPPED_REQUESTED:
         state_ = State::STOPPED;
@@ -440,18 +440,16 @@ Regs::PlayStream::PlainPlayerNotifications::StopResult Player::stopped()
         currently_playing_stream_id_ = StreamID::make_invalid();
 
         if(next_stream_.is_known())
-            return do_push_next()
-                ? Regs::PlayStream::PlainPlayerNotifications::StopResult::PUSHED_NEXT
-                : Regs::PlayStream::PlainPlayerNotifications::StopResult::FAILED;
+            return do_push_next() ? StopResult::PUSHED_NEXT : StopResult::FAILED;
 
         if(state_ == State::STOPPED)
-            return Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED;
+            return StopResult::STOPPED_AS_REQUESTED;
 
         state_ = State::PLAYING_BUT_STOPPED;
-        return Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY;
+        return StopResult::STOPPED_EXTERNALLY;
     }
 
-    return Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE;
+    return StopResult::WRONG_STATE;
 }
 
 std::unique_ptr<Regs::PlayStream::PlainPlayer> Regs::PlayStream::make_player()
