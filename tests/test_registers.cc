@@ -7393,11 +7393,12 @@ void test_try_start_stream_and_quickly_deselect_audio_source()
  * App starts single stream with plain title information, then audio source is
  * deselected before stop notification from player is received.
  *
- * This is a special case which should never occur in practice: the audio
- * source is deselected, and the stop notification from the player is received
- * only after that.
+ * This is a special case which frequently occurs in practice when switching
+ * away from plain URL to another source while a stream is playing. The stop
+ * notification from the player is received only after the plain URL source has
+ * been deselected.
  */
-void test_start_stream_and_deselect_audio_source()
+void test_start_stream_and_deselect_audio_source_with_correct_stop_notification()
 {
     set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
                             OurStream::make(),
@@ -7414,14 +7415,43 @@ void test_start_stream_and_deselect_audio_source()
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_current_title_and_url("Test stream", "http://app-provided.url.org/stream.flac");
 
-    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
-        "BUG: Plain URL audio source deselected while app stream is playing");
+    streaming_regs->audio_source_deselected();
+
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    streaming_regs->stop_notification(OurStream::make().get());
+    register_changed_data->check(std::array<uint8_t, 2>{75, 76});
+    expect_current_title_and_url("", "");
+}
+
+/*!\test
+ * See #test_start_stream_and_deselect_audio_source_with_correct_stop_notification().
+ *
+ * We expect a BUG log message in case a stop notification is received for an
+ * unexpected stream ID.
+ */
+void test_start_stream_and_deselect_audio_source_with_unexpected_stop_notification()
+{
+    set_start_title_and_url("Test stream", "http://app-provided.url.org/stream.flac",
+                            OurStream::make(),
+                            SetTitleAndURLFlowAssumptions::DESELECTED__SELECT,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
+                            nullptr);
+    register_changed_data->check();
+
+    mock_messages->expect_msg_info_formatted("Next app stream 257");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
+    GVariantWrapper skey;
+    streaming_regs->start_notification(OurStream::make().get(),
+                                       GVariantWrapper::move(skey));
+    register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
+    expect_current_title_and_url("Test stream", "http://app-provided.url.org/stream.flac");
+
     streaming_regs->audio_source_deselected();
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
-        "BUG: App stream 257 stopped in unexpected state DESELECTED");
+        "BUG: App stream 271 stopped in unexpected state DESELECTED");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-    streaming_regs->stop_notification(OurStream::make().get());
+    streaming_regs->stop_notification(OurStream::make(15).get());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
     expect_current_title_and_url("", "");
 }
@@ -7751,8 +7781,6 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_early_start_notif
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Non-app stream 129 started while plain URL player is selected");
-    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
-        "BUG: Plain URL audio source deselected while app stream is playing");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     const auto bad_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
     GVariantWrapper dummy_stream_key;
@@ -7799,8 +7827,6 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_late_start_notifi
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Non-app stream 129 started while plain URL player is selected");
-    mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
-        "BUG: Plain URL audio source deselected while app stream is playing");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);

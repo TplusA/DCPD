@@ -70,6 +70,17 @@ class Player:
      */
     StreamID currently_playing_stream_id_;
 
+    /*!
+     * Suppress a BUG log entry when receiving a stop notification for a
+     * specific stream while the plain URL source is deselected.
+     *
+     * After audio source deselection, a stop notification may still be
+     * delivered by the stream player. If this happens, then we don't want to
+     * see a bug entry in case the stream ID matches the ID we know should be
+     * playing; for any other ID, we still emit a bug message.
+     */
+    StreamID expected_stopping_stream_id_;
+
   public:
     Player(const Player &) = delete;
     Player(Player &&) = default;
@@ -80,7 +91,8 @@ class Player:
         state_(State::DESELECTED),
         next_free_stream_id_(StreamID::make()),
         waiting_for_stream_id_(StreamID::make_invalid()),
-        currently_playing_stream_id_(StreamID::make_invalid())
+        currently_playing_stream_id_(StreamID::make_invalid()),
+        expected_stopping_stream_id_(StreamID::make_invalid())
     {
         LoggedLock::configure(lock_, "Player", MESSAGE_LEVEL_DEBUG);
     }
@@ -117,6 +129,7 @@ class Player:
         next_stream_.set_unknown();
         waiting_for_stream_id_ = StreamID::make_invalid();
         currently_playing_stream_id_ = StreamID::make_invalid();
+        expected_stopping_stream_id_ = StreamID::make_invalid();
     }
 
     bool do_push_next()
@@ -351,7 +364,7 @@ void Player::audio_source_deselected()
 
       case State::PLAYING_REQUESTED:
       case State::PLAYING:
-        BUG("Plain URL audio source deselected while app stream is playing");
+        expected_stopping_stream_id_ = currently_playing_stream_id_;
         break;
     }
 
@@ -425,7 +438,7 @@ Player::stopped(StreamID stream_id)
     {
       case State::DESELECTED:
       case State::DESELECTED_AWAITING_SELECTION:
-        if(stream_id.get().is_valid())
+        if(stream_id.get().is_valid() && stream_id != expected_stopping_stream_id_)
             BUG("App stream %u stopped in unexpected state %s",
                 stream_id.get().get_raw_id(), to_string(state_));
 
