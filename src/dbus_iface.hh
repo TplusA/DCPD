@@ -27,6 +27,7 @@ namespace Configuration
 }
 namespace Network { class AccessPointManager; }
 namespace Applink { class AppConnections; }
+namespace Regs { namespace PlayStream { class StreamingRegistersIface; }}
 
 namespace DBus
 {
@@ -36,6 +37,7 @@ int setup(bool connect_to_session_bus, bool with_connman,
           Connman::WLANManager &connman_wlan,
           Configuration::ConfigManager<Configuration::ApplianceValues> &config_man,
           Network::AccessPointManager &access_point,
+          Regs::PlayStream::StreamingRegistersIface &streaming_regs,
           void (*content_manager_iface_available_notification)(bool),
           void (*credentials_read_iface_available_notification)());
 void shutdown();

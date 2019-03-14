@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -61,7 +61,8 @@ void dbussignal_artcache_monitor(GDBusProxy *proxy, const gchar *sender_name,
 gboolean dbusmethod_set_stream_info(tdbusdcpdPlayback *object,
                                     GDBusMethodInvocation *invocation,
                                     guint16 raw_stream_id,
-                                    const gchar *title, const gchar *url);
+                                    const gchar *title, const gchar *url,
+                                    gpointer user_data);
 
 gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
                                     GDBusMethodInvocation *invocation,

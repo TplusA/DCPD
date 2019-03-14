@@ -931,6 +931,7 @@ static bool main_loop_init(const struct parameters *parameters,
                            Applink::AppConnections &appconn,
                            Connman::WLANTools &wlan_tools,
                            Connman::WLANManager *&connman,
+                           const Regs::PlayStream::StreamingRegistersIface &streaming_regs,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
     Regs::UPnPName::init();
@@ -957,7 +958,7 @@ static bool main_loop_init(const struct parameters *parameters,
         network_prefs_migrate_old_network_configuration_files(connman_config_dir);
 
     Regs::init(push_register_to_slave, &wlan_tools);
-    Regs::FileTransfer::set_picture_provider(Regs::PlayStream::get_picture_provider());
+    Regs::FileTransfer::set_picture_provider(streaming_regs.get_picture_provider());
 
     connman = init_wlan_manager(try_connect_to_managed_wlan,
                                 deferred_connman_refresh,
@@ -1450,12 +1451,14 @@ int main(int argc, char *argv[])
     static Connman::WLANTools wlan_tools(tech_reg);
     static Network::AccessPoint ap(tech_reg);
     static Network::AccessPointManager apman(ap);
+    static auto streaming_regs(Regs::PlayStream::mk_streaming_registers());
 
-    main_loop_init(&parameters, config_manager, appconn, wlan_tools, connman, &dot, is_upgrading);
+    main_loop_init(&parameters, config_manager, appconn, wlan_tools,
+                   connman, *streaming_regs, &dot, is_upgrading);
 
     if(connman == nullptr ||
        DBus::setup(parameters.connect_to_session_dbus, parameters.with_connman,
-                   appconn, *connman, config_manager, apman,
+                   appconn, *connman, config_manager, apman, *streaming_regs,
                    Regs::UPnPServer::connected,
                    Regs::AudioSources::check_external_service_credentials) < 0)
     {
@@ -1489,7 +1492,8 @@ int main(int argc, char *argv[])
     apman.start();
 
     Regs::WLANAccessPoint::init(apman, tech_reg);
-    Regs::PlayStream::late_init();
+    Regs::PlayStream::DCP::init(*streaming_regs);
+    streaming_regs->late_init();
 
     static struct sigaction action;
 

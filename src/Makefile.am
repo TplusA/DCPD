@@ -34,7 +34,7 @@ dcpd_SOURCES = \
     drcp.hh drcp_command_codes.h \
     dcpregs_drcp.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
-    dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_status.hh \
+    dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_stream_speed.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_upnpserver.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
     dcpregs_accesspoint.hh \
@@ -44,8 +44,7 @@ dcpd_SOURCES = \
     connman_address.hh \
     connman_technology_registry.hh connman_property_cache.hh \
     network_device.hh network_device_list.hh \
-    stream_id.h \
-    coverart.hh gvariantwrapper.hh md5.hh \
+    stream_id.h plainplayer.hh coverart.hh gvariantwrapper.hh md5.hh \
     dbus_common.c dbus_common.h \
     dbus_iface.cc dbus_iface.hh dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.hh connman_agent.h \
@@ -94,6 +93,7 @@ noinst_LTLIBRARIES = \
     libconnman_technology_registry.la \
     libconnman_dbus.la \
     libaccesspoint.la \
+    libplainplayer.la \
     liblogind_dbus.la \
     libsystemd_dbus.la \
     libdebug_dbus.la
@@ -116,6 +116,7 @@ libregisters_la_SOURCES = \
     dcpregs_tcptunnel.cc dcpregs_tcptunnel.hh \
     dcpregs_audiosources.cc dcpregs_audiosources.hh \
     dcpregs_playstream.cc dcpregs_playstream.hh \
+    dcpregs_stream_speed.cc dcpregs_stream_speed.hh \
     dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
     dcpregs_searchparameters.cc dcpregs_searchparameters.hh \
     dcpregs_status.hh \
@@ -187,6 +188,7 @@ libdbus_handlers_la_SOURCES = \
     dcpregs_filetransfer.hh \
     dcpregs_audiosources.hh \
     dcpregs_playstream.hh \
+    dcpregs_stream_speed.hh \
     dcpregs_status.hh
 libdbus_handlers_la_CFLAGS = $(AM_CFLAGS)
 libdbus_handlers_la_CXXFLAGS = $(AM_CXXFLAGS)
@@ -195,6 +197,9 @@ libaccesspoint_la_SOURCES = \
     accesspoint.cc accesspoint.hh \
     accesspoint_manager.cc accesspoint_manager.hh
 libaccesspoint_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libplainplayer_la_SOURCES = plainplayer.cc plainplayer.hh
+libplainplayer_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)

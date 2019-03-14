@@ -24,357 +24,29 @@
 
 #include "dcpregs_playstream.hh"
 #include "dcpregs_audiosources.hh"
+#include "plainplayer.hh"
+#include "coverart.hh"
 #include "registers_priv.hh"
 #include "de_tahifi_artcache_errors.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "logged_lock.hh"
-#include "messages.h"
 
 #include <algorithm>
 
 constexpr const char *ArtCache::ReadError::names_[];
 
 static const auto plainurl_register_dump_level = MESSAGE_LEVEL_NORMAL;
+static const char app_audio_source_id[] = "strbo.plainurl";
 
-enum class DevicePlaymode
+static inline void notify_stream_title_changed()
 {
-    DESELECTED,
-    DESELECTED_PLAYING,
-    SELECTED_IDLE,
-    WAIT_FOR_START_NOTIFICATION,
-    WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED,
-    WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION,
-    APP_IS_PLAYING,
-};
-
-enum class StreamIdType
-{
-    INVALID,
-    NON_APP,
-    APP_CURRENT,
-    APP_NEXT,
-    APP_UNKNOWN,
-};
-
-enum class NotifyStreamInfo
-{
-    UNMODIFIED,
-    PENDING,
-    OVERWRITTEN_PENDING,
-    DEV_NULL,
-};
-
-enum class SendStreamUpdate
-{
-    NONE,
-    TITLE,
-    URL_AND_TITLE,
-};
-
-struct SimplifiedStreamInfo
-{
-    std::string meta_data;
-    std::string url;
-
-    void clear()
-    {
-        meta_data.clear();
-        url.clear();
-    }
-};
-
-enum class PendingAppRequest
-{
-    NONE,
-    START,
-    STOP_KEEP_SELECTED,
-};
-
-using AppStreamID = ::ID::SourcedStream<STREAM_ID_SOURCE_APP>;
-
-struct PlayAppStreamData
-{
-    DevicePlaymode device_playmode;
-
-    /*!
-     * Pending request to be considered when app audio source is selected.
-     */
-    PendingAppRequest pending_request;
-
-  private:
-    /*!
-     * Keep track of IDs of streams started by app.
-     */
-    AppStreamID next_free_stream_id_;
-
-    /*!
-     * Currently playing app stream.
-     *
-     * Set when a new stream is sent to streamplayer.
-     */
-    AppStreamID current_stream_id_;
-
-    /*!
-     * Next app stream already pushed to streamplayer FIFO.
-     */
-    AppStreamID next_stream_id_;
-
-    /*!
-     * Stream last pushed to streamplayer.
-     */
-    AppStreamID last_pushed_stream_id_;
-
-  public:
-    /*!
-     * Write buffer for registers 78 and 79.
-     */
-    SimplifiedStreamInfo inbuffer_new_stream;
-
-    /*!
-     * Write buffer for registers 238 and 239, next queued app stream.
-     */
-    SimplifiedStreamInfo inbuffer_next_stream;
-
-    PlayAppStreamData():
-        device_playmode(DevicePlaymode::DESELECTED),
-        pending_request(PendingAppRequest::NONE),
-        next_free_stream_id_(AppStreamID::make_invalid()),
-        current_stream_id_(AppStreamID::make_invalid()),
-        next_stream_id_(AppStreamID::make_invalid()),
-        last_pushed_stream_id_(AppStreamID::make_invalid())
-    {}
-
-    void reset()
-    {
-        device_playmode = DevicePlaymode::DESELECTED;
-        pending_request = PendingAppRequest::NONE;
-        next_free_stream_id_ = AppStreamID::make();
-        current_stream_id_ = AppStreamID::make_invalid();
-        next_stream_id_ = AppStreamID::make_invalid();
-        last_pushed_stream_id_ = AppStreamID::make_invalid();
-        inbuffer_new_stream.clear();
-        inbuffer_next_stream.clear();
-    }
-
-    void reset_to_idle_mode()
-    {
-        device_playmode = DevicePlaymode::SELECTED_IDLE;
-        pending_request = PendingAppRequest::NONE;
-        current_stream_id_ = AppStreamID::make_invalid();
-        next_stream_id_ = AppStreamID::make_invalid();
-    }
-
-    void reset_to_deselected_mode()
-    {
-        device_playmode = DevicePlaymode::DESELECTED_PLAYING;
-        pending_request = PendingAppRequest::NONE;
-        current_stream_id_ = AppStreamID::make_invalid();
-        next_stream_id_ = AppStreamID::make_invalid();
-    }
-
-    bool is_current_stream(const AppStreamID id) const
-    {
-        return id.get().is_valid() && id == current_stream_id_;
-    }
-
-    bool is_next_stream_in_queue(const AppStreamID id) const
-    {
-        return id.get().is_valid() && id == next_stream_id_;
-    }
-
-    bool is_last_pushed_stream(const AppStreamID id) const
-    {
-        return id.get().is_valid() && id == last_pushed_stream_id_;
-    }
-
-    void queued_stream_notification(AppStreamID stream_id)
-    {
-        next_stream_id_ = stream_id;
-    }
-
-    void restart_notification(AppStreamID stream_id)
-    {
-        current_stream_id_ = stream_id;
-        next_stream_id_ = AppStreamID::make_invalid();
-    }
-
-    void playing_next_notification()
-    {
-        current_stream_id_ = next_stream_id_;
-        next_stream_id_ = AppStreamID::make_invalid();
-        inbuffer_next_stream.clear();
-    }
-
-    void set_last_pushed_stream_id(AppStreamID stream_id)
-    {
-        last_pushed_stream_id_ = stream_id;
-    }
-
-    AppStreamID get_free_stream_id()
-    {
-        if(!next_free_stream_id_.get().is_valid())
-            return AppStreamID::make_invalid();
-
-        while(true)
-        {
-            const AppStreamID result = next_free_stream_id_;
-            ++next_free_stream_id_;
-
-            if(result != current_stream_id_ && result != next_stream_id_)
-                return result;
-        }
-    }
-
-    stream_id_t get_current_stream_raw_id() const
-    {
-        return current_stream_id_.get().get_raw_id();
-    }
-
-    stream_id_t get_next_stream_raw_id() const
-    {
-        return next_stream_id_.get().get_raw_id();
-    }
-};
-
-struct PlayAnyStreamData
-{
-  private:
-    /*!
-     * The ID that arrived through start/stop notifications.
-     */
-    ID::Stream currently_playing_stream_;
-
-  public:
-    /*!
-     * The cover art meta data of the currently playing stream, if any.
-     */
-    CoverArt::Tracker tracked_stream_key;
-    CoverArt::Picture current_cover_art;
-
-    /*!
-     * Register values in #PlayAnyStreamData::pending_data are for this ID.
-     */
-    ID::Stream pending_stream_id;
-
-    /*!
-     * Pending stream ID overwritten by new, also pending stream.
-     *
-     * There can, in fact, be two pending streams if the SPI slave is queuing
-     * streams very quickly.
-     */
-    ID::Stream overwritten_pending_stream_id;
-
-    /*!
-     * Buffered information for registers 75 and 76.
-     *
-     * These information are used when the registers are read out.
-     */
-    SimplifiedStreamInfo current_stream_information;
-
-    /*!
-     * Write buffer for changes to registers 75 and 76.
-     */
-    SimplifiedStreamInfo pending_data;
-
-    /*!
-     * Buffer for changes to registers 75 and 76 while changes are pending.
-     */
-    SimplifiedStreamInfo overwritten_pending_data;
-
-    PlayAnyStreamData():
-        currently_playing_stream_(ID::Stream::make_invalid()),
-        pending_stream_id(ID::Stream::make_invalid()),
-        overwritten_pending_stream_id(ID::Stream::make_invalid())
-    {}
-
-    void reset()
-    {
-        currently_playing_stream_ = ID::Stream::make_invalid();
-        tracked_stream_key.clear();
-        current_cover_art.clear();
-        pending_stream_id = ID::Stream::make_invalid();
-        overwritten_pending_stream_id = ID::Stream::make_invalid();
-        current_stream_information.clear();
-        pending_data.clear();
-        overwritten_pending_data.clear();
-    }
-
-    bool is_currently_playing(const ID::Stream &id) const
-    {
-        return id.is_valid() && id == currently_playing_stream_;
-    }
-
-    bool set_currently_playing(const ID::Stream &id)
-    {
-        if(id == currently_playing_stream_)
-            return false;
-
-        currently_playing_stream_ = id;
-        return true;
-    }
-};
-
-static inline bool is_app_mode(const DevicePlaymode mode)
-{
-    switch(mode)
-    {
-      case DevicePlaymode::SELECTED_IDLE:
-      case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
-      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
-      case DevicePlaymode::APP_IS_PLAYING:
-        return true;
-
-      case DevicePlaymode::DESELECTED:
-      case DevicePlaymode::DESELECTED_PLAYING:
-      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
-        break;
-    }
-
-    return false;
+    Regs::get_data().register_changed_notification_fn(75);
 }
 
-static inline bool is_app_mode_and_playing(const DevicePlaymode mode)
+static inline void notify_stream_url_changed()
 {
-    return is_app_mode(mode) &&
-           mode != DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED;
-}
-
-static StreamIdType determine_stream_id_type(const ID::Stream &stream_id,
-                                             const PlayAppStreamData &data)
-{
-    const auto id(AppStreamID::make_from_generic_id(stream_id));
-
-    if(!id.get().is_valid())
-        return stream_id.is_valid() ? StreamIdType::NON_APP : StreamIdType::INVALID;
-
-    if(data.is_current_stream(id))
-        return StreamIdType::APP_CURRENT;
-    else if(data.is_next_stream_in_queue(id))
-        return StreamIdType::APP_NEXT;
-    else
-        return StreamIdType::APP_UNKNOWN;
-}
-
-static inline SendStreamUpdate
-determine_send_stream_update(bool title_changed, bool url_changed)
-{
-    if(!title_changed && !url_changed)
-        return SendStreamUpdate::NONE;
-
-    if(!url_changed)
-        return SendStreamUpdate::TITLE;
-
-    return SendStreamUpdate::URL_AND_TITLE;
-}
-
-static inline SendStreamUpdate
-clear_stream_info(SimplifiedStreamInfo &info)
-{
-    const auto ret = determine_send_stream_update(!info.meta_data.empty(),
-                                                  !info.url.empty());
-    info.clear();
-    return ret;
+    Regs::get_data().register_changed_notification_fn(76);
 }
 
 static inline void notify_app_playback_stopped()
@@ -387,39 +59,27 @@ static inline void notify_ready_for_next_stream_from_slave()
     Regs::get_data().register_changed_notification_fn(239);
 }
 
-static void do_notify_stream_info(PlayAnyStreamData &data,
-                                  const NotifyStreamInfo which,
-                                  const SendStreamUpdate update)
+static inline void notify_cover_art_changed()
 {
-    switch(which)
-    {
-      case NotifyStreamInfo::UNMODIFIED:
-        break;
+    Regs::get_data().register_changed_notification_fn(210);
+}
 
-      case NotifyStreamInfo::PENDING:
-        data.current_stream_information = data.pending_data;
-        break;
+enum class SendStreamUpdate
+{
+    NONE,
+    TITLE,
+    URL_AND_TITLE,
+};
 
-      case NotifyStreamInfo::OVERWRITTEN_PENDING:
-        data.current_stream_information = data.overwritten_pending_data;
-        break;
+enum class StreamStarted
+{
+    NOT,
+    FRESH,
+    CONTINUED
+};
 
-      case NotifyStreamInfo::DEV_NULL:
-        clear_stream_info(data.current_stream_information);
-        break;
-    }
-
-    if(which == NotifyStreamInfo::OVERWRITTEN_PENDING)
-    {
-        clear_stream_info(data.overwritten_pending_data);
-        data.overwritten_pending_stream_id = ID::Stream::make_invalid();
-    }
-    else
-    {
-        clear_stream_info(data.pending_data);
-        data.pending_stream_id = ID::Stream::make_invalid();
-    }
-
+static void do_notify_stream_info(const SendStreamUpdate update)
+{
     switch(update)
     {
       case SendStreamUpdate::NONE:
@@ -429,782 +89,118 @@ static void do_notify_stream_info(PlayAnyStreamData &data,
 
       case SendStreamUpdate::URL_AND_TITLE:
         msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
-        Regs::get_data().register_changed_notification_fn(75);
-        Regs::get_data().register_changed_notification_fn(76);
+        notify_stream_title_changed();
+        notify_stream_url_changed();
         break;
 
       case SendStreamUpdate::TITLE:
         msg_vinfo(MESSAGE_LEVEL_DIAG, "Send only new title to SPI slave");
-        Regs::get_data().register_changed_notification_fn(75);
+        notify_stream_title_changed();
         break;
     }
 }
 
-static void app_stream_started_playing(PlayAppStreamData &data,
-                                       StreamIdType stype, bool is_new_stream)
+/*!
+ * Contents of register pair 78/79 or 238/239.
+ */
+class BufferedStreamInfo
 {
-    log_assert(stype == StreamIdType::APP_CURRENT ||
-               stype == StreamIdType::APP_NEXT);
+  private:
+    ID::Stream stream_id_;
 
-    if(!is_app_mode(data.device_playmode))
-        BUG("App stream started in unexpected mode %d",
-            static_cast<int>(data.device_playmode));
+  public:
+    std::string meta_data_;
+    std::string url_;
 
-    data.device_playmode = DevicePlaymode::APP_IS_PLAYING;
+  public:
+    BufferedStreamInfo(const BufferedStreamInfo &) = delete;
+    BufferedStreamInfo &operator=(const BufferedStreamInfo &) = delete;
 
-    if(stype == StreamIdType::APP_NEXT)
-        data.playing_next_notification();
-
-    if(is_new_stream)
-        notify_ready_for_next_stream_from_slave();
-}
-
-static inline void other_stream_started_playing(PlayAppStreamData &data,
-                                                bool &switched_to_nonapp_mode)
-{
-    if(data.device_playmode != DevicePlaymode::DESELECTED &&
-       data.device_playmode != DevicePlaymode::DESELECTED_PLAYING)
-        switched_to_nonapp_mode = true;
-
-    data.reset_to_deselected_mode();
-}
-
-static size_t copy_string_to_slave(const std::string &src,
-                                   char *const dest, size_t dest_size)
-{
-    if(dest_size == 0)
-        return 0;
-
-    const size_t len = src.length();
-    const size_t count = len < dest_size ? len : dest_size;
-
-    if(count > 0)
-        std::copy_n(src.begin(), count, dest);
-
-    return count;
-}
-
-static bool copy_string_data(std::string &dest, const uint8_t *src,
-                             size_t src_size, const char *what)
-{
-    dest.clear();
-
-    if(src_size > 0 && src[0] != '\0')
-        std::copy_n(src, src_size, std::back_inserter(dest));
-
-    if(dest.empty())
-        msg_vinfo(plainurl_register_dump_level, "%s: <empty>", what);
-
-    return !dest.empty();
-}
-
-static void unchecked_set_meta_data_and_url(const ID::Stream &stream_id,
-                                            const std::string &title,
-                                            const std::string &url,
-                                            PlayAnyStreamData &any_stream_data)
-{
-    SimplifiedStreamInfo &dest_info(any_stream_data.is_currently_playing(stream_id)
-                                    ? any_stream_data.current_stream_information
-                                    : any_stream_data.pending_data);
-
-    any_stream_data.pending_stream_id =
-        ((&dest_info == &any_stream_data.pending_data)
-         ? stream_id
-         : ID::Stream::make_invalid());
-
-    NotifyStreamInfo which;
-    SendStreamUpdate update;
-
-    if(stream_id.get_cookie() == STREAM_ID_COOKIE_INVALID)
+    BufferedStreamInfo(BufferedStreamInfo &&src):
+        stream_id_(src.stream_id_),
+        meta_data_(std::move(src.meta_data_)),
+        url_(std::move(src.url_))
     {
-        update = clear_stream_info(dest_info);
-        which = NotifyStreamInfo::DEV_NULL;
-    }
-    else
-    {
-        update = determine_send_stream_update(dest_info.meta_data != title,
-                                              dest_info.url != url);
-        dest_info.meta_data = title;
-        dest_info.url = url;
-        which = NotifyStreamInfo::UNMODIFIED;
+        src.stream_id_ = ID::Stream::make_invalid();
     }
 
-    /* direct update */
-    if(any_stream_data.pending_stream_id.get_source() == STREAM_ID_SOURCE_INVALID)
-        do_notify_stream_info(any_stream_data, which, update);
-}
-
-static void try_notify_pending_stream_info(PlayAnyStreamData &data,
-                                           bool switched_to_nonapp_mode)
-{
-    if(data.pending_stream_id.get_source() != STREAM_ID_SOURCE_INVALID &&
-       data.is_currently_playing(data.pending_stream_id))
+    BufferedStreamInfo &operator=(BufferedStreamInfo &&src)
     {
-        do_notify_stream_info(data, NotifyStreamInfo::PENDING,
-                              SendStreamUpdate::URL_AND_TITLE);
-    }
-    else if(data.overwritten_pending_stream_id.get_source() != STREAM_ID_SOURCE_INVALID &&
-            data.is_currently_playing(data.overwritten_pending_stream_id))
-    {
-        do_notify_stream_info(data, NotifyStreamInfo::OVERWRITTEN_PENDING,
-                              SendStreamUpdate::URL_AND_TITLE);
-    }
-    else if(switched_to_nonapp_mode)
-    {
-        /* In case the mode switched to non-app mode, but the external source
-         * has failed to deliver title and URL up to this point, then we need
-         * to wipe out the currently stored, outdated information. The external
-         * source may send the missing information later in this case. */
-        do_notify_stream_info(data, NotifyStreamInfo::DEV_NULL,
-                              SendStreamUpdate::URL_AND_TITLE);
-    }
-}
-
-static std::tuple<std::string, const size_t, const size_t>
-tokenize_meta_data(const std::string &src)
-{
-    std::string dest;
-    dest.reserve(src.length() + 1);
-
-    size_t artist = src.length();
-    size_t album = src.length();
-    size_t idx = 0;
-
-    for(size_t i = 0; i < src.length(); ++i)
-    {
-        const char ch = src[i];
-
-        if(ch == '\x1d')
+        if(src.stream_id_.is_valid())
         {
-            dest.push_back('\0');
-
-            if(idx < 2)
-            {
-                if(idx == 0)
-                    artist = i + 1;
-                else
-                    album = i + 1;
-
-                ++idx;
-            }
+            stream_id_ = src.stream_id_;
+            meta_data_ = std::move(src.meta_data_);
+            url_ = std::move(src.url_);
+            src.stream_id_ = ID::Stream::make_invalid();
         }
         else
-            dest.push_back(ch);
+            clear();
+
+        return *this;
     }
 
-    return std::make_tuple(std::move(dest), artist, album);
-}
+    explicit BufferedStreamInfo():
+        stream_id_(ID::Stream::make_invalid())
+    {}
 
-static void try_start_stream(PlayAppStreamData &data,
-                             PlayAnyStreamData &any_stream_data,
-                             bool is_restart)
-{
-    const AppStreamID stream_id(data.get_free_stream_id());
+    bool is_valid() const { return stream_id_.is_valid(); }
 
-    gboolean fifo_overflow;
-    gboolean is_playing;
-
-    const SimplifiedStreamInfo &selected(is_restart
-                                         ? data.inbuffer_new_stream
-                                         : data.inbuffer_next_stream);
-
-    CoverArt::StreamKey stream_key;
-    CoverArt::generate_stream_key_for_app(stream_key, selected.url);
-
-    const auto tokenized(tokenize_meta_data(selected.meta_data));
-    const auto token_store(std::get<0>(tokenized).c_str());
-
-    tdbus_dcpd_playback_emit_stream_info(dbus_get_playback_iface(),
-                                         stream_id.get().get_raw_id(),
-                                         &token_store[std::get<1>(tokenized)],
-                                         &token_store[std::get<2>(tokenized)],
-                                         token_store,
-                                         selected.meta_data.c_str(),
-                                         selected.url.c_str());
-    GError *error = nullptr;
-
-    if(!tdbus_splay_urlfifo_call_push_sync(dbus_get_streamplayer_urlfifo_iface(),
-                                           stream_id.get().get_raw_id(),
-                                           selected.url.c_str(),
-                                           g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
-                                                                     stream_key.key_,
-                                                                     sizeof(stream_key.key_),
-                                                                     sizeof(stream_key.key_[0])),
-                                           0, "ms", 0, "ms",
-                                           is_restart ? -2 : 0,
-                                           &fifo_overflow, &is_playing,
-                                           nullptr, &error))
+    bool matches_id(const ID::Stream &stream_id) const
     {
-        BUG("Failed pushing stream %u, URL %s to stream player",
-            stream_id.get().get_raw_id(), selected.url.c_str());
-        dbus_common_handle_dbus_error(&error, "Push stream to player");
-        return;
+        return stream_id.is_valid() && stream_id_ == stream_id;
     }
 
-    if(fifo_overflow)
+    SendStreamUpdate diff(const BufferedStreamInfo &other) const
     {
-        BUG("Pushed stream with clear request, got FIFO overflow");
-        return;
+        return determine_send_stream_update(meta_data_ != other.meta_data_,
+                                            url_ != other.url_);
     }
 
-    auto maybe_our_pending_stream_id(AppStreamID::make_from_generic_id(any_stream_data.pending_stream_id));
-
-    if(data.is_last_pushed_stream(maybe_our_pending_stream_id))
+    SendStreamUpdate set_full(const ID::Stream &stream_id,
+                              std::string &&meta_data, std::string &&url)
     {
-        /* slave sent the next stream very quickly after the first stream,
-         * didn't receive any start notification from streamplayer yet */
-        any_stream_data.overwritten_pending_stream_id = any_stream_data.pending_stream_id;
-        any_stream_data.overwritten_pending_data = any_stream_data.pending_data;
+        const auto result = set_full(std::move(meta_data), std::move(url));
+        stream_id_ = stream_id;
+        return result;
     }
 
-    data.set_last_pushed_stream_id(stream_id);
-
-    unchecked_set_meta_data_and_url(stream_id.get(), selected.meta_data,
-                                    selected.url, any_stream_data);
-
-    if(!is_playing && data.device_playmode == DevicePlaymode::SELECTED_IDLE)
+    SendStreamUpdate set_full(std::string &&meta_data, std::string &&url)
     {
-
-        if(tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
-                                                 nullptr, &error))
-            data.device_playmode = DevicePlaymode::WAIT_FOR_START_NOTIFICATION;
-        else
-        {
-            msg_error(0, LOG_NOTICE, "Failed starting stream");
-            dbus_common_handle_dbus_error(&error, "Start stream");
-
-            data.reset_to_idle_mode();
-
-            if(!tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
-                                                    0, nullptr, nullptr, nullptr,
-                                                    nullptr, &error))
-            {
-                msg_error(0, LOG_NOTICE, "Failed clearing stream player FIFO");
-                dbus_common_handle_dbus_error(&error, "Clear URLFIFO");
-            }
-
-            return;
-        }
+        const auto update =
+            determine_send_stream_update(meta_data_ != meta_data, url_ != url);
+        meta_data_ = std::move(meta_data);
+        url_ = std::move(url);
+        return update;
     }
 
-    if(is_restart)
+    SendStreamUpdate clear()
     {
-        data.restart_notification(stream_id);
-        tdbus_dcpd_views_emit_open(dbus_get_views_iface(), "Play");
+        return clear(ID::Stream::make_invalid());
     }
-    else
+
+    SendStreamUpdate clear(const ID::Stream &stream_id)
     {
-        log_assert(data.device_playmode == DevicePlaymode::WAIT_FOR_START_NOTIFICATION ||
-                   data.device_playmode == DevicePlaymode::SELECTED_IDLE ||
-                   data.device_playmode == DevicePlaymode::APP_IS_PLAYING);
-        data.queued_stream_notification(stream_id);
+        const auto update =
+            determine_send_stream_update(!meta_data_.empty(), !url_.empty());
+        stream_id_ = stream_id;
+        meta_data_.clear();
+        url_.clear();
+        return update;
     }
-}
 
-static void try_stop_stream(PlayAppStreamData &data, const char *reason,
-                            bool stay_in_app_mode)
-{
-    data.device_playmode = stay_in_app_mode
-        ? DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED
-        : DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
-
-    GError *error = nullptr;
-
-    if(!tdbus_splay_playback_call_stop_sync(dbus_get_streamplayer_playback_iface(),
-                                            reason, nullptr, &error))
+  private:
+    static inline SendStreamUpdate
+    determine_send_stream_update(bool title_changed, bool url_changed)
     {
-        msg_error(0, LOG_NOTICE, "Failed stopping stream player");
-        dbus_common_handle_dbus_error(&error, "Stop stream");
-        data.reset_to_idle_mode();
-    }
-}
+        if(!title_changed && !url_changed)
+            return SendStreamUpdate::NONE;
 
-static void registered_audio_source(GObject *source_object, GAsyncResult *res,
-                                    gpointer user_data)
-{
-    GError *error = nullptr;
-    tdbus_aupath_manager_call_register_source_finish(TDBUS_AUPATH_MANAGER(source_object),
-                                                     res, &error);
-    dbus_common_handle_dbus_error(&error, "Register audio source");
+        if(!url_changed)
+            return SendStreamUpdate::TITLE;
 
-    Regs::AudioSources::fetch_audio_paths();
-}
-
-struct PlayStreamData
-{
-    LoggedLock::Mutex lock;
-
-    PlayAppStreamData app;
-    PlayAnyStreamData other;
-
-    PlayStreamData()
-    {
-        LoggedLock::configure(lock, "PlayStreamData", MESSAGE_LEVEL_DEBUG);
+        return SendStreamUpdate::URL_AND_TITLE;
     }
 };
-
-static PlayStreamData play_stream_data;
-
-static const char app_audio_source_id[] = "strbo.plainurl";
-
-void Regs::PlayStream::init()
-{
-    play_stream_data.app.reset();
-    play_stream_data.other.reset();
-}
-
-void Regs::PlayStream::late_init()
-{
-    tdbus_aupath_manager_call_register_source(dbus_audiopath_get_manager_iface(),
-                                              app_audio_source_id,
-                                              "Streams pushed by smartphone app",
-                                              "strbo",
-                                              "/de/tahifi/Dcpd",
-                                              nullptr,
-                                              registered_audio_source, &play_stream_data);
-}
-
-void Regs::PlayStream::deinit()
-{
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-    play_stream_data.other.tracked_stream_key.clear();
-    play_stream_data.other.current_cover_art.clear();
-}
-
-static bool parse_speed_factor(const uint8_t *data, size_t length,
-                               double &factor)
-{
-    if(length != 2)
-    {
-        msg_error(EINVAL, LOG_ERR, "Speed factor length must be 2");
-        return false;
-    }
-
-    if(data[1] >= 100)
-    {
-        msg_error(EINVAL, LOG_ERR, "Speed factor invalid fraction part");
-        return false;
-    }
-
-    factor = data[0];
-    factor += double(data[1]) / 100.0;
-
-    if(factor <= 0.0)
-    {
-        msg_error(EINVAL, LOG_ERR, "Speed factor too small");
-        return false;
-    }
-
-    return true;
-}
-
-static bool parse_absolute_position_ms(const uint8_t *data, size_t length,
-                                       uint32_t &position_ms)
-{
-    if(length != sizeof(position_ms))
-    {
-        msg_error(EINVAL, LOG_ERR,
-                  "Seek position length must be %zu", sizeof(position_ms));
-        return false;
-    }
-
-    /* little endian */
-    position_ms = (uint32_t(data[0]) << 0)  | (uint32_t(data[1]) << 8) |
-                  (uint32_t(data[2]) << 16) | (uint32_t(data[3]) << 24);
-
-    return true;
-}
-
-int Regs::PlayStream::DCP::write_73_seek_or_set_speed(const uint8_t *data, size_t length)
-{
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 73 handler %p %zu", data, length);
-
-    if(length < 1)
-        return -1;
-
-    double factor;
-    uint32_t position;
-
-    switch(data[0])
-    {
-      case 0xc1:
-        if(parse_speed_factor(data + 1, length - 1, factor))
-        {
-            tdbus_dcpd_playback_emit_set_speed(dbus_get_playback_iface(), factor);
-            return 0;
-        }
-
-        break;
-
-      case 0xc2:
-        if(parse_speed_factor(data + 1, length - 1, factor))
-        {
-            tdbus_dcpd_playback_emit_set_speed(dbus_get_playback_iface(), -factor);
-            return 0;
-        }
-
-        break;
-
-      case 0xc3:
-        tdbus_dcpd_playback_emit_set_speed(dbus_get_playback_iface(), 0.0);
-        return 0;
-
-      case 0xc4:
-        if(parse_absolute_position_ms(data + 1, length - 1, position))
-        {
-            /* overflow/underflow impossible, no further checks required */
-            tdbus_dcpd_playback_emit_seek(dbus_get_playback_iface(),
-                                          position, "ms");
-            return 0;
-        }
-
-        break;
-
-      default:
-        msg_error(EINVAL, LOG_ERR,
-                  "Invalid subcommand 0x%02x for register 73", data[0]);
-        break;
-    }
-
-    return -1;
-}
-
-ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, size_t length)
-{
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-    return copy_string_to_slave(play_stream_data.other.current_stream_information.meta_data,
-                                (char *)response, length);
-}
-
-ssize_t Regs::PlayStream::DCP::read_76_current_stream_url(uint8_t *response, size_t length)
-{
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-    return copy_string_to_slave(play_stream_data.other.current_stream_information.url,
-                                (char *)response, length);
-}
-
-static void dump_plainurl_register_meta_data(const char *what,
-                                             const SimplifiedStreamInfo &info)
-{
-    if(!msg_is_verbose(plainurl_register_dump_level))
-        return;
-
-    const auto tokenized(tokenize_meta_data(info.meta_data));
-    const auto d(std::get<0>(tokenized).c_str());
-
-    msg_vinfo(plainurl_register_dump_level, "%s artist: \"%s\"", what, &d[std::get<1>(tokenized)]);
-    msg_vinfo(plainurl_register_dump_level, "%s album : \"%s\"", what, &d[std::get<2>(tokenized)]);
-    msg_vinfo(plainurl_register_dump_level, "%s title : \"%s\"", what, d);
-}
-
-static void dump_plainurl_register_url(const char *what,
-                                       const SimplifiedStreamInfo &info)
-{
-    msg_vinfo(plainurl_register_dump_level, "%s: \"%s\"", what, info.url.c_str());
-}
-
-int Regs::PlayStream::DCP::write_78_start_play_stream_title(const uint8_t *data, size_t length)
-{
-    static const char register_description[] = "First stream meta data (reg 78)";
-
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 78 handler %p %zu", data, length);
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    if(!is_app_mode(play_stream_data.app.device_playmode))
-    {
-        GVariantDict empty;
-        g_variant_dict_init(&empty, nullptr);
-        tdbus_aupath_manager_call_request_source(dbus_audiopath_get_manager_iface(),
-                                                 app_audio_source_id,
-                                                 g_variant_dict_end(&empty),
-                                                 nullptr, nullptr, nullptr);
-    }
-
-    if(copy_string_data(play_stream_data.app.inbuffer_new_stream.meta_data,
-                        data, length, register_description))
-        dump_plainurl_register_meta_data(register_description,
-                                         play_stream_data.app.inbuffer_new_stream);
-
-    return 0;
-}
-
-int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, size_t length)
-{
-    static const char register_description[] = "First stream URL (reg 79)";
-
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 79 handler %p %zu", data, length);
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    const bool is_in_app_mode = is_app_mode(play_stream_data.app.device_playmode);
-
-    if(is_in_app_mode)
-        play_stream_data.app.pending_request = PendingAppRequest::NONE;
-
-    if(copy_string_data(play_stream_data.app.inbuffer_new_stream.url,
-                        data, length, register_description))
-    {
-        dump_plainurl_register_url(register_description,
-                                   play_stream_data.app.inbuffer_new_stream);
-
-        /* maybe start playing */
-        if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
-        {
-            if(is_in_app_mode)
-                try_start_stream(play_stream_data.app, play_stream_data.other,
-                                 true);
-            else
-                play_stream_data.app.pending_request = PendingAppRequest::START;
-        }
-        else
-            msg_error(0, LOG_ERR, "Not starting stream, register 78 still unset");
-    }
-    else if(is_in_app_mode)
-    {
-        /* stop command */
-        try_stop_stream(play_stream_data.app,
-                        "empty URL written to reg 79 while in app mode",
-                        true);
-    }
-    else
-        play_stream_data.app.pending_request = PendingAppRequest::STOP_KEEP_SELECTED;
-
-    switch(play_stream_data.app.pending_request)
-    {
-      case PendingAppRequest::START:
-        break;
-
-      case PendingAppRequest::NONE:
-      case PendingAppRequest::STOP_KEEP_SELECTED:
-        clear_stream_info(play_stream_data.app.inbuffer_new_stream);
-        break;
-    }
-
-    return 0;
-}
-
-ssize_t Regs::PlayStream::DCP::read_79_start_play_stream_url(uint8_t *response, size_t length)
-{
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 79 handler %p %zu", response, length);
-    return 0;
-}
-
-ssize_t Regs::PlayStream::DCP::read_210_current_cover_art_hash(uint8_t *response, size_t length)
-{
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    const size_t len =
-        play_stream_data.other.current_cover_art.copy_hash(response, length);
-
-    if(len == 0)
-        msg_info("Cover art: Send empty hash to SPI slave");
-    else if(len == 16)
-        msg_info("Cover art: Send hash to SPI slave: "
-                 "%02x%02x%02x%02x%02x%02x%02x%02x"
-                 "%02x%02x%02x%02x%02x%02x%02x%02x",
-                 response[0], response[1], response[2], response[3],
-                 response[4], response[5], response[6], response[7],
-                 response[8], response[9], response[10], response[11],
-                 response[12], response[13], response[14], response[15]);
-    else
-        BUG("Cover art: Send %zu hash bytes to SPI slave", len);
-
-    return len;
-}
-
-int Regs::PlayStream::DCP::write_238_next_stream_title(const uint8_t *data, size_t length)
-{
-    static const char register_description[] = "Next stream meta data (reg 238)";
-
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 238 handler %p %zu", data, length);
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    if(!is_app_mode(play_stream_data.app.device_playmode))
-    {
-        BUG("App sets next stream title while not in app mode");
-        return 0;
-    }
-
-    if(copy_string_data(play_stream_data.app.inbuffer_next_stream.meta_data,
-                        data, length, register_description))
-        dump_plainurl_register_meta_data(register_description,
-                                         play_stream_data.app.inbuffer_next_stream);
-
-    return 0;
-}
-
-int Regs::PlayStream::DCP::write_239_next_stream_url(const uint8_t *data, size_t length)
-{
-    static const char register_description[] = "Next stream URL (reg 239)";
-
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 239 handler %p %zu", data, length);
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    if(!is_app_mode(play_stream_data.app.device_playmode))
-    {
-        BUG("App sets next URL while not in app mode");
-        return 0;
-    }
-
-    if(copy_string_data(play_stream_data.app.inbuffer_next_stream.url,
-                        data, length, register_description))
-    {
-        dump_plainurl_register_url(register_description,
-                                   play_stream_data.app.inbuffer_next_stream);
-
-        /* maybe send to streamplayer queue */
-        if(play_stream_data.app.inbuffer_next_stream.meta_data[0] != '\0')
-            try_start_stream(play_stream_data.app, play_stream_data.other,
-                             false);
-        else
-            msg_error(0, LOG_ERR,
-                      "Not starting stream, register 238 still unset");
-    }
-    else
-    {
-        /* ignore funny writes */
-        BUG("App is doing weird stuff");
-    }
-
-    clear_stream_info(play_stream_data.app.inbuffer_next_stream);
-
-    return 0;
-}
-
-ssize_t Regs::PlayStream::DCP::read_239_next_stream_url(uint8_t *response, size_t length)
-{
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 239 handler %p %zu", response, length);
-    return 0;
-}
-
-void Regs::PlayStream::select_source()
-{
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    if(is_app_mode(play_stream_data.app.device_playmode))
-    {
-        BUG("Already selected");
-        return;
-    }
-
-    msg_info("Enter app mode");
-
-    play_stream_data.app.device_playmode = DevicePlaymode::SELECTED_IDLE;
-
-    switch(play_stream_data.app.pending_request)
-    {
-      case PendingAppRequest::NONE:
-        break;
-
-      case PendingAppRequest::START:
-        msg_vinfo(MESSAGE_LEVEL_DIAG, "Processing pending start request");
-
-        if(play_stream_data.app.inbuffer_new_stream.meta_data[0] != '\0')
-        {
-            try_start_stream(play_stream_data.app, play_stream_data.other,
-                             true);
-            clear_stream_info(play_stream_data.app.inbuffer_new_stream);
-        }
-        else
-            BUG("No data available for pending start request");
-
-        break;
-
-      case PendingAppRequest::STOP_KEEP_SELECTED:
-        msg_info("Processing pending stop request");
-        try_stop_stream(play_stream_data.app,
-                        "empty URL written to reg 79 while not in app mode",
-                        true);
-        break;
-    }
-
-    play_stream_data.app.pending_request = PendingAppRequest::NONE;
-}
-
-void Regs::PlayStream::deselect_source()
-{
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    if(!is_app_mode(play_stream_data.app.device_playmode))
-    {
-        BUG("Not selected");
-        return;
-    }
-
-    msg_info("Leave app mode");
-
-    switch(play_stream_data.app.device_playmode)
-    {
-      case DevicePlaymode::SELECTED_IDLE:
-        play_stream_data.app.device_playmode = DevicePlaymode::DESELECTED;
-        break;
-
-      case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
-        try_stop_stream(play_stream_data.app,
-                        "source deselected while waiting for start notification from player",
-                        false);
-        break;
-
-      case DevicePlaymode::APP_IS_PLAYING:
-        try_stop_stream(play_stream_data.app,
-                        "source deselected while app is playing",
-                        false);
-        break;
-
-      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
-        play_stream_data.app.device_playmode =
-            DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION;
-        break;
-
-      case DevicePlaymode::DESELECTED:
-      case DevicePlaymode::DESELECTED_PLAYING:
-      case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
-        break;
-    }
-}
-
-void Regs::PlayStream::set_title_and_url(ID::Stream stream_id,
-                                         std::string &&title, std::string &&url)
-{
-    msg_vinfo(MESSAGE_LEVEL_DIAG,
-              "Received explicit title and URL information for stream %u",
-              stream_id.get_raw_id());
-
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    log_assert(stream_id.get_source() != STREAM_ID_SOURCE_INVALID);
-
-    if(!AppStreamID::compatible_with(stream_id))
-        unchecked_set_meta_data_and_url(stream_id, title, url,
-                                        play_stream_data.other);
-    else
-    {
-        BUG("Got title and URL information for app stream ID %u",
-            stream_id.get_raw_id());
-        BUG("+   Title: \"%s\"", title.c_str());
-        BUG("+   URL  : \"%s\"", url.c_str());
-    }
-}
 
 /*!
  * Retrieve cover art for given stream key if necessary and possible.
@@ -1308,203 +304,780 @@ static bool try_retrieve_cover_art(GVariant *stream_key,
     return should_clear_picture ? picture.clear() : retval;
 }
 
-static inline void notify_cover_art_changed()
+class StreamingRegisters:
+    public Regs::PlayStream::StreamingRegistersIface,
+    public CoverArt::PictureProviderIface
 {
-    Regs::get_data().register_changed_notification_fn(210);
-}
+  private:
+    mutable LoggedLock::Mutex lock_;
 
-/*!
- * React on start of stream.
- *
- * ATTENTION, PLEASE!
- *
- * In case you are wondering why this code does not incorporate the currently
- * selected audio source in any way, but instead relies on a seemingly weired
- * kind of auto-detection of a mysterious "app mode": This code predates
- * explicit audio source and audio path management. Before there were audio
- * paths, there was only a single stream player. Mode switching was done based
- * on stream IDs and start/stop state changes.
- *
- * And this is what's still going on in here. The Roon Ready player generates
- * stream IDs tagged with the Roon ID, so the logic in here detects non-app IDs
- * when seeing them. Code that sends commands directly to the stream player are
- * only sent in app mode, so that there should be no accidental communication
- * with the regular stream player while Roon is active.
- *
- * The mechanisms in here (and in #Regs::PlayStream::stop_notification())
- * operate orthogonal to and completely independent of audio path selection,
- * AND OF COURSE THIS IS A PROBLEM. It currently works, but an adaption to make
- * use of audio source information is required to make this code simpler and
- * also more stable against possible misdetections of app/no-app modes. FIXME.
- */
-void Regs::PlayStream::start_notification(ID::Stream stream_id,
-                                          void *stream_key_variant)
-{
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
+    /*!
+     * Plain URL player.
+     *
+     * This handles registers 78, 79, 238, and 239.
+     */
+    std::unique_ptr<Regs::PlayStream::PlainPlayer> player_;
 
-    play_stream_data.other.tracked_stream_key.set(
+    /*!
+     * The cover art meta data of the currently playing stream, if any.
+     *
+     * This is for register 210.
+     */
+    CoverArt::Tracker tracked_stream_key_;
+    CoverArt::Picture current_cover_art_;
+
+    /*!
+     * Currently playing stream (any kind).
+     *
+     * This is buffered information for the stream information in registers 75
+     * and 76, i.e., these data are returned when these registered are read
+     * out. The contained stream ID is also used for filtering updates sent to
+     * register 210.
+     *
+     * Note that this object is meant to handle not only app streams, but any
+     * kind of stream playing on any source.
+     */
+    BufferedStreamInfo stream_info_output_buffer_;
+
+    /*!
+     * Write buffer for changes of stream meta data and URL.
+     *
+     * These data are filled in via D-Bus. Since it is possible for us to
+     * receive stream information before the stream has actually started
+     * playing (because of multitasking and undeterministic task switching), we
+     * need to store the data here and wait for the stream to start before
+     * moving it over to StreamingRegisters::stream_info_output_buffer_.
+     */
+    BufferedStreamInfo stream_info_input_buffer_;
+
+    /*!
+     * Write buffer for register 78 and 238.
+     *
+     * Since meta data and URL are different registers (by stupid design), we
+     * need to store what's written to register 78 (or 238) until register 79
+     * (or 239) is written in some place and construct the request to the
+     * player bit by bit.
+     *
+     * The first field of the pair is the stream information for the player,
+     * the second field is true in case the meta data was written through
+     * register 78.
+     */
+    Maybe<std::pair<Regs::PlayStream::StreamInfo, bool>> play_request_input_buffer_;
+
+  public:
+    explicit StreamingRegisters():
+        player_(Regs::PlayStream::make_player())
+    {
+        LoggedLock::configure(lock_, "StreamingRegisters", MESSAGE_LEVEL_DEBUG);
+    }
+
+    void late_init() override;
+
+    const CoverArt::PictureProviderIface &get_picture_provider() const override
+    {
+        return *this;
+    }
+
+    void with_current_stream_information(const std::function<void(const BufferedStreamInfo &)> &apply)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+        apply(stream_info_output_buffer_);
+    }
+
+    void with_current_cover_art(const std::function<void(const CoverArt::Picture &)> &apply)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+        apply(current_cover_art_);
+    }
+
+    void audio_source_selected()
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+        player_->notifications().audio_source_selected();
+    }
+
+    void audio_source_deselected()
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+        player_->notifications().audio_source_deselected();
+    }
+
+    /*!
+     * Store title and URL for non-app stream.
+     *
+     * For registers 75 and 76.
+     */
+    void set_title_and_url(ID::Stream stream_id,
+                           std::string &&title, std::string &&url)
+    {
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "Received explicit title and URL information for stream %u",
+                  stream_id.get_raw_id());
+
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        log_assert(stream_id.get_source() != STREAM_ID_SOURCE_INVALID);
+
+        if(!Regs::PlayStream::PlainPlayer::StreamID::compatible_with(stream_id))
+            store_meta_data_and_url(stream_id, std::move(title), std::move(url));
+        else
+        {
+            BUG("Got title and URL information for app stream ID %u",
+                stream_id.get_raw_id());
+            BUG("+   Title: \"%s\"", title.c_str());
+            BUG("+   URL  : \"%s\"", url.c_str());
+        }
+    }
+
+    /*!
+     * Store meta data written through register 78 in a buffer.
+     *
+     * The plain URL audio source is requested by this function if not done
+     * already. This function must be called before calling
+     * #StreamingRegisters::start_first_stream().
+     */
+    void store_meta_data_for_first_stream(std::string &&artist, std::string &&album,
+                                          std::string &&title, std::string &&alttrack)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        play_request_input_buffer_ =
+        {
+            Regs::PlayStream::StreamInfo(std::move(artist), std::move(album),
+                                         std::move(title), std::move(alttrack), ""),
+            true
+        };
+
+        player_->activate(
+            [] ()
+            {
+                GVariantDict empty;
+                g_variant_dict_init(&empty, nullptr);
+                tdbus_aupath_manager_call_request_source(
+                    dbus_audiopath_get_manager_iface(), app_audio_source_id,
+                    g_variant_dict_end(&empty), nullptr, nullptr, nullptr);
+            });
+    }
+
+    /*!
+     * Store meta data written through register 79 in a buffer.
+     *
+     * The plain URL audio source is requested by this function if not done
+     * already. This function must be called before calling
+     * #StreamingRegisters::push_next_stream().
+     */
+    void store_meta_data_for_next_stream(std::string &&artist, std::string &&album,
+                                         std::string &&title, std::string &&alttrack)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        play_request_input_buffer_ =
+        {
+            Regs::PlayStream::StreamInfo(std::move(artist), std::move(album),
+                                         std::move(title), std::move(alttrack), ""),
+            false
+        };
+    }
+
+    void start_first_stream(std::string &&url)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        if(!play_request_input_buffer_.is_known() || !play_request_input_buffer_->second)
+        {
+            msg_error(0, LOG_ERR, "Not starting stream, register 78 wasn't set");
+            return;
+        }
+
+        play_request_input_buffer_->first.url_ = std::move(url);
+        player_->start(
+            std::move(play_request_input_buffer_->first),
+            [this]
+            (const auto &stream_info, auto stream_id,
+             bool is_first, bool is_start_requested)
+            {
+                return do_push_and_start_stream(stream_info, stream_id,
+                                                is_first, is_start_requested);
+            });
+        play_request_input_buffer_.set_unknown();
+    }
+
+    void push_next_stream(std::string &&url)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        if(!play_request_input_buffer_.is_known() || play_request_input_buffer_->second)
+        {
+            msg_error(0, LOG_ERR, "Not pushing next stream, register 238 wasn't set");
+            return;
+        }
+
+        play_request_input_buffer_->first.url_ = std::move(url);
+        player_->next(std::move(play_request_input_buffer_->first));
+        play_request_input_buffer_.set_unknown();
+    }
+
+    void stop_playing(const char *reason)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        const auto stopped = player_->stop(
+            [reason] ()
+            {
+                GError *error = nullptr;
+                if(!tdbus_splay_playback_call_stop_sync(
+                        dbus_get_streamplayer_playback_iface(),
+                        reason, nullptr, &error))
+                {
+                    msg_error(0, LOG_NOTICE, "Failed stopping stream player");
+                    dbus_common_handle_dbus_error(&error, "Stop stream");
+                    return false;
+                }
+                return true;
+            });
+
+        if(stopped)
+            play_request_input_buffer_.set_unknown();
+    }
+
+    /*!
+     * React on start of stream.
+     */
+    void start_notification(ID::Stream stream_id, void *stream_key_variant)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        const auto app_stream_id =
+            Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
+        bool player_has_matching_meta_data = false;
+        bool stream_is_a_new_one = true;
+        if(app_stream_id.get().is_valid())
+        {
+            switch(player_->notifications().started(app_stream_id))
+            {
+              case Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED:
+              case Regs::PlayStream::PlainPlayerNotifications::StartResult::PLAYING_ON:
+                notify_ready_for_next_stream_from_slave();
+                player_has_matching_meta_data = true;
+                break;
+
+              case Regs::PlayStream::PlainPlayerNotifications::StartResult::CONTINUE_FROM_PAUSE:
+                stream_is_a_new_one = false;
+                break;
+
+              case Regs::PlayStream::PlainPlayerNotifications::StartResult::UNEXPECTED_START:
+              case Regs::PlayStream::PlainPlayerNotifications::StartResult::UNEXPECTED_STREAM_ID:
+              case Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE:
+              case Regs::PlayStream::PlainPlayerNotifications::StartResult::FAILED:
+                break;
+            }
+        }
+        else if(player_->is_active())
+        {
+            BUG("Non-app stream %u started while plain URL player is selected",
+                stream_id.get_raw_id());
+            player_->notifications().audio_source_deselected();
+            notify_app_playback_stopped();
+        }
+
+        tracked_stream_key_.set(
             std::move(GVariantWrapper(static_cast<GVariant *>(stream_key_variant),
                                       GVariantWrapper::Transfer::JUST_MOVE)));
 
-    const StreamIdType stream_id_type =
-        determine_stream_id_type(stream_id, play_stream_data.app);
-
-    const bool is_new_stream =
-        play_stream_data.other.set_currently_playing(stream_id);
-
-    bool switched_to_nonapp_mode = false;
-
-    switch(stream_id_type)
-    {
-      case StreamIdType::INVALID:
-        BUG("Got start notification for invalid stream ID %u", stream_id.get_raw_id());
-        break;
-
-      case StreamIdType::APP_UNKNOWN:
-        if(is_app_mode_and_playing(play_stream_data.app.device_playmode))
-            msg_error(0, LOG_NOTICE,
-                      "Got start notification for unknown app stream ID %u",
-                      stream_id.get_raw_id());
-        else
-            other_stream_started_playing(play_stream_data.app,
-                                         switched_to_nonapp_mode);
-
-        break;
-
-      case StreamIdType::APP_CURRENT:
-      case StreamIdType::APP_NEXT:
-        switch(play_stream_data.app.device_playmode)
+        StreamStarted stream_started;
+        if(stream_is_a_new_one)
         {
-          case DevicePlaymode::DESELECTED:
-          case DevicePlaymode::DESELECTED_PLAYING:
-            BUG("App stream %u started, but audio source not selected",
-                stream_id.get_raw_id());
+            const auto update =
+                set_currently_playing_stream_id(
+                    stream_id, stream_started,
+                    app_stream_id.get().is_valid() && player_has_matching_meta_data
+                    ? player_.get()
+                    : nullptr);
 
-            other_stream_started_playing(play_stream_data.app,
-                                         switched_to_nonapp_mode);
-            break;
-
-          case DevicePlaymode::SELECTED_IDLE:
-          case DevicePlaymode::WAIT_FOR_START_NOTIFICATION:
-          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_KEEP_SELECTED:
-          case DevicePlaymode::APP_IS_PLAYING:
-            msg_info("%s app stream %u",
-                     is_new_stream ? "Next" : "Continue with",
-                     stream_id.get_raw_id());
-            app_stream_started_playing(play_stream_data.app, stream_id_type, is_new_stream);
-            break;
-
-          case DevicePlaymode::WAIT_FOR_STOP_NOTIFICATION_FOR_DESELECTION:
-            msg_error(0, LOG_NOTICE,
-                      "Unexpected start of app stream %u", stream_id.get_raw_id());
-
-            other_stream_started_playing(play_stream_data.app,
-                                         switched_to_nonapp_mode);
-            break;
+            if(update != SendStreamUpdate::NONE || stream_started != StreamStarted::FRESH)
+                do_notify_stream_info(update);
+        }
+        else
+        {
+            msg_info("Continue with app stream %u", stream_id.get_raw_id());
+            stream_started = StreamStarted::NOT;
         }
 
-        break;
+        GVariant *val = tracked_stream_key_.is_tracking()
+            ? GVariantWrapper::get(tracked_stream_key_.get_variant())
+            : nullptr;
 
-      case StreamIdType::NON_APP:
-        if(is_app_mode(play_stream_data.app.device_playmode))
-            BUG("Leave app mode: unexpected start of non-app stream %u "
-                "(expected next %u or new %u)",
-                stream_id.get_raw_id(),
-                play_stream_data.app.get_next_stream_raw_id(),
-                play_stream_data.app.get_current_stream_raw_id());
-
-        other_stream_started_playing(play_stream_data.app,
-                                     switched_to_nonapp_mode);
-
-        if(switched_to_nonapp_mode)
-            notify_app_playback_stopped();
-
-        break;
+        if(try_retrieve_cover_art(val, current_cover_art_) ||
+           stream_started != StreamStarted::NOT)
+            notify_cover_art_changed();
     }
 
-    try_notify_pending_stream_info(play_stream_data.other,
-                                   switched_to_nonapp_mode);
-
-    GVariant *val = play_stream_data.other.tracked_stream_key.is_tracking()
-        ? GVariantWrapper::get(play_stream_data.other.tracked_stream_key.get_variant())
-        : nullptr;
-
-    if(try_retrieve_cover_art(val, play_stream_data.other.current_cover_art) ||
-       is_new_stream)
-        notify_cover_art_changed();
-}
-
-void Regs::PlayStream::stop_notification()
-{
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
-
-    play_stream_data.other.tracked_stream_key.clear();
-    play_stream_data.other.current_cover_art.clear();
-
-    if(is_app_mode(play_stream_data.app.device_playmode))
+    void stop_notification(ID::Stream stream_id)
     {
-        msg_info("App mode: streamplayer has stopped");
-        play_stream_data.app.device_playmode = DevicePlaymode::SELECTED_IDLE;
-        notify_app_playback_stopped();
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+
+        const auto app_stream_id =
+            Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
+
+        tracked_stream_key_.clear();
+        current_cover_art_.clear();
+
+        const auto stopped_result = player_->notifications().stopped(app_stream_id);
+        if(app_stream_id.get().is_valid())
+        {
+            switch(stopped_result)
+            {
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_AS_REQUESTED:
+                msg_info("Stream player stopped playing app stream %u (requested)",
+                         stream_id.get_raw_id());
+                notify_app_playback_stopped();
+                break;
+
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY:
+                msg_info("Stream player stopped playing app stream %u (external cause)",
+                         stream_id.get_raw_id());
+                notify_app_playback_stopped();
+                break;
+
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::PUSHED_NEXT:
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::ALREADY_STOPPED:
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE:
+              case Regs::PlayStream::PlainPlayerNotifications::StopResult::FAILED:
+                break;
+            }
+        }
+
+        const auto update = stream_info_output_buffer_.clear();
+        do_notify_stream_info(update);
     }
-    else
-        play_stream_data.app.device_playmode = DevicePlaymode::DESELECTED;
 
-    play_stream_data.app.set_last_pushed_stream_id(AppStreamID::make_invalid());
-    play_stream_data.other.set_currently_playing(ID::Stream::make_invalid());
+    void cover_art_notification(void *stream_key_variant)
+    {
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
-    do_notify_stream_info(play_stream_data.other, NotifyStreamInfo::DEV_NULL,
-                          SendStreamUpdate::URL_AND_TITLE);
-}
+        const GVariantWrapper wrapped_val(static_cast<GVariant *>(stream_key_variant),
+                                          GVariantWrapper::Transfer::JUST_MOVE);
 
-void Regs::PlayStream::cover_art_notification(void *stream_key_variant)
-{
-    LOGGED_LOCK_CONTEXT_HINT;
-    std::lock_guard<LoggedLock::Mutex> lk(play_stream_data.lock);
+        const bool has_cover_art_changed =
+            tracked_stream_key_.is_tracking(wrapped_val)
+            ? try_retrieve_cover_art(GVariantWrapper::get(wrapped_val),
+                                     current_cover_art_)
+            : false;
 
-    const GVariantWrapper wrapped_val(static_cast<GVariant *>(stream_key_variant),
-                                      GVariantWrapper::Transfer::JUST_MOVE);
-
-    const bool has_cover_art_changed =
-        play_stream_data.other.tracked_stream_key.is_tracking(wrapped_val)
-        ? try_retrieve_cover_art(GVariantWrapper::get(wrapped_val),
-                                 play_stream_data.other.current_cover_art)
-        : false;
-
-    if(has_cover_art_changed)
-        notify_cover_art_changed();
-}
-
-class PictureProvider: public CoverArt::PictureProviderIface
-{
-  private:
-    LoggedLock::Mutex &lock_;
-    const CoverArt::Picture &picture_;
-
-  public:
-    PictureProvider(const PictureProvider &) = delete;
-    PictureProvider &operator=(const PictureProvider &) = delete;
-
-    explicit PictureProvider(LoggedLock::Mutex &lock, const CoverArt::Picture &picture):
-        lock_(lock),
-        picture_(picture)
-    {}
+        if(has_cover_art_changed)
+            notify_cover_art_changed();
+    }
 
     bool copy_picture(CoverArt::Picture &dest) const override
     {
-        std::lock_guard<LoggedLock::Mutex> lk(lock_);
-        dest = picture_;
-
+        LOGGED_LOCK_CONTEXT_HINT;
+        std::lock_guard<LoggedLock::Mutex> lock(lock_);
+        dest = current_cover_art_;
         return dest.is_available();
+    }
+
+  private:
+    /*!
+     * Push first or next stream to streamplayer, emit meta data, start if necessary
+     */
+    bool do_push_and_start_stream(const Regs::PlayStream::StreamInfo &stream_info,
+                                  Regs::PlayStream::PlainPlayer::StreamID stream_id,
+                                  bool is_first, bool is_start_requested)
+    {
+        CoverArt::StreamKey stream_key;
+        CoverArt::generate_stream_key_for_app(stream_key, stream_info.url_);
+
+        tdbus_dcpd_playback_emit_stream_info(
+                dbus_get_playback_iface(), stream_id.get().get_raw_id(),
+                stream_info.artist_.c_str(), stream_info.album_.c_str(),
+                stream_info.title_.c_str(), stream_info.alttrack_.c_str(),
+                stream_info.url_.c_str());
+
+        gboolean fifo_overflow;
+        gboolean is_playing;
+        GError *error = nullptr;
+
+        if(!tdbus_splay_urlfifo_call_push_sync(
+                dbus_get_streamplayer_urlfifo_iface(),
+                stream_id.get().get_raw_id(), stream_info.url_.c_str(),
+                g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                          stream_key.key_,
+                                          sizeof(stream_key.key_),
+                                          sizeof(stream_key.key_[0])),
+                0, "ms", 0, "ms",
+                is_first ? -2 : 0,
+                &fifo_overflow, &is_playing,
+                nullptr, &error))
+        {
+            BUG("Failed pushing stream %u, URL %s to stream player",
+                stream_id.get().get_raw_id(), stream_info.url_.c_str());
+            dbus_common_handle_dbus_error(&error, "Push stream to player");
+            return false;
+        }
+
+        if(fifo_overflow)
+        {
+            BUG("Pushed stream with clear request, got FIFO overflow");
+            return false;
+        }
+
+        if(!is_playing && !is_start_requested &&
+           !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
+                                                 nullptr, &error))
+        {
+            msg_error(0, LOG_NOTICE, "Failed starting stream");
+            dbus_common_handle_dbus_error(&error, "Start stream");
+
+            if(!tdbus_splay_urlfifo_call_clear_sync(dbus_get_streamplayer_urlfifo_iface(),
+                                                    0, nullptr, nullptr, nullptr,
+                                                    nullptr, &error))
+            {
+                msg_error(0, LOG_NOTICE, "Failed clearing stream player FIFO");
+                dbus_common_handle_dbus_error(&error, "Clear URLFIFO");
+            }
+
+            return false;
+        }
+
+        if(is_first)
+            tdbus_dcpd_views_emit_open(dbus_get_views_iface(), "Play");
+
+        return true;
+    }
+
+    SendStreamUpdate
+    set_currently_playing_stream_id(const ID::Stream &stream_id,
+                                    StreamStarted &started,
+                                    const Regs::PlayStream::PlainPlayer *const player)
+    {
+        started = (stream_info_output_buffer_.matches_id(stream_id)
+                   ? StreamStarted::NOT
+                   : (stream_info_output_buffer_.is_valid()
+                      ? StreamStarted::CONTINUED
+                      : StreamStarted::FRESH));
+
+        if(!stream_id.is_valid())
+        {
+            BUG("Got start notification for invalid stream ID %u",
+                stream_id.get_raw_id());
+            return stream_info_output_buffer_.clear();
+        }
+
+        if(started == StreamStarted::NOT)
+        {
+            BUG("Got repeated start notification for stream %u",
+                stream_id.get_raw_id());
+            return SendStreamUpdate::NONE;
+        }
+
+        if(stream_info_input_buffer_.matches_id(stream_id))
+        {
+            const auto update =
+                stream_info_output_buffer_.diff(stream_info_input_buffer_);
+            stream_info_output_buffer_ = std::move(stream_info_input_buffer_);
+            return update;
+        }
+
+        if(player == nullptr)
+            return stream_info_output_buffer_.clear(stream_id);
+
+        const auto &info(player->get_current_stream_info());
+
+        return info.is_known()
+            ? stream_info_output_buffer_.set_full(stream_id,
+                                                  std::string(info->alttrack_),
+                                                  std::string(info->url_))
+            : stream_info_output_buffer_.clear(stream_id);
+    }
+
+    void store_meta_data_and_url(const ID::Stream &stream_id,
+                                 std::string &&title, std::string &&url)
+    {
+        if(stream_info_output_buffer_.matches_id(stream_id))
+        {
+            const SendStreamUpdate update = stream_id.is_valid()
+                ? stream_info_output_buffer_.set_full(std::move(title), std::move(url))
+                : stream_info_output_buffer_.clear();
+            do_notify_stream_info(update);
+        }
+        else
+            stream_info_input_buffer_.set_full(stream_id,
+                                               std::move(title), std::move(url));
     }
 };
 
-static PictureProvider picture_provider(play_stream_data.lock,
-                                        play_stream_data.other.current_cover_art);
-
-const CoverArt::PictureProviderIface &Regs::PlayStream::get_picture_provider()
+std::unique_ptr<Regs::PlayStream::StreamingRegistersIface>
+Regs::PlayStream::mk_streaming_registers()
 {
-    return picture_provider;
+    return std::make_unique<StreamingRegisters>();
+}
+
+static size_t copy_string_to_slave(const std::string &src,
+                                   char *const dest, size_t dest_size)
+{
+    if(dest_size == 0)
+        return 0;
+
+    const size_t len = src.length();
+    const size_t count = len < dest_size ? len : dest_size;
+
+    if(count > 0)
+        std::copy_n(src.begin(), count, dest);
+
+    return count;
+}
+
+static bool copy_string_data(std::string &dest, const uint8_t *src,
+                             size_t src_size, const char *what)
+{
+    dest.clear();
+
+    if(src_size > 0 && src[0] != '\0')
+        std::copy_n(src, src_size, std::back_inserter(dest));
+
+    if(dest.empty())
+        msg_vinfo(plainurl_register_dump_level, "%s: <empty>", what);
+
+    return !dest.empty();
+}
+
+static void dump_meta_data(const std::string &artist, const std::string &album,
+                           const std::string &title, const char *what)
+{
+    if(!msg_is_verbose(plainurl_register_dump_level))
+        return;
+
+    msg_vinfo(plainurl_register_dump_level, "%s artist: \"%s\"", what, artist.c_str());
+    msg_vinfo(plainurl_register_dump_level, "%s album : \"%s\"", what, album.c_str());
+    msg_vinfo(plainurl_register_dump_level, "%s title : \"%s\"", what, title.c_str());
+}
+
+static void dump_plain_url(const std::string &url, const char *what)
+{
+    msg_vinfo(plainurl_register_dump_level, "%s: \"%s\"", what, url.c_str());
+}
+
+static void registered_audio_source(GObject *source_object, GAsyncResult *res,
+                                    gpointer user_data)
+{
+    GError *error = nullptr;
+    tdbus_aupath_manager_call_register_source_finish(TDBUS_AUPATH_MANAGER(source_object),
+                                                     res, &error);
+    dbus_common_handle_dbus_error(&error, "Register audio source");
+
+    Regs::AudioSources::fetch_audio_paths();
+}
+
+void StreamingRegisters::late_init()
+{
+    tdbus_aupath_manager_call_register_source(
+        dbus_audiopath_get_manager_iface(), app_audio_source_id,
+        "Streams pushed by smartphone app", "strbo", "/de/tahifi/Dcpd",
+        nullptr, registered_audio_source, this);
+}
+
+static std::tuple<std::string, const size_t, const size_t>
+tokenize_meta_data(const std::string &src)
+{
+    std::string dest;
+    dest.reserve(src.length() + 1);
+
+    size_t artist = src.length();
+    size_t album = src.length();
+    size_t idx = 0;
+
+    for(size_t i = 0; i < src.length(); ++i)
+    {
+        const char ch = src[i];
+
+        if(ch == '\x1d')
+        {
+            dest.push_back('\0');
+
+            if(idx < 2)
+            {
+                if(idx == 0)
+                    artist = i + 1;
+                else
+                    album = i + 1;
+
+                ++idx;
+            }
+        }
+        else
+            dest.push_back(ch);
+    }
+
+    return std::make_tuple(std::move(dest), artist, album);
+}
+
+static StreamingRegisters *dcpregs_streaming_registers;
+
+void Regs::PlayStream::DCP::init(StreamingRegistersIface &regs)
+{
+    dcpregs_streaming_registers = static_cast<StreamingRegisters *>(&regs);
+}
+
+ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 75 handler %p %zu", response, length);
+
+    size_t result;
+    dcpregs_streaming_registers->with_current_stream_information(
+        [response, length, &result]
+        (const auto &info)
+        {
+            result = copy_string_to_slave(info.meta_data_, (char *)response, length);
+        });
+    return result;
+}
+
+ssize_t Regs::PlayStream::DCP::read_76_current_stream_url(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 76 handler %p %zu", response, length);
+
+    size_t result;
+    dcpregs_streaming_registers->with_current_stream_information(
+        [response, length, &result]
+        (const auto &info)
+        {
+            result = copy_string_to_slave(info.url_, (char *)response, length);
+        });
+    return result;
+}
+
+int Regs::PlayStream::DCP::write_78_start_play_stream_title(const uint8_t *data, size_t length)
+{
+    static const char register_description[] = "First stream meta data (reg 78)";
+
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 78 handler %p %zu", data, length);
+
+    std::string meta_data;
+    if(!copy_string_data(meta_data, data, length, register_description))
+        return -1;
+
+    const auto tokenized(tokenize_meta_data(meta_data));
+    const auto d(std::get<0>(tokenized).c_str());
+    std::string artist(&d[std::get<1>(tokenized)]);
+    std::string album(&d[std::get<2>(tokenized)]);
+    std::string title(d);
+
+    dump_meta_data(artist, album, title, register_description);
+    dcpregs_streaming_registers->store_meta_data_for_first_stream(
+        std::move(artist), std::move(album), std::move(title),
+        std::move(meta_data));
+
+    return 0;
+}
+
+int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, size_t length)
+{
+    static const char register_description[] = "First stream URL (reg 79)";
+
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 79 handler %p %zu", data, length);
+
+    std::string url;
+    if(copy_string_data(url, data, length, register_description))
+    {
+        dump_plain_url(url, register_description);
+        dcpregs_streaming_registers->start_first_stream(std::move(url));
+    }
+    else
+        dcpregs_streaming_registers->stop_playing("empty URL written to reg 79");
+
+    return 0;
+}
+
+ssize_t Regs::PlayStream::DCP::read_79_start_play_stream_url(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 79 handler %p %zu", response, length);
+    return 0;
+}
+
+int Regs::PlayStream::DCP::write_238_next_stream_title(const uint8_t *data, size_t length)
+{
+    static const char register_description[] = "Next stream meta data (reg 238)";
+
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 238 handler %p %zu", data, length);
+
+    std::string meta_data;
+    if(!copy_string_data(meta_data, data, length, register_description))
+        return -1;
+
+    const auto tokenized(tokenize_meta_data(meta_data));
+    const auto d(std::get<0>(tokenized).c_str());
+    std::string artist(&d[std::get<1>(tokenized)]);
+    std::string album(&d[std::get<2>(tokenized)]);
+    std::string title(d);
+
+    dump_meta_data(artist, album, title, register_description);
+    dcpregs_streaming_registers->store_meta_data_for_next_stream(
+        std::move(artist), std::move(album), std::move(title),
+        std::move(meta_data));
+
+    return 0;
+}
+
+int Regs::PlayStream::DCP::write_239_next_stream_url(const uint8_t *data, size_t length)
+{
+    static const char register_description[] = "Next stream URL (reg 239)";
+
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 239 handler %p %zu", data, length);
+
+    std::string url;
+    if(copy_string_data(url, data, length, register_description))
+    {
+        dump_plain_url(url, register_description);
+        dcpregs_streaming_registers->push_next_stream(std::move(url));
+    }
+    else
+        APPLIANCE_BUG("Empty URL written to reg 239");
+
+    return 0;
+}
+
+ssize_t Regs::PlayStream::DCP::read_239_next_stream_url(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 239 handler %p %zu", response, length);
+    return 0;
+}
+
+ssize_t Regs::PlayStream::DCP::read_210_current_cover_art_hash(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 210 handler %p %zu", response, length);
+
+    size_t len;
+    dcpregs_streaming_registers->with_current_cover_art(
+        [response, length, &len] (const auto &cover_art)
+        {
+            len = cover_art.copy_hash(response, length);
+        });
+
+    if(len == 0)
+        msg_info("Cover art: Send empty hash to SPI slave");
+    else if(len == 16)
+        msg_info("Cover art: Send hash to SPI slave: "
+                 "%02x%02x%02x%02x%02x%02x%02x%02x"
+                 "%02x%02x%02x%02x%02x%02x%02x%02x",
+                 response[0], response[1], response[2], response[3],
+                 response[4], response[5], response[6], response[7],
+                 response[8], response[9], response[10], response[11],
+                 response[12], response[13], response[14], response[15]);
+    else
+        BUG("Cover art: Send %zu hash bytes to SPI slave", len);
+
+    return len;
 }

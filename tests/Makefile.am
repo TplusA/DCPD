@@ -86,6 +86,7 @@ test_registers_la_SOURCES = \
     mock_expectation.hh
 test_registers_la_LIBADD = \
     $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libplainplayer.la \
     $(top_builddir)/src/libshutdown_guard.la \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libservicelist.la \
@@ -116,6 +117,7 @@ test_transactions_la_LIBADD = \
     $(top_builddir)/src/libtransactions.la \
     $(top_builddir)/src/libconfigproxy.la \
     $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libplainplayer.la \
     $(top_builddir)/src/libservicelist.la \
     $(top_builddir)/src/libconnman_service.la \
     $(top_builddir)/src/libconnman_technology_registry.la \

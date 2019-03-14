@@ -40,6 +40,7 @@
 #include "dcpregs_audiosources.hh"
 #include "dcpregs_volume.hh"
 #include "dcpregs_playstream.hh"
+#include "dcpregs_stream_speed.hh"
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.hh"
 #include "dcpregs_status.hh"
@@ -600,7 +601,6 @@ void Regs::init(void (*register_changed_callback)(uint8_t reg_number),
     Regs::WLANSurvey::init(wlan);
     Regs::FileTransfer::init();
     Regs::AudioSources::init();
-    Regs::PlayStream::init();
     Regs::UPnPName::init();
 }
 
@@ -609,7 +609,6 @@ void Regs::deinit()
     Regs::NetworkConfig::deinit();
     Regs::WLANSurvey::deinit();
     Regs::FileTransfer::deinit();
-    Regs::PlayStream::deinit();
     Regs::AudioSources::deinit();
     Regs::UPnPName::deinit();
     memset(&registers_private_data, 0, sizeof(registers_private_data));
