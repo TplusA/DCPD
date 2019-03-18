@@ -1955,10 +1955,6 @@ static bool do_process_pending_changes(LoggedLock::UniqueLock<LoggedLock::RecMut
             ? our_wlan->first
             : configured_wlan_service_name);
 
-    /* either all services have been disconnected above and the function has
-     * returned already, or we end up here because there are exactly one or two
-     * services left for further configuration */
-
     const bool consider_wlan_connection =
         our_ethernet != locked_services.first.end()
         ? process_our_ethernet_service(*our_ethernet->second, our_ethernet->first,
