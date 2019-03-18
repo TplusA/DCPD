@@ -1977,7 +1977,7 @@ static bool do_process_pending_changes(LoggedLock::UniqueLock<LoggedLock::RecMut
     {
         bool revised_decision = false;
 
-        if(consider_wlan_connection && have_wlan_service_prefs)
+        if(consider_wlan_connection)
         {
             /* we didn't want to switch to WLAN in the first place, but we are
              * allowed to because there is no Ethernet connection; also, we
@@ -1992,9 +1992,12 @@ static bool do_process_pending_changes(LoggedLock::UniqueLock<LoggedLock::RecMut
                return false;
            }
 
-           /* switch to WLAN if there is a network matching our WLAN
-            * configuration */
-           revised_decision = our_wlan != locked_services.first.end();
+           if(have_wlan_service_prefs)
+           {
+               /* switch to WLAN if there is a network matching our WLAN
+                * configuration */
+               revised_decision = our_wlan != locked_services.first.end();
+           }
         }
 
         if(!revised_decision)
