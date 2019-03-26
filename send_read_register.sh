@@ -32,4 +32,4 @@ HEXREG="$(printf %02x $REG)"
 HEXCOMMAND="01 $HEXREG 00 00"
 
 echo "Sending '$HEXCOMMAND' to $HOST:$PORT"
-echo "0 $HEXCOMMAND" | xxd -r | nc "$HOST" "$PORT" | hexdump -C
+echo "0 $HEXCOMMAND" | xxd -r | nc -N "$HOST" "$PORT" | hexdump -C
