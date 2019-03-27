@@ -22,6 +22,7 @@
 
 #include "dcpregs_drcp.hh"
 #include "drcp_command_codes.h"
+#include "dcpregs_playstream.hh"
 #include "dbus_iface_deep.h"
 #include "messages.h"
 
@@ -223,7 +224,11 @@ static const std::array<std::unique_ptr<DRCCommand>, 25> drc_commands
     std::make_unique<SimpleCommand>(DRCP_PLAYBACK_PREVIOUS,
         [] () { tdbus_dcpd_playback_emit_previous(dbus_get_playback_iface()); }),
     std::make_unique<SimpleCommand>(DRCP_PLAYBACK_STOP,
-        [] () { tdbus_dcpd_playback_emit_stop(dbus_get_playback_iface()); }),
+        [] ()
+        {
+            if(!Regs::PlayStream::DCP::stop_plain_player())
+                tdbus_dcpd_playback_emit_stop(dbus_get_playback_iface());
+        }),
     std::make_unique<SimpleCommand>(DRCP_PLAYBACK_START,
         [] () { tdbus_dcpd_playback_emit_start(dbus_get_playback_iface()); }),
     std::make_unique<SimpleCommand>(DRCP_PLAYBACK_TRY_RESUME,

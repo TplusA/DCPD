@@ -64,6 +64,7 @@ std::unique_ptr<StreamingRegistersIface> mk_streaming_registers();
 namespace DCP
 {
 void init(StreamingRegistersIface &regs);
+bool stop_plain_player();
 ssize_t read_75_current_stream_title(uint8_t *response, size_t length);
 ssize_t read_76_current_stream_url(uint8_t *response, size_t length);
 int write_78_start_play_stream_title(const uint8_t *data, size_t length);

@@ -526,7 +526,7 @@ class StreamingRegisters:
         play_request_input_buffer_.set_unknown();
     }
 
-    void stop_playing(const char *reason)
+    bool stop_playing(const char *reason)
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
@@ -548,6 +548,8 @@ class StreamingRegisters:
 
         if(stopped)
             play_request_input_buffer_.set_unknown();
+
+        return stopped;
     }
 
     /*!
@@ -929,6 +931,11 @@ static StreamingRegisters *dcpregs_streaming_registers;
 void Regs::PlayStream::DCP::init(StreamingRegistersIface &regs)
 {
     dcpregs_streaming_registers = static_cast<StreamingRegisters *>(&regs);
+}
+
+bool Regs::PlayStream::DCP::stop_plain_player()
+{
+    return dcpregs_streaming_registers->stop_playing("stopped by remote control");
 }
 
 ssize_t Regs::PlayStream::DCP::read_75_current_stream_title(uint8_t *response, size_t length)
