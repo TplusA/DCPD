@@ -371,9 +371,9 @@ class StreamingRegisters:
         LoggedLock::configure(lock_, "StreamingRegisters", MESSAGE_LEVEL_DEBUG);
     }
 
-    void late_init() override;
+    void late_init() final override;
 
-    const CoverArt::PictureProviderIface &get_picture_provider() const override
+    const CoverArt::PictureProviderIface &get_picture_provider() const final override
     {
         return *this;
     }
@@ -392,14 +392,14 @@ class StreamingRegisters:
         apply(current_cover_art_);
     }
 
-    void audio_source_selected()
+    void audio_source_selected() final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
         player_->notifications().audio_source_selected();
     }
 
-    void audio_source_deselected()
+    void audio_source_deselected() final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
@@ -412,7 +412,7 @@ class StreamingRegisters:
      * For registers 75 and 76.
      */
     void set_title_and_url(ID::Stream stream_id,
-                           std::string &&title, std::string &&url)
+                           std::string &&title, std::string &&url) final override
     {
         msg_vinfo(MESSAGE_LEVEL_DIAG,
                   "Received explicit title and URL information for stream %u",
@@ -553,7 +553,7 @@ class StreamingRegisters:
     /*!
      * React on start of stream.
      */
-    void start_notification(ID::Stream stream_id, void *stream_key_variant)
+    void start_notification(ID::Stream stream_id, void *stream_key_variant) final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
@@ -623,7 +623,7 @@ class StreamingRegisters:
             notify_cover_art_changed();
     }
 
-    void stop_notification(ID::Stream stream_id)
+    void stop_notification(ID::Stream stream_id) final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
@@ -663,7 +663,7 @@ class StreamingRegisters:
         do_notify_stream_info(update);
     }
 
-    void cover_art_notification(void *stream_key_variant)
+    void cover_art_notification(void *stream_key_variant) final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
@@ -681,7 +681,7 @@ class StreamingRegisters:
             notify_cover_art_changed();
     }
 
-    bool copy_picture(CoverArt::Picture &dest) const override
+    bool copy_picture(CoverArt::Picture &dest) const final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
