@@ -26,7 +26,7 @@
 #include "configproxy.h"
 
 #include "dcpdefs.h"
-#include "dcpregs_drcp.h"
+#include "dcpregs_drcp.hh"
 #include "dcpregs_protolevel.hh"
 #include "dcpregs_appliance.hh"
 #include "dcpregs_internationalization.hh"
@@ -394,7 +394,7 @@ static const std::array<Regs::Register, 52> register_map
     Regs::Register("DRC command", 72,
                    REGISTER_MK_VERSION(1, 0, 0),
                    3,
-                   dcpregs_write_drcp_command),
+                   Regs::DRCP::DCP::write_drcp_command),
 
     /* Seek in stream or set playback speed/direction */
     Regs::Register("seek in stream or set speed", 73,

@@ -32,7 +32,7 @@ dcpd_SOURCES = \
     transactions.hh dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
     drcp.hh drcp_command_codes.h \
-    dcpregs_drcp.h dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
+    dcpregs_drcp.hh dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_stream_speed.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_upnpserver.hh dcpregs_audiosources.hh dcpregs_volume.hh \
@@ -103,7 +103,7 @@ dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
 libregisters_la_SOURCES = \
     registers.cc registers.hh registers_priv.hh register_response_writer.hh \
     string_trim.hh \
-    dcpregs_drcp.c dcpregs_drcp.h \
+    dcpregs_drcp.cc dcpregs_drcp.hh \
     dcpregs_protolevel.cc dcpregs_protolevel.hh \
     dcpregs_appliance.cc dcpregs_appliance.hh \
     dcpregs_internationalization.cc dcpregs_internationalization.hh \
