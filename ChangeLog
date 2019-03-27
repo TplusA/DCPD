@@ -1,3 +1,15 @@
+2019-03-27  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 4.23 released.
+
+	* Playback: Stopping from app or via remote control while playing a
+	  list from the app works now.
+
+	* Networking: Request WLAN power-on on Ethernet disconnect even if no
+	  WLAN preferences are stored. This allows access to WLAN after
+	  sitting on an Ethernet connection for some time after WLAN has been
+	  suspended already.
+
 2019-03-14  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.22 released.
