@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -16,8 +16,8 @@
  * along with DCPD.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPREGS_DRCP_H
-#define DCPREGS_DRCP_H
+#ifndef DCPREGS_DRCP_HH
+#define DCPREGS_DRCP_HH
 
 #include <stdint.h>
 #include <unistd.h>
@@ -27,16 +27,17 @@
  */
 /*!@{*/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-int dcpregs_write_drcp_command(const uint8_t *data, size_t length);
-
-#ifdef __cplusplus
+namespace Regs
+{
+namespace DRCP
+{
+namespace DCP
+{
+int write_drcp_command(const uint8_t *data, size_t length);
 }
-#endif
+}
+}
 
 /*!@}*/
 
-#endif /* !DCPREGS_DRCP_H */
+#endif /* !DCPREGS_DRCP_HH */

@@ -29,7 +29,7 @@
 #include "register_response_writer.hh"
 #include "networkprefs.h"
 #include "network_status_bits.h"
-#include "dcpregs_drcp.h"
+#include "dcpregs_drcp.hh"
 #include "dcpregs_protolevel.hh"
 #include "dcpregs_networkconfig.hh"
 #include "dcpregs_wlansurvey.hh"
@@ -1403,8 +1403,8 @@ void cut_teardown()
 
 /*!\test
  * Check that writes to register 72 (DRC command) are indeed wired to calls of
- * dcpregs_write_drcp_command(), and that reading from register 72 is not
- * possible.
+ * Regs::DRCP::DCP::write_drcp_command(), and that reading from register 72 is
+ * not possible.
  */
 void test_dcp_register_72_calls_correct_write_handler()
 {
@@ -1421,7 +1421,7 @@ void test_dcp_register_72_calls_correct_write_handler()
 
     cppcut_assert_not_null(reg);
     cppcut_assert_equal(72U, unsigned(reg->address_));
-    cut_assert(reg->has_handler(dcpregs_write_drcp_command));
+    cut_assert(reg->has_handler(Regs::DRCP::DCP::write_drcp_command));
     cut_assert(reg->has_handler(static_cast<ssize_t (*)(uint8_t *, size_t)>(nullptr)));
 
     Regs::deinit();
@@ -1436,7 +1436,7 @@ void test_slave_drc_invalid_command()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xbe");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_ERR, "Received unsupported DRC command 0xbe (Invalid argument)");
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1449,7 +1449,7 @@ void test_slave_drc_playback_start()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xb3");
     mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_start(dbus_dcpd_playback_iface_dummy);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1462,7 +1462,7 @@ void test_slave_drc_views_goto_view_by_id_0()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "UPnP");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1475,7 +1475,7 @@ void test_slave_drc_views_goto_view_by_id_1()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "TuneIn");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1488,7 +1488,7 @@ void test_slave_drc_views_goto_view_by_id_2()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Filesystem");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1503,13 +1503,13 @@ void test_slave_drc_views_goto_view_by_id_unknown_id()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0x03 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_lowest_unknown, sizeof(buffer_lowest_unknown)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer_lowest_unknown, sizeof(buffer_lowest_unknown)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unknown view ID 0xff (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_highest_unknown, sizeof(buffer_highest_unknown)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer_highest_unknown, sizeof(buffer_highest_unknown)));
 }
 
 /*!\test
@@ -1522,7 +1522,7 @@ void test_slave_drc_views_goto_view_by_id_must_be_terminated_with_accept_code()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x9a");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1536,7 +1536,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_few_data_bytes()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 1, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1550,7 +1550,7 @@ void test_slave_drc_views_goto_view_by_id_with_too_many_data_bytes()
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_NOTICE, "Unexpected data length 3, expected 2 (Invalid argument)");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x9a failed: -1");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1563,7 +1563,7 @@ void test_slave_drc_views_goto_internet_radio()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xaa");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_open(dbus_dcpd_views_iface_dummy, "Internet Radio");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1576,7 +1576,7 @@ void test_slave_drc_views_toggle_browse_and_play()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0xba");
     mock_dbus_iface->expect_dbus_get_views_iface(dbus_dcpd_views_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_views_emit_toggle(dbus_dcpd_views_iface_dummy, "Browse", "Play");
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1589,7 +1589,7 @@ void test_slave_drc_list_navigation_scroll_one_line_up()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x26");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, -1);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1602,7 +1602,7 @@ void test_slave_drc_list_navigation_scroll_one_page_down()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x98");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_pages(dbus_dcpd_list_navigation_iface_dummy, 1);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1615,7 +1615,7 @@ void test_slave_drc_list_navigation_scroll_10_lines_up()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x21");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, -10);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1628,7 +1628,7 @@ void test_slave_drc_list_navigation_scroll_8_lines_down()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x22");
     mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_navigation_emit_move_lines(dbus_dcpd_list_navigation_iface_dummy, 8);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1641,15 +1641,12 @@ void test_slave_drc_list_navigation_scroll_fast_by_0_lines_is_ignored()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x21");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x21 failed: -1");
-    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_up, sizeof(buffer_up)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer_up, sizeof(buffer_up)));
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x22");
     mock_messages->expect_msg_error_formatted(0, LOG_ERR, "DRC command 0x22 failed: -1");
-    mock_dbus_iface->expect_dbus_get_list_navigation_iface(dbus_dcpd_list_navigation_iface_dummy);
-    cppcut_assert_equal(-1, dcpregs_write_drcp_command(buffer_down, sizeof(buffer_down)));
+    cppcut_assert_equal(-1, Regs::DRCP::DCP::write_drcp_command(buffer_down, sizeof(buffer_down)));
 }
-
 
 /*!\test
  * Slave sends DRC command for adding the currently selected item to the
@@ -1662,7 +1659,7 @@ void test_slave_drc_list_item_add_to_favorites()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x2d");
     mock_dbus_iface->expect_dbus_get_list_item_iface(dbus_dcpd_list_item_iface_dummy);
     mock_dcpd_dbus->expect_tdbus_dcpd_list_item_emit_add_to_list(dbus_dcpd_list_item_iface_dummy, "Favorites", 0);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 /*!\test
@@ -1675,7 +1672,7 @@ void test_slave_drc_power_off()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x03");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_power_off_sync(true, dbus_logind_manager_iface_dummy, false);
-    cppcut_assert_equal(0, dcpregs_write_drcp_command(buffer, sizeof(buffer)));
+    cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
 };
