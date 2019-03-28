@@ -44,6 +44,7 @@
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.hh"
 #include "dcpregs_status.hh"
+#include "dcpregs_datetime.hh"
 #include "string_trim.hh"
 
 #include <cstring>
@@ -51,7 +52,7 @@
 #include <array>
 #include <algorithm>
 
-#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 7)
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 8)
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -246,7 +247,7 @@ static int write_95_max_bitrate(const uint8_t *data, size_t length)
  *
  * \note The entries must be sorted by address for the binary search.
  */
-static const std::array<Regs::Register, 52> register_map
+static const std::array<Regs::Register, 53> register_map
 {
     /* Protocol level negotiation */
     Regs::Register("protocol level negotiation", 1,
@@ -556,6 +557,11 @@ static const std::array<Regs::Register, 52> register_map
                    REGISTER_MK_VERSION(1, 0, 0),
                    DCP_PACKET_MAX_PAYLOAD_SIZE,
                    Regs::TCPTunnel::DCP::write_121_tcp_tunnel_write),
+
+    /* File transfer CRC mode, encryption mode, URL */
+    Regs::Register("current date and time", 207,
+                   REGISTER_MK_VERSION(1, 0, 8),
+                   Regs::DateTime::DCP::read_207_date_and_time),
 
     /* File transfer CRC mode, encryption mode, URL */
     Regs::Register("file transfer control", 209,

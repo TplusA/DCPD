@@ -37,7 +37,7 @@ dcpd_SOURCES = \
     dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_stream_speed.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_upnpserver.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
-    dcpregs_accesspoint.hh \
+    dcpregs_accesspoint.hh dcpregs_datetime.hh \
     connman_iter.c connman_iter.h connman_scan.cc connman_scan.hh \
     connman_common.c connman_common.h \
     connman_service.hh connman_service_list.hh maybe.hh \
@@ -119,6 +119,7 @@ libregisters_la_SOURCES = \
     dcpregs_stream_speed.cc dcpregs_stream_speed.hh \
     dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
     dcpregs_searchparameters.cc dcpregs_searchparameters.hh \
+    dcpregs_datetime.cc dcpregs_datetime.hh \
     dcpregs_status.hh \
     volume_control.cc volume_control.hh dcpregs_volume.hh \
     dbus_handlers_connman_manager.hh networkprefs.h \
