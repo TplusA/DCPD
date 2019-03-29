@@ -21,7 +21,8 @@ check_PROGRAMS = \
     test_connman_service \
     test_connman_property_cache \
     test_access_point \
-    test_plainplayer
+    test_plainplayer \
+    test_aupal_parser
 
 TESTS = run_tests.sh
 
@@ -72,6 +73,14 @@ test_access_point_LDADD = \
     $(top_builddir)/src/libconnman_service.la
 test_access_point_CPPFLAGS = $(AM_CPPFLAGS)
 test_access_point_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_aupal_parser_SOURCES = \
+    test_aupal_parser.cc
+test_aupal_parser_LDADD = \
+    libtestrunner.la \
+    $(top_builddir)/src/libaudiopath_minidsl.la
+test_aupal_parser_CPPFLAGS = $(AM_CPPFLAGS)
+test_aupal_parser_CXXFLAGS = $(AM_CXXFLAGS)
 
 test_plainplayer_SOURCES = \
     test_plainplayer.cc \

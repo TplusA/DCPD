@@ -37,7 +37,7 @@ dcpd_SOURCES = \
     dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_stream_speed.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_upnpserver.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
-    dcpregs_accesspoint.hh dcpregs_datetime.hh \
+    dcpregs_accesspoint.hh dcpregs_datetime.hh audiopath_minidsl.hh json.hh \
     connman_iter.c connman_iter.h connman_scan.cc connman_scan.hh \
     connman_common.c connman_common.h \
     connman_service.hh connman_service_list.hh maybe.hh \
@@ -71,6 +71,7 @@ noinst_LTLIBRARIES = \
     libnetworkprefs.la \
     libinifile.la \
     libapplink.la \
+    libaudiopath_minidsl.la \
     libdrcpdcomm.la \
     libxmodem.la \
     libnetwork.la \
@@ -174,6 +175,11 @@ libapplink_la_SOURCES = \
     smartphone_app.cc smartphone_app.hh
 libapplink_la_CFLAGS = $(AM_CFLAGS)
 libapplink_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libaudiopath_minidsl_la_SOURCES = \
+    audiopath_minidsl.cc audiopath_minidsl.hh json.hh
+libaudiopath_minidsl_la_CFLAGS = $(AM_CFLAGS)
+libaudiopath_minidsl_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libdbus_handlers_la_SOURCES = \
     dbus_handlers.cc dbus_handlers.h \
