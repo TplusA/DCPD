@@ -809,6 +809,7 @@ EXCLUDE                = \
     @abs_builddir@/src/logind_dbus.c \
     @abs_builddir@/src/systemd_dbus.c \
     @abs_builddir@/src/gerbera_dbus.c \
+    @abs_srcdir@/src/json.hh \
     @abs_srcdir@/dbus_interfaces/de_tahifi_lists_errors.hh \
     @abs_srcdir@/dbus_interfaces/*.xml
 
