@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -19,9 +19,11 @@
 #ifndef FIXPOINT_HH
 #define FIXPOINT_HH
 
-#include <climits>
-#include <cmath>
 #include <iostream>
+#include <limits>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
 
 /*!
  * Compact representation of small real numbers.
