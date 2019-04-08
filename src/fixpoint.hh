@@ -223,7 +223,7 @@ class FixPoint
     }
 };
 
-std::ostream &operator<<(std::ostream &os, const FixPoint &fp)
+inline std::ostream &operator<<(std::ostream &os, const FixPoint &fp)
 {
     /* C++ iostreams suck... */
     char buffer[100];
