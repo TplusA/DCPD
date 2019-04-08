@@ -122,7 +122,7 @@ class CommandWithData: public DRCCommand
  *
  * \note The entries must be sorted by code for binary search.
  */
-static const std::array<std::unique_ptr<DRCCommand>, 25> drc_commands
+static const std::array<std::unique_ptr<DRCCommand>, 25> drc_commands =
 {
     std::make_unique<SimpleCommand>(DRCP_POWER_OFF,
         [] ()
