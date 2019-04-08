@@ -31,9 +31,9 @@
 class AudioPaths::ParserState
 {
   private:
-    std::vector<uint8_t>::const_iterator input_begin_;
-    std::vector<uint8_t>::const_iterator input_end_;
-    std::vector<uint8_t>::const_iterator pos_;
+    const uint8_t *input_begin_;
+    const uint8_t *input_end_;
+    const uint8_t *pos_;
 
     nlohmann::json out_;
 
@@ -43,8 +43,14 @@ class AudioPaths::ParserState
     ParserState &operator=(const ParserState &) = delete;
     ParserState &operator=(ParserState &&) = default;
 
-    explicit ParserState(): out_({}) {}
-    void process(const std::vector<uint8_t> &input);
+    explicit ParserState():
+        input_begin_(nullptr),
+        input_end_(nullptr),
+        pos_(nullptr),
+        out_({})
+    {}
+
+    void process(const uint8_t *const input, size_t input_size);
     const nlohmann::json &json() const { return out_; }
 
   private:
@@ -340,14 +346,15 @@ nlohmann::json AudioPaths::ParserState::parse_variant()
     return v;
 }
 
-void AudioPaths::ParserState::process(const std::vector<uint8_t> &input)
+void AudioPaths::ParserState::process(const uint8_t *const input,
+                                      size_t input_size)
 {
-    if(input.empty())
+    if(input_size == 0)
         return;
 
-    input_begin_ = input.begin();
-    input_end_ = input.end();
-    pos_ = input.begin();
+    input_begin_ = input;
+    input_end_ = input + input_size;
+    pos_ = input;
 
     while(pos_ != input_end_)
     {
@@ -371,7 +378,16 @@ void AudioPaths::Parser::process(const std::vector<uint8_t> &input)
     if(state_ == nullptr)
         state_ = std::make_unique<AudioPaths::ParserState>();
 
-    state_->process(input);
+    state_->process(input.data(), input.size());
+}
+
+void AudioPaths::Parser::process(const uint8_t *const input,
+                                 size_t input_size)
+{
+    if(state_ == nullptr)
+        state_ = std::make_unique<AudioPaths::ParserState>();
+
+    state_->process(input, input_size);
 }
 
 std::string AudioPaths::Parser::json_string() const

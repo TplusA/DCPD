@@ -85,11 +85,18 @@ class Parser
     void reset();
 
     /*!
-     * Parse input in AuPaL syntax.
+     * Parse input in AuPaL syntax passed as vector.
      *
      * Throws #AudioPaths::ParserError in case of a parsing error.
      */
     void process(const std::vector<uint8_t> &input);
+
+    /*!
+     * Parse input in AuPaL syntax passed as C memory.
+     *
+     * Throws #AudioPaths::ParserError in case of a parsing error.
+     */
+    void process(const uint8_t *const input, size_t input_size);
 
     /*!
      * Turn parsed input into serialized JSON object.
