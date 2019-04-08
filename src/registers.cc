@@ -38,6 +38,7 @@
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_tcptunnel.hh"
 #include "dcpregs_audiosources.hh"
+#include "dcpregs_audiopaths.hh"
 #include "dcpregs_volume.hh"
 #include "dcpregs_playstream.hh"
 #include "dcpregs_stream_speed.hh"
@@ -52,7 +53,7 @@
 #include <array>
 #include <algorithm>
 
-#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 8)
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 9)
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -247,7 +248,7 @@ static int write_95_max_bitrate(const uint8_t *data, size_t length)
  *
  * \note The entries must be sorted by address for the binary search.
  */
-static const std::array<Regs::Register, 53> register_map
+static const std::array<Regs::Register, 54> register_map
 {
     /* Protocol level negotiation */
     Regs::Register("protocol level negotiation", 1,
@@ -447,6 +448,12 @@ static const std::array<Regs::Register, 53> register_map
                    32,
                    Regs::AudioSources::DCP::read_81_current_audio_source,
                    Regs::AudioSources::DCP::write_81_current_audio_source),
+
+    /* Set audio path parameters (AuPaL) */
+    Regs::Register("set audio path parameters", 82,
+                   REGISTER_MK_VERSION(1, 0, 9),
+                   2048,
+                   Regs::AudioPaths::DCP::write_82_audio_path_parameters),
 
     /* Set appliance ID */
     Regs::Register("appliance ID", 87,

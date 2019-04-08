@@ -798,6 +798,7 @@ EXCLUDE                = \
     @abs_builddir@/src/configuration_dbus.c \
     @abs_builddir@/src/dbusdl_dbus.c \
     @abs_builddir@/src/debug_dbus.c \
+    @abs_builddir@/src/jsonio_dbus.c \
     @abs_builddir@/src/streamplayer_dbus.c \
     @abs_builddir@/src/airable_dbus.c \
     @abs_builddir@/src/artcache_dbus.c \

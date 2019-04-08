@@ -37,7 +37,8 @@ dcpd_SOURCES = \
     dcpregs_tcptunnel.hh dcpregs_playstream.hh dcpregs_stream_speed.hh dcpregs_status.hh \
     dcpregs_upnpname.hh dcpregs_upnpserver.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
-    dcpregs_accesspoint.hh dcpregs_datetime.hh audiopath_minidsl.hh json.hh \
+    dcpregs_accesspoint.hh dcpregs_datetime.hh dcpregs_audiopaths.hh \
+    audiopath_minidsl.hh json.hh \
     connman_iter.c connman_iter.h connman_scan.cc connman_scan.hh \
     connman_common.c connman_common.h \
     connman_service.hh connman_service_list.hh maybe.hh \
@@ -97,6 +98,7 @@ noinst_LTLIBRARIES = \
     libplainplayer.la \
     liblogind_dbus.la \
     libsystemd_dbus.la \
+    libjsonio_dbus.la \
     libdebug_dbus.la
 
 dcpd_LDADD = $(noinst_LTLIBRARIES) $(DCPD_DEPENDENCIES_LIBS)
@@ -116,6 +118,7 @@ libregisters_la_SOURCES = \
     dcpregs_filetransfer.cc dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \
     dcpregs_tcptunnel.cc dcpregs_tcptunnel.hh \
     dcpregs_audiosources.cc dcpregs_audiosources.hh \
+    dcpregs_audiopaths.cc dcpregs_audiopaths.hh \
     dcpregs_playstream.cc dcpregs_playstream.hh \
     dcpregs_stream_speed.cc dcpregs_stream_speed.hh \
     dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
@@ -250,6 +253,9 @@ libconfiguration_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 nodist_libappliance_dbus_la_SOURCES = appliance_dbus.c appliance_dbus.h
 libappliance_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
+nodist_libjsonio_dbus_la_SOURCES = jsonio_dbus.c jsonio_dbus.h
+libjsonio_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
+
 nodist_libdebug_dbus_la_SOURCES = debug_dbus.c debug_dbus.h
 libdebug_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
@@ -346,6 +352,10 @@ BUILT_SOURCES = \
     org_freedesktop_systemd.h \
     org_freedesktop_systemd.md \
     systemd_dbus.stamp \
+    $(nodist_libjsonio_dbus_la_SOURCES) \
+    de_tahifi_jsonio.h \
+    de_tahifi_jsonio.md \
+    jsonio_dbus.stamp \
     $(nodist_libdebug_dbus_la_SOURCES) \
     de_tahifi_debug.h \
     de_tahifi_debug.md \
@@ -453,6 +463,15 @@ appliance_dbus.h: appliance_dbus.stamp
 appliance_dbus.stamp: $(DBUS_IFACES)/de_tahifi_appliance.xml
 	$(GDBUS_CODEGEN) --generate-c-code=appliance_dbus --c-namespace tdbus_appliance --interface-prefix de.tahifi.Appliance. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_appliance.md -H de_tahifi_appliance.h -c tdbus_appliance -s de.tahifi.Appliance. -n "Appliance state and control"
+	touch $@
+
+de_tahifi_jsonio.h: jsonio_dbus.stamp
+de_tahifi_jsonio.md: jsonio_dbus.stamp
+jsonio_dbus.c: jsonio_dbus.stamp
+jsonio_dbus.h: jsonio_dbus.stamp
+jsonio_dbus.stamp: $(DBUS_IFACES)/de_tahifi_jsonio.xml
+	$(GDBUS_CODEGEN) --generate-c-code=jsonio_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_jsonio.md -H de_tahifi_jsonio.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (JSON object exchange)"
 	touch $@
 
 de_tahifi_debug.h: debug_dbus.stamp
