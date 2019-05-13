@@ -62,7 +62,7 @@ void Regs::WLANAccessPoint::deinit()
 
 int Regs::WLANAccessPoint::DCP::write_107_access_point(const uint8_t *data, size_t length)
 {
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 81 handler %p %zu", data, length);
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "write 107 handler %p %zu", data, length);
 
     if(data[0] > uint8_t(WriteCommand::LAST_WRITE_COMMAND))
     {
