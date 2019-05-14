@@ -486,20 +486,20 @@ class Connman::WLANManager
   public:
     LoggedLock::RecMutex lock;
 
-    bool is_disabled;
+    Mode mode;
 
     std::function<void()> schedule_connect_to_wlan;
     std::function<void()> schedule_refresh_connman_services;
 
     WLANConnectionState wlan_connection_state;
 
-    Connman::WLANTools *wlan_tools;
+    WLANTools *wlan_tools;
 
     WLANManager(const WLANManager &) = delete;
     WLANManager &operator=(const WLANManager &) = delete;
 
     explicit WLANManager():
-        is_disabled(false),
+        mode(Mode::REGULAR),
         schedule_connect_to_wlan(nullptr),
         schedule_refresh_connman_services(nullptr),
         wlan_tools(nullptr)
@@ -507,17 +507,18 @@ class Connman::WLANManager
         LoggedLock::configure(lock, "Connman::WLANManager", MESSAGE_LEVEL_DEBUG);
     }
 
+    void set_mode(Mode connman_mode) { mode = connman_mode; }
+
     void init(std::function<void()> &&schedule_connect_to_wlan_fn,
               std::function<void()> &&schedule_refresh_connman_services_fn,
-              Connman::WLANTools *wlan, bool is_enabled)
+              WLANTools *wlan)
     {
-        is_disabled = !is_enabled;
         schedule_connect_to_wlan = std::move(schedule_connect_to_wlan_fn);
         schedule_refresh_connman_services = std::move(schedule_refresh_connman_services_fn);
         wlan_connection_state.reset();
         wlan_tools = wlan;
         LOGGED_LOCK_CONTEXT_HINT;
-        Connman::ServiceList::get_singleton_for_update().first.clear();
+        ServiceList::get_singleton_for_update().first.clear();
     }
 };
 
@@ -2198,7 +2199,7 @@ void Connman::dbussignal_connman_manager(struct _GDBusProxy *proxy, const char *
 
     if(wman != nullptr)
     {
-        log_assert(!wman->is_disabled);
+        log_assert(wman->mode == Mode::REGULAR);
         std::string context(signal_name);
         MainLoop::post(
             [wman, signal_name(std::move(context))] ()
@@ -2285,14 +2286,24 @@ static bool start_wps(Connman::WLANManager &wman,
 
 static Connman::WLANManager global_connman_wlan_manager;
 
+void Connman::set_networking_mode(Mode mode)
+{
+    global_connman_wlan_manager.set_mode(mode);
+}
+
+Connman::Mode Connman::get_networking_mode()
+{
+    return global_connman_wlan_manager.mode;
+}
+
 Connman::WLANManager *
 Connman::init_wlan_manager(std::function<void()> &&schedule_connect_to_wlan_fn,
                            std::function<void()> &&schedule_refresh_connman_services_fn,
-                           Connman::WLANTools *wlan_tools, bool is_enabled)
+                           Connman::WLANTools *wlan_tools)
 {
     global_connman_wlan_manager.init(std::move(schedule_connect_to_wlan_fn),
                                      std::move(schedule_refresh_connman_services_fn),
-                                     wlan_tools, is_enabled);
+                                     wlan_tools);
     return &global_connman_wlan_manager;
 }
 
@@ -2340,7 +2351,7 @@ static void scan_for_wps_done(Connman::SiteSurveyResult result)
 
 void Connman::about_to_connect_dbus_signals()
 {
-    log_assert(!global_connman_wlan_manager.is_disabled);
+    log_assert(global_connman_wlan_manager.mode == Mode::REGULAR);
 
     LOGGED_LOCK_CONTEXT_HINT;
     LoggedLock::UniqueLock<LoggedLock::RecMutex> wman_lock(global_connman_wlan_manager.lock);
@@ -2370,8 +2381,15 @@ void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
                                  const char *service_to_be_disabled,
                                  bool immediate_activation, bool force_reconnect)
 {
-    if(global_connman_wlan_manager.is_disabled)
+    switch(global_connman_wlan_manager.mode)
+    {
+      case Mode::REGULAR:
+        break;
+
+      case Mode::NONE:
+      case Mode::FAKE_CONNMAN:
         return;
+    }
 
     if(tech == NWPREFSTECH_UNKNOWN)
         return;
@@ -2457,8 +2475,15 @@ void Connman::connect_to_service(enum NetworkPrefsTechnology tech,
 void Connman::connect_to_wps_service(const char *network_name, const char *network_ssid,
                                      const char *service_to_be_disabled)
 {
-    if(global_connman_wlan_manager.is_disabled)
+    switch(global_connman_wlan_manager.mode)
+    {
+      case Mode::REGULAR:
+        break;
+
+      case Mode::NONE:
+      case Mode::FAKE_CONNMAN:
         return;
+    }
 
     LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
@@ -2473,8 +2498,15 @@ void Connman::connect_to_wps_service(const char *network_name, const char *netwo
 
 void Connman::cancel_wps()
 {
-    if(global_connman_wlan_manager.is_disabled)
+    switch(global_connman_wlan_manager.mode)
+    {
+      case Mode::REGULAR:
+        break;
+
+      case Mode::NONE:
+      case Mode::FAKE_CONNMAN:
         return;
+    }
 
     LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
@@ -2514,7 +2546,7 @@ static bool get_connecting_status(const Connman::ServiceList::Map::value_type &s
 
 bool Connman::is_connecting(bool *is_wps)
 {
-    log_assert(!global_connman_wlan_manager.is_disabled);
+    log_assert(global_connman_wlan_manager.mode == Mode::REGULAR);
 
     LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(global_connman_wlan_manager.lock);
@@ -2550,7 +2582,15 @@ bool Connman::is_connecting(bool *is_wps)
 
 void Connman::refresh_services(bool force_refresh_all)
 {
-    if(!global_connman_wlan_manager.is_disabled)
+    switch(global_connman_wlan_manager.mode)
+    {
+      case Mode::REGULAR:
         do_refresh_services(global_connman_wlan_manager,
                             force_refresh_all, __func__);
+        break;
+
+      case Mode::NONE:
+      case Mode::FAKE_CONNMAN:
+        break;
+    }
 }

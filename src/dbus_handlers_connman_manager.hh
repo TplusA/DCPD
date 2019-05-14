@@ -34,13 +34,23 @@ struct _GVariant;
 namespace Connman
 {
 
+enum class Mode
+{
+    REGULAR,
+    NONE,
+    FAKE_CONNMAN,
+};
+
 class WLANTools;
 class WLANManager;
+
+void set_networking_mode(Mode mode);
+Mode get_networking_mode();
 
 WLANManager *
 init_wlan_manager(std::function<void()> &&schedule_connect_to_wlan_fn,
                   std::function<void()> &&schedule_refresh_connman_services_fn,
-                  WLANTools *wlan_tools, bool is_enabled);
+                  WLANTools *wlan_tools);
 
 /*!
  * Tell ConnMan to connect to WLAN service with name stored in passed data.

@@ -1805,9 +1805,27 @@ int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, 
 
 static void fill_network_status_register_response(uint8_t *response)
 {
-    response[0] = NETWORK_STATUS_IPV4_NOT_CONFIGURED;
-    response[1] = NETWORK_STATUS_DEVICE_NONE;
-    response[2] = NETWORK_STATUS_CONNECTION_NONE;
+    const auto mode(Connman::get_networking_mode());
+
+    switch(mode)
+    {
+      case Connman::Mode::REGULAR:
+      case Connman::Mode::NONE:
+        response[0] = NETWORK_STATUS_IPV4_NOT_CONFIGURED;
+        response[1] = NETWORK_STATUS_DEVICE_NONE;
+        response[2] = NETWORK_STATUS_CONNECTION_NONE;
+
+        if(mode == Connman::Mode::NONE)
+            return;
+
+        break;
+
+      case Connman::Mode::FAKE_CONNMAN:
+        response[0] = NETWORK_STATUS_IPV4_DHCP;
+        response[1] = NETWORK_STATUS_DEVICE_ETHERNET;
+        response[2] = NETWORK_STATUS_CONNECTION_CONNECTED;
+        return;
+    }
 
     /* we must do this before locking the service list below */
     bool is_wps;

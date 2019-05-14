@@ -551,6 +551,12 @@ bool Connman::is_connecting(bool *is_wps)
     return false;
 }
 
+/* Of course we have networking here. */
+Connman::Mode Connman::get_networking_mode()
+{
+    return Connman::Mode::REGULAR;
+}
+
 namespace register_response_writer_tests
 {
 

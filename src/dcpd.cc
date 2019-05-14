@@ -920,7 +920,7 @@ struct parameters
     enum MessageVerboseLevel verbose_level;
     bool run_in_foreground;
     bool connect_to_session_dbus;
-    bool with_connman;
+    Connman::Mode with_connman;
     bool is_fixing_broken_update_state;
     bool is_upgrade_enforced;
     bool is_upgrade_strongly_enforced;
@@ -934,6 +934,8 @@ static bool main_loop_init(const struct parameters *parameters,
                            const Regs::PlayStream::StreamingRegistersIface &streaming_regs,
                            struct dcp_over_tcp_data *dot, bool is_upgrading)
 {
+    Connman::set_networking_mode(parameters->with_connman);
+
     Regs::UPnPName::init();
     configproxy_init();
 
@@ -962,7 +964,7 @@ static bool main_loop_init(const struct parameters *parameters,
 
     connman = init_wlan_manager(try_connect_to_managed_wlan,
                                 deferred_connman_refresh,
-                                &wlan_tools, parameters->with_connman);
+                                &wlan_tools);
 
     /*
      * The port number is ASCII "TB" (meaning T + A + 1).
@@ -1140,6 +1142,7 @@ static void usage(const char *program_name)
            "  --idrcp name   Name of the named pipe the DRCP daemon writes to.\n"
            "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n"
            "  --no-connman   Disable use of Connman (no network support).\n"
+           "  --fake-connman Fake use of Connman (fake network support).\n"
            "  --upgrade      Enforce upgrading the system.\n"
            "  --force-upgrade  No, really do it regardless of circumstances.\n"
            "  --session-dbus Connect to session D-Bus.\n"
@@ -1154,7 +1157,7 @@ static int process_command_line(int argc, char *argv[],
     parameters->verbose_level = MESSAGE_LEVEL_NORMAL;
     parameters->run_in_foreground = false;
     parameters->connect_to_session_dbus = true;
-    parameters->with_connman = true;
+    parameters->with_connman = Connman::Mode::REGULAR;
     parameters->is_fixing_broken_update_state = false;
     parameters->is_upgrade_enforced = false;
     parameters->is_upgrade_strongly_enforced = false;
@@ -1232,7 +1235,9 @@ static int process_command_line(int argc, char *argv[],
         else if(strcmp(argv[i], "--system-dbus") == 0)
             parameters->connect_to_session_dbus = false;
         else if(strcmp(argv[i], "--no-connman") == 0)
-            parameters->with_connman = false;
+            parameters->with_connman = Connman::Mode::NONE;
+        else if(strcmp(argv[i], "--fake-connman") == 0)
+            parameters->with_connman = Connman::Mode::FAKE_CONNMAN;
         else if(strcmp(argv[i], "--upgrade") == 0)
             parameters->is_upgrade_enforced = true;
         else if(strcmp(argv[i], "--force-upgrade") == 0)
@@ -1457,7 +1462,8 @@ int main(int argc, char *argv[])
                    connman, *streaming_regs, &dot, is_upgrading);
 
     if(connman == nullptr ||
-       DBus::setup(parameters.connect_to_session_dbus, parameters.with_connman,
+       DBus::setup(parameters.connect_to_session_dbus,
+                   parameters.with_connman == Connman::Mode::REGULAR,
                    appconn, *connman, config_manager, apman, *streaming_regs,
                    Regs::UPnPServer::connected,
                    Regs::AudioSources::check_external_service_credentials) < 0)
@@ -1504,8 +1510,16 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &action, nullptr);
     sigaction(SIGTERM, &action, nullptr);
 
-    if(parameters.with_connman)
+    switch(parameters.with_connman)
+    {
+      case Connman::Mode::REGULAR:
         wlan_tools.power_on();
+        break;
+
+      case Connman::Mode::NONE:
+      case Connman::Mode::FAKE_CONNMAN:
+        break;
+    }
 
     DBus::lock_shutdown_sequence("Notify SPI slave");
 
