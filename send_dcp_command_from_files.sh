@@ -109,6 +109,6 @@ do
 done
 
 echo 'Sending command with total size of '$(stat -c %s "$TEMPFILE")" to $HOST:$PORT"
-nc "$HOST" "$PORT" <"$TEMPFILE" | hexdump -C
+nc -N "$HOST" "$PORT" <"$TEMPFILE" | hexdump -C
 
 rm -f "$TEMPFILE"
