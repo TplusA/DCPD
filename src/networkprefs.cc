@@ -23,6 +23,7 @@
 #include "networkprefs.h"
 #include "inifile.h"
 #include "network_device_list.hh"
+#include "dbus_handlers_connman_manager.hh"
 #include "messages.h"
 
 #include <dirent.h>
@@ -343,8 +344,32 @@ static int find_nic_name(const char *path, unsigned char dtype, void *user_data)
 }
 
 static Connman::Address<Connman::AddressType::MAC>
-read_out_mac_address(const char *sysfs_path)
+read_out_mac_address(const char *sysfs_path, Connman::Technology tech)
 {
+    switch(Connman::get_networking_mode())
+    {
+      case Connman::Mode::REGULAR:
+        break;
+
+      case Connman::Mode::NONE:
+        sysfs_path = nullptr;
+        break;
+
+      case Connman::Mode::FAKE_CONNMAN:
+        switch(tech)
+        {
+          case Connman::Technology::ETHERNET:
+            return Connman::Address<Connman::AddressType::MAC>("11:22:33:44:55:66");
+
+          case Connman::Technology::WLAN:
+            return Connman::Address<Connman::AddressType::MAC>("66:55:44:33:22:11");
+
+          case Connman::Technology::UNKNOWN_TECHNOLOGY:
+            sysfs_path = nullptr;
+            break;
+        }
+    }
+
     if(sysfs_path == nullptr)
         return Connman::Address<Connman::AddressType::MAC>();
 
@@ -471,8 +496,10 @@ void network_prefs_update_primary_network_devices(const char *ethernet_sysfs_pat
                                                   const char *wlan_sysfs_path,
                                                   bool remove_prefs_for_missing_devices)
 {
-    Connman::Address<Connman::AddressType::MAC> ethernet_mac(read_out_mac_address(ethernet_sysfs_path));
-    Connman::Address<Connman::AddressType::MAC> wlan_mac(read_out_mac_address(wlan_sysfs_path));
+    Connman::Address<Connman::AddressType::MAC> ethernet_mac(
+        read_out_mac_address(ethernet_sysfs_path, Connman::Technology::ETHERNET));
+    Connman::Address<Connman::AddressType::MAC> wlan_mac(
+        read_out_mac_address(wlan_sysfs_path, Connman::Technology::WLAN));
 
     if(ethernet_mac.empty())
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "No Ethernet NIC found");
