@@ -452,7 +452,7 @@ static const std::array<Regs::Register, 54> register_map
     /* Set audio path parameters (AuPaL) */
     Regs::Register("set audio path parameters", 82,
                    REGISTER_MK_VERSION(1, 0, 9),
-                   2048,
+                   Regs::AudioPaths::DCP::read_82_audio_path_parameters,
                    Regs::AudioPaths::DCP::write_82_audio_path_parameters),
 
     /* Set appliance ID */

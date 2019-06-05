@@ -21,6 +21,7 @@
 
 #include <cinttypes>
 #include <cstdlib>
+#include <vector>
 
 /*!
  * \addtogroup registers
@@ -33,9 +34,12 @@ namespace Regs
 namespace AudioPaths
 {
 
+void request_full_from_appliance();
+
 namespace DCP
 {
 int write_82_audio_path_parameters(const uint8_t *data, size_t length);
+bool read_82_audio_path_parameters(std::vector<uint8_t> &buffer);
 }
 
 }

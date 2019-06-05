@@ -22,6 +22,7 @@
 
 #include "dbus_handlers.h"
 #include "dcpregs_audiosources.hh"
+#include "dcpregs_audiopaths.hh"
 #include "dcpregs_appliance.hh"
 #include "dcpregs_networkconfig.hh"
 #include "dcpregs_upnpname.hh"
@@ -1117,6 +1118,80 @@ gboolean dbusmethod_debug_logging_config_set_level(tdbusdebugLoggingConfig *obje
     if(old_level != MESSAGE_LEVEL_IMPOSSIBLE)
         tdbus_debug_logging_config_emit_global_debug_level_changed(object,
                                                                    arg_new_level);
+
+    return TRUE;
+}
+
+bool handle_audiopath_json_request(GDBusMethodInvocation *invocation,
+                                   const char *json, const char *const *extra,
+                                   std::string *result)
+{
+    Json::Value request;
+    if(!parse_json_from_buffer(invocation, request, json, strlen(json),
+                               "audio path configuration request"))
+        return false;
+
+    const auto &q(request["query"]);
+    if(!q.isNull())
+    {
+        const auto &what(q["what"]);
+        if(what.isNull() || !what.isString())
+        {
+            g_dbus_method_invocation_return_error(
+                invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                "Invalid audio path configuration query");
+            return false;
+        }
+
+        if(what == "full_audio_signal_path")
+        {
+            Regs::AudioPaths::request_full_from_appliance();
+
+            if(result != nullptr)
+                *result = "{\"result\":\"ok\"}";
+
+            return true;
+        }
+        else
+        {
+            g_dbus_method_invocation_return_error(
+                invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                "Unknown audio path configuration query \"%s\"", what.asCString());
+            return false;
+        }
+    }
+    else
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Malformed audio path configuration request");
+        return false;
+    }
+}
+
+gboolean dbusmethod_audiopath_jsonreceiver_notify(tdbusJSONReceiver *object,
+                                                  GDBusMethodInvocation *invocation,
+                                                  const gchar *json,
+                                                  const gchar *const *extra,
+                                                  gpointer user_data)
+{
+    if(handle_audiopath_json_request(invocation, json, extra, nullptr))
+        tdbus_jsonreceiver_complete_notify(object, invocation);
+
+    return TRUE;
+}
+
+gboolean dbusmethod_audiopath_jsonreceiver_tell(tdbusJSONReceiver *object,
+                                                GDBusMethodInvocation *invocation,
+                                                const gchar *json,
+                                                const gchar *const *extra,
+                                                gpointer user_data)
+{
+    std::string result;
+
+    if(handle_audiopath_json_request(invocation, json, extra, &result))
+        tdbus_jsonreceiver_complete_tell(object, invocation,
+                                         result.c_str(), extra);
 
     return TRUE;
 }
