@@ -23,13 +23,12 @@
 #include "dcpregs_audiopaths.hh"
 #include "audiopath_minidsl.hh"
 #include "dbus_iface_deep.h"
-#include "registers_priv.hh"
+#include "register_push_queue.hh"
 #include "logged_lock.hh"
 #include "messages.h"
 
 #include <deque>
 #include <string>
-#include <stdexcept>
 
 enum class AudioPathRequest
 {
@@ -40,60 +39,8 @@ enum class AudioPathRequest
 
 /*!
  * A queue for audio path requests from the system to the SPI slave.
- *
- * TODO: See also #SlavePushCommandQueue for similar thing; try to DRY up
  */
-class AudioPathRequestQueue
-{
-  private:
-    LoggedLock::Mutex lock_;
-    std::deque<AudioPathRequest> queue_;
-
-  public:
-    AudioPathRequestQueue(const AudioPathRequestQueue &) = delete;
-    AudioPathRequestQueue(AudioPathRequestQueue &&) = default;
-    AudioPathRequestQueue &operator=(const AudioPathRequestQueue &) = delete;
-    AudioPathRequestQueue &operator=(AudioPathRequestQueue &&) = default;
-
-    explicit AudioPathRequestQueue()
-    {
-        LoggedLock::configure(lock_, "AudioPathRequestQueue", MESSAGE_LEVEL_DEBUG);
-    }
-
-    void add(AudioPathRequest request)
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        queue_.push_back(request);
-        Regs::get_data().register_changed_notification_fn(82);
-    }
-
-    AudioPathRequest take()
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(lock_);
-
-        if(queue_.empty())
-        {
-            BUG("No request in register 82 read queue");
-            throw std::out_of_range("");
-        }
-
-        const auto result = queue_.front();
-        queue_.pop_front();
-
-        return result;
-    }
-
-    void reset()
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        queue_.clear();
-    }
-};
-
-static AudioPathRequestQueue push_82_queue;
+static Regs::PushQueue<AudioPathRequest> push_82_queue(82, "AudioPathRequestQueue");
 
 void Regs::AudioPaths::request_full_from_appliance()
 {

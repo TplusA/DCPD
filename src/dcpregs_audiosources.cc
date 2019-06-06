@@ -22,8 +22,8 @@
 
 #include "dcpregs_audiosources.hh"
 #include "connman_service_list.hh"
-#include "registers_priv.hh"
 #include "register_response_writer.hh"
+#include "register_push_queue.hh"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
 #include "string_trim.hh"
@@ -689,69 +689,20 @@ class SelectedSource
     }
 };
 
-class SlavePushCommandQueue
+using SlavePushCommandQueue =
+    Regs::PushQueue<std::pair<const GetAudioSourcesCommand, const std::string>>;
+
+static void add_to_queue(SlavePushCommandQueue &q,
+                         GetAudioSourcesCommand command)
 {
-  public:
-    using Item = std::pair<const GetAudioSourcesCommand, const std::string>;
+    q.add(std::move(std::make_pair(command, std::move(std::string()))));
+}
 
-  private:
-    LoggedLock::Mutex lock_;
-    std::deque<Item> queue_;
-
-  public:
-    SlavePushCommandQueue(const SlavePushCommandQueue &) = delete;
-    SlavePushCommandQueue &operator=(const SlavePushCommandQueue &) = delete;
-
-    explicit SlavePushCommandQueue()
-    {
-        LoggedLock::configure(lock_, "SlavePushCommandQueue", MESSAGE_LEVEL_DEBUG);
-    }
-
-    void add(GetAudioSourcesCommand command)
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        push_and_notify(std::move(std::make_pair(command, std::move(std::string()))));
-    }
-
-    void add(GetAudioSourcesCommand command, std::string &&str)
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        push_and_notify(std::move(std::make_pair(command, std::move(str))));
-    }
-
-    Item take()
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(lock_);
-
-        if(queue_.empty())
-        {
-            BUG("No command in register 80 queue");
-            return std::make_pair(GetAudioSourcesCommand::READ_ALL, std::move(std::string()));
-        }
-
-        const auto result = queue_.front();
-        queue_.pop_front();
-
-        return result;
-    }
-
-    void reset()
-    {
-        LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        queue_.clear();
-    }
-
-  private:
-    void push_and_notify(Item &&item)
-    {
-        queue_.emplace_back(std::move(item));
-        Regs::get_data().register_changed_notification_fn(80);
-    }
-};
+static void add_to_queue(SlavePushCommandQueue &q,
+                         GetAudioSourcesCommand command, std::string &&str)
+{
+    q.add(std::move(std::make_pair(command, std::move(str))));
+}
 
 class AudioSourceData
 {
@@ -949,7 +900,7 @@ class AudioSourceData
 
     static void audio_sources_changed_lock_state_notification(SlavePushCommandQueue &q)
     {
-        q.add(GetAudioSourcesCommand::SOURCES_CHANGED);
+        add_to_queue(q, GetAudioSourcesCommand::SOURCES_CHANGED);
     }
 };
 
@@ -991,7 +942,8 @@ static AudioSourceState is_service_unlocked(const AudioSource &src)
 
 void Regs::AudioSources::init()
 {
-    push_80_command_queue = std::make_unique<SlavePushCommandQueue>();
+    push_80_command_queue = std::make_unique<SlavePushCommandQueue>(80, "SlavePushCommandQueue");
+
     global_external_service_state = std::make_unique<ExternalServiceState>();
     audio_source_data = std::make_unique<AudioSourceData, std::array<AudioSource, AudioSourceData::NUMBER_OF_DEFAULT_SOURCES>>(
     {
@@ -1203,7 +1155,19 @@ ssize_t Regs::AudioSources::DCP::read_80_get_known_audio_sources(uint8_t *respon
 
     LOGGED_LOCK_CONTEXT_HINT;
     auto lock(audio_source_data->lock());
-    const auto queue_item(push_80_command_queue->take());
+    const auto queue_item(
+        [] () -> std::pair<const GetAudioSourcesCommand, const std::string>
+        {
+            try
+            {
+                return push_80_command_queue->take();
+            }
+            catch(const std::out_of_range &e)
+            {
+                return std::make_pair(GetAudioSourcesCommand::READ_ALL,
+                                      std::move(std::string()));
+            }
+        }());
     const GetAudioSourcesCommand &command(queue_item.first);
 
     RegisterResponseWriter out(response, length);
@@ -1289,8 +1253,9 @@ static int queue_read_one_command(const uint8_t *data, size_t length)
         return -1;
     }
 
-    push_80_command_queue->add(GetAudioSourcesCommand::READ_ONE,
-                               std::move(std::string(reinterpret_cast<const char *>(data))));
+    add_to_queue(*push_80_command_queue,
+                 GetAudioSourcesCommand::READ_ONE,
+                 std::string(reinterpret_cast<const char *>(data)));
 
     return 0;
 }
@@ -1315,7 +1280,7 @@ int Regs::AudioSources::DCP::write_80_get_known_audio_sources(const uint8_t *dat
         switch(command)
         {
           case GetAudioSourcesCommand::READ_ALL:
-            push_80_command_queue->add(GetAudioSourcesCommand(data[0]));
+            add_to_queue(*push_80_command_queue, GetAudioSourcesCommand(data[0]));
             result = 0;
             break;
 
@@ -1563,7 +1528,7 @@ void Regs::AudioSources::source_available(const char *source_id)
         return;
 
     if(audio_source_data->audio_source_available_notification(*src))
-        push_80_command_queue->add(GetAudioSourcesCommand::SOURCES_CHANGED);
+        add_to_queue(*push_80_command_queue, GetAudioSourcesCommand::SOURCES_CHANGED);
 }
 
 void Regs::AudioSources::selected_source(const char *source_id,
