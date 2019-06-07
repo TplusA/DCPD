@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -109,7 +109,7 @@ static void add_link_if_interesting(const struct nlmsghdr *const link,
 
 static bool extract_interfaces(int fd, Network::NetlinkList &devices)
 {
-    struct sockaddr_nl addr {0};
+    struct sockaddr_nl addr {};
     addr.nl_family = AF_NETLINK;
     addr.nl_pid = getpid();
     addr.nl_groups = 0;
@@ -126,7 +126,7 @@ static bool extract_interfaces(int fd, Network::NetlinkList &devices)
         struct rtgenmsg gen;
     };
 
-    struct nl_req_s req {0};
+    struct nl_req_s req {};
     req.hdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtgenmsg));
     req.hdr.nlmsg_type = RTM_GETLINK;
     req.hdr.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
@@ -138,10 +138,10 @@ static bool extract_interfaces(int fd, Network::NetlinkList &devices)
     io.iov_base = &req;
     io.iov_len = req.hdr.nlmsg_len;
 
-    struct sockaddr_nl kernel {0};
+    struct sockaddr_nl kernel {};
     kernel.nl_family = AF_NETLINK;
 
-    struct msghdr msg {0};
+    struct msghdr msg {};
     msg.msg_iov = &io;
     msg.msg_iovlen = 1;
     msg.msg_name = &kernel;

@@ -145,7 +145,7 @@ void Connman::TechnologyPropertiesWIFI::notify_watchers(Property property, Store
         });
 }
 
-void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&p)
+void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&path)
 {
     LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(lock_);
@@ -156,7 +156,7 @@ void Connman::TechnologyPropertiesWIFI::set_dbus_object_path(std::string &&p)
         proxy_ = nullptr;
     }
 
-    dbus_object_path_ = std::move(p);
+    dbus_object_path_ = std::move(path);
     ensure_dbus_proxy();
 }
 

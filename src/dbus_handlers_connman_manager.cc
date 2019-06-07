@@ -32,6 +32,7 @@
 #include "dbus_common.h"
 
 #include <functional>
+#include <algorithm>
 #include <cinttypes>
 
 /*!
@@ -381,6 +382,10 @@ class WLANConnectionState
           case State::CONNECTING:
           case State::ABORTED:
             finalize(false);
+
+            if(be_a_failure)
+                break;
+
             state_ = State::FAILED;
             return;
         }
@@ -536,6 +541,7 @@ static bool stop_wps(WLANConnectionState &state, bool emit_warning_if_idle)
     switch(state.get_state())
     {
       case WLANConnectionState::State::WAIT_FOR_REGISTRAR:
+        // cppcheck-suppress unreadVariable
         may_reset_state = true;
 
         /* fall-through */
@@ -2573,11 +2579,8 @@ bool Connman::is_connecting(bool *is_wps)
         break;
     }
 
-    for(const auto &s : services)
-        if(get_connecting_status(s, false))
-            return true;
-
-    return false;
+    return std::find_if(services.begin(), services.end(),
+            [] (const auto &s) { return get_connecting_status(s, false); }) != services.end();
 }
 
 void Connman::refresh_services(bool force_refresh_all)

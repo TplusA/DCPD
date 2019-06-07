@@ -119,7 +119,7 @@ class AudioSource
     {}
 
     explicit AudioSource(std::string &&id, std::string &&default_name,
-                         Flags flags,
+                         const Flags flags /* cppcheck-suppress passedByValue  */,
                          std::function<AudioSourceState(const AudioSource &)> &&check_unlocked_fn = nullptr,
                          std::function<bool(const AudioSource &, bool)> &&invoke_audio_source_fn = nullptr,
                          bool is_dead = false):
@@ -144,8 +144,8 @@ class AudioSource
     bool has_changed() const { return has_changed_; }
     void set_processed() { has_changed_ = false; }
 
-    bool check_any_flag(const Flags flags)  const { return (flags_ & flags) != 0; }
-    bool check_all_flags(const Flags flags) const { return (flags_ & flags) == flags; }
+    bool check_any_flag(const Flags flags /* cppcheck-suppress passedByValue  */)  const { return (flags_ & flags) != 0; }
+    bool check_all_flags(const Flags flags /* cppcheck-suppress passedByValue  */) const { return (flags_ & flags) == flags; }
 
     bool set_available()
     {
@@ -667,7 +667,7 @@ class SelectedSource
         }
 
         LOGGED_LOCK_CONTEXT_HINT;
-        std::lock_guard<LoggedLock::RecMutex> lock(sel->lock_);
+        std::lock_guard<LoggedLock::RecMutex> lk(sel->lock_);
 
         log_assert(sel->state_ == SelectionState::SELECTING);
         log_assert(sel->cancel_ != nullptr);

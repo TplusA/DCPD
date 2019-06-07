@@ -69,7 +69,7 @@ class IPSettings
     void set_address(const char *addr) { address_.set(addr); }
     void set_netmask(const char *addr) { netmask_.set(addr); }
     void set_gateway(const char *addr) { gateway_.set(addr); }
-    void set_dhcp_method(DHCPMethod dhcp_method) { dhcp_method_ = dhcp_method; }
+    void set_dhcp_method(const DHCPMethod &dhcp_method) { dhcp_method_ = dhcp_method; }
 
     DHCPMethod get_dhcp_method() const { return dhcp_method_; }
 

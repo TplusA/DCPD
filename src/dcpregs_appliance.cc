@@ -29,6 +29,8 @@
 #include "maybe.hh"
 #include "registers_priv.hh"
 
+#include <algorithm>
+
 /*!
  * Predefined appliances.
  *
@@ -176,9 +178,10 @@ static ApplianceID map_appliance_id(const char *name)
     if(name == nullptr || name[0] == '\0')
         return ApplianceID::UNDEFINED;
 
-    for(const auto &a : names)
-        if(a.first == name)
-            return a.second;
+    const auto &it(std::find_if(names.begin(), names.end(),
+                        [name] (const auto &a) { return a.first == name; }));
+    if(it != names.end())
+        return it->second;
 
     msg_error(0, LOG_ERR, "Appliance ID \"%s\" is NOT SUPPORTED, "
               "using generic fallback configuration", name);

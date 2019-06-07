@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -94,14 +94,16 @@ Configuration::UpdateSettings<Configuration::ApplianceValues>::insert_boxed(cons
 
     const size_t requested_key_length(strlen(key));
 
-    for(const auto &k : ApplianceValues::all_keys)
-    {
-        if(k.name_.length() == requested_key_length &&
-           strcmp(k.name_.c_str(), key) == 0)
+    auto it = std::find_if(
+        ApplianceValues::all_keys.begin(), ApplianceValues::all_keys.end(),
+        [key, requested_key_length] (const auto &k)
         {
-            return k.unbox(*this, std::move(value));
-        }
-    }
+            return k.name_.length() == requested_key_length &&
+                   strcmp(k.name_.c_str(), key) == 0;
+        });
+
+    if(it != ApplianceValues::all_keys.end())
+        return it->unbox(*this, std::move(value));
 
     return InsertResult::KEY_UNKNOWN;
 }

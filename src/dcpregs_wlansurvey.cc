@@ -267,7 +267,7 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer)
             if(!retval)
             {
                 connman_service_iterator_free(service);
-                return retval;
+                return false;
             }
 
             break;

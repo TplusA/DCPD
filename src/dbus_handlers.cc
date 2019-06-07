@@ -621,7 +621,8 @@ class MoveToFunction
   public:
     MoveToFunction &operator=(const MoveToFunction &) = delete;
 
-    MoveToFunction(const MoveToFunction &)
+    MoveToFunction(const MoveToFunction &):
+        value_{}
     {
         throw std::runtime_error("MoveToFunction objects shall not be copied");
     }

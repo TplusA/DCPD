@@ -196,7 +196,6 @@ class NetworkConfigWriteData
     void shift_dns_servers()
     {
         ipv4_dns_server1_ = std::move(ipv4_dns_server2_);
-        ipv4_dns_server2_.set_unknown();
     }
 
     /*!
@@ -877,7 +876,7 @@ static bool handle_unhandled_settings(const Network::ConfigRequest &req)
         result = false;
     }
 
-    if(req.time_servers_.is_known())
+    if(req.domains_.is_known())
     {
         msg_error(0, LOG_ERR, "Domain configuration is not supported yet");
         result = false;
@@ -935,9 +934,6 @@ static size_t hexdump_to_binary(char *dest, size_t dest_size,
 
     for(size_t i = 0; i < src.size() && j < dest_size; i += 2)
     {
-        if(j >= dest_size)
-            break;
-
         dest[j] = char_to_nibble(src[i]) << 4;
 
         if(i + 1 >= src.size())
@@ -1686,9 +1682,12 @@ static bool process_external_config_request(
     if(immediate_activation)
     {
         auto connect_later =
-            [wps_mode, immediate_activation, target_tech,
-             current_wlan_service_name, have_new_wlan_passphrase,
-             wps_network_name_s, wps_network_ssid_s]
+            [wps_mode,
+             /* cppcheck-suppress shadowVar */ immediate_activation,
+             target_tech, current_wlan_service_name,
+             /* cppcheck-suppress shadowVar */ have_new_wlan_passphrase,
+             /* cppcheck-suppress shadowVar */ wps_network_name_s,
+             wps_network_ssid_s]
             (Network::AccessPoint::RequestResult result,
              Network::AccessPoint::Error error,
              Network::AccessPoint::Status status)
@@ -2119,6 +2118,7 @@ ssize_t Regs::NetworkConfig::DCP::read_62_primary_dns(uint8_t *response, size_t 
                     if(!s.get_service_data().active_.dns_servers_.is_known())
                         return -1;
 
+                    // cppcheck-suppress shadowVar
                     const auto &servers(s.get_service_data().active_.dns_servers_.get());
 
                     if(!servers.empty())
@@ -2141,6 +2141,7 @@ ssize_t Regs::NetworkConfig::DCP::read_63_secondary_dns(uint8_t *response, size_
                     if(!s.get_service_data().active_.dns_servers_.is_known())
                         return -1;
 
+                    // cppcheck-suppress shadowVar
                     const auto &servers(s.get_service_data().active_.dns_servers_.get());
 
                     if(servers.size() >= 2)
