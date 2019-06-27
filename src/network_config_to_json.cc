@@ -375,7 +375,7 @@ static bool fill_in_service_configuration(
         Json::Value &config, MD5::Context &ctx, bool allow_empty,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV4>> &ipv4,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV6>> &ipv6,
-        const Maybe<Connman::ProxySettings> proxy,
+        const Maybe<Connman::ProxySettings> &proxy,
         const Maybe<std::vector<std::string>> &dns_servers,
         const Maybe<std::vector<std::string>> &time_servers,
         const Maybe<std::vector<std::string>> &domains)

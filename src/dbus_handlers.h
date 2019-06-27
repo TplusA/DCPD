@@ -24,6 +24,7 @@
 #include "mixer_dbus.h"
 #include "appliance_dbus.h"
 #include "configuration_dbus.h"
+#include "jsonio_dbus.h"
 #include "debug_dbus.h"
 
 /*!
@@ -133,6 +134,17 @@ gboolean dbusmethod_config_get_value(tdbusConfigurationRead *object,
 gboolean dbusmethod_config_get_all_values(tdbusConfigurationRead *object,
                                           GDBusMethodInvocation *invocation,
                                           const gchar *database, gpointer user_data);
+
+gboolean dbusmethod_audiopath_jsonreceiver_notify(tdbusJSONReceiver *object,
+                                                  GDBusMethodInvocation *invocation,
+                                                  const gchar *json,
+                                                  const gchar *const *extra,
+                                                  gpointer user_data);
+gboolean dbusmethod_audiopath_jsonreceiver_tell(tdbusJSONReceiver *object,
+                                                GDBusMethodInvocation *invocation,
+                                                const gchar *json,
+                                                const gchar *const *extra,
+                                                gpointer user_data);
 
 void dbussignal_gerbera(GDBusProxy *proxy, const gchar *sender_name,
                         const gchar *signal_name, GVariant *parameters,

@@ -121,6 +121,7 @@ class BufferedStreamInfo
         meta_data_(std::move(src.meta_data_)),
         url_(std::move(src.url_))
     {
+        // cppcheck-suppress useInitializationList
         src.stream_id_ = ID::Stream::make_invalid();
     }
 
@@ -695,9 +696,10 @@ class StreamingRegisters:
     /*!
      * Push first or next stream to streamplayer, emit meta data, start if necessary
      */
-    bool do_push_and_start_stream(const Regs::PlayStream::StreamInfo &stream_info,
-                                  Regs::PlayStream::PlainPlayer::StreamID stream_id,
-                                  bool is_first, bool is_start_requested)
+    static bool do_push_and_start_stream(
+            const Regs::PlayStream::StreamInfo &stream_info,
+            Regs::PlayStream::PlainPlayer::StreamID stream_id,
+            bool is_first, bool is_start_requested)
     {
         CoverArt::StreamKey stream_key;
         CoverArt::generate_stream_key_for_app(stream_key, stream_info.url_);
@@ -898,7 +900,7 @@ tokenize_meta_data(const std::string &src)
     dest.reserve(src.length() + 1);
 
     size_t artist = src.length();
-    size_t album = src.length();
+    size_t album = artist;
     size_t idx = 0;
 
     for(size_t i = 0; i < src.length(); ++i)

@@ -162,7 +162,7 @@ class AccessPoint
                LoggedLock::UniqueLock<LoggedLock::RecMutex> &ap_lock);
     void shutdown(std::unique_ptr<ShutdownRequest> request);
     void request_done(Connman::TechnologyPropertiesBase::StoreResult result,
-                      bool is_tethering, Status status);
+                      bool is_tether_status_ok, Status status);
 };
 
 }

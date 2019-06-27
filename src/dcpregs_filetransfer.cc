@@ -128,6 +128,7 @@ class XModemStatus
 
     explicit XModemStatus():
         source(XMODEM_SOURCE_NONE),
+        xm_ctx({}),
         progress_rate_limit(0)
     {
         LoggedLock::configure(lock, "XModemStatus", MESSAGE_LEVEL_DEBUG);

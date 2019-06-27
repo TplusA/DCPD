@@ -75,6 +75,8 @@ static struct
     tdbusdcpdListItem *list_item_iface;
     tdbusdcpdNetwork *network_config_iface;
     tdbusaupathSource *audiopath_source_iface;
+    tdbusJSONEmitter *audiopath_config_update_iface;
+    tdbusJSONReceiver *audiopath_config_request_iface;
     tdbusmixerVolume *mixer_volume_iface;
     tdbusappliancePower *appliance_power_iface;
     tdbusConfigurationProxy *configproxy_iface;
@@ -222,11 +224,12 @@ static void gerbera_vanished(GDBusConnection *connection, const gchar *name,
 }
 
 static void try_export_iface(GDBusConnection *connection,
-                             GDBusInterfaceSkeleton *iface)
+                             GDBusInterfaceSkeleton *iface,
+                             const char *object_name = "/de/tahifi/Dcpd")
 {
     GError *error = nullptr;
 
-    g_dbus_interface_skeleton_export(iface, connection, "/de/tahifi/Dcpd", &error);
+    g_dbus_interface_skeleton_export(iface, connection, object_name, &error);
 
     (void)dbus_common_handle_dbus_error(&error, "Export D-Bus interface");
 }
@@ -249,6 +252,8 @@ static void bus_acquired(GDBusConnection *connection,
         dcpd_iface_data.list_item_iface = tdbus_dcpd_list_item_skeleton_new();
         dcpd_iface_data.network_config_iface = tdbus_dcpd_network_skeleton_new();
         dcpd_iface_data.audiopath_source_iface = tdbus_aupath_source_skeleton_new();
+        dcpd_iface_data.audiopath_config_update_iface = tdbus_jsonemitter_skeleton_new();
+        dcpd_iface_data.audiopath_config_request_iface = tdbus_jsonreceiver_skeleton_new();
         dcpd_iface_data.mixer_volume_iface = tdbus_mixer_volume_skeleton_new();
         dcpd_iface_data.appliance_power_iface = tdbus_appliance_power_skeleton_new();
         dcpd_iface_data.configproxy_iface = tdbus_configuration_proxy_skeleton_new();
@@ -308,6 +313,15 @@ static void bus_acquired(GDBusConnection *connection,
                          "handle-set-global-debug-level",
                          G_CALLBACK(dbusmethod_debug_logging_config_set_level), nullptr);
 
+        g_signal_connect(dcpd_iface_data.audiopath_config_request_iface,
+                         "handle-notify",
+                         G_CALLBACK(dbusmethod_audiopath_jsonreceiver_notify),
+                         nullptr);
+        g_signal_connect(dcpd_iface_data.audiopath_config_request_iface,
+                         "handle-tell",
+                         G_CALLBACK(dbusmethod_audiopath_jsonreceiver_tell),
+                         nullptr);
+
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.playback_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.views_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.list_navigation_iface));
@@ -321,6 +335,10 @@ static void bus_acquired(GDBusConnection *connection,
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.configuration_monitor_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_iface));
         try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.debug_logging_config_iface));
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.audiopath_config_update_iface),
+                         "/de/tahifi/Dcpd/AudioPaths");
+        try_export_iface(connection, G_DBUS_INTERFACE_SKELETON(dcpd_iface_data.audiopath_config_request_iface),
+                         "/de/tahifi/Dcpd/AudioPaths");
     }
 
     if(is_session_bus == gerbera_iface_data.connect_to_session_bus)
@@ -690,6 +708,8 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
     log_assert(dcpd_iface_data.list_item_iface != nullptr);
     log_assert(dcpd_iface_data.network_config_iface != nullptr);
     log_assert(dcpd_iface_data.audiopath_source_iface != nullptr);
+    log_assert(dcpd_iface_data.audiopath_config_update_iface != nullptr);
+    log_assert(dcpd_iface_data.audiopath_config_request_iface != nullptr);
     log_assert(dcpd_iface_data.mixer_volume_iface != nullptr);
     log_assert(dcpd_iface_data.appliance_power_iface != nullptr);
     log_assert(dcpd_iface_data.configproxy_iface != nullptr);
@@ -772,6 +792,8 @@ void DBus::shutdown()
     g_object_unref(dcpd_iface_data.list_item_iface);
     g_object_unref(dcpd_iface_data.network_config_iface);
     g_object_unref(dcpd_iface_data.audiopath_source_iface);
+    g_object_unref(dcpd_iface_data.audiopath_config_update_iface);
+    g_object_unref(dcpd_iface_data.audiopath_config_request_iface);
     g_object_unref(dcpd_iface_data.mixer_volume_iface);
     g_object_unref(dcpd_iface_data.appliance_power_iface);
     g_object_unref(dcpd_iface_data.configproxy_iface);
@@ -961,6 +983,11 @@ tdbusaupathManager *dbus_audiopath_get_manager_iface()
 tdbusaupathAppliance *dbus_audiopath_get_appliance_iface()
 {
     return audiopath_iface_data.audiopath_appliance_proxy;
+}
+
+tdbusJSONEmitter *dbus_audiopath_get_config_update_iface(void)
+{
+    return dcpd_iface_data.audiopath_config_update_iface;
 }
 
 tdbusGerberaContentManager *dbus_get_gerbera_content_manager_iface()
