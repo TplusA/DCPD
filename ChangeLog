@@ -1,3 +1,13 @@
+2019-06-27  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.0 released.
+
+	* DCP protocol: Add register 82 for audio path information exchange.
+
+	* Testing: Enable testing on PC again (new option --fake-connman).
+
+	* Licensing: Changed license from GPLv3+ to GPLv2+.
+
 2019-03-29  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 4.24 released.
