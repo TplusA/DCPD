@@ -49,24 +49,24 @@ namespace DCP
  *
  * - Set volume level and mute state (0x00). This subcommand expects 16 bits of
  *   data structured as follows:
- *       Bits    | Meaning
- *       -------:|--------------------------------------
- *       15      | Mute on or off (1 = mute).
- *       14      | Reserved, must be zero.
- *       13...0  | Fix point value for the volume level.
+ *       Bits   | Meaning
+ *       ------:|--------------------------------------
+ *       15     | Mute on or off (1 = mute).
+ *       14     | Reserved, must be zero.
+ *       13...0 | Fix point value for the volume level (NaN for \c pm scale).
  *
  * - Configure volume control properties (0x01). This subcommand expects the
  *   following parameters:
- *       Offset  | Type       | Meaning
- *       -------:|------------|-----------------------------------------
- *       0       | byte       | Scale (0 = steps, 1 = dB).
- *       1       | fix point  | Minimum value on scale.
- *       3       | fix point  | Maximum value on scale.
- *       5       | fix point  | Minimum step width on scale (for use by Roon client).
- *       7       | fix point  | Dynamic range minimum value, always in dB. Pass NaN if not used or applicable.
- *       9       | fix point  | Dynamic range maximum value, always in dB. Pass NaN if not used or applicable.
- *       11      | fix point  | Initial volume level. Pass NaN if unknown.
- *       13      | byte       | Initial mute state (0 = not muted, 1 = muted, 2 = unknown).
+ *       Offset | Type      | Meaning
+ *       ------:|-----------|-----------------------------------------
+ *       0      | byte      | Scale (0 = steps, 1 = dB, 2 relative).
+ *       1      | fix point | Minimum value on scale. Pass NaN if not applicable.
+ *       3      | fix point | Maximum value on scale. Pass NaN if not applicable.
+ *       5      | fix point | Minimum step width on scale (for use by Roon client).
+ *       7      | fix point | Dynamic range minimum value, always in dB. Pass NaN if not used or applicable.
+ *       9      | fix point | Dynamic range maximum value, always in dB. Pass NaN if not used or applicable.
+ *       11     | fix point | Initial volume level. Pass NaN if unknown.
+ *       13     | byte      | Initial mute state (0 = not muted, 1 = muted, other = unknown).
  *
  * - Clear volume control properties (0x02). This subcommand does not expect
  *   any parameters.

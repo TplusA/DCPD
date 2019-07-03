@@ -53,8 +53,9 @@ enum class VolumeScale
 {
     STEPS,
     DECIBEL,
+    RELATIVE_STEPS,
 
-    LAST_SCALE = DECIBEL,
+    LAST_SCALE = RELATIVE_STEPS,
 };
 
 static inline const char *scale_to_string(Mixer::VolumeScale scale)
@@ -66,6 +67,9 @@ static inline const char *scale_to_string(Mixer::VolumeScale scale)
 
       case Mixer::VolumeScale::DECIBEL:
         return "dB";
+
+      case Mixer::VolumeScale::RELATIVE_STEPS:
+        return "pm";
     }
 
     return "";
@@ -129,7 +133,8 @@ class VolumeControl
     }
 
     bool set_new_values(double volume, bool is_muted);
-    bool set_request(double volume, bool is_muted);
+    bool set_absolute_request(double volume, bool is_muted);
+    bool set_relative_request(double step, bool is_muted);
 
     const VolumeSettings &get_settings() const { return appliance_settings_; }
     const VolumeSettings &get_request() const { return requested_; }
@@ -169,7 +174,8 @@ class VolumeControls
     Result set_values(uint16_t id, double volume, bool is_muted);
 
     /* set request as requested by some part of the Streaming Board */
-    Result request(uint16_t id, double volume, bool is_muted);
+    Result request_absolute(uint16_t id, double volume, bool is_muted);
+    Result request_relative(uint16_t id, double step, bool is_muted);
 
     Result get_current_values(uint16_t id, const VolumeSettings *&values) const;
     Result get_requested_values(uint16_t id, const VolumeSettings *&values) const;

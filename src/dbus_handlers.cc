@@ -859,7 +859,7 @@ gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
                               gpointer user_data)
 {
     LOGGED_LOCK_CONTEXT_HINT;
-    switch(Mixer::VolumeControls::get_singleton().first->request(id, volume, is_muted))
+    switch(Mixer::VolumeControls::get_singleton().first->request_absolute(id, volume, is_muted))
     {
       case Mixer::VolumeControls::Result::OK:
       case Mixer::VolumeControls::Result::IGNORED:
@@ -867,10 +867,32 @@ gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
         break;
 
       case Mixer::VolumeControls::Result::UNKNOWN_ID:
-        g_dbus_method_invocation_return_error(invocation,
-                                              G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
-                                              "Cannot set unknown control ID %u",
-                                              id);
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+            "Cannot set (absolute) unknown control ID %u", id);
+        break;
+    }
+
+    return TRUE;
+}
+
+gboolean dbusmethod_mixer_set_relative(tdbusmixerVolume *object,
+                                       GDBusMethodInvocation *invocation,
+                                       guint16 id, gdouble step, gboolean is_muted,
+                                       gpointer user_data)
+{
+    LOGGED_LOCK_CONTEXT_HINT;
+    switch(Mixer::VolumeControls::get_singleton().first->request_relative(id, step, is_muted))
+    {
+      case Mixer::VolumeControls::Result::OK:
+      case Mixer::VolumeControls::Result::IGNORED:
+        tdbus_mixer_volume_complete_set_relative(object, invocation);
+        break;
+
+      case Mixer::VolumeControls::Result::UNKNOWN_ID:
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+            "Cannot set (relative) unknown control ID %u", id);
         break;
     }
 
