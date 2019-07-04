@@ -289,6 +289,8 @@ static void bus_acquired(GDBusConnection *connection,
                          G_CALLBACK(dbusmethod_mixer_get_master), nullptr);
         g_signal_connect(dcpd_iface_data.mixer_volume_iface, "handle-set",
                          G_CALLBACK(dbusmethod_mixer_set), nullptr);
+        g_signal_connect(dcpd_iface_data.mixer_volume_iface, "handle-set-relative",
+                         G_CALLBACK(dbusmethod_mixer_set_relative), nullptr);
         g_signal_connect(dcpd_iface_data.mixer_volume_iface, "handle-get",
                          G_CALLBACK(dbusmethod_mixer_get), nullptr);
 

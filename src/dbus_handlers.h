@@ -103,6 +103,10 @@ gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
                               GDBusMethodInvocation *invocation,
                               guint16 id, gdouble volume, gboolean is_muted,
                               gpointer user_data);
+gboolean dbusmethod_mixer_set_relative(tdbusmixerVolume *object,
+                                       GDBusMethodInvocation *invocation,
+                                       guint16 id, gdouble step, gboolean is_muted,
+                                       gpointer user_data);
 gboolean dbusmethod_mixer_get(tdbusmixerVolume *object,
                               GDBusMethodInvocation *invocation,
                               guint16 id, gpointer user_data);

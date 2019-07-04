@@ -55,6 +55,66 @@ static double clamp(const Mixer::VolumeControlProperties &properties,
         return volume;
 }
 
+static double clamp(double permitted_step, double step)
+{
+    if(std::isnan(step))
+        return step;
+
+    if(permitted_step <= 0.0)
+        return 0.0;
+
+    if(step < -permitted_step)
+        return -permitted_step;
+    else if(step > permitted_step)
+        return permitted_step;
+    else
+        return step;
+}
+
+static inline bool config_params_are_valid(
+        uint8_t raw_scale_id,
+        const FixPoint &volume_min_fp, const FixPoint &volume_max_fp,
+        const FixPoint &volume_step_fp, const FixPoint &db_min_fp,
+        const FixPoint &db_max_fp, const FixPoint &volume_level_fp,
+        const double volume_step, const Mixer::VolumeScale scale)
+{
+    if(raw_scale_id > int(Mixer::VolumeScale::LAST_SCALE))
+        return false;
+
+    if(volume_step_fp.is_nan())
+        return false;
+
+    switch(scale)
+    {
+      case Mixer::VolumeScale::STEPS:
+      case Mixer::VolumeScale::DECIBEL:
+        if(volume_min_fp.is_nan() || volume_max_fp.is_nan())
+            return false;
+
+        if(volume_step <= 0.0 && volume_step >= 0.0)
+            return false;
+
+        break;
+
+      case Mixer::VolumeScale::RELATIVE_STEPS:
+        if(!volume_level_fp.is_nan())
+            return false;
+
+        if(!volume_min_fp.is_nan() || !volume_max_fp.is_nan())
+            return false;
+
+        if(!db_min_fp.is_nan() || !db_max_fp.is_nan())
+            return false;
+
+        if(volume_step <= 0.0)
+            return false;
+
+        break;
+    }
+
+    return true;
+}
+
 int Regs::ApplianceVolumeControl::DCP::write_64_volume_control(const uint8_t *data, size_t length)
 {
     if(length == 0)
@@ -118,18 +178,18 @@ int Regs::ApplianceVolumeControl::DCP::write_64_volume_control(const uint8_t *da
             const FixPoint db_max_fp(params + 9, params_length - 9);
             const FixPoint volume_level(params + 11, params_length - 11);
             const double volume_step(volume_step_fp.to_double());
+            const auto scale = Mixer::VolumeScale(params[0]);
 
-            if(params[0] > int(Mixer::VolumeScale::LAST_SCALE) ||
-               volume_min_fp.is_nan() || volume_max_fp.is_nan() ||
-               volume_step_fp.is_nan() ||
-               (volume_step <= 0.0 && volume_step >= 0.0))
+            if(!config_params_are_valid(params[0], volume_min_fp, volume_max_fp,
+                                        volume_step_fp, db_min_fp, db_max_fp,
+                                        volume_level, volume_step, scale))
             {
                 msg_error(EINVAL, LOG_NOTICE, "Invalid volume control configuration");
                 break;
             }
 
             auto properties = std::make_unique<Mixer::VolumeControlProperties>(
-                    "Master", Mixer::VolumeScale(params[0]),
+                    "Master", scale,
                     volume_min_fp.to_double(), volume_max_fp.to_double(),
                     volume_step, db_min_fp.to_double(), db_max_fp.to_double());
 
@@ -229,6 +289,23 @@ bool Mixer::VolumeControl::set_new_values(double volume, bool is_muted)
         return false;
     }
 
+    switch(control_properties_->scale_)
+    {
+      case Mixer::VolumeScale::STEPS:
+      case Mixer::VolumeScale::DECIBEL:
+        break;
+
+      case Mixer::VolumeScale::RELATIVE_STEPS:
+        if(!std::isnan(volume))
+        {
+            msg_error(0, LOG_ERR,
+                      "Ignoring volume value report for relative volume control");
+            return false;
+        }
+
+        break;
+    }
+
     appliance_settings_.volume_ = clamp(*control_properties_, volume);
     appliance_settings_.is_muted_ = is_muted;
 
@@ -239,12 +316,57 @@ bool Mixer::VolumeControl::set_new_values(double volume, bool is_muted)
     return true;
 }
 
-bool Mixer::VolumeControl::set_request(double volume, bool is_muted)
+bool Mixer::VolumeControl::set_absolute_request(double volume, bool is_muted)
 {
     if(control_properties_ == nullptr)
         return false;
 
+    switch(control_properties_->scale_)
+    {
+      case Mixer::VolumeScale::STEPS:
+      case Mixer::VolumeScale::DECIBEL:
+        break;
+
+      case Mixer::VolumeScale::RELATIVE_STEPS:
+        if(!std::isnan(volume))
+        {
+            msg_error(0, LOG_ERR,
+                      "Blocking volume value request for relative volume control");
+            return false;
+        }
+
+        break;
+    }
+
     requested_.volume_ = clamp(*control_properties_, volume);
+    requested_.is_muted_ = is_muted;
+
+    Regs::get_data().register_changed_notification_fn(64);
+
+    return true;
+}
+
+bool Mixer::VolumeControl::set_relative_request(double step, bool is_muted)
+{
+    if(control_properties_ == nullptr)
+        return false;
+
+    switch(control_properties_->scale_)
+    {
+      case Mixer::VolumeScale::STEPS:
+      case Mixer::VolumeScale::DECIBEL:
+        msg_error(0, LOG_ERR,
+                  "Blocking relative volume value request for absolute volume control");
+        return false;
+
+      case Mixer::VolumeScale::RELATIVE_STEPS:
+        if(std::isnan(step))
+            step = 0.0;
+
+        break;
+    }
+
+    requested_.volume_ = clamp(control_properties_->volume_step_, step);
     requested_.is_muted_ = is_muted;
 
     Regs::get_data().register_changed_notification_fn(64);
@@ -385,13 +507,32 @@ Mixer::VolumeControls::set_values(uint16_t id, double volume, bool is_muted)
 }
 
 Mixer::VolumeControls::Result
-Mixer::VolumeControls::request(uint16_t id, double volume, bool is_muted)
+Mixer::VolumeControls::request_absolute(uint16_t id, double volume, bool is_muted)
 {
     try
     {
         auto &ctrl = lookup_rw(id);
 
-        if(ctrl->set_request(volume, is_muted))
+        if(ctrl->set_absolute_request(volume, is_muted))
+            return Mixer::VolumeControls::Result::OK;
+        else
+            return Mixer::VolumeControls::Result::IGNORED;
+    }
+    catch(const std::out_of_range &e)
+    {
+        msg_error(0, LOG_ERR, "Exception: %s", e.what());;
+        return Mixer::VolumeControls::Result::UNKNOWN_ID;
+    }
+}
+
+Mixer::VolumeControls::Result
+Mixer::VolumeControls::request_relative(uint16_t id, double step, bool is_muted)
+{
+    try
+    {
+        auto &ctrl = lookup_rw(id);
+
+        if(ctrl->set_relative_request(step, is_muted))
             return Mixer::VolumeControls::Result::OK;
         else
             return Mixer::VolumeControls::Result::IGNORED;
