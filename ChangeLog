@@ -1,3 +1,17 @@
+2019-12-05  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.2 released.
+
+	* Appliances: Recognize appliance "MP3000HV".
+
+	* Volume control: Support incremental volume changes for appliances
+	  which can support only simple volume increment/decrement requests.
+	  The volume control configured via register 64 can be set to a
+	  relative mode for these appliances. See src/dcpregs_volume.hh for
+	  updated protocol specification.
+
+	* Logging: Show active and requested network configuration in log.
+
 2019-09-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.1 released.
