@@ -457,7 +457,7 @@ void test_checksum_of_data()
 {
     /* Correct CRC-16 checksums were computed on
      * http://www.lammertbies.nl/comm/info/crc-calculation.html */
-    static constexpr CRC16TestData test_data[] =
+    static CRC16TestData test_data[] =
     {
         CRC16TestData("123456789", 0x31C3),
         CRC16TestData("987654321", 0x9CAD),
