@@ -1,1 +1,2 @@
 *:dcpd/src/json.hh
+*:/usr/*

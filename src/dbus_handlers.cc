@@ -44,7 +44,7 @@
 
 #include <cstring>
 #include <cerrno>
-#include <jsoncpp/json.h>
+#include <json/json.h>
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
                            const char *sender_name)

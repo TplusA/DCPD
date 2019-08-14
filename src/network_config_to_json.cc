@@ -31,7 +31,7 @@
 #include <sstream>
 #include <algorithm>
 #include <functional>
-#include <jsoncpp/json.h>
+#include <json/json.h>
 
 static void add_to_hash(MD5::Context &ctx, size_t size)
 {
