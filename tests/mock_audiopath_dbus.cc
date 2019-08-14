@@ -376,6 +376,34 @@ static char extract_id(tdbusaupathSource *proxy)
     return reinterpret_cast<unsigned long>(proxy) & UINT8_MAX;
 }
 
+static void dictionaries_shall_be_equal(GVariant *const expected_asv,
+                                        GVariant *const d_asv)
+{
+    cppcut_assert_equal(g_variant_n_children(expected_asv),
+                        g_variant_n_children(d_asv));
+
+    GVariantDict expected;
+    g_variant_dict_init(&expected, expected_asv);
+
+    GVariantIter d;
+    g_variant_iter_init(&d, d_asv);
+
+    const gchar *key;
+    GVariant *value;
+
+    while(g_variant_iter_next(&d, "{&sv}", &key, &value))
+    {
+        GVariant *v = g_variant_dict_lookup_value(&expected, key,
+                                                  g_variant_get_type(value));
+        cppcut_assert_not_null(v);
+        cppcut_assert_equal(0, g_variant_compare(v, value));
+        g_variant_unref(v);
+        g_variant_unref(value);
+    }
+
+    g_variant_dict_clear(&expected);
+}
+
 static void check_request_data(const GVariantWrapper &expected_data,
                                GVariant *const arg_request_data,
                                bool auto_unref_data = true)
@@ -388,8 +416,8 @@ static void check_request_data(const GVariantWrapper &expected_data,
     if(expected_data != nullptr)
     {
         if(GVariantWrapper::get(expected_data) != arg_request_data)
-            cut_assert_true(g_variant_equal(GVariantWrapper::get(expected_data),
-                                            arg_request_data));
+            dictionaries_shall_be_equal(GVariantWrapper::get(expected_data),
+                                        arg_request_data);
     }
     else
         cppcut_assert_equal(gsize(0), g_variant_n_children(arg_request_data));
