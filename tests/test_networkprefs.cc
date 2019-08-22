@@ -244,7 +244,7 @@ static void do_migration(const char *const old_ethernet_config_name,
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "MIGRATING OLD NETWORK CONFIGURATION");
 
-    struct os_mapped_file_data network_ini = { .fd = -1 };
+    struct os_mapped_file_data network_ini = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
 
     if(existing_new_config == nullptr)

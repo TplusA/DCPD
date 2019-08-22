@@ -300,10 +300,10 @@ struct NetworkPrefsData
         preferences_path(nullptr),
         preferences_filename(nullptr),
         is_writable(false),
-        file{0},
-        handle{0},
-        network_ethernet_prefs{0},
-        network_wlan_prefs{0}
+        file{},
+        handle{},
+        network_ethernet_prefs{},
+        network_wlan_prefs{}
     {
         LoggedLock::configure(lock, "NetworkPrefsData", MESSAGE_LEVEL_DEBUG);
     }

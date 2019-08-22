@@ -174,7 +174,7 @@ void test_registered_fds_are_scattered_over_big_enough_array()
     cut_assert_true(nwdispatcher.add_connection(7, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(9, dispatch_fd));
 
-    struct pollfd fds[5] = { 0 };
+    struct pollfd fds[5] = {};
 
     cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(&fds[1], POLLIN));
 
@@ -194,7 +194,7 @@ void test_excess_scatter_elements_are_left_untouched()
     cut_assert_true(nwdispatcher.add_connection(17, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(19, dispatch_fd));
 
-    struct pollfd fds[6] = { 0 };
+    struct pollfd fds[6] = {};
 
     cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(&fds[1], POLLIN));
 
@@ -211,7 +211,7 @@ void test_excess_scatter_elements_are_left_untouched()
  */
 void test_scatter_array_is_left_untouched_if_no_fds_are_registered()
 {
-    struct pollfd fds[5] = { 0 };
+    struct pollfd fds[5] = {};
 
     cppcut_assert_equal(size_t(0), nwdispatcher.scatter_fds(&fds[1], POLLIN));
 
@@ -241,7 +241,7 @@ void test_unregister_single_registered_fd()
     mock_os->expect_os_file_close(0, 5);
     cut_assert_true(nwdispatcher.remove_connection(5));
 
-    struct pollfd dummy { 0 };
+    struct pollfd dummy {};
     cppcut_assert_equal(size_t(0), nwdispatcher.scatter_fds(&dummy, POLLIN));
 }
 
@@ -258,7 +258,7 @@ void test_unregister_first_registered_fd()
     mock_os->expect_os_file_close(0, 100);
     cut_assert_true(nwdispatcher.remove_connection(100));
 
-    struct pollfd fds[4] { 0 };
+    struct pollfd fds[4] {};
     cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds, POLLIN));
 
     cppcut_assert_equal(0, fds[2].fd);
@@ -278,7 +278,7 @@ void test_unregister_last_registered_fd()
     mock_os->expect_os_file_close(0, 102);
     cut_assert_true(nwdispatcher.remove_connection(102));
 
-    struct pollfd fds[4] { 0 };
+    struct pollfd fds[4] {};
     cppcut_assert_equal(size_t(2), nwdispatcher.scatter_fds(fds, POLLIN));
 
     cppcut_assert_equal(0, fds[2].fd);
@@ -303,7 +303,7 @@ void test_unregister_from_center_of_full_fd_registry()
     mock_os->expect_os_file_close(0, 35);
     cut_assert_true(nwdispatcher.remove_connection(35));
 
-    struct pollfd fds[8] { 0 };
+    struct pollfd fds[8] {};
     cppcut_assert_equal(size_t(5), nwdispatcher.scatter_fds(fds, POLLIN));
 
     cppcut_assert_equal(0, fds[5].fd);
@@ -342,7 +342,7 @@ void test_registered_callback_is_called_when_data_arrives_for_single_fd()
 {
     cut_assert_true(nwdispatcher.add_connection(15, dispatch_fd));
 
-    struct pollfd fds[5] = { 0 };
+    struct pollfd fds[5] = {};
     cppcut_assert_equal(size_t(1), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLIN;
@@ -363,7 +363,7 @@ void test_registered_callbacks_are_called_when_data_arrives_for_many_fds()
     cut_assert_true(nwdispatcher.add_connection(21, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(22, dispatch_fd));
 
-    struct pollfd fds[5] = { 0 };
+    struct pollfd fds[5] = {};
     cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLIN;
@@ -383,7 +383,7 @@ void test_registered_callback_is_called_when_connection_dies_for_single_fd()
 {
     cut_assert_true(nwdispatcher.add_connection(25, dispatch_fd));
 
-    struct pollfd fds[5] = { 0 };
+    struct pollfd fds[5] = {};
     cppcut_assert_equal(size_t(1), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLHUP;
@@ -404,7 +404,7 @@ void test_registered_callbacks_are_called_when_connection_dies_for_many_fds()
     cut_assert_true(nwdispatcher.add_connection(31, dispatch_fd));
     cut_assert_true(nwdispatcher.add_connection(32, dispatch_fd));
 
-    struct pollfd fds[5] = { 0 };
+    struct pollfd fds[5] = {};
     cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLHUP;
@@ -441,7 +441,7 @@ void test_registered_callbacks_are_called_after_reg_unreg()
     mock_os->expect_os_file_close(0, 200);
     cut_assert_true(nwdispatcher.remove_connection(200));
 
-    struct pollfd fds[10] = { 0 };
+    struct pollfd fds[10] = {};
     cppcut_assert_equal(size_t(3), nwdispatcher.scatter_fds(fds, POLLIN));
 
     fds[0].revents = POLLIN | POLLHUP;
