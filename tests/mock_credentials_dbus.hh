@@ -22,7 +22,7 @@
 #ifndef MOCK_CREDENTIALS_DBUS_HH
 #define MOCK_CREDENTIALS_DBUS_HH
 
-#include "credentials_dbus.h"
+#include "de_tahifi_credentials.h"
 #include "mock_expectation.hh"
 
 class MockCredentialsDBus

@@ -22,7 +22,7 @@
 #ifndef MOCK_DCPD_DBUS_HH
 #define MOCK_DCPD_DBUS_HH
 
-#include "dcpd_dbus.h"
+#include "de_tahifi_dcpd.h"
 #include "mock_expectation.hh"
 
 class MockDcpdDBus

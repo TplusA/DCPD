@@ -794,22 +794,22 @@ RECURSIVE              = YES
 # run.
 
 EXCLUDE                = \
-    @abs_builddir@/src/dcpd_dbus.c \
-    @abs_builddir@/src/configuration_dbus.c \
-    @abs_builddir@/src/dbusdl_dbus.c \
-    @abs_builddir@/src/debug_dbus.c \
-    @abs_builddir@/src/jsonio_dbus.c \
-    @abs_builddir@/src/streamplayer_dbus.c \
-    @abs_builddir@/src/airable_dbus.c \
-    @abs_builddir@/src/artcache_dbus.c \
-    @abs_builddir@/src/audiopath_dbus.c \
-    @abs_builddir@/src/mixer_dbus.c \
-    @abs_builddir@/src/credentials_dbus.c \
-    @abs_builddir@/src/appliance_dbus.c \
-    @abs_builddir@/src/connman_dbus.c \
-    @abs_builddir@/src/logind_dbus.c \
-    @abs_builddir@/src/systemd_dbus.c \
-    @abs_builddir@/src/gerbera_dbus.c \
+    @abs_builddir@/src/de_tahifi_airable.c \
+    @abs_builddir@/src/de_tahifi_appliance.c \
+    @abs_builddir@/src/de_tahifi_artcache.c \
+    @abs_builddir@/src/de_tahifi_audiopath.c \
+    @abs_builddir@/src/de_tahifi_configuration.c \
+    @abs_builddir@/src/de_tahifi_credentials.c \
+    @abs_builddir@/src/de_tahifi_dcpd.c \
+    @abs_builddir@/src/de_tahifi_debug.c \
+    @abs_builddir@/src/de_tahifi_filetransfer.c \
+    @abs_builddir@/src/de_tahifi_jsonio.c \
+    @abs_builddir@/src/de_tahifi_mixer.c \
+    @abs_builddir@/src/de_tahifi_streamplayer.c \
+    @abs_builddir@/src/io_gerbera.c \
+    @abs_builddir@/src/net_connman.c \
+    @abs_builddir@/src/org_freedesktop_login1.c \
+    @abs_builddir@/src/org_freedesktop_systemd1.c \
     @abs_srcdir@/src/json.hh \
     @abs_srcdir@/dbus_interfaces/de_tahifi_lists_errors.hh \
     @abs_srcdir@/dbus_interfaces/*.xml

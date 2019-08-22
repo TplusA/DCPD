@@ -22,7 +22,7 @@
 #ifndef MOCK_LOGIND_MANAGER_DBUS_HH
 #define MOCK_LOGIND_MANAGER_DBUS_HH
 
-#include "logind_dbus.h"
+#include "org_freedesktop_login1.h"
 #include "mock_expectation.hh"
 
 class MockLogindManagerDBus

@@ -24,7 +24,6 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "dcpregs_upnpserver.hh"
-#include "gerbera_dbus.h"
 #include "dbus_iface_deep.h"
 #include "registers_priv.hh"
 #include "os.h"

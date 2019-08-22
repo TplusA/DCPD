@@ -22,7 +22,7 @@
 #ifndef DBUS_HANDLERS_CONNMAN_AGENT_HH
 #define DBUS_HANDLERS_CONNMAN_AGENT_HH
 
-#include "connman_dbus.h"
+#include "net_connman.h"
 
 #include <stdbool.h>
 #include <gio/gio.h>

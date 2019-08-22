@@ -24,7 +24,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "connman_technology_registry.hh"
-#include "connman_dbus.h"
+#include "net_connman.h"
 #include "connman_address.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
