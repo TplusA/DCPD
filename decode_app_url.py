@@ -84,6 +84,7 @@ import sys
 import getopt
 import re
 
+
 class LFSR:
     def __init__(self, seed, mask):
         self.mask = mask
@@ -102,16 +103,20 @@ class LFSR:
 
         return self.state & 0xff
 
+
 class Hexdump:
-    def __init__(self, offset = 0):
+    def __init__(self, offset=0):
         self.offset = offset
         self.data = []
 
     def add_chunk(self, offset, data):
         if offset != self.offset + len(self.data):
-            raise IndexError("Hexdump offset does not match; expected {}, got {}".format(self.offset + len(self.data), offset))
+            raise IndexError(
+                    "Hexdump offset does not match; expected {}, got {}"
+                    .format(self.offset + len(self.data), offset))
 
         self.data += data
+
 
 def extract_hexdump(input, start_line, max_lines):
     while start_line > 1:
@@ -137,17 +142,20 @@ def extract_hexdump(input, start_line, max_lines):
 
         offset = int(m.group(1).strip(), 16)
 
-        if hexdump == None:
+        if hexdump is None:
             hexdump = Hexdump(offset)
 
         try:
-            hexdump.add_chunk(offset, list(map(lambda x: int(x, 16), re.split(r' +', m.group(2).strip()))))
-        except:
+            hexdump.add_chunk(offset,
+                              list(map(lambda x: int(x, 16),
+                                       re.split(r' +', m.group(2).strip()))))
+        except:  # noqa: E722
             print("Failed processing the following line:")
             print(l.strip())
             raise
 
     return hexdump
+
 
 def escaped_hexdump(hexdump):
     escaped = Hexdump(hexdump.offset)
@@ -169,11 +177,13 @@ def escaped_hexdump(hexdump):
 
     return escaped
 
-def error_exit(error_message, exit_code = 1):
-    print("ERROR: " + error_message, file = sys.stderr)
+
+def error_exit(error_message, exit_code=1):
+    print("ERROR: " + error_message, file=sys.stderr)
     sys.exit(exit_code)
 
-def usage(exit_code = 1):
+
+def usage(exit_code=1):
     print("""Usage:
 {0} [-h] [-l start line] [-b start byte] [-u] [input file]
 
@@ -185,6 +195,7 @@ Options:
          please read the comments at the top of this script for details
 -u       Unescape SPI escape sequences (0x27 handling)""".format(sys.argv[0]))
     sys.exit(exit_code)
+
 
 def main():
     input = sys.stdin
@@ -199,11 +210,16 @@ def main():
         error_exit(str(err))
 
     for o, a in opts:
-        if o == "-h":   usage(0)
-        elif o == "-b": start_byte = int(a)
-        elif o == "-l": start_line = int(a)
-        elif o == "-n": max_lines = int(a)
-        elif o == "-u": unescape = True
+        if o == "-h":
+            usage(0)
+        elif o == "-b":
+            start_byte = int(a)
+        elif o == "-l":
+            start_line = int(a)
+        elif o == "-n":
+            max_lines = int(a)
+        elif o == "-u":
+            unescape = True
 
     if args:
         input = open(args[0], "r")
@@ -215,11 +231,13 @@ def main():
             hexdump = escaped_hexdump(hexdump)
 
         prng = LFSR(44257, 46080)
-        decoded = ''.join(list(map(lambda x: chr(x ^ prng.get_byte()), hexdump.data[start_byte:])))
+        decoded = ''.join(list(map(lambda x: chr(x ^ prng.get_byte()),
+                                   hexdump.data[start_byte:])))
 
         print(decoded)
     except IndexError as err:
         print("Failed processing input: " + str(err))
 
+
 if __name__ == '__main__':
-    main();
+    main()
