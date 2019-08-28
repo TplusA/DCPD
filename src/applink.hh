@@ -103,7 +103,7 @@ class Command
     {}
 
     const Variable *get_variable() const { return variable_; }
-    const bool is_request() const { return is_request_; }
+    bool is_request() const { return is_request_; }
 
     void set_variable(const Variable *var)
     {
@@ -163,7 +163,7 @@ class InputBuffer
 
   private:
     void begin_scan() { last_scan_pos_ = scan_pos_; }
-    const bool can_scan() const { return scan_pos_ < data_.size(); }
+    bool can_scan() const { return scan_pos_ < data_.size(); }
     void advance_scan() { ++scan_pos_; }
     uint8_t get_scan_char() const { return data_[scan_pos_]; }
     void mark_scan_position() { last_scan_pos_ = scan_pos_ + 1; }
@@ -179,7 +179,7 @@ class InputBuffer
         return reinterpret_cast<const char *>(&data_[pos]);
     }
 
-    const size_t get_line_length(size_t pos) const
+    size_t get_line_length(size_t pos) const
     {
         return scan_pos_ - pos;
     }
