@@ -348,7 +348,7 @@ static unsigned int handle_primqueue_events(int fd, short revents)
             for(ssize_t i = 0; i < number_of_commands; ++i)
             {
                 const enum PrimitiveQueueCommand cmd =
-                    static_cast<const enum PrimitiveQueueCommand>(commands[i]);
+                    static_cast<enum PrimitiveQueueCommand>(commands[i]);
 
                 switch(cmd)
                 {
@@ -628,7 +628,7 @@ static void push_register_to_slave(uint8_t reg_number)
 
 static void primitive_queue_send(const enum PrimitiveQueueCommand cmd, const char *what)
 {
-    const uint8_t cmd_as_byte = (const uint8_t)cmd;
+    const uint8_t cmd_as_byte = static_cast<uint8_t>(cmd);
     ssize_t ret;
 
     while((ret = os_write(primitive_command_queue_write_fd,

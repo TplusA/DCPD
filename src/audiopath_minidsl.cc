@@ -57,7 +57,7 @@ class AudioPaths::ParserState
     const nlohmann::json &json() const { return out_; }
 
   private:
-    const size_t pos() const { return std::distance(input_begin_, pos_); }
+    size_t pos() const { return std::distance(input_begin_, pos_); }
 
     void assert_input_available() const
     {

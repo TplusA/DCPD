@@ -70,7 +70,7 @@ find_owner_by_id(const struct ConfigProxyData *data, const char *id)
     return NULL;
 }
 
-static const size_t is_owner_equal(const char *owner, const char *key_prefix)
+static size_t is_owner_equal(const char *owner, const char *key_prefix)
 {
     size_t i = 0;
 

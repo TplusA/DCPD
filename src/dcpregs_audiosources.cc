@@ -512,7 +512,7 @@ class SelectedSource
         return selected_;
     }
 
-    const SelectionState get_state() const
+    SelectionState get_state() const
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
@@ -1111,7 +1111,7 @@ static bool check_network_requirements(const AudioSource &asrc)
     return false;
 }
 
-static const uint8_t determine_usable(const AudioSource &asrc)
+static uint8_t determine_usable(const AudioSource &asrc)
 {
     switch(asrc.get_state())
     {
