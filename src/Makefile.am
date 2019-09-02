@@ -129,7 +129,7 @@ libregisters_la_SOURCES = \
     dcpregs_searchparameters.cc dcpregs_searchparameters.hh \
     dcpregs_datetime.cc dcpregs_datetime.hh \
     dcpregs_status.hh \
-    volume_control.cc volume_control.hh dcpregs_volume.hh \
+    volume_control.cc volume_control.hh dcpregs_volume.hh fixpoint.hh \
     dbus_handlers_connman_manager.hh networkprefs.h \
     connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
     network_device.hh network_device_list.hh \
