@@ -33,6 +33,7 @@
 
 #include <memory>
 #include <map>
+#include <unordered_map>
 #include <limits>
 
 class PeerID
@@ -73,7 +74,7 @@ class TcpTunnel
   private:
     PeerID next_peer_id_;
     std::map<PeerID, int> peer_id_to_descriptor_;
-    std::map<int, PeerID> peer_descriptor_to_id_;
+    std::unordered_map<int, PeerID> peer_descriptor_to_id_;
 
     int server_fd_;
     bool is_registered_with_dispatcher_;
