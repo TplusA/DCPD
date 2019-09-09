@@ -40,12 +40,13 @@ struct ParserContext
     size_t token_length;
 };
 
-bool Applink::InputBuffer::append_from_fd(int fd, size_t max_total_size)
+Applink::InputBuffer::AppendResult
+Applink::InputBuffer::append_from_fd(int fd, size_t max_total_size)
 {
     if(data_.size() == max_total_size)
     {
         msg_error(0, LOG_WARNING, "Applink input buffer full");
-        return true;
+        return AppendResult::INPUT_BUFFER_FULL;
     }
 
     size_t pos = data_.size();
@@ -65,13 +66,15 @@ bool Applink::InputBuffer::append_from_fd(int fd, size_t max_total_size)
             msg_error(errno, LOG_CRIT,
                       "Failed reading app commands from fd %d", fd);
             data_.resize(pos);
-            return false;
+            return AppendResult::IO_ERROR;
         }
     }
 
-    data_.resize(pos);
+    if(pos == data_.size())
+        return AppendResult::CONNECTION_CLOSED;
 
-    return true;
+    data_.resize(pos);
+    return AppendResult::OK;
 }
 
 void Applink::InputBuffer::remove_processed_data()
@@ -340,13 +343,22 @@ Applink::InputBuffer::get_next_command(int peer_fd, Applink::ParserResult &resul
 {
     log_assert(peer_fd >= 0);
 
-    if(append_from_fd(peer_fd, 4096))
-        return parse_command_or_answer(result);
-    else
+    switch(append_from_fd(peer_fd, 4096))
     {
+      case AppendResult::OK:
+        return parse_command_or_answer(result);
+
+      case AppendResult::INPUT_BUFFER_FULL:
+        result = Applink::ParserResult::OUT_OF_MEMORY;
+        break;
+
+      case AppendResult::IO_ERROR:
+      case AppendResult::CONNECTION_CLOSED:
         result = Applink::ParserResult::IO_ERROR;
-        return nullptr;
+        break;
     }
+
+    return nullptr;
 }
 
 void Applink::Command::get_parameter(size_t n, char *buffer, size_t buffer_size) const
