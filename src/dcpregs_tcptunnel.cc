@@ -33,6 +33,8 @@
 
 #include <memory>
 #include <map>
+#include <unordered_map>
+#include <vector>
 #include <limits>
 
 class PeerID
@@ -43,21 +45,24 @@ class PeerID
   private:
     IDType id_;
 
+    static constexpr IDType INVALID   = 0;
+    static constexpr IDType BROADCAST = UINT8_MAX;
+
   public:
-    explicit PeerID(): id_(0) {}
+    explicit PeerID(): id_(INVALID) {}
     explicit PeerID(IDType id): id_(id) {}
 
-    bool is_valid() const { return id_ > 0; }
-    void invalidate() { id_ = 0; }
+    bool is_valid_peer() const { return id_ != INVALID && id_ != BROADCAST; }
+    bool is_valid_for_sending() const { return id_ != INVALID; }
+    bool is_broadcast() const { return id_ == BROADCAST; }
+    void invalidate() { id_ = INVALID; }
     IDType get_raw_id() const { return id_; }
     bool operator<(const PeerID &other) const { return id_ < other.id_; }
 
     void increment()
     {
-        log_assert(is_valid());
-
-        if(++id_ == 0)
-            id_ = 1;
+        log_assert(is_valid_peer());
+        do { ++id_; } while(!is_valid_peer());
     }
 };
 
@@ -73,7 +78,7 @@ class TcpTunnel
   private:
     PeerID next_peer_id_;
     std::map<PeerID, int> peer_id_to_descriptor_;
-    std::map<int, PeerID> peer_descriptor_to_id_;
+    std::unordered_map<int, PeerID> peer_descriptor_to_id_;
 
     int server_fd_;
     bool is_registered_with_dispatcher_;
@@ -145,7 +150,7 @@ class TcpTunnel
     void close_and_forget_peer(PeerID peer_id,
                                bool is_registered_with_dispatcher = true)
     {
-        log_assert(peer_id.is_valid());
+        log_assert(peer_id.is_valid_peer());
 
         const auto it = peer_id_to_descriptor_.find(peer_id);
         log_assert(it != peer_id_to_descriptor_.end());
@@ -162,6 +167,12 @@ class TcpTunnel
 
         peer_id_to_descriptor_.erase(peer_id);
         peer_descriptor_to_id_.erase(peer_fd);
+    }
+
+    void for_each_peer(const std::function<void(const TcpTunnel &,PeerID, int)> &apply) const
+    {
+        for(const auto &p : peer_id_to_descriptor_)
+            apply(*this, p.first, p.second);
     }
 };
 
@@ -245,7 +256,7 @@ class RegisterStatus
         peer_id_(0)
     {}
 
-    bool is_set() const { return tunnel_port_ != 0 && peer_id_.is_valid(); }
+    bool is_set() const { return tunnel_port_ != 0 && peer_id_.is_valid_peer(); }
 
     bool set(uint16_t tunnel_port, PeerID peer_id)
     {
@@ -255,7 +266,7 @@ class RegisterStatus
             return false;
         }
 
-        if(tunnel_port == 0 || !peer_id.is_valid())
+        if(tunnel_port == 0 || !peer_id.is_valid_peer())
             return false;
 
         tunnel_port_ = tunnel_port;
@@ -343,7 +354,7 @@ static bool handle_new_peer(int fd, uint16_t port, AllTunnels &tunnels)
 
     const PeerID peer_id = t->add_peer(peer_fd);
 
-    if(!peer_id.is_valid())
+    if(!peer_id.is_valid_peer())
     {
         network_close(&peer_fd);
         return false;
@@ -374,6 +385,23 @@ static bool handle_new_peer(int fd, uint16_t port, AllTunnels &tunnels)
     msg_info("Accepted connection on tunnel on port %u, peer %u, fd %d",
              t->port_, peer_id.get_raw_id(), peer_fd);
 
+    return true;
+}
+
+static bool send_to_peer(const TcpTunnel &tunnel, PeerID peer_id, int peer_fd,
+                         const uint8_t *data, size_t data_length)
+{
+    if(os_write_from_buffer(data, data_length, peer_fd) < 0)
+    {
+        msg_error(errno, LOG_ERR,
+                  "Sending data to peer %u on port %u failed, closing connection",
+                  peer_id.get_raw_id(), tunnel.port_);
+        return false;
+    }
+
+    msg_vinfo(MESSAGE_LEVEL_TRACE,
+              "Sent %zu bytes to network peer %u on port %u",
+              data_length, peer_id.get_raw_id(), tunnel.port_);
     return true;
 }
 
@@ -598,9 +626,13 @@ int Regs::TCPTunnel::DCP::write_121_tcp_tunnel_write(const uint8_t *data, size_t
 
     const PeerID requested_peer_id(data[2]);
 
-    if(!requested_peer_id.is_valid())
-        return tunnel_error(what_error, requested_port,
-                            "peer ID 0 is invalid");
+    if(!requested_peer_id.is_valid_for_sending())
+        return tunnel_error_with_peer(what_error, requested_port,
+                                      requested_peer_id, "invalid peer ID");
+
+    /* skip command header */
+    data += 3;
+    length -= 3;
 
     TcpTunnel *const tunnel = all_tunnels.get_tunnel_by_port(requested_port);
 
@@ -608,28 +640,42 @@ int Regs::TCPTunnel::DCP::write_121_tcp_tunnel_write(const uint8_t *data, size_t
         return tunnel_error_with_peer(what_error, requested_port,
                                       requested_peer_id, "no active tunnel");
 
-    const int peer_fd = tunnel->get_peer_descriptor(requested_peer_id);
-
-    if(peer_fd < 0)
-        return tunnel_error_with_peer(what_error, requested_port,
-                                      requested_peer_id, "no such peer");
-
-    /* skip command header parsed above */
-    data += 3;
-    length -= 3;
-
-    if(os_write_from_buffer(data, length, peer_fd) < 0)
+    if(requested_peer_id.is_broadcast())
     {
-        msg_error(errno, LOG_ERR,
-                  "Sending data to peer %u on port %u failed, closing connection",
-                  requested_peer_id.get_raw_id(), requested_port);
+        std::vector<PeerID> failed;
+        unsigned int succeeded = 0;
+
+        tunnel->for_each_peer(
+            [data, length, &failed, &succeeded]
+            (const TcpTunnel &t, PeerID peer_id, int peer_fd)
+            {
+                if(send_to_peer(t, peer_id, peer_fd, data, length))
+                    ++succeeded;
+                else
+                    failed.push_back(peer_id);
+            });
+
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "Sent broadcast message to %u peers, %zu failures",
+                  succeeded, failed.size());
+
+        for(const auto &peer_id : failed)
+            tunnel->close_and_forget_peer(peer_id);
+
+        return 0;
+    }
+    else
+    {
+        const int peer_fd = tunnel->get_peer_descriptor(requested_peer_id);
+
+        if(peer_fd < 0)
+            return tunnel_error_with_peer(what_error, requested_port,
+                                          requested_peer_id, "no such peer");
+
+        if(send_to_peer(*tunnel, requested_peer_id, peer_fd, data, length))
+            return 0;
+
         tunnel->close_and_forget_peer(requested_peer_id);
         return -1;
     }
-
-    msg_vinfo(MESSAGE_LEVEL_TRACE,
-              "Sent %zu bytes to network peer %u on port %u",
-              length, requested_peer_id.get_raw_id(), requested_port);
-
-    return 0;
 }
