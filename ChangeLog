@@ -1,3 +1,14 @@
+2019-09-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.1 released.
+
+	* TCP tunnel: Improved detection of peer disconnects.
+
+	* TCP tunnel: Allow SPI slave to close peer connections.
+
+	* Networking: Avoid CPU hogging when the direct, non-tunnel smartphone
+	  connection is closed.
+
 2019-06-27  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.0 released.
