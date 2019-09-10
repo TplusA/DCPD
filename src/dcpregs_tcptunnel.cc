@@ -612,7 +612,7 @@ int Regs::TCPTunnel::DCP::write_121_tcp_tunnel_write(const uint8_t *data, size_t
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 121 handler %p %zu", data, length);
 
-    if(length < 4)
+    if(length < 3)
     {
         msg_error(EINVAL, LOG_ERR,
                   "Write buffer too small, cannot send anything to peer");
@@ -643,21 +643,36 @@ int Regs::TCPTunnel::DCP::write_121_tcp_tunnel_write(const uint8_t *data, size_t
     if(requested_peer_id.is_broadcast())
     {
         std::vector<PeerID> failed;
-        unsigned int succeeded = 0;
 
-        tunnel->for_each_peer(
-            [data, length, &failed, &succeeded]
-            (const TcpTunnel &t, PeerID peer_id, int peer_fd)
-            {
-                if(send_to_peer(t, peer_id, peer_fd, data, length))
-                    ++succeeded;
-                else
-                    failed.push_back(peer_id);
-            });
+        if(length > 0)
+        {
+            unsigned int succeeded = 0;
 
-        msg_vinfo(MESSAGE_LEVEL_DIAG,
-                  "Sent broadcast message to %u peers, %zu failures",
-                  succeeded, failed.size());
+            tunnel->for_each_peer(
+                [data, length, &failed, &succeeded]
+                (const TcpTunnel &t, PeerID peer_id, int peer_fd)
+                {
+                    if(send_to_peer(t, peer_id, peer_fd, data, length))
+                        ++succeeded;
+                    else
+                        failed.push_back(peer_id);
+                });
+
+            msg_vinfo(MESSAGE_LEVEL_DIAG,
+                      "Sent broadcast message to %u peer%s on port %u, "
+                      "%zu failure%s",
+                      succeeded, succeeded == 1 ? "" : "s", tunnel->port_,
+                      failed.size(), failed.size() == 1 ? "" : "s");
+        }
+        else
+        {
+            tunnel->for_each_peer(
+                [&failed] (const TcpTunnel &t, PeerID peer_id, int)
+                { failed.push_back(peer_id); });
+            msg_info("Kicking all %zu peer%s on port %u",
+                     failed.size(), failed.size() == 1 ? "" : "s",
+                     tunnel->port_);
+        }
 
         for(const auto &peer_id : failed)
             tunnel->close_and_forget_peer(peer_id);
@@ -672,10 +687,15 @@ int Regs::TCPTunnel::DCP::write_121_tcp_tunnel_write(const uint8_t *data, size_t
             return tunnel_error_with_peer(what_error, requested_port,
                                           requested_peer_id, "no such peer");
 
-        if(send_to_peer(*tunnel, requested_peer_id, peer_fd, data, length))
+        if(length > 0 &&
+           send_to_peer(*tunnel, requested_peer_id, peer_fd, data, length))
             return 0;
 
+        if(length == 0)
+            msg_info("Kicking peer %u on port %u",
+                     requested_peer_id.get_raw_id(), tunnel->port_);
+
         tunnel->close_and_forget_peer(requested_peer_id);
-        return -1;
+        return length > 0 ? -1 : 0;
     }
 }
