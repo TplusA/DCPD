@@ -129,6 +129,14 @@ class MockNetwork::Expectation
     explicit Expectation(int ret, int peer_fd):
         d(NetworkFn::have_data)
     {
+        data_.ret_int_ = ret;
+        data_.fd_arg_ = peer_fd;
+    }
+
+    explicit Expectation(bool ret, int peer_fd):
+        d(NetworkFn::have_data)
+    {
+        data_.ret_bool_ = ret;
         data_.fd_arg_ = peer_fd;
     }
 

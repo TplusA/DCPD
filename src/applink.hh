@@ -186,7 +186,17 @@ class InputBuffer
 
     std::unique_ptr<Command> parse_command_or_answer(ParserResult &result);
     std::unique_ptr<Command> parse_line(const size_t begin_pos, ParserResult &result);
-    bool append_from_fd(int fd, size_t max_total_size);
+
+    enum class AppendResult
+    {
+        OK,
+        INPUT_BUFFER_FULL,
+        IO_ERROR,
+        CONNECTION_CLOSED,
+    };
+
+    AppendResult append_from_fd(int fd, size_t max_total_size);
+
     void remove_processed_data();
 };
 

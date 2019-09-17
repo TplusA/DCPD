@@ -921,6 +921,7 @@ void test_peer_reconnect_after_disconnect_on_write_error()
             });
     mock_messages->expect_msg_error_formatted(EPIPE, LOG_ERR,
             "Sending data to app fd 32 failed (Broken pipe)");
+    mock_messages->expect_msg_info_formatted("Applink connection on fd 32 died");
     mock_messages->expect_msg_info_formatted("Smartphone direct connection disconnected (fd 32)");
     mock_network->expect_close(peer_fd);
 
@@ -955,6 +956,7 @@ void test_peer_reconnect_after_disconnect_on_read_error()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
                                               "Smartphone app over TCP/IP on fd 753");
+    mock_network->expect_have_data(true, peer_fd);
     mock_os->expect_os_try_read_to_buffer_callback(
             0,
             [] (void *dest, size_t count, size_t *add_bytes_read,
@@ -973,6 +975,7 @@ void test_peer_reconnect_after_disconnect_on_read_error()
             });
     mock_messages->expect_msg_error_formatted(EINVAL, LOG_CRIT,
             "Failed reading app commands from fd 753 (Invalid argument)");
+    mock_messages->expect_msg_info_formatted("Applink connection on fd 753 died");
     mock_messages->expect_msg_info_formatted("Smartphone direct connection disconnected (fd 753)");
     mock_network->expect_close(peer_fd);
 
@@ -1009,6 +1012,7 @@ void test_peer_ready_to_read_and_disconnected()
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG,
                                               "Smartphone app over TCP/IP on fd 63");
+    mock_network->expect_have_data(true, peer_fd);
     mock_os->expect_os_try_read_to_buffer_callback(
             0,
             [] (void *dest, size_t count, size_t *add_bytes_read,
@@ -1027,6 +1031,7 @@ void test_peer_ready_to_read_and_disconnected()
             });
     mock_messages->expect_msg_error_formatted(ETIMEDOUT, LOG_CRIT,
             "Failed reading app commands from fd 63 (Connection timed out)");
+    mock_messages->expect_msg_info_formatted("Applink connection on fd 63 died");
     mock_messages->expect_msg_info_formatted("Smartphone direct connection disconnected (fd 63)");
     mock_network->expect_close(peer_fd);
 
@@ -1103,6 +1108,7 @@ static void setup_request_expectations(int peer_fd,
     os << "Smartphone app over TCP/IP on fd " << peer_fd;
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DEBUG, os.str().c_str());
 
+    mock_network->expect_have_data(true, peer_fd);
     mock_os->expect_os_try_read_to_buffer_callback(
             0,
             [peer_fd, take_second_fill_buffer]

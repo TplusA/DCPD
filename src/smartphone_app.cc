@@ -85,12 +85,18 @@ bool Applink::AppConnections::add_new_peer(int peer_fd)
         return false;
     }
 
-    peers_.emplace(peer_fd, std::make_unique<Applink::Peer>(
-                                peer_fd, send_queue_filled_notification_fn_,
-                                [this] (int fd, bool cleanly_closed)
-                                {
-                                    close_and_forget_peer(fd);
-                                }));
+    peers_.emplace(peer_fd,
+        std::make_unique<Applink::Peer>(
+            peer_fd, send_queue_filled_notification_fn_,
+            [this] (int fd, bool cleanly_closed)
+            {
+                if(cleanly_closed)
+                    msg_info("Applink fd %d closed by client", fd);
+                else
+                    msg_info("Applink connection on fd %d died", fd);
+
+                close_and_forget_peer(fd);
+            }));
 
     if(peers_.find(peer_fd) == peers_.end())
     {
@@ -445,6 +451,12 @@ bool Applink::Peer::handle_incoming_data(int fd)
 {
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "Smartphone app over TCP/IP on fd %d", fd);
 
+    if(!network_have_data(fd))
+    {
+        send_queue_.notify_peer_died_fn_(fd, true);
+        return false;
+    }
+
     while(true)
     {
         Applink::ParserResult result = Applink::ParserResult::IO_ERROR;
@@ -470,12 +482,12 @@ bool Applink::Peer::handle_incoming_data(int fd)
             break;
 
           case Applink::ParserResult::IO_ERROR:
+          case Applink::ParserResult::OUT_OF_MEMORY:
             send_queue_.notify_peer_died_fn_(fd, false);
             return false;
 
           case Applink::ParserResult::EMPTY:
           case Applink::ParserResult::NEED_MORE_DATA:
-          case Applink::ParserResult::OUT_OF_MEMORY:
             return true;
         }
     }
