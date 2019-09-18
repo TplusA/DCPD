@@ -46,6 +46,7 @@ enum class ApplianceID
     MP1000E,
     MP2000R,
     MP2500R,
+    MP3000HV,
     MP3100HV,
     MP8,
     SD3100HV,
@@ -106,6 +107,7 @@ static void setup_primary_network_devices_for_appliance(ApplianceID appliance,
       case ApplianceID::MP1000E:
       case ApplianceID::MP2000R:
       case ApplianceID::MP2500R:
+      case ApplianceID::MP3000HV:
       case ApplianceID::MP3100HV:
       case ApplianceID::SD3100HV:
       case ApplianceID::SDV3100HV:
@@ -167,6 +169,7 @@ static ApplianceID map_appliance_id(const char *name)
         std::move(std::make_pair("MP1000E",    ApplianceID::MP1000E)),
         std::move(std::make_pair("MP2000R",    ApplianceID::MP2000R)),
         std::move(std::make_pair("MP2500R",    ApplianceID::MP2500R)),
+        std::move(std::make_pair("MP3000HV",   ApplianceID::MP3000HV)),
         std::move(std::make_pair("MP3100HV",   ApplianceID::MP3100HV)),
         std::move(std::make_pair("MP8",        ApplianceID::MP8)),
         std::move(std::make_pair("SD3100HV",   ApplianceID::SD3100HV)),
