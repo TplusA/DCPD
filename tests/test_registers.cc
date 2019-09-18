@@ -4871,6 +4871,30 @@ static void expect_network_status(const std::array<uint8_t, 3> &expected_status)
  */
 void test_network_status__ethernet_ready__wlan_idle()
 {
+    static const std::array<const char *const, 17> network_status_logs
+    {
+        "Network device: Ethernet C4:FD:EC:AF:DE:AD, auto, physical",
+        "Network (requested): IPv4 settings invalid",
+        "Network (requested): No IPv6 configuration",
+        "Network (requested): No proxy configuration",
+        "Network (requested): DNS server list *unknown*",
+        "Network (requested): NTP server list *unknown*",
+        "Network (requested): Domain list *unknown*",
+        "Network (active): IPv4 configuration method DHCP",
+        "Network (active): IPv4 address 192.168.166.177",
+        "Network (active): IPv4 netmask 255.255.255.0",
+        "Network (active): IPv4 gateway 192.168.166.15",
+        "Network (active): No IPv6 configuration",
+        "Network (active): No proxy configuration",
+        "Network (active): DNS server 13.24.35.246",
+        "Network (active): DNS server 4.225.136.7",
+        "Network (active): NTP server list *unknown*",
+        "Network (active): Domain list *unknown*",
+    };
+
+    for(const auto *log : network_status_logs)
+        mock_messages->expect_msg_info_formatted(log);
+
     expect_network_status({NETWORK_STATUS_IPV4_DHCP,
                            NETWORK_STATUS_DEVICE_ETHERNET,
                            NETWORK_STATUS_CONNECTION_CONNECTED});
@@ -4887,6 +4911,30 @@ void test_network_status__ethernet_idle__wlan_ready()
 
     inject_service_changes(wlan_name,
         [] (Connman::ServiceData &sdata) { sdata.state_ = Connman::ServiceState::READY; });
+
+    static const std::array<const char *const, 17> network_status_logs
+    {
+        "Network device: WLAN B4:DD:EA:DB:EE:F1, auto, physical",
+        "Network (requested): IPv4 settings invalid",
+        "Network (requested): No IPv6 configuration",
+        "Network (requested): No proxy configuration",
+        "Network (requested): DNS server list *unknown*",
+        "Network (requested): NTP server list *unknown*",
+        "Network (requested): Domain list *unknown*",
+        "Network (active): IPv4 configuration method DHCP",
+        "Network (active): IPv4 address 192.168.166.177",
+        "Network (active): IPv4 netmask 255.255.255.0",
+        "Network (active): IPv4 gateway 192.168.166.15",
+        "Network (active): No IPv6 configuration",
+        "Network (active): No proxy configuration",
+        "Network (active): DNS server 13.24.35.246",
+        "Network (active): DNS server 4.225.136.7",
+        "Network (active): NTP server list *unknown*",
+        "Network (active): Domain list *unknown*",
+    };
+
+    for(const auto *log : network_status_logs)
+        mock_messages->expect_msg_info_formatted(log);
 
     expect_network_status({NETWORK_STATUS_IPV4_DHCP,
                            NETWORK_STATUS_DEVICE_WLAN,
@@ -4915,6 +4963,22 @@ void test_network_status__ethernet_idle__wlan_idle()
             sdata.active_.ipsettings_v6_.set_unknown();
         });
 
+    static const std::array<const char *const, 9> network_status_logs
+    {
+        "Network device: Ethernet C4:FD:EC:AF:DE:AD, auto, physical",
+        "Network (requested): IPv4 settings invalid",
+        "Network (requested): No IPv6 configuration",
+        "Network (requested): No proxy configuration",
+        "Network (requested): DNS server list *unknown*",
+        "Network (requested): NTP server list *unknown*",
+        "Network (requested): Domain list *unknown*",
+        "Network (active): No IPv4 configuration",
+        "Network (active): No IPv6 configuration",
+    };
+
+    for(const auto *log : network_status_logs)
+        mock_messages->expect_msg_info_formatted(log);
+
     expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
                            NETWORK_STATUS_DEVICE_ETHERNET,
                            NETWORK_STATUS_CONNECTION_NONE});
@@ -4939,6 +5003,22 @@ void test_network_status__ethernet_idle___wlan_unavailable()
             sdata.active_.ipsettings_v4_.set_unknown();
             sdata.active_.ipsettings_v6_.set_unknown();
         });
+
+    static const std::array<const char *const, 9> network_status_logs
+    {
+        "Network device: Ethernet C4:FD:EC:AF:DE:AD, auto, physical",
+        "Network (requested): IPv4 settings invalid",
+        "Network (requested): No IPv6 configuration",
+        "Network (requested): No proxy configuration",
+        "Network (requested): DNS server list *unknown*",
+        "Network (requested): NTP server list *unknown*",
+        "Network (requested): Domain list *unknown*",
+        "Network (active): No IPv4 configuration",
+        "Network (active): No IPv6 configuration",
+    };
+
+    for(const auto *log : network_status_logs)
+        mock_messages->expect_msg_info_formatted(log);
 
     expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
                            NETWORK_STATUS_DEVICE_ETHERNET,
@@ -4965,6 +5045,22 @@ void test_network_status__ethernet_unavailable___wlan_idle()
             sdata.active_.ipsettings_v6_.set_unknown();
         });
 
+    static const std::array<const char *const, 9> network_status_logs
+    {
+        "Network device: WLAN B4:DD:EA:DB:EE:F1, auto, physical",
+        "Network (requested): IPv4 settings invalid",
+        "Network (requested): No IPv6 configuration",
+        "Network (requested): No proxy configuration",
+        "Network (requested): DNS server list *unknown*",
+        "Network (requested): NTP server list *unknown*",
+        "Network (requested): Domain list *unknown*",
+        "Network (active): No IPv4 configuration",
+        "Network (active): No IPv6 configuration",
+    };
+
+    for(const auto *log : network_status_logs)
+        mock_messages->expect_msg_info_formatted(log);
+
     expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
                            NETWORK_STATUS_DEVICE_WLAN,
                            NETWORK_STATUS_CONNECTION_NONE});
@@ -4981,6 +5077,14 @@ void test_network_status__ethernet_unavailable___wlan_unavailable()
         auto &services(locked.first);
         services.clear();
     }
+
+    static const std::array<const char *const, 1> network_status_logs
+    {
+        "Network: no service configured",
+    };
+
+    for(const auto *log : network_status_logs)
+        mock_messages->expect_msg_info_formatted(log);
 
     expect_network_status({NETWORK_STATUS_IPV4_NOT_CONFIGURED,
                            NETWORK_STATUS_DEVICE_NONE,

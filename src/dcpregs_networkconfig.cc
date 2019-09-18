@@ -1805,6 +1805,210 @@ int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, 
     return nwconfig_write_data.enter_edit_mode(tech) ? 0 : -1;
 }
 
+static const char *dhcp_method_to_string(Connman::DHCPV4Method method)
+{
+    switch(method)
+    {
+        case Connman::DHCPV4Method::NOT_AVAILABLE:
+          return "[not available]";
+
+        case Connman::DHCPV4Method::UNKNOWN_METHOD:
+          return "unknown";
+
+        case Connman::DHCPV4Method::ON:
+          return "DHCP";
+
+        case Connman::DHCPV4Method::OFF:
+          return "off (no IPv4)";
+
+        case Connman::DHCPV4Method::MANUAL:
+          return "manual";
+
+        case Connman::DHCPV4Method::FIXED:
+          return "fixed (cannot be modified)";
+    }
+
+    return "*** INVALID VALUE ***";
+}
+
+static const char *dhcp_method_to_string(Connman::DHCPV6Method method)
+{
+    switch(method)
+    {
+        case Connman::DHCPV6Method::NOT_AVAILABLE:
+          return "[not available]";
+
+        case Connman::DHCPV6Method::UNKNOWN_METHOD:
+          return "unknown";
+
+        case Connman::DHCPV6Method::ON:
+          return "DHCP";
+
+        case Connman::DHCPV6Method::OFF:
+          return "off (no IPv6)";
+
+        case Connman::DHCPV6Method::MANUAL:
+          return "manual";
+
+        case Connman::DHCPV6Method::SIX_TO_FOUR:
+          return "6to4 tunnel";
+
+        case Connman::DHCPV6Method::FIXED:
+          return "fixed (cannot be modified)";
+    }
+
+    return "*** INVALID VALUE ***";
+}
+
+static bool dump_ipv4_config(const Connman::IPSettings<Connman::AddressType::IPV4> &ipv4,
+                             const char *which)
+{
+    if(!ipv4.is_configuration_valid())
+    {
+        msg_info("Network (%s): IPv4 settings invalid", which);
+        return false;
+    }
+
+    msg_info("Network (%s): IPv4 configuration method %s",
+             which, dhcp_method_to_string(ipv4.get_dhcp_method()));
+    msg_info("Network (%s): IPv4 address %s",
+             which, ipv4.get_address().get_string().c_str());
+    msg_info("Network (%s): IPv4 netmask %s",
+             which, ipv4.get_netmask().get_string().c_str());
+    msg_info("Network (%s): IPv4 gateway %s",
+             which, ipv4.get_gateway().get_string().c_str());
+    return true;
+}
+
+static bool dump_ipv6_config(const Connman::IPSettings<Connman::AddressType::IPV6> &ipv6,
+                             const char *which)
+{
+    if(!ipv6.is_configuration_valid())
+    {
+        msg_info("Network (%s): IPv6 settings invalid", which);
+        return false;
+    }
+
+    msg_info("Network (%s): IPv6 configuration method %s",
+             which, dhcp_method_to_string(ipv6.get_dhcp_method()));
+    msg_info("Network (%s): IPv6 address %s",
+             which, ipv6.get_address().get_string().c_str());
+    msg_info("Network (%s): IPv6 netmask %s",
+             which, ipv6.get_netmask().get_string().c_str());
+    msg_info("Network (%s): IPv6 gateway %s",
+             which, ipv6.get_gateway().get_string().c_str());
+    return true;
+}
+
+static const char *proxy_method_to_string(Connman::ProxyMethod pm)
+{
+    switch(pm)
+    {
+      case Connman::ProxyMethod::NOT_AVAILABLE:
+        return "[not available]";
+
+      case Connman::ProxyMethod::UNKNOWN_METHOD:
+        return "unknown";
+
+      case Connman::ProxyMethod::DIRECT:
+        return "direct";
+
+      case Connman::ProxyMethod::AUTO:
+        return "auto";
+
+      case Connman::ProxyMethod::MANUAL:
+        return "manual";
+    }
+
+    return "*** INVALID VALUE ***";
+}
+
+static void dump_string_vector(const std::vector<std::string> &v,
+                               const char *item_name, const char *which)
+{
+    if(v.empty())
+        msg_info("Network (%s): %s list *empty*", which, item_name);
+    else
+        for(const auto &s : v)
+            msg_info("Network (%s): %s %s", which, item_name, s.c_str());
+}
+
+static void dump_string_vector(const Maybe<std::vector<std::string>> &v,
+                               const char *item_name, const char *which)
+{
+    if(v.is_known())
+        dump_string_vector(v.get(), item_name, which);
+    else
+        msg_info("Network (%s): %s list *unknown*", which, item_name);
+}
+
+static void dump_service_settings(const Connman::ServiceData::Settings &settings,
+                                  bool suppress_details_if_unconfigured,
+                                  const char *which)
+{
+    bool is_configured = false;
+
+    if(settings.ipsettings_v4_.is_known())
+        is_configured |= dump_ipv4_config(settings.ipsettings_v4_.get(), which);
+    else
+        msg_info("Network (%s): No IPv4 configuration", which);
+
+    if(settings.ipsettings_v6_.is_known())
+        is_configured |= dump_ipv6_config(settings.ipsettings_v6_.get(), which);
+    else
+        msg_info("Network (%s): No IPv6 configuration", which);
+
+    if(!is_configured && suppress_details_if_unconfigured)
+        return;
+
+    if(settings.proxy_.is_known())
+    {
+        const Connman::ProxySettings &proxy(settings.proxy_.get());
+        msg_info("Network (%s): Proxy method %s",
+                 which, proxy_method_to_string(proxy.get_method()));
+        msg_info("Network (%s): Proxy PAC URL %s", which,
+                 proxy.get_pac_url().empty() ? "*empty*" : proxy.get_pac_url().c_str());
+
+        dump_string_vector(proxy.get_proxy_servers(), "Proxy server", which);
+
+        if(proxy.get_excluded_hosts().empty())
+            msg_info("Network (%s): Proxy host exclude list *empty*", which);
+        else
+            for(const auto &ex : proxy.get_excluded_hosts())
+                msg_info("Network (%s): Proxy not used for %s",
+                         which, ex.c_str());
+    }
+    else
+        msg_info("Network (%s): No proxy configuration", which);
+
+    dump_string_vector(settings.dns_servers_, "DNS server", which);
+    dump_string_vector(settings.time_servers_, "NTP server", which);
+    dump_string_vector(settings.domains_, "Domain", which);
+}
+
+static void dump_network_configuration(const Connman::ServiceData &sd)
+{
+    if(sd.device_ != nullptr)
+    {
+        const auto &dev(*sd.device_);
+
+        msg_info("Network device: %s %s, %s, %s",
+                 dev.technology_ == Connman::Technology::UNKNOWN_TECHNOLOGY
+                 ? "*unknown*"
+                 : (dev.technology_ == Connman::Technology::ETHERNET
+                    ? "Ethernet"
+                    : "WLAN"),
+                 dev.mac_address_.get_string().c_str(),
+                 dev.is_auto_selected_device() ? "auto" : "aux",
+                 dev.is_real_ ? "physical" : "virtual");
+    }
+    else
+        msg_info("Network device: *NULL*");
+
+    dump_service_settings(sd.configured_, false, "requested");
+    dump_service_settings(sd.active_, true, "active");
+}
+
 static void fill_network_status_register_response(uint8_t *response)
 {
     const auto mode(Connman::get_networking_mode());
@@ -1847,8 +2051,13 @@ static void fill_network_status_register_response(uint8_t *response)
     else
         log_assert(fallback_service_data == nullptr);
 
-    if(service == nullptr)
+    if(service != nullptr)
+        dump_network_configuration(service->get_service_data());
+    else
+    {
+        msg_info("Network: no service configured");
         return;
+    }
 
     if(service->get_service_data().active_.ipsettings_v4_.is_known())
     {
