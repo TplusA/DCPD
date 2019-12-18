@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -28,7 +28,30 @@ html_DATA = README.html
 endif
 
 EXTRA_DIST = COPYING COPYING.GPLv3 README.md cppcheck_suppressed.txt
-EXTRA_DIST += send_drcp_command.sh
+
+EXTRA_DIST += \
+    scripts/Back.sh \
+    scripts/configure_volume_control.sh \
+    scripts/Down.sh \
+    scripts/JumpToPos.sh \
+    scripts/login_logout.sh \
+    scripts/mediaservices_fast.sh \
+    scripts/mediaservices_slow.sh \
+    scripts/OK.sh \
+    scripts/play_app_stream.sh \
+    scripts/Play.sh \
+    scripts/query.sh \
+    scripts/send_dcp_command_from_files.sh \
+    scripts/send_dcp_command.sh \
+    scripts/send_drcp_command.sh \
+    scripts/send_read_register.sh \
+    scripts/SkipBackward.sh \
+    scripts/SkipForward.sh \
+    scripts/start_access_point.sh \
+    scripts/Stop.sh \
+    scripts/switch_to_language.sh \
+    scripts/switch_to_source.sh \
+    scripts/Up.sh
 
 CLEANFILES = README.html
 

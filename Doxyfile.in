@@ -778,7 +778,7 @@ INPUT_ENCODING         = UTF-8
 # *.md, *.mm, *.dox, *.py, *.f90, *.f, *.for, *.tcl, *.vhd, *.vhdl, *.ucf,
 # *.qsf, *.as and *.js.
 
-FILE_PATTERNS          =
+FILE_PATTERNS          = *.cc *.c *.hh *.h *.md
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
 # be searched for input files as well.
@@ -1798,7 +1798,7 @@ RTF_SOURCE_CODE        = NO
 # Configuration options related to the man page output
 #---------------------------------------------------------------------------
 
-# If the GENERATE_MAN tag is set to YES doxygen will generate man pages for
+# If the GENERATE_MAN tag is set to YES, doxygen will generate man pages for
 # classes and files.
 # The default value is: NO.
 
@@ -1999,12 +1999,13 @@ INCLUDE_FILE_PATTERNS  =
 # recursively expanded use the := operator instead of the = operator.
 # This tag requires that the tag ENABLE_PREPROCESSING is set to YES.
 
-PREDEFINED             = DE_TAHIFI_LISTS_ERRORS_ENUM_NAME:=Code \
-                         DE_TAHIFI_LISTS_ERRORS_ENUM_VALUE(V):=V \
-                         DE_TAHIFI_ARTCACHE_READ_ERRORS_ENUM_NAME:=Code \
-                         DE_TAHIFI_ARTCACHE_READ_ERRORS_ENUM_VALUE(V):=V \
-                         DE_TAHIFI_ARTCACHE_MONITOR_ERRORS_ENUM_NAME:=Code \
-                         DE_TAHIFI_ARTCACHE_MONITOR_ERRORS_ENUM_VALUE(V):=V
+PREDEFINED             = \
+    DE_TAHIFI_LISTS_ERRORS_ENUM_NAME:=ListError::Code \
+    DE_TAHIFI_LISTS_ERRORS_ENUM_VALUE(V):=V \
+    DE_TAHIFI_ARTCACHE_READ_ERRORS_ENUM_NAME:=ArtCache::ReadError::Code \
+    DE_TAHIFI_ARTCACHE_READ_ERRORS_ENUM_VALUE(V):=V \
+    DE_TAHIFI_ARTCACHE_MONITOR_ERRORS_ENUM_NAME:=ArtCache::MonitorError::Code \
+    DE_TAHIFI_ARTCACHE_MONITOR_ERRORS_ENUM_VALUE(V):=V
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The
