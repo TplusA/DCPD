@@ -34,6 +34,7 @@ dcpd_SOURCES = \
     accesspoint_manager.hh accesspoint.hh \
     transactions.hh dcpdefs.h \
     messages.c messages.h messages_glib.c messages_glib.h \
+    backtrace.c backtrace.h \
     drcp.hh drcp_command_codes.h \
     dcpregs_drcp.hh dcpregs_networkconfig.hh dcpregs_wlansurvey.hh \
     dcpregs_filetransfer.hh dcpregs_filetransfer_priv.h \

@@ -40,7 +40,7 @@ registers_tests = shared_module('test_registers',
      'mock_credentials_dbus.cc', 'mock_airable_dbus.cc',
      'mock_artcache_dbus.cc', 'mock_audiopath_dbus.cc',
      'mock_logind_manager_dbus.cc', 'mock_connman.cc', 'mock_os.cc',
-     'mock_messages.cc'],
+     'mock_messages.cc', 'mock_backtrace.cc'],
     include_directories: ['../src', '../dbus_interfaces'],
     dependencies: [cutter_dep, glib_deps],
     link_with: [
@@ -67,7 +67,8 @@ test('DRCPD Communication',
 
 transactions_tests = shared_module('test_transactions',
     ['test_transactions.cc', 'mock_dcpd_dbus.cc',
-     'mock_logind_manager_dbus.cc', 'mock_os.cc', 'mock_messages.cc'],
+     'mock_logind_manager_dbus.cc', 'mock_os.cc', 'mock_messages.cc',
+     'mock_backtrace.cc'],
     include_directories: '../src',
     dependencies: [cutter_dep, glib_deps],
     link_with: [
@@ -106,7 +107,8 @@ test('Network Preferences',
 )
 
 network_dispatcher_tests = shared_module('test_network_dispatcher',
-    ['test_network_dispatcher.cc', 'mock_os.cc', 'mock_messages.cc'],
+    ['test_network_dispatcher.cc', 'mock_os.cc', 'mock_messages.cc',
+     'mock_backtrace.cc'],
     include_directories: '../src',
     dependencies: cutter_dep,
     link_with: [network_dispatcher_lib, network_lib]
@@ -118,7 +120,8 @@ test('Network Dispatcher',
 
 applink_tests = shared_module('test_applink',
     ['test_applink.cc', 'mock_os.cc', 'mock_network.cc', 'mock_dbus_iface.cc',
-     'mock_airable_dbus.cc', 'mock_credentials_dbus.cc', 'mock_messages.cc'],
+     'mock_airable_dbus.cc', 'mock_credentials_dbus.cc', 'mock_messages.cc',
+     'mock_backtrace.cc'],
     include_directories: '../src',
     dependencies: [cutter_dep, glib_deps],
     link_with: [applink_lib, network_dispatcher_lib]

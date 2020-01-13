@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -29,6 +29,7 @@
 #include "mainloop.hh"
 
 #include "mock_connman_technology_registry.hh"
+#include "mock_backtrace.hh"
 #include "mock_messages.hh"
 
 #if !LOGGED_LOCKS_ENABLED
@@ -103,16 +104,19 @@ class AccessPointModeTestsBasicFixture
     Connman::TechnologyRegistry tech_reg;
     Network::AccessPoint ap;
     std::unique_ptr<MockMessages::Mock> mock_messages;
+    std::unique_ptr<MockBacktrace::Mock> mock_backtrace;
     std::unique_ptr<MockConnmanTechnologyRegistry::Wifi::Mock> mock_techreg_wifi;
 
   public:
     explicit AccessPointModeTestsBasicFixture():
         ap(tech_reg),
         mock_messages(std::make_unique<MockMessages::Mock>()),
+        mock_backtrace(std::make_unique<MockBacktrace::Mock>()),
         mock_techreg_wifi(std::make_unique<MockConnmanTechnologyRegistry::Wifi::Mock>(tech_reg))
     {
         queued_work_notified_ = 0;
         MockMessages::singleton = mock_messages.get();
+        MockBacktrace::singleton = mock_backtrace.get();
         MockConnmanTechnologyRegistry::Wifi::singleton = mock_techreg_wifi.get();
 
         REQUIRE(queued_work_notified_ == 0);
@@ -126,6 +130,7 @@ class AccessPointModeTestsBasicFixture
         try
         {
             mock_messages->done();
+            mock_backtrace->done();
             mock_techreg_wifi->done();
         }
         catch(...)
@@ -134,6 +139,7 @@ class AccessPointModeTestsBasicFixture
         }
 
         MockMessages::singleton = nullptr;
+        MockBacktrace::singleton = nullptr;
         MockConnmanTechnologyRegistry::Wifi::singleton = nullptr;
     }
 };
@@ -277,6 +283,7 @@ TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
 TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
                   "Cannot spawn access point without D-Bus connectivity")
 {
+    mock_backtrace->expect(std::make_unique<MockBacktrace::Log>());
     mock_messages->expect(
         std::make_unique<MockMessages::MsgError>(0, LOG_CRIT,
                                                  "BUG: Technology registry unavailable (no D-Bus connection)",
@@ -300,6 +307,7 @@ TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
 
     RequestDoneData done_data;
 
+    mock_backtrace->expect(std::make_unique<MockBacktrace::Log>());
     mock_messages->expect(
         std::make_unique<MockMessages::MsgError>(0, LOG_CRIT, "BUG: AP spawn request before start", true));
 

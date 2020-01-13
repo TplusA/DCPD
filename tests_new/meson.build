@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2019  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -53,6 +53,7 @@ test('ConnMan Property Cache',
 test('Access Point',
     executable('test_access_point',
         ['test_access_point.cc', 'mock_connman_technology_registry.cc',
+         'mock_backtrace.cc',
          'mock_os.cc', 'mock_messages.cc'],
         include_directories: '../src',
         link_with: [testrunner_lib, accesspoint_lib, servicelist_lib,
@@ -64,7 +65,8 @@ test('Access Point',
 
 test('Plain Stream Player',
     executable('test_plainplayer',
-        ['test_plainplayer.cc', 'mock_os.cc', 'mock_messages.cc'],
+        ['test_plainplayer.cc', 'mock_os.cc', 'mock_messages.cc',
+         'mock_backtrace.cc'],
         include_directories: '../src',
         link_with: [testrunner_lib, plainplayer_lib],
         build_by_default: false),

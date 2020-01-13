@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -66,6 +66,7 @@
 #include "mock_dbus_iface.hh"
 #include "mock_connman.hh"
 #include "mock_messages.hh"
+#include "mock_backtrace.hh"
 #include "mock_os.hh"
 
 /*
@@ -2135,6 +2136,7 @@ namespace spi_registers_networking
 
 static MockConnman *mock_connman;
 static MockMessages *mock_messages;
+static MockBacktrace *mock_backtrace;
 static MockOs *mock_os;
 
 static constexpr char connman_config_path[] = "/var/lib/connman";
@@ -2398,6 +2400,11 @@ void cut_setup()
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
+    mock_backtrace = new MockBacktrace;
+    cppcut_assert_not_null(mock_backtrace);
+    mock_backtrace->init();
+    mock_backtrace_singleton = mock_backtrace;
+
     mock_os = new MockOs;
     cppcut_assert_not_null(mock_os);
     mock_os->init();
@@ -2449,18 +2456,22 @@ void cut_teardown()
     os_write_buffer.shrink_to_fit();
 
     mock_messages->check();
+    mock_backtrace->check();
     mock_os->check();
     mock_connman->check();
 
     mock_messages_singleton = nullptr;
+    mock_backtrace_singleton = nullptr;
     mock_os_singleton = nullptr;
     mock_connman_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_backtrace;
     delete mock_os;
     delete mock_connman;
 
     mock_messages = nullptr;
+    mock_backtrace = nullptr;
     mock_os = nullptr;
     mock_connman = nullptr;
 }
@@ -3850,6 +3861,7 @@ void test_set_wlan_security_mode_wep()
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Support for insecure WLAN mode "
                                     "\"WEP\" not implemented");
+    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 
@@ -6741,6 +6753,7 @@ namespace spi_registers_play_app_stream
 {
 
 static MockMessages *mock_messages;
+static MockBacktrace *mock_backtrace;
 static MockStreamplayerDBus *mock_streamplayer_dbus;
 static MockArtCacheDBus *mock_artcache_dbus;
 static MockDcpdDBus *mock_dcpd_dbus;
@@ -6786,6 +6799,11 @@ void cut_setup()
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
     mock_messages_singleton = mock_messages;
+
+    mock_backtrace = new MockBacktrace;
+    cppcut_assert_not_null(mock_backtrace);
+    mock_backtrace->init();
+    mock_backtrace_singleton = mock_backtrace;
 
     mock_streamplayer_dbus = new MockStreamplayerDBus;
     cppcut_assert_not_null(mock_streamplayer_dbus);
@@ -6841,6 +6859,7 @@ void cut_teardown()
     register_changed_data = nullptr;
 
     mock_messages->check();
+    mock_backtrace->check();
     mock_streamplayer_dbus->check();
     mock_artcache_dbus->check();
     mock_dcpd_dbus->check();
@@ -6848,6 +6867,7 @@ void cut_teardown()
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
+    mock_backtrace_singleton = nullptr;
     mock_streamplayer_dbus_singleton = nullptr;
     mock_artcache_dbus_singleton = nullptr;
     mock_dcpd_dbus_singleton = nullptr;
@@ -6855,6 +6875,7 @@ void cut_teardown()
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_backtrace;
     delete mock_streamplayer_dbus;
     delete mock_artcache_dbus;
     delete mock_dcpd_dbus;
@@ -6862,6 +6883,7 @@ void cut_teardown()
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
+    mock_backtrace = nullptr;
     mock_streamplayer_dbus = nullptr;
     mock_artcache_dbus = nullptr;
     mock_dcpd_dbus = nullptr;
@@ -7231,6 +7253,7 @@ static void set_next_url(const std::string title, const std::string url,
       case SetTitleAndURLFlowAssumptions::DESELECTED__PLAYING__SELECT:
         mock_messages->expect_msg_error(0, LOG_CRIT,
                 "BUG: Attempted to set next stream without prior audio source selection");
+        mock_backtrace->expect_backtrace_log();
 
         if(expected_stream_key != nullptr)
             expected_stream_key->release();
@@ -7569,6 +7592,7 @@ void test_start_stream_and_deselect_audio_source_with_unexpected_stop_notificati
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: App stream 271 stopped in unexpected state DESELECTED");
+    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     streaming_regs->stop_notification(OurStream::make(15).get());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
@@ -7900,6 +7924,7 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_early_start_notif
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Non-app stream 129 started while plain URL player is selected");
+    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     const auto bad_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
     GVariantWrapper dummy_stream_key;
@@ -7946,6 +7971,7 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_late_start_notifi
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Non-app stream 129 started while plain URL player is selected");
+    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
@@ -8017,6 +8043,7 @@ void test_quick_start_stop_single_stream()
     /* late D-Bus signals are ignored */
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: App stream 257 started in unexpected state STOPPED_REQUESTED");
+    mock_backtrace->expect_backtrace_log();
     register_changed_data->check();
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
@@ -9795,6 +9822,7 @@ void test_playback_stream_seek_boundaries()
 namespace spi_registers_audio_sources
 {
 static MockMessages *mock_messages;
+static MockBacktrace *mock_backtrace;
 static MockAudiopathDBus *mock_audiopath_dbus;
 static MockDBusIface *mock_dbus_iface;
 
@@ -9909,6 +9937,11 @@ void cut_setup()
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
+    mock_backtrace = new MockBacktrace;
+    cppcut_assert_not_null(mock_backtrace);
+    mock_backtrace->init();
+    mock_backtrace_singleton = mock_backtrace;
+
     mock_audiopath_dbus = new MockAudiopathDBus();
     cppcut_assert_not_null(mock_audiopath_dbus);
     mock_audiopath_dbus->init();
@@ -9949,18 +9982,22 @@ void cut_teardown()
     register_changed_data = nullptr;
 
     mock_messages->check();
+    mock_backtrace->check();
     mock_audiopath_dbus->check();
     mock_dbus_iface->check();
 
     mock_messages_singleton = nullptr;
+    mock_backtrace_singleton = nullptr;
     mock_audiopath_dbus_singleton = nullptr;
     mock_dbus_iface_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_backtrace;
     delete mock_audiopath_dbus;
     delete mock_dbus_iface;
 
     mock_messages = nullptr;
+    mock_backtrace = nullptr;
     mock_audiopath_dbus = nullptr;
     mock_dbus_iface = nullptr;
 }
@@ -10494,6 +10531,7 @@ void test_spurious_deselection_of_audio_source_emits_bug_message()
 {
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Plain URL audio source not selected");
+    mock_backtrace->expect_backtrace_log();
     streaming_regs->audio_source_deselected();
 }
 

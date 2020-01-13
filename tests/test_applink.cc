@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,7 @@
 #include "network_dispatcher.hh"
 
 #include "mock_messages.hh"
+#include "mock_backtrace.hh"
 #include "mock_network.hh"
 #include "mock_dbus_iface.hh"
 #include "mock_airable_dbus.hh"
@@ -65,6 +66,7 @@ namespace applink_protocol_tests
 {
 
 static MockMessages *mock_messages;
+static MockBacktrace *mock_backtrace;
 static MockOs *mock_os;
 
 static Applink::InputBuffer *in_buf;
@@ -77,6 +79,11 @@ void cut_setup()
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
     mock_messages_singleton = mock_messages;
+
+    mock_backtrace = new MockBacktrace;
+    cppcut_assert_not_null(mock_backtrace);
+    mock_backtrace->init();
+    mock_backtrace_singleton = mock_backtrace;
 
     mock_os = new MockOs;
     cppcut_assert_not_null(mock_os);
@@ -96,16 +103,20 @@ void cut_teardown()
     delete in_buf;
 
     mock_messages->check();
+    mock_backtrace->check();
     mock_os->check();
 
     mock_messages_singleton = nullptr;
+    mock_backtrace_singleton = nullptr;
     mock_os_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_backtrace;
     delete mock_os;
     delete fill_buffer_data;
 
     mock_messages = nullptr;
+    mock_backtrace = nullptr;
     mock_os = nullptr;
     fill_buffer_data = nullptr;
 }
@@ -563,6 +574,7 @@ void test_sending_empty_command_triggers_bug_message()
                        [] (int, bool) { cut_fail("unexpected call"); });
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
             "BUG: Ignoring empty applink command in out queue for peer 42");
+    mock_backtrace->expect_backtrace_log();
     peer.send_to_queue(default_peer_fd, std::string());
     cppcut_assert_equal(size_t(1), notifications);
     cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));
