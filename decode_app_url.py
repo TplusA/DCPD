@@ -117,6 +117,22 @@ class Hexdump:
 
         self.data += data
 
+    def dump(self, start_byte=0, end_byte=None):
+        if start_byte < 0 or start_byte >= len(self.data):
+            raise IndexError('Start byte {} out of range 0...{}'.format(start_byte, len(self.data) - 1))
+
+        if end_byte is None:
+            end_byte = len(self.data) - 1
+
+        print('# Input size    : {} bytes'.format(len(self.data)))
+        print('# Start offset  : {}'.format(start_byte))
+        print('# End offset    : {}'.format(end_byte))
+        print('# Length of dump: {} bytes'.format(end_byte - start_byte + 1))
+        offset = 0
+        for l in range(start_byte, end_byte + 1, 16):
+            print('{:04x}  '.format(offset) + ' '.join('{:02x}'.format(b) for b in self.data[l : min(l + 16, end_byte + 1)]))
+            offset += 16
+
 
 def extract_hexdump(input, start_line, max_lines):
     while start_line > 1:
@@ -185,7 +201,7 @@ def error_exit(error_message, exit_code=1):
 
 def usage(exit_code=1):
     print("""Usage:
-{0} [-h] [-l start line] [-b start byte] [-u] [input file]
+{0} [-h] [-l start line] [-b start byte] [-e end byte] [-u] [-d] [input file]
 
 Options:
 -h       This help screen.
@@ -193,7 +209,11 @@ Options:
 -n num   How many lines to read at most (default: all)
 -b byte  At which byte in the hexdump decoding should start (default: 16);
          please read the comments at the top of this script for details
--u       Unescape SPI escape sequences (0x27 handling)""".format(sys.argv[0]))
+-e byte  At which byte the decoding should stop (default: last byte); this
+         number refers to offsets *after* unescaping if -u is used; use
+         negative numbers for positions relative to end of hexdump
+-u       Unescape SPI escape sequences (0x27 handling)
+-d       Dump block to be decoded, and exit (for troubleshooting)""".format(sys.argv[0]))
     sys.exit(exit_code)
 
 
@@ -201,11 +221,13 @@ def main():
     input = sys.stdin
     start_byte = 16
     start_line = 1
+    end_byte = None
     max_lines = None
     unescape = False
+    dump_only = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hb:l:n:u")
+        opts, args = getopt.getopt(sys.argv[1:], "hb:e:l:n:ud")
     except getopt.GetoptError as err:
         error_exit(str(err))
 
@@ -214,12 +236,16 @@ def main():
             usage(0)
         elif o == "-b":
             start_byte = int(a)
+        elif o == '-e':
+            end_byte = int(a)
         elif o == "-l":
             start_line = int(a)
         elif o == "-n":
             max_lines = int(a)
         elif o == "-u":
             unescape = True
+        elif o == "-d":
+            dump_only = True
 
     if args:
         input = open(args[0], "r")
@@ -230,9 +256,24 @@ def main():
         if unescape:
             hexdump = escaped_hexdump(hexdump)
 
+        if end_byte is None:
+            end_byte = len(hexdump.data) - 1
+        elif end_byte < 0:
+            end_byte = len(hexdump.data) + end_byte - 1
+
+        if end_byte < start_byte:
+            raise IndexError("Start byte {} is greater than end byte {}".format(start_byte, end_byte))
+
+        if end_byte >= len(hexdump.data):
+            raise IndexError("End byte {} exceeds offset of last byte in input at {}".format(end_byte, len(hexdump.data) - 1))
+
+        if dump_only:
+            hexdump.dump(start_byte, end_byte)
+            return
+
         prng = LFSR(44257, 46080)
         decoded = ''.join(list(map(lambda x: chr(x ^ prng.get_byte()),
-                                   hexdump.data[start_byte:])))
+                                   hexdump.data[start_byte:end_byte+1])))
 
         print(decoded)
     except IndexError as err:
