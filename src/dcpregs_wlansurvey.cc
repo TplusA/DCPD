@@ -295,7 +295,7 @@ static const char *survey_result_to_string(Connman::SiteSurveyResult result)
 {
     const auto idx = size_t(result);
 
-    if(idx >= 0 && idx <= size_t(Connman::SiteSurveyResult::LAST_RESULT))
+    if(idx <= size_t(Connman::SiteSurveyResult::LAST_RESULT))
     {
         static const char *strings[size_t(Connman::SiteSurveyResult::LAST_RESULT) + 1] =
         {

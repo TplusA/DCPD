@@ -22,7 +22,7 @@
 #ifndef MOCK_FILE_TRANSFER_DBUS_HH
 #define MOCK_FILE_TRANSFER_DBUS_HH
 
-#include "dbusdl_dbus.h"
+#include "de_tahifi_filetransfer.h"
 #include "mock_expectation.hh"
 
 class MockFileTransferDBus

@@ -22,21 +22,21 @@
 #ifndef DBUS_IFACE_DEEP_H
 #define DBUS_IFACE_DEEP_H
 
-#include "dcpd_dbus.h"
-#include "dbusdl_dbus.h"
-#include "streamplayer_dbus.h"
-#include "airable_dbus.h"
-#include "artcache_dbus.h"
-#include "audiopath_dbus.h"
-#include "mixer_dbus.h"
-#include "credentials_dbus.h"
-#include "configuration_dbus.h"
-#include "jsonio_dbus.h"
-#include "appliance_dbus.h"
-#include "connman_dbus.h"
-#include "gerbera_dbus.h"
-#include "logind_dbus.h"
-#include "systemd_dbus.h"
+#include "de_tahifi_dcpd.h"
+#include "de_tahifi_filetransfer.h"
+#include "de_tahifi_streamplayer.h"
+#include "de_tahifi_airable.h"
+#include "de_tahifi_artcache.h"
+#include "de_tahifi_audiopath.h"
+#include "de_tahifi_mixer.h"
+#include "de_tahifi_credentials.h"
+#include "de_tahifi_configuration.h"
+#include "de_tahifi_jsonio.h"
+#include "de_tahifi_appliance.h"
+#include "net_connman.h"
+#include "io_gerbera.h"
+#include "org_freedesktop_login1.h"
+#include "org_freedesktop_systemd1.h"
 
 #ifdef __cplusplus
 extern "C" {

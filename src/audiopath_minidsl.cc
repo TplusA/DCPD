@@ -176,7 +176,7 @@ nlohmann::json AudioPaths::ParserState::parse_add_instance()
         { "id", std::move(copy_asciiz()) },
         { "name", std::move(copy_asciiz()) },
     };
-};
+}
 
 nlohmann::json AudioPaths::ParserState::parse_remove_instance()
 {
@@ -184,7 +184,7 @@ nlohmann::json AudioPaths::ParserState::parse_remove_instance()
         { "op", "rm_instance" },
         { "name", std::move(copy_asciiz()) },
     };
-};
+}
 
 nlohmann::json AudioPaths::ParserState::parse_connect_instances()
 {

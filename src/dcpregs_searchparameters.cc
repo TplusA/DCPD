@@ -24,7 +24,6 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "dcpregs_searchparameters.hh"
-#include "dcpd_dbus.h"
 #include "dbus_iface_deep.h"
 #include "messages.h"
 

@@ -22,7 +22,7 @@
 #ifndef MOCK_STREAMPLAYER_DBUS_HH
 #define MOCK_STREAMPLAYER_DBUS_HH
 
-#include "streamplayer_dbus.h"
+#include "de_tahifi_streamplayer.h"
 #include "md5.hh"
 #include "mock_expectation.hh"
 

@@ -400,12 +400,12 @@ static unsigned int wait_for_events(DCPDState &state,
 
     struct pollfd fds[FIRST_NWDISPATCH_INDEX + nwdispatcher.get_number_of_fds()];
 
-    fds[0] = { .fd = dcpspi_fifo_in_fd,    .events = POLLIN, };
-    fds[1] = { .fd = drcp_fifo_in_fd,      .events = POLLIN, };
-    fds[2] = { .fd = dcp_server_socket_fd, .events = POLLIN, };
-    fds[3] = { .fd = dcp_peer_socket_fd,   .events = POLLIN, };
-    fds[4] = { .fd = primitive_queue_fd,   .events = POLLIN, };
-    fds[5] = { .fd = register_changed_fd,  .events = POLLIN, };
+    fds[0] = { .fd = dcpspi_fifo_in_fd,    .events = POLLIN, .revents = 0, };
+    fds[1] = { .fd = drcp_fifo_in_fd,      .events = POLLIN, .revents = 0, };
+    fds[2] = { .fd = dcp_server_socket_fd, .events = POLLIN, .revents = 0, };
+    fds[3] = { .fd = dcp_peer_socket_fd,   .events = POLLIN, .revents = 0, };
+    fds[4] = { .fd = primitive_queue_fd,   .events = POLLIN, .revents = 0, };
+    fds[5] = { .fd = register_changed_fd,  .events = POLLIN, .revents = 0, };
 
     nwdispatcher.scatter_fds(&fds[FIRST_NWDISPATCH_INDEX], POLLIN);
 
@@ -1275,7 +1275,7 @@ static bool delay_seconds(int seconds)
         if(!keep_running)
             return false;
 
-        static const struct timespec one_second = { .tv_sec = 1, };
+        static const struct timespec one_second = { .tv_sec = 1, .tv_nsec = 0, };
         os_nanosleep(&one_second);
 
         --seconds;

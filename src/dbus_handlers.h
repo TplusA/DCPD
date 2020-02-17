@@ -22,13 +22,13 @@
 #ifndef DBUS_HANDLERS_H
 #define DBUS_HANDLERS_H
 
-#include "dcpd_dbus.h"
-#include "audiopath_dbus.h"
-#include "mixer_dbus.h"
-#include "appliance_dbus.h"
-#include "configuration_dbus.h"
-#include "jsonio_dbus.h"
-#include "debug_dbus.h"
+#include "de_tahifi_dcpd.h"
+#include "de_tahifi_audiopath.h"
+#include "de_tahifi_mixer.h"
+#include "de_tahifi_appliance.h"
+#include "de_tahifi_configuration.h"
+#include "de_tahifi_jsonio.h"
+#include "de_tahifi_debug.h"
 
 /*!
  * \addtogroup dbus_handlers DBus handlers for signals

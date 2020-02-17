@@ -38,6 +38,14 @@ struct ParserContext
 
     size_t token_pos;
     size_t token_length;
+
+    explicit ParserContext(const char *l, size_t llen):
+        line(l),
+        line_length(llen),
+        pos(0),
+        token_pos(0),
+        token_length(0)
+    {}
 };
 
 Applink::InputBuffer::AppendResult
@@ -246,11 +254,7 @@ static Applink::ParserResult parse_answer_line(ParserContext &ctx,
 std::unique_ptr<Applink::Command>
 Applink::InputBuffer::parse_line(const size_t begin_pos, Applink::ParserResult &result)
 {
-    struct ParserContext ctx =
-    {
-        .line = get_line_at(begin_pos),
-        .line_length = get_line_length(begin_pos),
-    };
+    struct ParserContext ctx(get_line_at(begin_pos), get_line_length(begin_pos));
 
     if(skip_spaces(ctx) < 0)
     {

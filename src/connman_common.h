@@ -22,7 +22,7 @@
 #ifndef CONNMAN_COMMON_H
 #define CONNMAN_COMMON_H
 
-#include "connman_dbus.h"
+#include "net_connman.h"
 
 #include <stdbool.h>
 

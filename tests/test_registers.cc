@@ -2673,7 +2673,7 @@ static size_t do_test_set_static_ipv4_config(const struct os_mapped_file_data *e
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
 
     if(existing_file == nullptr)
@@ -2740,7 +2740,7 @@ static size_t do_test_set_dhcp_ipv4_config(const struct os_mapped_file_data *exi
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
 
     if(existing_file == nullptr)
@@ -2928,7 +2928,7 @@ void test_explicitly_disabling_dhcp_disables_whole_interface()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -3465,7 +3465,7 @@ void test_replace_primary_dns_server_of_two_servers()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -3522,7 +3522,7 @@ void test_replace_secondary_dns_server_of_two_servers()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -3586,7 +3586,7 @@ void test_add_secondary_dns_server_to_primary_server()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -3639,7 +3639,7 @@ void test_set_wlan_security_mode_on_ethernet_service_is_ignored()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address C4:FD:EC:AF:DE:AD");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -3718,7 +3718,7 @@ static void set_wlan_security_mode(const char *requested_security_mode,
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -3841,7 +3841,7 @@ void test_set_wlan_security_mode_wep()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -3876,7 +3876,7 @@ void test_set_invalid_wlan_security_mode()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -4000,7 +4000,7 @@ static void set_passphrase_with_security_mode(const char *passphrase,
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -4219,7 +4219,7 @@ void test_set_passphrase_without_security_mode_does_not_work()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -4348,7 +4348,7 @@ void test_set_simple_ascii_wlan_ssid()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -4408,7 +4408,7 @@ void test_set_binary_wlan_ssid()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
         "Writing new network configuration for MAC address B4:DD:EA:DB:EE:F1");
 
-    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1 };
+    struct os_mapped_file_data file_with_written_default_contents = { .fd = -1, .ptr = nullptr, .length = 0 };
     std::vector<char> written_default_contents;
     mock_os->expect_os_map_file_to_memory(-1, ENOENT, false, network_config_file);
     expect_create_default_network_preferences(file_with_written_default_contents,
@@ -4521,7 +4521,6 @@ void test_get_wlan_ssid_in_normal_mode()
 
     const size_t ssid_length = reg->read(dest, 32);
 
-    cppcut_assert_operator(size_t(0), <=, ssid_length);
     cut_assert_equal_memory(assumed_ssid, ssize_t(sizeof(assumed_ssid)),
                             dest, ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -4580,7 +4579,6 @@ void test_get_wlan_ssid_in_edit_mode_before_any_changes()
 
     const size_t ssid_length = reg->read(dest, 32);
 
-    cppcut_assert_operator(size_t(0), <=, ssid_length);
     cut_assert_equal_memory(dest, sizeof(assumed_ssid),
                             buffer + sizeof(redzone_content), ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),
@@ -4625,7 +4623,6 @@ void test_get_wlan_ssid_in_edit_mode_after_change()
 
     const size_t ssid_length = reg->read(buffer, sizeof(buffer));
 
-    cppcut_assert_operator(size_t(0), <=, ssid_length);
     cut_assert_equal_memory(ssid, sizeof(ssid),
                             buffer, ssid_length);
     cut_assert_equal_memory(redzone_content, sizeof(redzone_content),

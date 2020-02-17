@@ -26,7 +26,6 @@
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_audiosources.hh"
 #include "registers_priv.hh"
-#include "credentials_dbus.h"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
 #include "actor_id.h"

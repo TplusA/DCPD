@@ -198,6 +198,6 @@ class VolumeControls
     std::unique_ptr<VolumeControl> &lookup_rw(uint16_t id);
 };
 
-};
+}
 
 #endif /* !VOLUME_CONTROL_HH */

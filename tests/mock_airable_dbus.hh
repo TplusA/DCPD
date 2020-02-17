@@ -22,7 +22,7 @@
 #ifndef MOCK_AIRABLE_DBUS_HH
 #define MOCK_AIRABLE_DBUS_HH
 
-#include "airable_dbus.h"
+#include "de_tahifi_airable.h"
 #include "mock_expectation.hh"
 
 class MockAirableDBus

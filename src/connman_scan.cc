@@ -25,7 +25,7 @@
 
 #include "connman_scan.hh"
 #include "connman_technology_registry.hh"
-#include "connman_dbus.h"
+#include "net_connman.h"
 #include "dbus_common.h"
 #include "messages.h"
 

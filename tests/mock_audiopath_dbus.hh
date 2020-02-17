@@ -24,7 +24,7 @@
 
 #include <functional>
 
-#include "audiopath_dbus.h"
+#include "de_tahifi_audiopath.h"
 #include "gvariantwrapper.hh"
 #include "mock_expectation.hh"
 

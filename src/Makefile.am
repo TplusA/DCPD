@@ -134,7 +134,7 @@ libregisters_la_SOURCES = \
     connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
     network_device.hh network_device_list.hh \
     network_config_request.hh \
-    dbusdl_dbus.h \
+    de_tahifi_filetransfer.h \
     stream_id.h \
     coverart.cc coverart.hh md5.cc md5.hh \
     gvariantwrapper.cc gvariantwrapper.hh \
@@ -194,7 +194,7 @@ libdbus_handlers_la_SOURCES = \
     dbus_handlers_connman_manager.cc dbus_handlers_connman_manager.hh \
     network_config_to_json.cc network_config_to_json.hh \
     networkprefs.h \
-    connman_dbus.h \
+    net_connman.h \
     actor_id.h \
     dcpregs_networkconfig.hh \
     dcpregs_upnpname.hh \
@@ -215,52 +215,52 @@ libaccesspoint_la_CXXFLAGS = $(AM_CXXFLAGS)
 libplainplayer_la_SOURCES = plainplayer.cc plainplayer.hh
 libplainplayer_la_CXXFLAGS = $(AM_CXXFLAGS)
 
-nodist_libdcpd_dbus_la_SOURCES = dcpd_dbus.c dcpd_dbus.h
+nodist_libdcpd_dbus_la_SOURCES = de_tahifi_dcpd.c de_tahifi_dcpd.h
 libdcpd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libconnman_dbus_la_SOURCES = connman_dbus.c connman_dbus.h
+nodist_libconnman_dbus_la_SOURCES = net_connman.c net_connman.h
 libconnman_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_liblogind_dbus_la_SOURCES = logind_dbus.c logind_dbus.h
+nodist_liblogind_dbus_la_SOURCES = org_freedesktop_login1.c org_freedesktop_login1.h
 liblogind_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libsystemd_dbus_la_SOURCES = systemd_dbus.c systemd_dbus.h
+nodist_libsystemd_dbus_la_SOURCES = org_freedesktop_systemd1.c org_freedesktop_systemd1.h
 libsystemd_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libdbusdl_dbus_la_SOURCES = dbusdl_dbus.c dbusdl_dbus.h
+nodist_libdbusdl_dbus_la_SOURCES = de_tahifi_filetransfer.c de_tahifi_filetransfer.h
 libdbusdl_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libstreamplayer_dbus_la_SOURCES = streamplayer_dbus.c streamplayer_dbus.h
+nodist_libstreamplayer_dbus_la_SOURCES = de_tahifi_streamplayer.c de_tahifi_streamplayer.h
 libstreamplayer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libaudiopath_dbus_la_SOURCES = audiopath_dbus.c audiopath_dbus.h
+nodist_libaudiopath_dbus_la_SOURCES = de_tahifi_audiopath.c de_tahifi_audiopath.h
 libaudiopath_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libmixer_dbus_la_SOURCES = mixer_dbus.c mixer_dbus.h
+nodist_libmixer_dbus_la_SOURCES = de_tahifi_mixer.c de_tahifi_mixer.h
 libmixer_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libartcache_dbus_la_SOURCES = artcache_dbus.c artcache_dbus.h
+nodist_libartcache_dbus_la_SOURCES = de_tahifi_artcache.c de_tahifi_artcache.h
 libartcache_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libairable_dbus_la_SOURCES = airable_dbus.c airable_dbus.h
+nodist_libairable_dbus_la_SOURCES = de_tahifi_airable.c de_tahifi_airable.h
 libairable_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libcredentials_dbus_la_SOURCES = credentials_dbus.c credentials_dbus.h
+nodist_libcredentials_dbus_la_SOURCES = de_tahifi_credentials.c de_tahifi_credentials.h
 libcredentials_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libgerbera_dbus_la_SOURCES = gerbera_dbus.c gerbera_dbus.h
+nodist_libgerbera_dbus_la_SOURCES = io_gerbera.c io_gerbera.h
 libgerbera_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libconfiguration_dbus_la_SOURCES = configuration_dbus.c configuration_dbus.h
+nodist_libconfiguration_dbus_la_SOURCES = de_tahifi_configuration.c de_tahifi_configuration.h
 libconfiguration_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libappliance_dbus_la_SOURCES = appliance_dbus.c appliance_dbus.h
+nodist_libappliance_dbus_la_SOURCES = de_tahifi_appliance.c de_tahifi_appliance.h
 libappliance_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libjsonio_dbus_la_SOURCES = jsonio_dbus.c jsonio_dbus.h
+nodist_libjsonio_dbus_la_SOURCES = de_tahifi_jsonio.c de_tahifi_jsonio.h
 libjsonio_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
-nodist_libdebug_dbus_la_SOURCES = debug_dbus.c debug_dbus.h
+nodist_libdebug_dbus_la_SOURCES = de_tahifi_debug.c de_tahifi_debug.h
 libdebug_dbus_la_CFLAGS = $(CRELAXEDWARNINGS)
 
 libdrcpdcomm_la_SOURCES = \
@@ -301,217 +301,217 @@ libshutdown_guard_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 BUILT_SOURCES = \
     $(nodist_libdcpd_dbus_la_SOURCES) \
-    de_tahifi_dcpd.h \
-    de_tahifi_dcpd.md \
-    dcpd_dbus.stamp \
+    de_tahifi_dcpd-doc.h \
+    de_tahifi_dcpd-doc.md \
+    de_tahifi_dcpd.stamp \
     $(nodist_libdbusdl_dbus_la_SOURCES) \
-    de_tahifi_dbusdl.h \
-    de_tahifi_dbusdl.md \
-    dbusdl_dbus.stamp \
+    de_tahifi_filetransfer-doc.h \
+    de_tahifi_filetransfer-doc.md \
+    de_tahifi_filetransfer.stamp \
     $(nodist_libstreamplayer_dbus_la_SOURCES) \
-    de_tahifi_streamplayer.h \
-    de_tahifi_streamplayer.md \
-    streamplayer_dbus.stamp \
+    de_tahifi_streamplayer-doc.h \
+    de_tahifi_streamplayer-doc.md \
+    de_tahifi_streamplayer.stamp \
     $(nodist_libaudiopath_dbus_la_SOURCES) \
-    de_tahifi_audiopath.h \
-    de_tahifi_audiopath.md \
-    audiopath_dbus.stamp \
+    de_tahifi_audiopath-doc.h \
+    de_tahifi_audiopath-doc.md \
+    de_tahifi_audiopath.stamp \
     $(nodist_libmixer_dbus_la_SOURCES) \
-    de_tahifi_mixer.h \
-    de_tahifi_mixer.md \
-    mixer_dbus.stamp \
+    de_tahifi_mixer-doc.h \
+    de_tahifi_mixer-doc.md \
+    de_tahifi_mixer.stamp \
     $(nodist_libartcache_dbus_la_SOURCES) \
-    de_tahifi_artcache.h \
-    de_tahifi_artcache.md \
-    artcache_dbus.stamp \
+    de_tahifi_artcache-doc.h \
+    de_tahifi_artcache-doc.md \
+    de_tahifi_artcache.stamp \
     $(nodist_libairable_dbus_la_SOURCES) \
-    de_tahifi_airable.h \
-    de_tahifi_airable.md \
-    airable_dbus.stamp \
+    de_tahifi_airable-doc.h \
+    de_tahifi_airable-doc.md \
+    de_tahifi_airable.stamp \
     $(nodist_libcredentials_dbus_la_SOURCES) \
-    de_tahifi_credentials.h \
-    de_tahifi_credentials.md \
-    credentials_dbus.stamp \
+    de_tahifi_credentials-doc.h \
+    de_tahifi_credentials-doc.md \
+    de_tahifi_credentials.stamp \
     $(nodist_libgerbera_dbus_la_SOURCES) \
-    io_gerbera.h \
-    io_gerbera.md \
-    gerbera_dbus.stamp \
+    io_gerbera-doc.h \
+    io_gerbera-doc.md \
+    io_gerbera.stamp \
     $(nodist_libconfiguration_dbus_la_SOURCES) \
-    de_tahifi_configuration.h \
-    de_tahifi_configuration.md \
-    configuration_dbus.stamp \
+    de_tahifi_configuration-doc.h \
+    de_tahifi_configuration-doc.md \
+    de_tahifi_configuration.stamp \
     $(nodist_libappliance_dbus_la_SOURCES) \
-    de_tahifi_appliance.h \
-    de_tahifi_appliance.md \
-    appliance_dbus.stamp \
+    de_tahifi_appliance-doc.h \
+    de_tahifi_appliance-doc.md \
+    de_tahifi_appliance.stamp \
     $(nodist_libconnman_dbus_la_SOURCES) \
-    net_connman.h \
-    net_connman.md \
-    connman_dbus.stamp \
+    net_connman-doc.h \
+    net_connman-doc.md \
+    net_connman.stamp \
     $(nodist_liblogind_dbus_la_SOURCES) \
-    org_freedesktop_logind.h \
-    org_freedesktop_logind.md \
-    logind_dbus.stamp \
+    org_freedesktop_login1-doc.h \
+    org_freedesktop_login1-doc.md \
+    org_freedesktop_login1.stamp \
     $(nodist_libsystemd_dbus_la_SOURCES) \
-    org_freedesktop_systemd.h \
-    org_freedesktop_systemd.md \
-    systemd_dbus.stamp \
+    org_freedesktop_systemd1-doc.h \
+    org_freedesktop_systemd1-doc.md \
+    org_freedesktop_systemd1.stamp \
     $(nodist_libjsonio_dbus_la_SOURCES) \
-    de_tahifi_jsonio.h \
-    de_tahifi_jsonio.md \
-    jsonio_dbus.stamp \
+    de_tahifi_jsonio-doc.h \
+    de_tahifi_jsonio-doc.md \
+    de_tahifi_jsonio.stamp \
     $(nodist_libdebug_dbus_la_SOURCES) \
-    de_tahifi_debug.h \
-    de_tahifi_debug.md \
-    debug_dbus.stamp \
+    de_tahifi_debug-doc.h \
+    de_tahifi_debug-doc.md \
+    de_tahifi_debug.stamp \
     $(nodist_libregisters_la_SOURCES)
 
 CLEANFILES = $(BUILT_SOURCES)
 
 EXTRA_DIST = do_update.sh
 
-de_tahifi_dcpd.h: dcpd_dbus.stamp
-de_tahifi_dcpd.md: dcpd_dbus.stamp
-dcpd_dbus.c: dcpd_dbus.stamp
-dcpd_dbus.h: dcpd_dbus.stamp
-dcpd_dbus.stamp: $(DBUS_IFACES)/de_tahifi_dcpd.xml
-	$(GDBUS_CODEGEN) --generate-c-code=dcpd_dbus --c-namespace tdbus_dcpd --interface-prefix de.tahifi.Dcpd. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dcpd.md -H de_tahifi_dcpd.h -c tdbus_dcpd -s de.tahifi.Dcpd. -n "$(PACKAGE_NAME)"
+de_tahifi_dcpd-doc.h: de_tahifi_dcpd.stamp
+de_tahifi_dcpd-doc.md: de_tahifi_dcpd.stamp
+de_tahifi_dcpd.c: de_tahifi_dcpd.stamp
+de_tahifi_dcpd.h: de_tahifi_dcpd.stamp
+de_tahifi_dcpd.stamp: $(DBUS_IFACES)/de_tahifi_dcpd.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_dcpd --c-namespace tdbus_dcpd --interface-prefix de.tahifi.Dcpd. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dcpd-doc.md -H de_tahifi_dcpd-doc.h -c tdbus_dcpd -s de.tahifi.Dcpd. -n "$(PACKAGE_NAME)"
 	touch $@
 
-de_tahifi_dbusdl.h: dbusdl_dbus.stamp
-de_tahifi_dbusdl.md: dbusdl_dbus.stamp
-dbusdl_dbus.c: dbusdl_dbus.stamp
-dbusdl_dbus.h: dbusdl_dbus.stamp
-dbusdl_dbus.stamp: $(DBUS_IFACES)/de_tahifi_filetransfer.xml
-	$(GDBUS_CODEGEN) --generate-c-code=dbusdl_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_dbusdl.md -H de_tahifi_dbusdl.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (file download)"
+de_tahifi_filetransfer-doc.h: de_tahifi_filetransfer.stamp
+de_tahifi_filetransfer-doc.md: de_tahifi_filetransfer.stamp
+de_tahifi_filetransfer.c: de_tahifi_filetransfer.stamp
+de_tahifi_filetransfer.h: de_tahifi_filetransfer.stamp
+de_tahifi_filetransfer.stamp: $(DBUS_IFACES)/de_tahifi_filetransfer.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_filetransfer --c-namespace tdbus --interface-prefix de.tahifi. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_filetransfer-doc.md -H de_tahifi_filetransfer-doc.h -c tdbus -s de.tahifi. -n "File Download"
 	touch $@
 
-de_tahifi_streamplayer.h: streamplayer_dbus.stamp
-de_tahifi_streamplayer.md: streamplayer_dbus.stamp
-streamplayer_dbus.c: streamplayer_dbus.stamp
-streamplayer_dbus.h: streamplayer_dbus.stamp
-streamplayer_dbus.stamp: $(DBUS_IFACES)/de_tahifi_streamplayer.xml
-	$(GDBUS_CODEGEN) --generate-c-code=streamplayer_dbus --c-namespace tdbus_splay --interface-prefix de.tahifi.Streamplayer. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_streamplayer.md -H de_tahifi_streamplayer.h -c tdbus_splay -s de.tahifi.Streamplayer. -n '$(PACKAGE_NAME) (stream player)'
+de_tahifi_streamplayer-doc.h: de_tahifi_streamplayer.stamp
+de_tahifi_streamplayer-doc.md: de_tahifi_streamplayer.stamp
+de_tahifi_streamplayer.c: de_tahifi_streamplayer.stamp
+de_tahifi_streamplayer.h: de_tahifi_streamplayer.stamp
+de_tahifi_streamplayer.stamp: $(DBUS_IFACES)/de_tahifi_streamplayer.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_streamplayer --c-namespace tdbus_splay --interface-prefix de.tahifi.Streamplayer. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_streamplayer-doc.md -H de_tahifi_streamplayer-doc.h -c tdbus_splay -s de.tahifi.Streamplayer. -n 'Stream Player'
 	touch $@
 
-de_tahifi_audiopath.h: audiopath_dbus.stamp
-de_tahifi_audiopath.md: audiopath_dbus.stamp
-audiopath_dbus.c: audiopath_dbus.stamp
-audiopath_dbus.h: audiopath_dbus.stamp
-audiopath_dbus.stamp: $(DBUS_IFACES)/de_tahifi_audiopath.xml
-	$(GDBUS_CODEGEN) --generate-c-code=audiopath_dbus --c-namespace tdbus_aupath --interface-prefix de.tahifi.AudioPath. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_audiopath.md -H de_tahifi_audiopath.h -c tdbus_aupath -s de.tahifi.AudioPath. -n 'Audio Paths'
+de_tahifi_audiopath-doc.h: de_tahifi_audiopath.stamp
+de_tahifi_audiopath-doc.md: de_tahifi_audiopath.stamp
+de_tahifi_audiopath.c: de_tahifi_audiopath.stamp
+de_tahifi_audiopath.h: de_tahifi_audiopath.stamp
+de_tahifi_audiopath.stamp: $(DBUS_IFACES)/de_tahifi_audiopath.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_audiopath --c-namespace tdbus_aupath --interface-prefix de.tahifi.AudioPath. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_audiopath-doc.md -H de_tahifi_audiopath-doc.h -c tdbus_aupath -s de.tahifi.AudioPath. -n 'Audio Paths'
 	touch $@
 
-de_tahifi_mixer.h: mixer_dbus.stamp
-de_tahifi_mixer.md: mixer_dbus.stamp
-mixer_dbus.c: mixer_dbus.stamp
-mixer_dbus.h: mixer_dbus.stamp
-mixer_dbus.stamp: $(DBUS_IFACES)/de_tahifi_mixer.xml
-	$(GDBUS_CODEGEN) --generate-c-code=mixer_dbus --c-namespace tdbus_mixer --interface-prefix de.tahifi.Mixer. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_mixer.md -H de_tahifi_mixer.h -c tdbus_mixer -s de.tahifi.Mixer. -n 'Volume control'
+de_tahifi_mixer-doc.h: de_tahifi_mixer.stamp
+de_tahifi_mixer-doc.md: de_tahifi_mixer.stamp
+de_tahifi_mixer.c: de_tahifi_mixer.stamp
+de_tahifi_mixer.h: de_tahifi_mixer.stamp
+de_tahifi_mixer.stamp: $(DBUS_IFACES)/de_tahifi_mixer.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_mixer --c-namespace tdbus_mixer --interface-prefix de.tahifi.Mixer. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_mixer-doc.md -H de_tahifi_mixer-doc.h -c tdbus_mixer -s de.tahifi.Mixer. -n 'Volume Control'
 	touch $@
 
-de_tahifi_artcache.h: artcache_dbus.stamp
-de_tahifi_artcache.md: artcache_dbus.stamp
-artcache_dbus.c: artcache_dbus.stamp
-artcache_dbus.h: artcache_dbus.stamp
-artcache_dbus.stamp: $(DBUS_IFACES)/de_tahifi_artcache.xml
-	$(GDBUS_CODEGEN) --generate-c-code=artcache_dbus --c-namespace tdbus_artcache --interface-prefix de.tahifi.ArtCache. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_artcache.md -H de_tahifi_artcache.h -c tdbus_artcache -s de.tahifi.ArtCache. -n "$(PACKAGE_NAME) (cover art)"
+de_tahifi_artcache-doc.h: de_tahifi_artcache.stamp
+de_tahifi_artcache-doc.md: de_tahifi_artcache.stamp
+de_tahifi_artcache.c: de_tahifi_artcache.stamp
+de_tahifi_artcache.h: de_tahifi_artcache.stamp
+de_tahifi_artcache.stamp: $(DBUS_IFACES)/de_tahifi_artcache.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_artcache --c-namespace tdbus_artcache --interface-prefix de.tahifi.ArtCache. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_artcache-doc.md -H de_tahifi_artcache-doc.h -c tdbus_artcache -s de.tahifi.ArtCache. -n "Cover Art"
 	touch $@
 
-de_tahifi_airable.h: airable_dbus.stamp
-de_tahifi_airable.md: airable_dbus.stamp
-airable_dbus.c: airable_dbus.stamp
-airable_dbus.h: airable_dbus.stamp
-airable_dbus.stamp: $(DBUS_IFACES)/de_tahifi_airable.xml
-	$(GDBUS_CODEGEN) --generate-c-code=airable_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_airable.md -H de_tahifi_airable.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (Airable HTTP session security)"
+de_tahifi_airable-doc.h: de_tahifi_airable.stamp
+de_tahifi_airable-doc.md: de_tahifi_airable.stamp
+de_tahifi_airable.c: de_tahifi_airable.stamp
+de_tahifi_airable.h: de_tahifi_airable.stamp
+de_tahifi_airable.stamp: $(DBUS_IFACES)/de_tahifi_airable.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_airable --c-namespace tdbus --interface-prefix de.tahifi. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_airable-doc.md -H de_tahifi_airable-doc.h -c tdbus -s de.tahifi. -n "Airable"
 	touch $@
 
-de_tahifi_credentials.h: credentials_dbus.stamp
-de_tahifi_credentials.md: credentials_dbus.stamp
-credentials_dbus.c: credentials_dbus.stamp
-credentials_dbus.h: credentials_dbus.stamp
-credentials_dbus.stamp: $(DBUS_IFACES)/de_tahifi_credentials.xml
-	$(GDBUS_CODEGEN) --generate-c-code=credentials_dbus --c-namespace tdbus_credentials --interface-prefix de.tahifi.Credentials. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_credentials.md -H de_tahifi_credentials.h -c tdbus_credentials -s de.tahifi.Credentials. -n "$(PACKAGE_NAME) (passing credentials around)"
+de_tahifi_credentials-doc.h: de_tahifi_credentials.stamp
+de_tahifi_credentials-doc.md: de_tahifi_credentials.stamp
+de_tahifi_credentials.c: de_tahifi_credentials.stamp
+de_tahifi_credentials.h: de_tahifi_credentials.stamp
+de_tahifi_credentials.stamp: $(DBUS_IFACES)/de_tahifi_credentials.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_credentials --c-namespace tdbus_credentials --interface-prefix de.tahifi.Credentials. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_credentials-doc.md -H de_tahifi_credentials-doc.h -c tdbus_credentials -s de.tahifi.Credentials. -n "Passing Credentials Around"
 	touch $@
 
-io_gerbera.h: gerbera_dbus.stamp
-io_gerbera.md: gerbera_dbus.stamp
-gerbera_dbus.c: gerbera_dbus.stamp
-gerbera_dbus.h: gerbera_dbus.stamp
-gerbera_dbus.stamp: $(DBUS_IFACES)/io_gerbera.xml
-	$(GDBUS_CODEGEN) --generate-c-code=gerbera_dbus --c-namespace tdbus --interface-prefix io. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o io_gerbera.md -H io_gerbera.h -c tdbus -s io. -n "Gerbera UPnP server"
+io_gerbera-doc.h: io_gerbera.stamp
+io_gerbera-doc.md: io_gerbera.stamp
+io_gerbera.c: io_gerbera.stamp
+io_gerbera.h: io_gerbera.stamp
+io_gerbera.stamp: $(DBUS_IFACES)/io_gerbera.xml
+	$(GDBUS_CODEGEN) --generate-c-code=io_gerbera --c-namespace tdbus --interface-prefix io. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o io_gerbera-doc.md -H io_gerbera-doc.h -c tdbus -s io. -n "Gerbera UPnP server"
 	touch $@
 
-de_tahifi_configuration.h: configuration_dbus.stamp
-de_tahifi_configuration.md: configuration_dbus.stamp
-configuration_dbus.c: configuration_dbus.stamp
-configuration_dbus.h: configuration_dbus.stamp
-configuration_dbus.stamp: $(DBUS_IFACES)/de_tahifi_configuration.xml
-	$(GDBUS_CODEGEN) --generate-c-code=configuration_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_configuration.md -H de_tahifi_configuration.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (configuration management)"
+de_tahifi_configuration-doc.h: de_tahifi_configuration.stamp
+de_tahifi_configuration-doc.md: de_tahifi_configuration.stamp
+de_tahifi_configuration.c: de_tahifi_configuration.stamp
+de_tahifi_configuration.h: de_tahifi_configuration.stamp
+de_tahifi_configuration.stamp: $(DBUS_IFACES)/de_tahifi_configuration.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_configuration --c-namespace tdbus --interface-prefix de.tahifi. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_configuration-doc.md -H de_tahifi_configuration-doc.h -c tdbus -s de.tahifi. -n "Configuration Management"
 	touch $@
 
-de_tahifi_appliance.h: appliance_dbus.stamp
-de_tahifi_appliance.md: appliance_dbus.stamp
-appliance_dbus.c: appliance_dbus.stamp
-appliance_dbus.h: appliance_dbus.stamp
-appliance_dbus.stamp: $(DBUS_IFACES)/de_tahifi_appliance.xml
-	$(GDBUS_CODEGEN) --generate-c-code=appliance_dbus --c-namespace tdbus_appliance --interface-prefix de.tahifi.Appliance. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_appliance.md -H de_tahifi_appliance.h -c tdbus_appliance -s de.tahifi.Appliance. -n "Appliance state and control"
+de_tahifi_appliance-doc.h: de_tahifi_appliance.stamp
+de_tahifi_appliance-doc.md: de_tahifi_appliance.stamp
+de_tahifi_appliance.c: de_tahifi_appliance.stamp
+de_tahifi_appliance.h: de_tahifi_appliance.stamp
+de_tahifi_appliance.stamp: $(DBUS_IFACES)/de_tahifi_appliance.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_appliance --c-namespace tdbus_appliance --interface-prefix de.tahifi.Appliance. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_appliance-doc.md -H de_tahifi_appliance-doc.h -c tdbus_appliance -s de.tahifi.Appliance. -n "Appliance State and Control"
 	touch $@
 
-de_tahifi_jsonio.h: jsonio_dbus.stamp
-de_tahifi_jsonio.md: jsonio_dbus.stamp
-jsonio_dbus.c: jsonio_dbus.stamp
-jsonio_dbus.h: jsonio_dbus.stamp
-jsonio_dbus.stamp: $(DBUS_IFACES)/de_tahifi_jsonio.xml
-	$(GDBUS_CODEGEN) --generate-c-code=jsonio_dbus --c-namespace tdbus --interface-prefix de.tahifi. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_jsonio.md -H de_tahifi_jsonio.h -c tdbus -s de.tahifi. -n "$(PACKAGE_NAME) (JSON object exchange)"
+de_tahifi_jsonio-doc.h: de_tahifi_jsonio.stamp
+de_tahifi_jsonio-doc.md: de_tahifi_jsonio.stamp
+de_tahifi_jsonio.c: de_tahifi_jsonio.stamp
+de_tahifi_jsonio.h: de_tahifi_jsonio.stamp
+de_tahifi_jsonio.stamp: $(DBUS_IFACES)/de_tahifi_jsonio.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_jsonio --c-namespace tdbus --interface-prefix de.tahifi. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_jsonio-doc.md -H de_tahifi_jsonio-doc.h -c tdbus -s de.tahifi. -n "JSON Object Exchange"
 	touch $@
 
-de_tahifi_debug.h: debug_dbus.stamp
-de_tahifi_debug.md: debug_dbus.stamp
-debug_dbus.c: debug_dbus.stamp
-debug_dbus.h: debug_dbus.stamp
-debug_dbus.stamp: $(DBUS_IFACES)/de_tahifi_debug.xml
-	$(GDBUS_CODEGEN) --generate-c-code=debug_dbus --c-namespace tdbus_debug --interface-prefix de.tahifi.Debug. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_debug.md -H de_tahifi_debug.h -c tdbus_debug -s de.tahifi.Debug. -n "$(PACKAGE_NAME) (debug levels)"
+de_tahifi_debug-doc.h: de_tahifi_debug.stamp
+de_tahifi_debug-doc.md: de_tahifi_debug.stamp
+de_tahifi_debug.c: de_tahifi_debug.stamp
+de_tahifi_debug.h: de_tahifi_debug.stamp
+de_tahifi_debug.stamp: $(DBUS_IFACES)/de_tahifi_debug.xml
+	$(GDBUS_CODEGEN) --generate-c-code=de_tahifi_debug --c-namespace tdbus_debug --interface-prefix de.tahifi.Debug. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o de_tahifi_debug-doc.md -H de_tahifi_debug-doc.h -c tdbus_debug -s de.tahifi.Debug. -n "Debug Levels"
 	touch $@
 
-net_connman.h: connman_dbus.stamp
-net_connman.md: connman_dbus.stamp
-connman_dbus.c: connman_dbus.stamp
-connman_dbus.h: connman_dbus.stamp
-connman_dbus.stamp: $(DBUS_IFACES)/net_connman.xml
-	$(GDBUS_CODEGEN) --generate-c-code=connman_dbus --c-namespace tdbus_connman --interface-prefix net.connman. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o net_connman.md -H net_connman.h -c tdbus_connman -s net.connman. -n "$(PACKAGE_NAME) (ConnMan integration)"
+net_connman-doc.h: net_connman.stamp
+net_connman-doc.md: net_connman.stamp
+net_connman.c: net_connman.stamp
+net_connman.h: net_connman.stamp
+net_connman.stamp: $(DBUS_IFACES)/net_connman.xml
+	$(GDBUS_CODEGEN) --generate-c-code=net_connman --c-namespace tdbus_connman --interface-prefix net.connman. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o net_connman-doc.md -H net_connman-doc.h -c tdbus_connman -s net.connman. -n "ConnMan Integration"
 	touch $@
 
-org_freedesktop_logind.h: logind_dbus.stamp
-org_freedesktop_logind.md: logind_dbus.stamp
-logind_dbus.c: logind_dbus.stamp
-logind_dbus.h: logind_dbus.stamp
-logind_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_login1.xml
-	$(GDBUS_CODEGEN) --generate-c-code=logind_dbus --c-namespace tdbus_logind --interface-prefix org.freedesktop.login1. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_logind.md -H org_freedesktop_logind.h -c tdbus_logind -s org.freedesktop.login1. -n "$(PACKAGE_NAME) (shutdown via systemd)"
+org_freedesktop_login1-doc.h: org_freedesktop_login1.stamp
+org_freedesktop_login1-doc.md: org_freedesktop_login1.stamp
+org_freedesktop_login1.c: org_freedesktop_login1.stamp
+org_freedesktop_login1.h: org_freedesktop_login1.stamp
+org_freedesktop_login1.stamp: $(DBUS_IFACES)/org_freedesktop_login1.xml
+	$(GDBUS_CODEGEN) --generate-c-code=org_freedesktop_login1 --c-namespace tdbus_logind --interface-prefix org.freedesktop.login1. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_login1-doc.md -H org_freedesktop_login1-doc.h -c tdbus_logind -s org.freedesktop.login1. -n "Shutdown via Systemd"
 	touch $@
 
-org_freedesktop_systemd.h: systemd_dbus.stamp
-org_freedesktop_systemd.md: systemd_dbus.stamp
-systemd_dbus.c: systemd_dbus.stamp
-systemd_dbus.h: systemd_dbus.stamp
-systemd_dbus.stamp: $(DBUS_IFACES)/org_freedesktop_systemd1.xml
-	$(GDBUS_CODEGEN) --generate-c-code=systemd_dbus --c-namespace tdbus_systemd --interface-prefix org.freedesktop.systemd1. $<
-	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_systemd.md -H org_freedesktop_systemd.h -c tdbus_systemd -s org.freedesktop.systemd1. -n "$(PACKAGE_NAME) (systemd manager)"
+org_freedesktop_systemd1-doc.h: org_freedesktop_systemd1.stamp
+org_freedesktop_systemd1-doc.md: org_freedesktop_systemd1.stamp
+org_freedesktop_systemd1.c: org_freedesktop_systemd1.stamp
+org_freedesktop_systemd1.h: org_freedesktop_systemd1.stamp
+org_freedesktop_systemd1.stamp: $(DBUS_IFACES)/org_freedesktop_systemd1.xml
+	$(GDBUS_CODEGEN) --generate-c-code=org_freedesktop_systemd1 --c-namespace tdbus_systemd --interface-prefix org.freedesktop.systemd1. $<
+	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_systemd1-doc.md -H org_freedesktop_systemd1-doc.h -c tdbus_systemd -s org.freedesktop.systemd1. -n "Systemd Manager"
 	touch $@
 
 do_update_sh.h: do_update.sh

@@ -22,7 +22,7 @@
 #ifndef MOCK_ARTCACHE_DBUS_HH
 #define MOCK_ARTCACHE_DBUS_HH
 
-#include "artcache_dbus.h"
+#include "de_tahifi_artcache.h"
 #include "de_tahifi_artcache_errors.hh"
 #include "mock_expectation.hh"
 #include "gvariantwrapper.hh"
