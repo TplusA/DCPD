@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -846,7 +846,7 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
 
         if((flags & TransactionQueue::DUMP_SENT_DCP_PAYLOAD) != 0)
             hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
-                           &payload_[current_fragment_offset_],
+                           &payload_.data()[current_fragment_offset_],
                            fragsize, "DCP payload");
     }
     else
@@ -882,7 +882,7 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
         {
             /* TODO: std::copy() */
             memcpy(merged_buffer + merged_size,
-                   &payload_[current_fragment_offset_], fragsize);
+                   &payload_.data()[current_fragment_offset_], fragsize);
             merged_size += fragsize;
         }
 
@@ -1102,7 +1102,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
                                      to_slave_fd) < 0) ||
                os_write_from_buffer(request_header_.data(), request_header_.size(),
                                     to_slave_fd) < 0 ||
-               os_write_from_buffer(&payload_[current_fragment_offset_],
+               os_write_from_buffer(&payload_.data()[current_fragment_offset_],
                                     fragsize, to_slave_fd) < 0)
                 break;
         }
