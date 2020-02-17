@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -41,6 +41,7 @@
 #include "mainloop.hh"
 
 #include "mock_messages.hh"
+#include "mock_backtrace.hh"
 #include "mock_os.hh"
 
 #if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
@@ -128,6 +129,7 @@ namespace dcp_transaction_tests_queue
 static TransactionQueue::Queue *queue;
 
 static MockMessages *mock_messages;
+static MockBacktrace *mock_backtrace;
 
 void cut_setup()
 {
@@ -138,6 +140,11 @@ void cut_setup()
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
     mock_messages_singleton = mock_messages;
+
+    mock_backtrace = new MockBacktrace;
+    cppcut_assert_not_null(mock_backtrace);
+    mock_backtrace->init();
+    mock_backtrace_singleton = mock_backtrace;
 
     mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
@@ -159,9 +166,16 @@ void cut_teardown()
     queue = nullptr;
 
     mock_messages->check();
+    mock_backtrace->check();
+
     mock_messages_singleton = nullptr;
+    mock_backtrace_singleton = nullptr;
+
     delete mock_messages;
+    delete mock_backtrace;
+
     mock_messages = nullptr;
+    mock_backtrace = nullptr;
 }
 
 /*!\test
@@ -332,10 +346,12 @@ void test_find_transaction_by_nonexistent_serial()
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Tried to find transaction with invalid serial 0x8000");
+    mock_backtrace->expect_backtrace_log();
     cut_assert(TransactionQueue::ProcessResult::ERROR ==
                queue->apply_to_dcpsync_serial(DCPSYNC_MASTER_SERIAL_INVALID, fn));
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Tried to find transaction with invalid serial 0x0000");
+    mock_backtrace->expect_backtrace_log();
     cut_assert(TransactionQueue::ProcessResult::ERROR ==
                queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_INVALID, fn));
 }
@@ -907,6 +923,7 @@ static ssize_t test_os_write(int fd, const void *buf, size_t count)
 static TransactionQueue::Queue *queue;
 
 static MockMessages *mock_messages;
+static MockBacktrace *mock_backtrace;
 static MockOs *mock_os;
 
 static std::vector<uint8_t> *answer_written_to_fifo;
@@ -927,6 +944,11 @@ void cut_setup()
     cppcut_assert_not_null(mock_messages);
     mock_messages->init();
     mock_messages_singleton = mock_messages;
+
+    mock_backtrace = new MockBacktrace;
+    cppcut_assert_not_null(mock_backtrace);
+    mock_backtrace->init();
+    mock_backtrace_singleton = mock_backtrace;
 
     mock_os = new MockOs;
     cppcut_assert_not_null(mock_os);
@@ -971,15 +993,19 @@ void cut_teardown()
     queue = nullptr;
 
     mock_messages->check();
+    mock_backtrace->check();
     mock_os->check();
 
     mock_messages_singleton = nullptr;
+    mock_backtrace_singleton = nullptr;
     mock_os_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_backtrace;
     delete mock_os;
 
     mock_messages = nullptr;
+    mock_backtrace = nullptr;
     mock_os = nullptr;
 
     delete read_data;
@@ -1812,6 +1838,7 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     read_data->set(write_unsupported_register);
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Slave requested register 0x0a, but is not implemented");
+    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
     read_data->set(write_unknown_data, internal_skip_command_size);
     read_data->set(write_unknown_data, sizeof(write_unknown_data) - internal_skip_command_size);
@@ -2030,6 +2057,7 @@ void test_bad_register_addresses_are_handled_in_push_transactions()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");
+    mock_backtrace->expect_backtrace_log();
 
     cut_assert_false(TransactionQueue::push_register_to_slave(*queue, 42,
                                                               TransactionQueue::Channel::SPI));
@@ -2044,6 +2072,7 @@ void test_bad_register_addresses_are_handled_in_fragmented_transactions()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");
+    mock_backtrace->expect_backtrace_log();
 
     static const uint8_t dummy = 23U;
     auto frags(TransactionQueue::fragments_from_data(*queue,

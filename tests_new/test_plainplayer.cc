@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,6 +28,7 @@
 #include "plainplayer.hh"
 
 #include "mock_messages.hh"
+#include "mock_backtrace.hh"
 
 TEST_SUITE_BEGIN("Plain URL player");
 
@@ -39,13 +40,16 @@ class Fixture
   protected:
     std::unique_ptr<Regs::PlayStream::PlainPlayer> player;
     std::unique_ptr<MockMessages::Mock> mock_messages;
+    std::unique_ptr<MockBacktrace::Mock> mock_backtrace;
 
   public:
     explicit Fixture():
         player(Regs::PlayStream::make_player()),
-        mock_messages(std::make_unique<MockMessages::Mock>())
+        mock_messages(std::make_unique<MockMessages::Mock>()),
+        mock_backtrace(std::make_unique<MockBacktrace::Mock>())
     {
         MockMessages::singleton = mock_messages.get();
+        MockBacktrace::singleton = mock_backtrace.get();
     }
 
     virtual ~Fixture()
@@ -53,6 +57,7 @@ class Fixture
         try
         {
             mock_messages->done();
+            mock_backtrace->done();
         }
         catch(...)
         {
@@ -60,6 +65,7 @@ class Fixture
         }
 
         MockMessages::singleton = nullptr;
+        MockBacktrace::singleton = nullptr;
     }
 
     /* activate player and tell it that the audio source has been selected */
@@ -105,6 +111,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(mock_messages, 0, LOG_CRIT,
         "BUG: Attempted to start playback without prior audio source selection",
         false);
+    expect<MockBacktrace::Log>(mock_backtrace);
     CHECK_FALSE(player->start(Regs::PlayStream::StreamInfo("artist", "album",
                                                            "title", "alttrack", "url"),
                               not_called));
@@ -117,6 +124,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(mock_messages, 0, LOG_CRIT,
         "BUG: Attempted to set next stream without prior audio source selection",
         false);
+    expect<MockBacktrace::Log>(mock_backtrace);
     CHECK_FALSE(player->next(Regs::PlayStream::StreamInfo("artist", "album",
                                                           "title", "alttrack", "url")));
 }
@@ -621,6 +629,7 @@ TEST_CASE_FIXTURE(Fixture,
     /* no luck... */
     expect<MockMessages::MsgError>(mock_messages, 0, LOG_CRIT,
         "BUG: Attempted to set next stream while stopped", false);
+    expect<MockBacktrace::Log>(mock_backtrace);
     CHECK_FALSE(player->next(Regs::PlayStream::StreamInfo("a2", "b2", "c2", "d2", "e2")));
     CHECK(current_id == pushed_id);
     CHECK_FALSE(player->get_current_stream_info().is_known());
@@ -664,6 +673,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(mock_messages, 0, LOG_CRIT,
         "BUG: Attempted to set next stream while stopped requested",
         false);
+    expect<MockBacktrace::Log>(mock_backtrace);
     CHECK_FALSE(player->next(Regs::PlayStream::StreamInfo("a2", "b2", "c2", "d2", "e2")));
     CHECK(current_id == pushed_id);
     REQUIRE(player->get_current_stream_info().is_known());
@@ -680,6 +690,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_CRIT,
             "BUG: App stream 261 stopped in unexpected state DESELECTED", false);
+    expect<MockBacktrace::Log>(mock_backtrace);
     CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
 }
 
@@ -703,6 +714,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_CRIT,
             "BUG: App stream 257 started in unexpected state DESELECTED", false);
+    expect<MockBacktrace::Log>(mock_backtrace);
     CHECK(player->notifications().started(Regs::PlayStream::PlainPlayer::StreamID::make()) == Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE);
 }
 
@@ -714,6 +726,7 @@ TEST_CASE_FIXTURE(Fixture,
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_CRIT,
             "BUG: App stream 261 started in unexpected state STOPPED", false);
+    expect<MockBacktrace::Log>(mock_backtrace);
     CHECK(player->notifications().started(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StartResult::WRONG_STATE);
 }
 

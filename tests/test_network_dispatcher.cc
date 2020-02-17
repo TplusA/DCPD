@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,7 @@
 #include "network_dispatcher.hh"
 
 #include "mock_messages.hh"
+#include "mock_backtrace.hh"
 #include "mock_os.hh"
 
 #if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
@@ -50,6 +51,7 @@ namespace network_dispatcher_tests
 {
 
 static MockMessages *mock_messages;
+static MockBacktrace *mock_backtrace;
 static MockOs *mock_os;
 
 static struct
@@ -90,6 +92,11 @@ void cut_setup()
     mock_messages->init();
     mock_messages_singleton = mock_messages;
 
+    mock_backtrace = new MockBacktrace;
+    cppcut_assert_not_null(mock_backtrace);
+    mock_backtrace->init();
+    mock_backtrace_singleton = mock_backtrace;
+
     mock_os = new MockOs;
     cppcut_assert_not_null(mock_os);
     mock_os->init();
@@ -103,15 +110,19 @@ void cut_setup()
 void cut_teardown()
 {
     mock_messages->check();
+    mock_backtrace->check();
     mock_os->check();
 
     mock_messages_singleton = nullptr;
+    mock_backtrace_singleton = nullptr;
     mock_os_singleton = nullptr;
 
     delete mock_messages;
+    delete mock_backtrace;
     delete mock_os;
 
     mock_messages = nullptr;
+    mock_backtrace = nullptr;
     mock_os = nullptr;
 
     cppcut_assert_equal(iface_check_data.handle_incoming_data_expected,
@@ -161,6 +172,7 @@ void test_fd_cannot_be_registered_twice()
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to register already registered fd 42");
+    mock_backtrace->expect_backtrace_log();
     cut_assert_false(nwdispatcher.add_connection(42, dispatch_fd));
 }
 
@@ -318,6 +330,7 @@ void test_unregister_unregistered_fd_from_empty_registry_returns_error()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to unregister nonexistent fd 1");
+    mock_backtrace->expect_backtrace_log();
     cut_assert_false(nwdispatcher.remove_connection(1));
 }
 
@@ -331,6 +344,7 @@ void test_unregister_unregistered_fd_returns_error()
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to unregister nonexistent fd 1");
+    mock_backtrace->expect_backtrace_log();
     cut_assert_false(nwdispatcher.remove_connection(1));
 }
 

@@ -274,7 +274,7 @@ dbus_iface_defs_includes = include_directories('../dbus_interfaces')
 
 dcpd_sources = [
     'dcpd.cc', 'os.c', 'named_pipe.c', 'dcp_over_tcp.c',
-    'smartphone_app_send.cc', 'messages.c', 'messages_glib.c',
+    'smartphone_app_send.cc', 'messages.c', 'messages_glib.c', 'backtrace.c',
     'connman_iter.c', 'connman_scan.cc', 'connman_common.c',
     'dbus_common.c', 'dbus_iface.cc',
     'configuration.cc', 'configuration_dcpd.cc',

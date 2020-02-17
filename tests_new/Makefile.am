@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -66,6 +66,7 @@ test_connman_property_cache_CXXFLAGS = $(AM_CXXFLAGS)
 test_access_point_SOURCES = \
     test_access_point.cc \
     mock_messages.hh mock_messages.cc \
+    mock_backtrace.hh mock_backtrace.cc \
     mock_connman_technology_registry.hh mock_connman_technology_registry.cc \
     mock_os.hh mock_os.cc \
     mock_expectation.hh
@@ -88,6 +89,7 @@ test_aupal_parser_CXXFLAGS = $(AM_CXXFLAGS)
 test_plainplayer_SOURCES = \
     test_plainplayer.cc \
     mock_messages.hh mock_messages.cc \
+    mock_backtrace.hh mock_backtrace.cc \
     mock_os.hh mock_os.cc \
     mock_expectation.hh
 test_plainplayer_LDADD = \

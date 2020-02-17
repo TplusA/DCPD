@@ -179,7 +179,7 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
     if(strcmp(signal_name, "NowPlaying") == 0)
     {
         /* some stream started or continued playing */
-        check_parameter_assertions(parameters, 5);
+        check_parameter_assertions(parameters, 6);
 
         GVariant *val = g_variant_get_child_value(parameters, 0);
         uint16_t stream_id = g_variant_get_uint16(val);
