@@ -1,8 +1,35 @@
+2020-01-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.3 released.
+
+	* Stability: Adapted for new style of list handling and stream player
+	  handling to remove dependencies on overall system timing.
+
+	* Stability: Fix UB in transaction handling. It is very unlikely that
+	  this bug has ever manifested as a real problem (compiler most
+	  probably did the right thing), but a bug is a bug.
+
+	* Build system: Support Meson.
+
 2019-12-05  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.2a released.
 
 	* Integration: Builds with our outdated Yocto Project.
+
+2019-12-05  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.2 released.
+
+	* Appliances: Recognize appliance "MP3000HV".
+
+	* Volume control: Support incremental volume changes for appliances
+	  which can support only simple volume increment/decrement requests.
+	  The volume control configured via register 64 can be set to a
+	  relative mode for these appliances. See src/dcpregs_volume.hh for
+	  updated protocol specification.
+
+	* Logging: Show active and requested network configuration in log.
 
 2019-09-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
@@ -930,4 +957,4 @@
 	* First release for testing.
 
 
-Copyright 2015, 2016, 2017, 2018, 2019 T+A elektroakustik GmbH & Co. KG
+Copyright 2015--2020 T+A elektroakustik GmbH & Co. KG
