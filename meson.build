@@ -20,7 +20,7 @@
 #
 
 project('DCPD', ['cpp', 'c'],
-    version: '5.3',
+    version: '5.4',
     default_options: ['warning_level=3', 'cpp_std=c++14', 'buildtype=plain'])
 
 config_data = configuration_data()

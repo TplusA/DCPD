@@ -1,3 +1,17 @@
+2020-03-09  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.4 released.
+
+	* Playback: Emit stream info for a stream only if the stream was
+	  successfully sent to the stream player. The correct ordering is
+	  crucial (to the UI) in case pushing the stream to the player fails.
+
+	* Playback: Fix handling of non-app streams.
+
+	* D-Bus: Avoid potential deadlock situations. Some D-Bus calls were
+	  being made in D-Bus context, and it seemed dangerous to leave it the
+	  way it was.
+
 2020-01-17  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.3 released.
