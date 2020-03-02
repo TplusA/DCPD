@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -707,12 +707,6 @@ class StreamingRegisters:
         CoverArt::StreamKey stream_key;
         CoverArt::generate_stream_key_for_app(stream_key, stream_info.url_);
 
-        tdbus_dcpd_playback_emit_stream_info(
-                dbus_get_playback_iface(), stream_id.get().get_raw_id(),
-                stream_info.artist_.c_str(), stream_info.album_.c_str(),
-                stream_info.title_.c_str(), stream_info.alttrack_.c_str(),
-                stream_info.url_.c_str());
-
         gboolean fifo_overflow;
         gboolean is_playing;
         GError *error = nullptr;
@@ -740,6 +734,12 @@ class StreamingRegisters:
             BUG("Pushed stream with clear request, got FIFO overflow");
             return false;
         }
+
+        tdbus_dcpd_playback_emit_stream_info(
+                dbus_get_playback_iface(), stream_id.get().get_raw_id(),
+                stream_info.artist_.c_str(), stream_info.album_.c_str(),
+                stream_info.title_.c_str(), stream_info.alttrack_.c_str(),
+                stream_info.url_.c_str());
 
         if(!is_playing && !is_start_requested &&
            !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
