@@ -77,9 +77,9 @@
 
 	* Version 4.22 released.
 
-	* Playback: Fix audio source management by removing "app mode", an
+	* Playback: Fix audio source management by removing "app mode", a
 	  relict harking back to the dark times before there were properly
-	  defined audio source. The plain URL source and switching back and
+	  defined audio sources. The plain URL source and switching back and
 	  forth from and to other audio sources is much more stable now.
 
 2019-02-20  Robert Tiemann  <r.tiemann@ta-hifi.de>
