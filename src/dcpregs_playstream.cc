@@ -794,11 +794,21 @@ class StreamingRegisters:
             return stream_info_output_buffer_.clear();
         }
 
-        if(started == StreamStarted::CONTINUED_WITH_SAME)
+        switch(started)
         {
-            BUG("Got repeated start notification for stream %u",
-                stream_id.get_raw_id());
-            return SendStreamUpdate::NONE;
+          case StreamStarted::CONTINUED_WITH_SAME:
+            if(player != nullptr)
+            {
+                BUG("Got repeated start notification for app stream %u",
+                    stream_id.get_raw_id());
+                return SendStreamUpdate::NONE;
+            }
+
+            break;
+
+          case StreamStarted::FRESH_START:
+          case StreamStarted::CONTINUED_WITH_DIFFERENT:
+            break;
         }
 
         if(stream_info_input_buffer_.matches_id(stream_id))
