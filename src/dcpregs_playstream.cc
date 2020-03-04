@@ -576,7 +576,7 @@ class StreamingRegisters:
         const auto app_stream_id =
             Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
         bool player_has_matching_meta_data = false;
-        bool stream_is_a_new_one = true;
+        bool continue_app_stream_from_pause_mode = false;
         if(app_stream_id.get().is_valid())
         {
             /* our own stream from app */
@@ -589,7 +589,7 @@ class StreamingRegisters:
                 break;
 
               case Regs::PlayStream::PlainPlayerNotifications::StartResult::CONTINUE_FROM_PAUSE:
-                stream_is_a_new_one = false;
+                continue_app_stream_from_pause_mode = true;
                 break;
 
               case Regs::PlayStream::PlainPlayerNotifications::StartResult::UNEXPECTED_START:
@@ -612,7 +612,12 @@ class StreamingRegisters:
                                       GVariantWrapper::Transfer::JUST_MOVE)));
 
         StreamStarted stream_started;
-        if(stream_is_a_new_one)
+        if(continue_app_stream_from_pause_mode)
+        {
+            msg_info("Continue with app stream %u", stream_id.get_raw_id());
+            stream_started = StreamStarted::CONTINUED_WITH_SAME;
+        }
+        else
         {
             const auto update =
                 set_currently_playing_stream_id(
@@ -624,11 +629,6 @@ class StreamingRegisters:
             if(update != SendStreamUpdate::NONE ||
                stream_started != StreamStarted::FRESH_START)
                 do_notify_stream_info(update);
-        }
-        else
-        {
-            msg_info("Continue with app stream %u", stream_id.get_raw_id());
-            stream_started = StreamStarted::CONTINUED_WITH_SAME;
         }
 
         GVariant *val = tracked_stream_key_.is_tracking()
