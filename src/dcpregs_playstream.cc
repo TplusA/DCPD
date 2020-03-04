@@ -76,9 +76,9 @@ enum class SendStreamUpdate
 
 enum class StreamStarted
 {
-    NOT,
-    FRESH,
-    CONTINUED
+    FRESH_START,
+    CONTINUED_WITH_SAME,
+    CONTINUED_WITH_DIFFERENT,
 };
 
 static void do_notify_stream_info(const SendStreamUpdate update)
@@ -109,6 +109,15 @@ static void do_notify_stream_info(const SendStreamUpdate update)
 class BufferedStreamInfo
 {
   private:
+    /*
+     * ID of the currently playing stream.
+     *
+     * Note that this is a generic stream ID, not an app-specific one. This is
+     * because we use this ID to observe any kind of stream, not just those
+     * sent by the app. Even for non-app streams, we need to send meta data and
+     * URL information to the app, and this class stores these information.
+     * Thus, keeping a generic ID around seems practical.
+     */
     ID::Stream stream_id_;
 
   public:
@@ -567,9 +576,10 @@ class StreamingRegisters:
         const auto app_stream_id =
             Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
         bool player_has_matching_meta_data = false;
-        bool stream_is_a_new_one = true;
+        bool continue_app_stream_from_pause_mode = false;
         if(app_stream_id.get().is_valid())
         {
+            /* our own stream from app */
             switch(player_->notifications().started(app_stream_id))
             {
               case Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED:
@@ -579,7 +589,7 @@ class StreamingRegisters:
                 break;
 
               case Regs::PlayStream::PlainPlayerNotifications::StartResult::CONTINUE_FROM_PAUSE:
-                stream_is_a_new_one = false;
+                continue_app_stream_from_pause_mode = true;
                 break;
 
               case Regs::PlayStream::PlainPlayerNotifications::StartResult::UNEXPECTED_START:
@@ -602,7 +612,12 @@ class StreamingRegisters:
                                       GVariantWrapper::Transfer::JUST_MOVE)));
 
         StreamStarted stream_started;
-        if(stream_is_a_new_one)
+        if(continue_app_stream_from_pause_mode)
+        {
+            msg_info("Continue with app stream %u", stream_id.get_raw_id());
+            stream_started = StreamStarted::CONTINUED_WITH_SAME;
+        }
+        else
         {
             const auto update =
                 set_currently_playing_stream_id(
@@ -611,13 +626,9 @@ class StreamingRegisters:
                     ? player_.get()
                     : nullptr);
 
-            if(update != SendStreamUpdate::NONE || stream_started != StreamStarted::FRESH)
+            if(update != SendStreamUpdate::NONE ||
+               stream_started != StreamStarted::FRESH_START)
                 do_notify_stream_info(update);
-        }
-        else
-        {
-            msg_info("Continue with app stream %u", stream_id.get_raw_id());
-            stream_started = StreamStarted::NOT;
         }
 
         GVariant *val = tracked_stream_key_.is_tracking()
@@ -625,7 +636,7 @@ class StreamingRegisters:
             : nullptr;
 
         if(try_retrieve_cover_art(val, current_cover_art_) ||
-           stream_started != StreamStarted::NOT)
+           stream_started != StreamStarted::CONTINUED_WITH_SAME)
             notify_cover_art_changed();
     }
 
@@ -771,10 +782,10 @@ class StreamingRegisters:
                                     const Regs::PlayStream::PlainPlayer *const player)
     {
         started = (stream_info_output_buffer_.matches_id(stream_id)
-                   ? StreamStarted::NOT
+                   ? StreamStarted::CONTINUED_WITH_SAME
                    : (stream_info_output_buffer_.is_valid()
-                      ? StreamStarted::CONTINUED
-                      : StreamStarted::FRESH));
+                      ? StreamStarted::CONTINUED_WITH_DIFFERENT
+                      : StreamStarted::FRESH_START));
 
         if(!stream_id.is_valid())
         {
@@ -783,11 +794,21 @@ class StreamingRegisters:
             return stream_info_output_buffer_.clear();
         }
 
-        if(started == StreamStarted::NOT)
+        switch(started)
         {
-            BUG("Got repeated start notification for stream %u",
-                stream_id.get_raw_id());
-            return SendStreamUpdate::NONE;
+          case StreamStarted::CONTINUED_WITH_SAME:
+            if(player != nullptr)
+            {
+                BUG("Got repeated start notification for app stream %u",
+                    stream_id.get_raw_id());
+                return SendStreamUpdate::NONE;
+            }
+
+            break;
+
+          case StreamStarted::FRESH_START:
+          case StreamStarted::CONTINUED_WITH_DIFFERENT:
+            break;
         }
 
         if(stream_info_input_buffer_.matches_id(stream_id))
