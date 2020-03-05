@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -44,9 +44,6 @@ void deinit();
  *
  * This function reads out the list of all audio paths and updates our internal
  * representation of audio source states.
- *
- * \attention
- *     Called from D-Bus thread, not main context.
  */
 void fetch_audio_paths();
 

@@ -30,6 +30,7 @@
 #include "plainplayer.hh"
 #include "coverart.hh"
 #include "registers_priv.hh"
+#include "mainloop.hh"
 #include "de_tahifi_artcache_errors.hh"
 #include "dbus_common.h"
 #include "dbus_iface_deep.h"
@@ -906,7 +907,8 @@ static void registered_audio_source(GObject *source_object, GAsyncResult *res,
                                                      res, &error);
     dbus_common_handle_dbus_error(&error, "Register audio source");
 
-    Regs::AudioSources::fetch_audio_paths();
+    /* better do this from main context (running in D-Bus context here) */
+    MainLoop::post(Regs::AudioSources::fetch_audio_paths);
 }
 
 void StreamingRegisters::late_init()
