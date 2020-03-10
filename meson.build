@@ -23,8 +23,10 @@ project('DCPD', ['cpp', 'c'],
     version: '5.4',
     default_options: ['warning_level=3', 'cpp_std=c++14', 'buildtype=plain'])
 
+PACKAGE = 'dcpd'
+
 config_data = configuration_data()
-config_data.set('PACKAGE', 'dcpd')
+config_data.set('PACKAGE', PACKAGE)
 config_data.set('PACKAGE_NAME', meson.project_name())
 config_data.set('PACKAGE_VERSION', meson.project_version())
 config_data.set('abs_srcdir', meson.current_source_dir())
@@ -53,17 +55,30 @@ doxygen = find_program('doxygen', required: false)
 doxyfile = configure_file(input: 'Doxyfile.in', output: 'Doxyfile',
                           configuration: config_data)
 
+version_info = custom_target(
+    'version information file',
+    input: configure_file(input: 'versioninfo.cache.in',
+                          output: 'versioninfo.cache', copy: true),
+    output: 'versioninfo.h',
+    command: [
+        autorevision, '-C', meson.current_source_dir(),
+        '-t', 'h',
+        '-o', 'versioninfo.cache'
+    ],
+    capture: true
+)
+
 subdir('src')
 subdir('tests_new')
 subdir('tests')
 
 custom_target('doxygen', output: 'doxygen.stamp',
-              input: [doxyfile, dbus_docs], command: doxygen)
+              input: doxyfile, depends: dbus_docs, command: doxygen)
 
 custom_target('documentation',
     output: 'README.html', input: 'README.md',
     command: [markdown, '-o', '@OUTPUT@', '@INPUT@'],
-    install: true, install_dir: get_option('datadir') / 'doc/dcpd')
+    install: true, install_dir: get_option('datadir') / 'doc' / PACKAGE)
 
 configure_file(
     input: 'dist/de.tahifi.Dcpd.in', output: 'de.tahifi.Dcpd.service',
