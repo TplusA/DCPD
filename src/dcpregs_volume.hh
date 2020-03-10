@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -59,7 +59,7 @@ namespace DCP
  *   following parameters:
  *       Offset | Type      | Meaning
  *       ------:|-----------|-----------------------------------------
- *       0      | byte      | Scale (0 = steps, 1 = dB, 2 relative).
+ *       0      | byte      | Scale (0 = steps, 1 = dB, 2 = relative).
  *       1      | fix point | Minimum value on scale. Pass NaN if not applicable.
  *       3      | fix point | Maximum value on scale. Pass NaN if not applicable.
  *       5      | fix point | Minimum step width on scale (for use by Roon client).
