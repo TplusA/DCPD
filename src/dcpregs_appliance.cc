@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -331,7 +331,7 @@ int Regs::Appliance::DCP::write_18_appliance_status(const uint8_t *data, size_t 
     const bool is_valid = (status & APPLIANCE_STATUS_BIT_IS_VALID) != 0;
     const bool is_audio_path_usable = (status & APPLIANCE_STATUS_BIT_AUDIO_PATH_READY) != 0;
     const bool is_in_standby        = (status & APPLIANCE_STATUS_BIT_IS_IN_STANDBY) != 0;
-    const uint8_t audio_state = is_valid ? (is_audio_path_usable ? 1 : 0) : 2;
+    const uint8_t audio_state = is_valid ? (is_audio_path_usable ? 2 : 1) : 0;
     const auto power_state = standby_state_flag_to_dbus_value(is_valid, is_in_standby);
     AppliancePowerState old_power_state;
 
@@ -358,7 +358,7 @@ int Regs::Appliance::DCP::write_18_appliance_status(const uint8_t *data, size_t 
                                                  uint8_t(power_state));
 
     tdbus_aupath_appliance_call_set_ready_state(dbus_audiopath_get_appliance_iface(),
-                                                audio_state,
+                                                audio_state, uint8_t(power_state),
                                                 nullptr, nullptr, nullptr);
 
     return 0;
