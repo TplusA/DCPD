@@ -51,7 +51,8 @@ registers_tests = shared_module('test_registers',
 )
 test('Registers',
     cutter_wrap, args: [cutter_wrap_args, registers_tests.full_path()],
-    depends: registers_tests
+    depends: registers_tests,
+    suite: 'old',
 )
 
 drcpdcomm_tests = shared_module('test_drcpdcomm',
@@ -62,7 +63,8 @@ drcpdcomm_tests = shared_module('test_drcpdcomm',
 )
 test('DRCPD Communication',
     cutter_wrap, args: [cutter_wrap_args, drcpdcomm_tests.full_path()],
-    depends: drcpdcomm_tests
+    depends: drcpdcomm_tests,
+    suite: 'old',
 )
 
 transactions_tests = shared_module('test_transactions',
@@ -79,7 +81,8 @@ transactions_tests = shared_module('test_transactions',
 )
 test('DCP Transactions',
     cutter_wrap, args: [cutter_wrap_args, transactions_tests.full_path()],
-    depends: transactions_tests
+    depends: transactions_tests,
+    suite: 'old',
 )
 
 xmodem_tests = shared_module('test_xmodem',
@@ -90,7 +93,8 @@ xmodem_tests = shared_module('test_xmodem',
 )
 test('XMODEM',
     cutter_wrap, args: [cutter_wrap_args, xmodem_tests.full_path()],
-    depends: xmodem_tests
+    depends: xmodem_tests,
+    suite: 'old',
 )
 
 networkprefs_tests = shared_module('test_networkprefs',
@@ -103,7 +107,8 @@ networkprefs_tests = shared_module('test_networkprefs',
 )
 test('Network Preferences',
     cutter_wrap, args: [cutter_wrap_args, networkprefs_tests.full_path()],
-    depends: networkprefs_tests
+    depends: networkprefs_tests,
+    suite: 'old',
 )
 
 network_dispatcher_tests = shared_module('test_network_dispatcher',
@@ -115,7 +120,8 @@ network_dispatcher_tests = shared_module('test_network_dispatcher',
 )
 test('Network Dispatcher',
     cutter_wrap, args: [cutter_wrap_args, network_dispatcher_tests.full_path()],
-    depends: network_dispatcher_tests
+    depends: network_dispatcher_tests,
+    suite: 'old',
 )
 
 applink_tests = shared_module('test_applink',
@@ -128,5 +134,6 @@ applink_tests = shared_module('test_applink',
 )
 test('App Link Protocol',
     cutter_wrap, args: [cutter_wrap_args, applink_tests.full_path()],
-    depends: applink_tests
+    depends: applink_tests,
+    suite: 'old',
 )

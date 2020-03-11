@@ -37,7 +37,8 @@ test('ConnMan Service',
         link_with: [testrunner_lib, connman_service_lib],
         build_by_default: false),
     workdir: meson.current_build_dir(),
-    args: ['--reporters=strboxml', '--out=test_connman_service.junit.xml']
+    args: ['--reporters=strboxml', '--out=test_connman_service.junit.xml'],
+    suite: 'new',
 )
 
 test('ConnMan Property Cache',
@@ -47,7 +48,8 @@ test('ConnMan Property Cache',
         link_with: testrunner_lib,
         build_by_default: false),
     workdir: meson.current_build_dir(),
-    args: ['--reporters=strboxml', '--out=test_connman_property_cache.junit.xml']
+    args: ['--reporters=strboxml', '--out=test_connman_property_cache.junit.xml'],
+    suite: 'new',
 )
 
 test('Access Point',
@@ -60,7 +62,8 @@ test('Access Point',
                     connman_service_lib],
         build_by_default: false),
     workdir: meson.current_build_dir(),
-    args: ['--reporters=strboxml', '--out=test_access_point.junit.xml']
+    args: ['--reporters=strboxml', '--out=test_access_point.junit.xml'],
+    suite: 'new',
 )
 
 test('Plain Stream Player',
@@ -71,7 +74,8 @@ test('Plain Stream Player',
         link_with: [testrunner_lib, plainplayer_lib],
         build_by_default: false),
     workdir: meson.current_build_dir(),
-    args: ['--reporters=strboxml', '--out=test_plainplayer.junit.xml']
+    args: ['--reporters=strboxml', '--out=test_plainplayer.junit.xml'],
+    suite: 'new',
 )
 
 test('AuPaL Parser',
@@ -81,5 +85,6 @@ test('AuPaL Parser',
         link_with: [testrunner_lib, audiopath_minidsl_lib],
         build_by_default: false),
     workdir: meson.current_build_dir(),
-    args: ['--reporters=strboxml', '--out=test_aupal_parser.junit.xml']
+    args: ['--reporters=strboxml', '--out=test_aupal_parser.junit.xml'],
+    suite: 'new',
 )
