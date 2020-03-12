@@ -7077,18 +7077,18 @@ static void set_start_playing_expectations(const std::string expected_artist,
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE:
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION:
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS:
-        mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-        mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
-            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-            expected_artist.c_str(), expected_album.c_str(),
-            expected_title.c_str(), expected_alttrack.c_str(),
-            url.c_str());
         mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(
             dbus_streamplayer_urlfifo_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
             stream_id.get().get_raw_id(), url.c_str(), hash,
             0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
+        mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+        mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
+            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
+            expected_artist.c_str(), expected_album.c_str(),
+            expected_title.c_str(), expected_alttrack.c_str(),
+            url.c_str());
 
         expecting_play_view_activation = true;
 
@@ -7227,16 +7227,16 @@ static void set_next_url(const std::string title, const std::string url,
             if(expected_stream_key != nullptr)
                 *expected_stream_key = std::move(hash_to_variant(hash));
 
-            mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-            mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
-                dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-                "", "", title.c_str(), title.c_str(), url.c_str());
             mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
             mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
                 TRUE, dbus_streamplayer_urlfifo_iface_dummy,
                 stream_id.get().get_raw_id(), url.c_str(), hash,
                 0, "ms", 0, "ms", 0, FALSE,
                 flow_assumptions == SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED);
+            mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
+            mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
+                dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
+                "", "", title.c_str(), title.c_str(), url.c_str());
 
             if(flow_assumptions != SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED)
             {
