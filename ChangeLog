@@ -1,3 +1,20 @@
+2020-03-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.5 released.
+
+	* Audio paths: Send appliance power state (powered, suspended,
+	  unknown) to TAPSwitch. This enables TAPSwitch to cancel audio path
+	  activations on suspending.
+
+	* Playback: Handle failing plain URL streams.
+
+	* Unit tests: Fix broken tests which are currently not executed on
+	  Jenkins CI, thus went unnoticed.
+
+	* Build system: Significant simplification of Meson build script.
+
+	* Repository: Add missing script required by Meson-based build system.
+
 2020-03-09  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.4 released.
