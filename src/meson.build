@@ -65,7 +65,7 @@ foreach d : dbus_iface_data
                                 sources: dbus_iface_dir / d[0] + '.xml',
                                 interface_prefix: d[1],
                                 namespace: d[2]),
-            dependencies: glib_deps,
+            dependencies: [glib_deps, config_h],
             c_args: relaxed_dbus_warnings),
         include_directories: dbus_iface_defs_includes
     )
