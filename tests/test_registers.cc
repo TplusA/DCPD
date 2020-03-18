@@ -7202,7 +7202,8 @@ static void set_next_url(const std::string title, const std::string url,
                          const OurStream stream_id,
                          SetTitleAndURLFlowAssumptions flow_assumptions,
                          SetTitleAndURLSystemAssumptions system_assumptions,
-                         GVariantWrapper *expected_stream_key)
+                         GVariantWrapper *expected_stream_key,
+                         bool app_is_too_fast)
 {
     std::string expected_message("Next stream URL (reg 239)");
     expected_message += ": \"";
@@ -7243,6 +7244,14 @@ static void set_next_url(const std::string title, const std::string url,
                 mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
                 mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
             }
+
+            if(!app_is_too_fast)
+            {
+                std::ostringstream os;
+                os << "Pushed next stream " << stream_id.get().get_raw_id();
+                mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG,
+                                                          os.str().c_str());
+            }
         }
 
         break;
@@ -7270,11 +7279,13 @@ static void set_next_title_and_url(const std::string title, const std::string ur
                                    const OurStream stream_id,
                                    SetTitleAndURLFlowAssumptions flow_assumptions,
                                    SetTitleAndURLSystemAssumptions system_assumptions,
-                                   GVariantWrapper *expected_stream_key)
+                                   GVariantWrapper *expected_stream_key,
+                                   bool app_is_too_fast = false)
 {
     set_next_title(title);
     set_next_url(title, url, stream_id,
-                 flow_assumptions, system_assumptions, expected_stream_key);
+                 flow_assumptions, system_assumptions, expected_stream_key,
+                 app_is_too_fast);
 }
 
 static void expect_current_title(const std::string &expected_title)
@@ -8062,6 +8073,33 @@ void test_quick_start_stop_single_stream()
 }
 
 /*!\test
+ * App starts single stream, but it fails.
+ */
+void test_start_single_stream_failure()
+{
+    const auto stream_id(OurStream::make());
+    GVariantWrapper skey;
+    set_start_title_and_url("Stream", "http://app-provided.url.org/stream.flac",
+                            stream_id,
+                            SetTitleAndURLFlowAssumptions::DESELECTED__SELECT,
+                            SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION,
+                            &skey);
+
+
+    register_changed_data->check();
+    mock_messages->check();
+
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE, "Stream 257 stopped with error: io.unavailable");
+    mock_messages->expect_msg_info_formatted(
+            "Stream player stopped playing app stream 257 (failure)");
+    mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
+                                    "Suppress sending title and URL to SPI slave");
+    streaming_regs->stop_notification(stream_id.get(), "io.unavailable", {});
+    register_changed_data->check(std::array<uint8_t, 1>{79});
+}
+
+/*!\test
  * If new title and URL information are received, but only title is different,
  * then only the title is forwarded to SPI slave.
  *
@@ -8303,11 +8341,12 @@ void test_start_stream_and_quickly_queue_next()
                            stream_id_second,
                            SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED,
                            SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE,
-                           &skey_second);
+                           &skey_second, true);
     register_changed_data->check();
     expect_current_title_and_url("", "");
 
     mock_messages->expect_msg_info_formatted("Next app stream 257");
+    mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "Pushed next stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
     streaming_regs->start_notification(stream_id_first.get(),

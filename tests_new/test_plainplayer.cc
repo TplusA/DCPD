@@ -336,6 +336,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(player->notifications().started(pushed_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
 
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 258", false);
     CHECK(player->next(Regs::PlayStream::StreamInfo("f", "g", "h", "i", "j")));
     CHECK(pushed_artist == "f");
     CHECK_FALSE(was_first);
@@ -383,6 +385,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(pushed_artist == "a");
 
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 258", false);
     CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
 
@@ -435,6 +439,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(pushed_artist == "a");
 
     expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 258", false);
     CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
     mock_messages->done();
 
@@ -493,6 +499,8 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK_FALSE(player->get_current_stream_info().is_known());
 
     /* we are late, but we can still continue with playing the next stream */
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 258", false);
     CHECK(player->next(Regs::PlayStream::StreamInfo("a2", "b2", "c2", "d2", "e2")));
     CHECK_FALSE(was_first);
     CHECK_FALSE(was_start_requested);
@@ -506,6 +514,63 @@ TEST_CASE_FIXTURE(Fixture,
     CHECK(current_id == pushed_id);
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a2");
+}
+
+TEST_CASE_FIXTURE(Fixture, "First stream may stop due to failure")
+{
+    activate_player();
+
+    auto pushed_id(Regs::PlayStream::PlainPlayer::StreamID::make_invalid());
+
+    CHECK(player->start(
+                Regs::PlayStream::StreamInfo("a1", "b1", "c1", "d1", "e1"),
+                [&pushed_id]
+                (const auto &stream, auto stream_id, bool is_first,
+                 bool is_start_requested)
+                {
+                    pushed_id = stream_id;
+                    return true;
+                }));
+    CHECK(pushed_id.get().is_valid());
+
+    expect<MockMessages::MsgError>(mock_messages, 0, LOG_NOTICE,
+        "Stream 257 stopped with error: io.unavailable", false);
+    CHECK(player->notifications().stopped(pushed_id, "io.unavailable", {}) == Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_BY_FAILURE);
+}
+
+TEST_CASE_FIXTURE(Fixture, "Next stream may stop due to failure")
+{
+    activate_player();
+
+    auto pushed_id(Regs::PlayStream::PlainPlayer::StreamID::make_invalid());
+
+    CHECK(player->start(
+                Regs::PlayStream::StreamInfo("a1", "b1", "c1", "d1", "e1"),
+                [&pushed_id]
+                (const auto &stream, auto stream_id, bool is_first,
+                 bool is_start_requested)
+                {
+                    pushed_id = stream_id;
+                    return true;
+                }));
+    CHECK(pushed_id.get().is_valid());
+    auto current_id(pushed_id);
+
+    expect<MockMessages::MsgInfo>(mock_messages, "Next app stream 257", false);
+    CHECK(player->notifications().started(current_id) == Regs::PlayStream::PlainPlayerNotifications::StartResult::STARTED);
+    mock_messages->done();
+
+    /* push next stream */
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 258", false);
+    CHECK(player->next(Regs::PlayStream::StreamInfo("a2", "b2", "c2", "d2", "e2")));
+    CHECK(pushed_id.get().get_raw_id() == current_id.get().get_raw_id() + 1);
+
+    /* when the next stream should start playing, it fails */
+    expect<MockMessages::MsgError>(mock_messages, 0, LOG_NOTICE,
+        "Stream 258 stopped with error: io.unavailable", false);
+    expect<MockMessages::MsgInfo>(mock_messages, "Pushed next stream 259", false);
+    CHECK(player->notifications().stopped(pushed_id, "io.unavailable", {}) == Regs::PlayStream::PlainPlayerNotifications::StopResult::PUSHED_NEXT);
 }
 
 TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
@@ -541,6 +606,8 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a1");
 
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 258", false);
     CHECK(player->next(Regs::PlayStream::StreamInfo("a2", "b2", "c2", "d2", "e2")));
     CHECK_FALSE(was_first);
     CHECK_FALSE(was_start_requested);
@@ -555,6 +622,8 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a2");
 
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 259", false);
     CHECK(player->next(Regs::PlayStream::StreamInfo("a3", "b3", "c3", "d3", "e3")));
     CHECK_FALSE(was_first);
     CHECK_FALSE(was_start_requested);
@@ -569,6 +638,8 @@ TEST_CASE_FIXTURE(Fixture, "Playing a list of four tracks")
     REQUIRE(player->get_current_stream_info().is_known());
     CHECK(player->get_current_stream_info()->artist_ == "a3");
 
+    expect<MockMessages::MsgVinfo>(mock_messages, MESSAGE_LEVEL_DIAG,
+                                   "Pushed next stream 260", false);
     CHECK(player->next(Regs::PlayStream::StreamInfo("a4", "b4", "c4", "d4", "e4")));
     CHECK_FALSE(was_first);
     CHECK_FALSE(was_start_requested);
@@ -691,13 +762,13 @@ TEST_CASE_FIXTURE(Fixture,
             mock_messages, 0, LOG_CRIT,
             "BUG: App stream 261 stopped in unexpected state DESELECTED", false);
     expect<MockBacktrace::Log>(mock_backtrace);
-    CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
+    CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make(5)) == Regs::PlayStream::PlainPlayerNotifications::StopResult::PLAYER_NOT_SELECTED);
 }
 
 TEST_CASE_FIXTURE(Fixture,
                   "Notification about stopped invalid stream while deselected is ignored")
 {
-    CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make_invalid()) == Regs::PlayStream::PlainPlayerNotifications::StopResult::WRONG_STATE);
+    CHECK(player->notifications().stopped(Regs::PlayStream::PlainPlayer::StreamID::make_invalid()) == Regs::PlayStream::PlainPlayerNotifications::StopResult::PLAYER_NOT_SELECTED);
 }
 
 TEST_CASE_FIXTURE(Fixture,

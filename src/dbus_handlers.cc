@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -189,16 +189,40 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
         regs.start_notification(ID::Stream::make_from_raw_id(stream_id),
                                 g_variant_get_child_value(parameters, 1));
     }
-    else if(strcmp(signal_name, "Stopped") == 0 ||
-            strcmp(signal_name, "StoppedWithError") == 0)
+    else if(strcmp(signal_name, "Stopped") == 0)
     {
         /* stream stopped playing */
+        check_parameter_assertions(parameters, 2);
         GVariant *val = g_variant_get_child_value(parameters, 0);
         uint16_t stream_id = g_variant_get_uint16(val);
         g_variant_unref(val);
 
         auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
         regs.stop_notification(ID::Stream::make_from_raw_id(stream_id));
+    }
+    else if(strcmp(signal_name, "StoppedWithError") == 0)
+    {
+        /* stream stopped playing with error */
+        check_parameter_assertions(parameters, 5);
+
+        uint16_t stream_id;
+        const gchar *url;
+        gboolean is_url_fifo_empty;
+        GVariantIter *dropped_ids_iter;
+        const gchar *reason;
+
+        g_variant_get(parameters, "(q&sbaq&s)", &stream_id, &url,
+                      &is_url_fifo_empty, &dropped_ids_iter, &reason);
+
+        std::vector<ID::Stream> dropped;
+        uint16_t id;
+        while(g_variant_iter_next(dropped_ids_iter, "q", &id))
+            dropped.push_back(ID::Stream::make_from_raw_id(id));
+        g_variant_iter_free(dropped_ids_iter);
+
+        auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+        regs.stop_notification(ID::Stream::make_from_raw_id(stream_id),
+                               reason, std::move(dropped));
     }
     else if(strcmp(signal_name, "MetaDataChanged") == 0 ||
             strcmp(signal_name, "PositionChanged") == 0 ||

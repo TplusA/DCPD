@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -26,6 +26,7 @@
 #include "maybe.hh"
 
 #include <string>
+#include <vector>
 #include <memory>
 #include <functional>
 
@@ -240,16 +241,25 @@ class PlainPlayerNotifications
     {
         STOPPED_AS_REQUESTED,
         STOPPED_EXTERNALLY,
+        STOPPED_BY_FAILURE,
         PUSHED_NEXT,
         ALREADY_STOPPED,
-        WRONG_STATE,
-        FAILED,
+        PUSH_NEXT_FAILED,
+        PLAYER_NOT_SELECTED,
+        BAD_STATE,
     };
 
     /*!
      * The player has stopped playing.
      */
     virtual StopResult stopped(PlainPlayer::StreamID stream_id) = 0;
+
+    /*!
+     * The player has stopped playing with an error.
+     */
+    virtual StopResult stopped(PlainPlayer::StreamID stream_id,
+                               const char *reason,
+                               std::vector<ID::Stream> &&dropped) = 0;
 };
 
 /*!

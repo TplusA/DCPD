@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -112,6 +112,8 @@ class Player:
     void audio_source_deselected() override;
     StartResult started(StreamID stream_id) override;
     StopResult stopped(StreamID stream_id) override;
+    StopResult stopped(StreamID stream_id, const char *reason,
+                       std::vector<ID::Stream> &&dropped) override;
 
     const Maybe<Regs::PlayStream::StreamInfo> &get_current_stream_info() const override
     {
@@ -135,15 +137,21 @@ class Player:
         expected_stopping_stream_id_ = StreamID::make_invalid();
     }
 
-    bool do_push_next()
+    bool do_push_next(MessageVerboseLevel level)
     {
         log_assert(push_stream_fn_ != nullptr);
         log_assert(next_stream_.is_known());
 
         if(!push_stream_fn_(next_stream_.get(), next_free_stream_id_, false,
                             state_ == State::PLAYING_REQUESTED))
+        {
+            msg_error(0, LOG_ERR, "Failed pushing next stream %u",
+                      next_free_stream_id_.get().get_raw_id());
             return false;
+        }
 
+        msg_vinfo(level, "Pushed next stream %u",
+                  next_free_stream_id_.get().get_raw_id());
         waiting_for_stream_id_ = next_free_stream_id_;
         ++next_free_stream_id_;
         return true;
@@ -271,7 +279,7 @@ bool Player::next(Regs::PlayStream::StreamInfo &&stream)
       case State::PLAYING:
       case State::PLAYING_BUT_STOPPED:
         next_stream_ = std::move(stream);
-        return do_push_next();
+        return do_push_next(MESSAGE_LEVEL_DIAG);
     }
 
     return false;
@@ -426,7 +434,7 @@ Player::started(StreamID stream_id)
         state_ = State::PLAYING;
 
         if(next_stream_.is_known())
-            do_push_next();
+            do_push_next(MESSAGE_LEVEL_DIAG);
 
         return StartResult::STARTED;
     }
@@ -445,7 +453,7 @@ Player::stopped(StreamID stream_id)
             BUG("App stream %u stopped in unexpected state %s",
                 stream_id.get().get_raw_id(), to_string(state_));
 
-        break;
+        return StopResult::PLAYER_NOT_SELECTED;
 
       case State::STOPPED:
       case State::PLAYING_BUT_STOPPED:
@@ -472,7 +480,9 @@ Player::stopped(StreamID stream_id)
         currently_playing_stream_id_ = StreamID::make_invalid();
 
         if(next_stream_.is_known())
-            return do_push_next() ? StopResult::PUSHED_NEXT : StopResult::FAILED;
+            return do_push_next(MESSAGE_LEVEL_DIAG)
+                ? StopResult::PUSHED_NEXT
+                : StopResult::PUSH_NEXT_FAILED;
 
         if(state_ == State::STOPPED)
             return StopResult::STOPPED_AS_REQUESTED;
@@ -481,7 +491,57 @@ Player::stopped(StreamID stream_id)
         return StopResult::STOPPED_EXTERNALLY;
     }
 
-    return StopResult::WRONG_STATE;
+    return StopResult::BAD_STATE;
+}
+
+Regs::PlayStream::PlainPlayerNotifications::StopResult
+Player::stopped(StreamID stream_id, const char *reason,
+                std::vector<ID::Stream> &&dropped)
+{
+    switch(state_)
+    {
+      case State::DESELECTED:
+      case State::DESELECTED_AWAITING_SELECTION:
+      case State::STOPPED_REQUESTED:
+      case State::STOPPED:
+      case State::PLAYING_BUT_STOPPED:
+        /* regular handling */
+        return stopped(stream_id);
+
+      case State::PLAYING_REQUESTED:
+      case State::PLAYING:
+        if(stream_id.get().is_valid() &&
+           currently_playing_stream_id_.get().is_valid() &&
+           stream_id != currently_playing_stream_id_ &&
+           waiting_for_stream_id_.get().is_valid() &&
+           stream_id != waiting_for_stream_id_)
+        {
+            BUG("App stream %u stopped with error, "
+                "but current stream ID is %u, waiting for ID %u",
+                stream_id.get().get_raw_id(),
+                currently_playing_stream_id_.get().get_raw_id(),
+                waiting_for_stream_id_.get().get_raw_id());
+        }
+
+        msg_error(0, LOG_NOTICE, "Stream %u stopped with error: %s",
+                  stream_id.get().get_raw_id(), reason);
+
+        current_stream_.set_unknown();
+        currently_playing_stream_id_ = StreamID::make_invalid();
+
+        if(next_stream_.is_known())
+            return do_push_next(MESSAGE_LEVEL_NORMAL)
+                ? StopResult::PUSHED_NEXT
+                : StopResult::PUSH_NEXT_FAILED;
+
+        if(state_ == State::STOPPED)
+            return StopResult::STOPPED_AS_REQUESTED;
+
+        state_ = State::PLAYING_BUT_STOPPED;
+        return StopResult::STOPPED_BY_FAILURE;
+    }
+
+    return StopResult::BAD_STATE;
 }
 
 std::unique_ptr<Regs::PlayStream::PlainPlayer> Regs::PlayStream::make_player()
