@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -398,18 +398,18 @@ static unsigned int wait_for_events(DCPDState &state,
      */
     static constexpr size_t FIRST_NWDISPATCH_INDEX = 6;
 
-    struct pollfd fds[FIRST_NWDISPATCH_INDEX + nwdispatcher.get_number_of_fds()];
+    std::vector<struct pollfd> fds(FIRST_NWDISPATCH_INDEX + nwdispatcher.get_number_of_fds());
 
-    fds[0] = { .fd = dcpspi_fifo_in_fd,    .events = POLLIN, .revents = 0, };
-    fds[1] = { .fd = drcp_fifo_in_fd,      .events = POLLIN, .revents = 0, };
-    fds[2] = { .fd = dcp_server_socket_fd, .events = POLLIN, .revents = 0, };
-    fds[3] = { .fd = dcp_peer_socket_fd,   .events = POLLIN, .revents = 0, };
-    fds[4] = { .fd = primitive_queue_fd,   .events = POLLIN, .revents = 0, };
-    fds[5] = { .fd = register_changed_fd,  .events = POLLIN, .revents = 0, };
+    fds[0] = {dcpspi_fifo_in_fd,    POLLIN, 0};
+    fds[1] = {drcp_fifo_in_fd,      POLLIN, 0};
+    fds[2] = {dcp_server_socket_fd, POLLIN, 0};
+    fds[3] = {dcp_peer_socket_fd,   POLLIN, 0};
+    fds[4] = {primitive_queue_fd,   POLLIN, 0};
+    fds[5] = {register_changed_fd,  POLLIN, 0};
 
     nwdispatcher.scatter_fds(&fds[FIRST_NWDISPATCH_INDEX], POLLIN);
 
-    int ret = os_poll(fds, sizeof(fds) / sizeof(fds[0]), do_block ? -1 : 0);
+    int ret = os_poll(fds.data(), fds.size(), do_block ? -1 : 0);
 
     if(ret <= 0)
     {
@@ -500,7 +500,8 @@ static void terminate_active_transaction(DCPDState &state,
             state.preallocated_inet_slave_transaction = std::move(state.active_transaction);
         else
         {
-            BUG("Unknown pinned active transaction %p", state.active_transaction.get());
+            BUG("Unknown pinned active transaction %p",
+                static_cast<const void *>(state.active_transaction.get()));
             state.active_transaction = nullptr;
         }
     }
@@ -1275,7 +1276,7 @@ static bool delay_seconds(int seconds)
         if(!keep_running)
             return false;
 
-        static const struct timespec one_second = { .tv_sec = 1, .tv_nsec = 0, };
+        static const struct timespec one_second = {1, 0};
         os_nanosleep(&one_second);
 
         --seconds;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -63,10 +63,6 @@ Applink::VariableTable::lookup(const char *variable_name,
         return nullptr;
     }
 
-    char buffer[length + 1];
-
-    memcpy(buffer, variable_name, length);
-    buffer[length] = '\0';
-
-    return lookup(buffer);
+    std::string buffer(variable_name, length);
+    return lookup(buffer.c_str());
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -63,13 +63,13 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
         const uint8_t *const range_spec = &ranges[i * SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC];
         const Regs::ProtocolLevel from =
         {
-            .code = REGISTER_MK_VERSION(range_spec[0], range_spec[1], range_spec[2]),
+            REGISTER_MK_VERSION(range_spec[0], range_spec[1], range_spec[2]),
         };
         const Regs::ProtocolLevel to =
         {
-            .code = REGISTER_MK_VERSION(range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 0],
-                                        range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 1],
-                                        range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 2]),
+            REGISTER_MK_VERSION(range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 0],
+                                range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 1],
+                                range_spec[SIZE_OF_PROTOCOL_LEVEL_SPEC + 2]),
         };
 
         if(from.code > to.code)
@@ -113,7 +113,7 @@ ssize_t Regs::DCPVersion::DCP::read_1_protocol_level(uint8_t *response, size_t l
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 1 handler %p %zu", response, length);
 
-    Regs::ProtocolLevel level = { .code = REGISTER_MK_VERSION(0, 0, 0) };
+    Regs::ProtocolLevel level = {REGISTER_MK_VERSION(0, 0, 0)};
 
     switch(global_negotiation_data.state)
     {

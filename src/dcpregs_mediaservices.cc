@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -32,16 +32,9 @@
 #include "gvariantwrapper.hh"
 #include "messages.h"
 
+#include <unordered_map>
 #include <sstream>
 #include <cstring>
-#include <cerrno>
-
-struct XmlEscapeSequence
-{
-    const char character;
-    const char *const escape_sequence;
-    const size_t escape_sequence_length;
-};
 
 static int delete_credentials(const char *service_id, bool logout_on_failure,
                               int *delete_ret_ptr)
@@ -199,37 +192,25 @@ int Regs::MediaServices::DCP::write_106_media_service_list(const uint8_t *data,
     return set_credentials(string_data, login, password_buffer);
 }
 
-static const struct XmlEscapeSequence *xml_escape_character(const char ch)
+static const std::string *xml_escape_character(const char ch)
 {
-    static const struct XmlEscapeSequence escapes[] =
+    static const std::unordered_map<char, const std::string> escapes =
     {
-#define MK_ESCAPE(CH, STR) \
-        { \
-            .character = (CH), \
-            .escape_sequence = (STR), \
-            .escape_sequence_length = sizeof(STR) - 1, \
-        }
-
-        MK_ESCAPE('&', "&amp;"),
-        MK_ESCAPE('<',  "&lt;"),
-        MK_ESCAPE('>',  "&gt;"),
-        MK_ESCAPE('\'', "&apos;"),
-        MK_ESCAPE('"',  "&quot;"),
+        {'&', "&amp;"},
+        {'<',  "&lt;"},
+        {'>',  "&gt;"},
+        {'\'', "&apos;"},
+        {'"',  "&quot;"},
     };
 
-    for(size_t i = 0; i < sizeof(escapes) / sizeof(escapes[0]); ++i)
-    {
-        if(ch == escapes[i].character)
-            return &escapes[i];
-    }
-
-    return NULL;
+    const auto &it(escapes.find(ch));
+    return it != escapes.end() ? &it->second : nullptr;
 }
 
 static void xml_escape(char *const buffer, const size_t buffer_size,
                        const char *const input)
 {
-    log_assert(input != NULL);
+    log_assert(input != nullptr);
 
     size_t out_pos = 0;
 
@@ -240,16 +221,14 @@ static void xml_escape(char *const buffer, const size_t buffer_size,
         if(ch == '\0')
             break;
 
-        const struct XmlEscapeSequence *seq = xml_escape_character(ch);
+        const std::string *seq = xml_escape_character(ch);
 
-        if(seq == NULL)
+        if(seq == nullptr)
             buffer[out_pos++] = ch;
-        else if(seq->escape_sequence_length < buffer_size - out_pos)
+        else if(seq->length() < buffer_size - out_pos)
         {
-            std::copy(seq->escape_sequence,
-                      seq->escape_sequence + seq->escape_sequence_length,
-                      &buffer[out_pos]);
-            out_pos += seq->escape_sequence_length;
+            std::copy(seq->begin(), seq->end(), &buffer[out_pos]);
+            out_pos += seq->length();
         }
         else
         {
@@ -341,7 +320,7 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
 
                 os << "<account login=\"" << buffer_first << "\""
                    << " password=\"" << buffer_second << "\""
-                   << ((strcmp(login, default_user) == 0) ? " default=\"true\"" : "")
+                   << ((std::strcmp(login, default_user) == 0) ? " default=\"true\"" : "")
                    << "/>";
             }
 

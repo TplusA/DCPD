@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -657,7 +657,7 @@ size_t Regs::get_supported_protocol_levels(const ProtocolLevel **level_ranges)
 {
     static const ProtocolLevel supported_level_ranges[] =
     {
-#define MK_RANGE(FROM, TO) { .code = (FROM) }, { .code = (TO) }
+#define MK_RANGE(FROM, TO) { (FROM) }, { (TO) }
 
         MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), CURRENT_PROTOCOL_VERSION_CODE),
 
