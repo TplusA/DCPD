@@ -1,3 +1,16 @@
+2020-03-30  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.6 released.
+
+	* JSON: Remove dependency on jsoncpp, use JSON for Modern C++ instead.
+	  This change was made for easier integration with Yocto Project (any
+	  version) and to improve our own code quality (jsoncpp is Java-esque
+	  whereas the new library integrates seamlessly with modern C++
+	  paradigms).
+
+	* Misc: Remove a lot of warnings thrown by gcc from Yocto Project SDK,
+	  get rid of some C remnants.
+
 2020-03-19  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.5 released.
