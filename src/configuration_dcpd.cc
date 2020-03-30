@@ -49,7 +49,7 @@ unbox_appliance_name(Configuration::UpdateSettings<Configuration::ApplianceValue
         return Configuration::InsertResult::UNCHANGED;
 
     return Configuration::InsertResult::UPDATED;
-};
+}
 
 static Configuration::InsertResult
 unbox_device_id(Configuration::UpdateSettings<Configuration::ApplianceValues> &dest,
@@ -64,7 +64,7 @@ unbox_device_id(Configuration::UpdateSettings<Configuration::ApplianceValues> &d
         return Configuration::InsertResult::UNCHANGED;
 
     return Configuration::InsertResult::UPDATED;
-};
+}
 
 const std::array<const Configuration::ConfigKey, Configuration::ApplianceValues::NUMBER_OF_KEYS>
 Configuration::ApplianceValues::all_keys
