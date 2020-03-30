@@ -1201,7 +1201,8 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
         break;
     }
 
-    msg_error(0, LOG_ERR, "Transaction %p failed in state %d", this, int(state_));
+    msg_error(0, LOG_ERR, "Transaction %p failed in state %d",
+              static_cast<const void *>(this), int(state_));
     state_ = State::ERROR;
 
     return ProcessResult::ERROR;

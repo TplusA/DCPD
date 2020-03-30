@@ -500,7 +500,8 @@ static void terminate_active_transaction(DCPDState &state,
             state.preallocated_inet_slave_transaction = std::move(state.active_transaction);
         else
         {
-            BUG("Unknown pinned active transaction %p", state.active_transaction.get());
+            BUG("Unknown pinned active transaction %p",
+                static_cast<const void *>(state.active_transaction.get()));
             state.active_transaction = nullptr;
         }
     }
