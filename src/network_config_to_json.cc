@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,10 +28,14 @@
 #include "networkprefs.h"
 #include "md5.hh"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-enum"
+#include "json.hh"
+#pragma GCC diagnostic pop
+
 #include <sstream>
 #include <algorithm>
 #include <functional>
-#include <jsoncpp/json.h>
 
 static void add_to_hash(MD5::Context &ctx, size_t size)
 {
@@ -71,10 +75,10 @@ static void add_to_hash(MD5::Context &ctx, const std::string &s)
     }
 }
 
-static void add_to_hash(MD5::Context &ctx, const Json::Value &obj, const char *field)
+static void add_to_hash(MD5::Context &ctx, const nlohmann::json &obj, const char *field)
 {
-    if(obj.isMember(field))
-        add_to_hash(ctx, obj[field].asString());
+    if(obj.find(field) != obj.end())
+        add_to_hash(ctx, obj[field].get<std::string>());
     else
         add_missing_to_hash(ctx);
 }
@@ -87,7 +91,7 @@ enum class IsCached
 };
 
 static void add_nic_entry(
-        Json::Value &nics,
+        nlohmann::json &nics,
         const Connman::Address<Connman::AddressType::MAC> &mac,
         Connman::Technology technology, bool is_secondary,
         IsCached is_cached, const std::string *devname = nullptr)
@@ -95,13 +99,13 @@ static void add_nic_entry(
     if(mac.empty())
         throw std::runtime_error("Need MAC to make NIC entry");
 
-    if(nics.isMember(mac.get_string()))
+    if(nics.find(mac.get_string()) != nics.end())
     {
         if(devname != nullptr || is_cached == IsCached::PHYSICALLY_AVAILABLE)
         {
             auto &nic(nics[mac.get_string()]);
 
-            if(devname != nullptr && !nic.isMember("device_name"))
+            if(devname != nullptr && nic.find("device_name") == nic.end())
                 nic["device_name"] = *devname;
 
             if(is_cached == IsCached::PHYSICALLY_AVAILABLE)
@@ -127,10 +131,11 @@ static void add_nic_entry(
         break;
     }
 
-    Json::Value nic;
-
-    nic["technology"] = tech_name;
-    nic["cached"] = is_cached == IsCached::CACHED;
+    nlohmann::json nic
+    {
+        {"technology", tech_name},
+        {"cached",     is_cached == IsCached::CACHED},
+    };
 
     if(is_secondary)
         nic["is_secondary"] = true;
@@ -138,13 +143,13 @@ static void add_nic_entry(
     if(devname != nullptr)
         nic["device_name"] = *devname;
 
-    nics[mac.get_string()].swap(nic);
+    nics[mac.get_string()] = std::move(nic);
 }
 
 /*!
  * Add the up to two "primary" NICs.
  */
-static void add_nics_from_prefs(Json::Value &nics,
+static void add_nics_from_prefs(nlohmann::json &nics,
                                 const Connman::NetworkDeviceList &devices,
                                 bool is_cached)
 {
@@ -176,7 +181,7 @@ static void add_nics_from_prefs(Json::Value &nics,
 /*!
  * Add any NIC known from Connman (contains non-primary NICs as well).
  */
-static void add_nics_from_connman_devices(Json::Value &nics,
+static void add_nics_from_connman_devices(nlohmann::json &nics,
                                           const Connman::NetworkDeviceList &devices,
                                           bool is_cached)
 {
@@ -204,7 +209,7 @@ static void add_nics_from_connman_devices(Json::Value &nics,
 /*!
  * Add NICs found via netlink (also contains NICs with no Connman services).
  */
-static void add_nics_from_netlink(Json::Value &nics)
+static void add_nics_from_netlink(nlohmann::json &nics)
 {
     const auto &devices(Network::os_get_network_devices());
 
@@ -223,33 +228,33 @@ static void add_nics_from_netlink(Json::Value &nics)
 }
 
 template <typename T>
-static void set_if_known(Json::Value &item, const char *field,
+static void set_if_known(nlohmann::json &item, const char *field,
                          MD5::Context &ctx, const Maybe<T> &value)
 {
     if(value.is_known())
     {
         item[field] = value.get();
-        add_to_hash(ctx, item[field].asString());
+        add_to_hash(ctx, item[field].get<std::string>());
     }
     else
         add_missing_to_hash(ctx);
 }
 
 template <typename InT, typename OutT>
-static void set_if_known(Json::Value &item, const char *field,
+static void set_if_known(nlohmann::json &item, const char *field,
                          MD5::Context &ctx, const Maybe<InT> &value,
                          const std::function<const OutT &(const Maybe<InT> &)> &get)
 {
     if(value.is_known())
     {
         item[field] = get(value);
-        add_to_hash(ctx, item[field].asString());
+        add_to_hash(ctx, item[field].get<std::string>());
     }
     else
         add_missing_to_hash(ctx);
 }
 
-static bool fill_ipv4_settings(Json::Value &json, MD5::Context &ctx,
+static bool fill_ipv4_settings(nlohmann::json &json, MD5::Context &ctx,
                                const Connman::IPSettings<Connman::AddressType::IPV4> &ipv4)
 {
     if(ipv4.get_dhcp_method() != Connman::DHCPV4Method::NOT_AVAILABLE)
@@ -277,10 +282,10 @@ static bool fill_ipv4_settings(Json::Value &json, MD5::Context &ctx,
     add_to_hash(ctx, json, "netmask");
     add_to_hash(ctx, json, "gateway");
 
-    return !json.isNull();
+    return !json.is_null();
 }
 
-static bool fill_ipv6_settings(Json::Value &json, MD5::Context &ctx,
+static bool fill_ipv6_settings(nlohmann::json &json, MD5::Context &ctx,
                                const Connman::IPSettings<Connman::AddressType::IPV6> &ipv6)
 {
     if(ipv6.get_dhcp_method() != Connman::DHCPV6Method::NOT_AVAILABLE)
@@ -308,10 +313,10 @@ static bool fill_ipv6_settings(Json::Value &json, MD5::Context &ctx,
     add_to_hash(ctx, json, "prefix_length");
     add_to_hash(ctx, json, "gateway");
 
-    return !json.isNull();
+    return !json.is_null();
 }
 
-static void fill_string_array(Json::Value &json, const char *field,
+static void fill_string_array(nlohmann::json &json, const char *field,
                               MD5::Context &ctx,
                               const std::vector<std::string> &a,
                               bool allow_empty)
@@ -322,7 +327,7 @@ static void fill_string_array(Json::Value &json, const char *field,
         return;
     }
 
-    Json::Value temp(Json::arrayValue);
+    auto temp = nlohmann::json::array();
 
     if(a.empty())
         add_empty_to_hash(ctx);
@@ -330,15 +335,15 @@ static void fill_string_array(Json::Value &json, const char *field,
     {
         for(const auto &s : a)
         {
-            temp.append(s);
+            temp.push_back(s);
             add_to_hash(ctx, s);
         }
     }
 
-    json[field].swap(temp);
+    json[field] = std::move(temp);
 }
 
-static void fill_string_array(Json::Value &json, const char *field,
+static void fill_string_array(nlohmann::json &json, const char *field,
                               MD5::Context &ctx,
                               const Maybe<std::vector<std::string>> &a,
                               bool allow_empty)
@@ -349,7 +354,7 @@ static void fill_string_array(Json::Value &json, const char *field,
         add_missing_to_hash(ctx);
 }
 
-static void fill_proxy_settings(Json::Value &json, MD5::Context &ctx,
+static void fill_proxy_settings(nlohmann::json &json, MD5::Context &ctx,
                                 const Connman::ProxySettings &proxy,
                                 bool allow_empty)
 {
@@ -375,7 +380,7 @@ static void fill_proxy_settings(Json::Value &json, MD5::Context &ctx,
 }
 
 static bool fill_in_service_configuration(
-        Json::Value &config, MD5::Context &ctx, bool allow_empty,
+        nlohmann::json &config, MD5::Context &ctx, bool allow_empty,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV4>> &ipv4,
         const Maybe<Connman::IPSettings<Connman::AddressType::IPV6>> &ipv6,
         const Maybe<Connman::ProxySettings> &proxy,
@@ -383,40 +388,40 @@ static bool fill_in_service_configuration(
         const Maybe<std::vector<std::string>> &time_servers,
         const Maybe<std::vector<std::string>> &domains)
 {
-    config = Json::Value();
+    config = {};
 
     if(ipv4.is_known())
     {
-        Json::Value temp;
+        nlohmann::json temp;
         if(fill_ipv4_settings(temp, ctx, ipv4.get()))
-            config["ipv4_config"].swap(temp);
+            config["ipv4_config"] = std::move(temp);
     }
     else
         add_missing_to_hash(ctx);
 
     if(ipv6.is_known())
     {
-        Json::Value temp;
+        nlohmann::json temp;
         if(fill_ipv6_settings(temp, ctx, ipv6.get()))
-            config["ipv6_config"].swap(temp);
+            config["ipv6_config"] = std::move(temp);
     }
     else
         add_missing_to_hash(ctx);
 
     if(proxy.is_known())
     {
-        Json::Value temp;
+        nlohmann::json temp;
         fill_proxy_settings(temp, ctx, proxy.get(), allow_empty);
 
-        if(!temp.isNull())
-            config["proxy_config"].swap(temp);
+        if(!temp.is_null())
+            config["proxy_config"] = std::move(temp);
     }
 
     fill_string_array(config, "dns_servers", ctx, dns_servers, allow_empty);
     fill_string_array(config, "time_servers", ctx, time_servers, allow_empty);
     fill_string_array(config, "domains", ctx, domains, allow_empty);
 
-    return !config.isNull();
+    return !config.is_null();
 }
 
 static std::string get_service_id(const std::string &path)
@@ -428,7 +433,7 @@ static std::string get_service_id(const std::string &path)
         : path;
 }
 
-static void add_services_from_connman(Json::Value &srv,
+static void add_services_from_connman(nlohmann::json &srv,
                                       std::vector<std::pair<std::string, MD5::Hash>> &service_hashes,
                                       const Connman::ServiceList &services, bool is_cached)
 {
@@ -439,9 +444,11 @@ static void add_services_from_connman(Json::Value &srv,
         MD5::Context ctx;
         MD5::init(ctx);
 
-        Json::Value item;
-        item["id"] = get_service_id(service.first);
-        item["cached"] = is_cached;
+        nlohmann::json item
+        {
+            {"id",     get_service_id(service.first)},
+            {"cached", is_cached},
+        };
 
         add_to_hash(ctx, item, "id");
 
@@ -462,7 +469,7 @@ static void add_services_from_connman(Json::Value &srv,
         set_if_known(item, "is_favorite", ctx, sd.is_favorite_);
         set_if_known(item, "is_auto_connect", ctx, sd.is_auto_connect_);
 
-        Json::Value config;
+        nlohmann::json config;
 
         if(fill_in_service_configuration(config, ctx, false,
                                          sd.active_.ipsettings_v4_,
@@ -471,7 +478,7 @@ static void add_services_from_connman(Json::Value &srv,
                                          sd.active_.dns_servers_,
                                          sd.active_.time_servers_,
                                          sd.active_.domains_))
-            item["active_config"].swap(config);
+            item["active_config"] = std::move(config);
 
         if(fill_in_service_configuration(config, ctx, true,
                                          sd.configured_.ipsettings_v4_,
@@ -480,7 +487,7 @@ static void add_services_from_connman(Json::Value &srv,
                                          sd.configured_.dns_servers_,
                                          sd.configured_.time_servers_,
                                          sd.configured_.domains_))
-            item["supposed_config"].swap(config);
+            item["supposed_config"] = std::move(config);
 
         switch(s.get_technology())
         {
@@ -539,22 +546,19 @@ static void add_services_from_connman(Json::Value &srv,
             }
         }
 
+        service_hashes.emplace_back(item["id"].get<std::string>(), MD5::Hash());
+        MD5::finish(ctx, service_hashes[service_hashes.size() - 1].second);
+
         const auto &mac_string(sd.device_->mac_address_.get_string());
 
-        if(srv.isMember(mac_string))
-            srv[mac_string][srv[mac_string].size()].swap(item);
-        else
-        {
-            srv[mac_string] = Json::Value(Json::arrayValue);
-            srv[mac_string][0].swap(item);
-        }
+        if(srv.find(mac_string) == srv.end())
+            srv[mac_string] = nlohmann::json::array();
 
-        service_hashes.emplace_back(item["id"].asString(), MD5::Hash());
-        MD5::finish(ctx, service_hashes[service_hashes.size() - 1].second);
+        srv[mac_string].emplace_back(std::move(item));
     }
 }
 
-static void add_service_from_prefs(Json::Value &srv,
+static void add_service_from_prefs(nlohmann::json &srv,
                                    std::vector<std::pair<std::string, MD5::Hash>> &service_hashes,
                                    const struct network_prefs *prefs,
                                    const Connman::Technology tech,
@@ -578,12 +582,14 @@ static void add_service_from_prefs(Json::Value &srv,
                                            false) == 0)
         return;
 
-    Json::Value item;
-    item["id"] = buffer.data();
-    item["state"] = "unknown";
-    item["is_system_service"] = false;
-    item["is_favorite"] = true;
-    item["is_auto_connect"] = true;
+    nlohmann::json item
+    {
+        {"id",                buffer.data()},
+        {"state",             "unknown"},
+        {"is_system_service", false},
+        {"is_favorite",       true},
+        {"is_auto_connect",   true},
+    };
 
     bool with_dhcp;
     const char *address;
@@ -595,9 +601,7 @@ static void add_service_from_prefs(Json::Value &srv,
     if(network_prefs_get_ipv4_settings(prefs, &with_dhcp, &address, &netmask,
                                        &gateway, &dns1, &dns2))
     {
-        Json::Value config;
-
-        config["dhcp_method"] = with_dhcp ? "dhcp" : "off";
+        nlohmann::json config {{"dhcp_method", with_dhcp ? "dhcp" : "off"}};
 
         if(address != nullptr)
             config["address"] = address;
@@ -610,18 +614,18 @@ static void add_service_from_prefs(Json::Value &srv,
 
         if(dns1 != nullptr || dns2 != nullptr)
         {
-            Json::Value dns(Json::arrayValue);
+            auto dns = nlohmann::json::array();
 
             if(dns1 != nullptr)
-                dns.append(dns1);
+                dns.push_back(dns1);
 
             if(dns2 != nullptr)
-                dns.append(dns2);
+                dns.push_back(dns2);
 
-            config["dns_servers"].swap(dns);
+            config["dns_servers"] = std::move(dns);
         }
 
-        item["supposed_config"].swap(config);
+        item["supposed_config"] = std::move(config);
     }
 
     switch(tech)
@@ -667,16 +671,13 @@ static void add_service_from_prefs(Json::Value &srv,
 
     const auto &mac_string(mac.get_string());
 
-    if(srv.isMember(mac_string))
-        srv[mac_string][srv[mac_string].size()].swap(item);
-    else
-    {
-        srv[mac_string] = Json::Value(Json::arrayValue);
-        srv[mac_string][0].swap(item);
-    }
+    if(srv.find(mac_string) == srv.end())
+        srv[mac_string] = nlohmann::json::array();
+
+    srv[mac_string].emplace_back(std::move(item));
 }
 
-static void add_services_from_prefs(Json::Value &srv,
+static void add_services_from_prefs(nlohmann::json &srv,
                                     std::vector<std::pair<std::string, MD5::Hash>> &service_hashes,
                                     const Connman::ServiceList &services)
 {
@@ -696,9 +697,11 @@ static void add_services_from_prefs(Json::Value &srv,
     network_prefs_close(cfg);
 }
 
-static void hash_sorted_nic_macs(MD5::Context &ctx, const Json::Value &nics)
+static void hash_sorted_nic_macs(MD5::Context &ctx, const nlohmann::json &nics)
 {
-    std::vector<std::string> macs(nics.getMemberNames());
+    std::vector<std::string> macs;
+    for(auto it = nics.begin(); it != nics.end(); ++it)
+        macs.push_back(it.key());
     std::sort(macs.begin(), macs.end());
 
     add_to_hash(ctx, macs.size());
@@ -739,7 +742,7 @@ static void hash_sorted_services(
 }
 
 static std::string compute_version(
-        const Json::Value &nics,
+        const nlohmann::json &nics,
         const std::vector<std::pair<std::string, MD5::Hash>> &service_hashes)
 {
     MD5::Context ctx;
@@ -762,7 +765,7 @@ std::string Network::configuration_to_json(const Connman::ServiceList &services,
                                            const std::string &have_version,
                                            bool is_cached, std::string &version)
 {
-    Json::Value nics(Json::objectValue);
+    nlohmann::json nics;
 
     add_nics_from_prefs(nics, devices, is_cached);
     add_nics_from_connman_devices(nics, devices, is_cached);
@@ -770,7 +773,7 @@ std::string Network::configuration_to_json(const Connman::ServiceList &services,
 
     std::vector<std::pair<std::string, MD5::Hash>> service_hashes;
 
-    Json::Value srv(Json::objectValue);
+    nlohmann::json srv;
     add_services_from_connman(srv, service_hashes, services, is_cached);
     add_services_from_prefs(srv, service_hashes, services);
 
@@ -779,16 +782,11 @@ std::string Network::configuration_to_json(const Connman::ServiceList &services,
     if(version == have_version)
         return "";
 
-    Json::Value root;
-    root["nics"].swap(nics);
-    root["services"].swap(srv);
+    nlohmann::json root
+    {
+        {"nics",     std::move(nics)},
+        {"services", std::move(srv)},
+    };
 
-    Json::StreamWriterBuilder builder;
-    builder["commentStyle"] = "None";
-    builder["indentation"] = "";
-    std::unique_ptr<Json::StreamWriter> writer(builder.newStreamWriter());
-    std::ostringstream json;
-    writer->write(root, &json);
-
-    return json.str();
+    return root.dump();
 }

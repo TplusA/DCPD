@@ -44,8 +44,6 @@ glib_deps = [
     dependency('gthread-2.0'),
 ]
 
-jsoncpp_deps = dependency('jsoncpp', version: '>= 1.6.0')
-
 autorevision = find_program('autorevision')
 markdown = find_program('markdown')
 extract_docs = find_program('dbus_interfaces/extract_documentation.py')

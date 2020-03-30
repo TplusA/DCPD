@@ -166,12 +166,12 @@ executable(
         'configuration.cc', 'configuration_dcpd.cc',
         version_info,
     ],
-    dependencies: [dbus_deps, glib_deps, jsoncpp_deps, config_h],
+    dependencies: [dbus_deps, glib_deps, config_h],
     link_with: [
         static_library('dbus_handlers', [
             'dbus_handlers.cc', 'dbus_handlers_connman_agent.cc',
             'dbus_handlers_connman_manager.cc', 'network_config_to_json.cc'],
-            dependencies: [dbus_deps, glib_deps, jsoncpp_deps],
+            dependencies: [dbus_deps, glib_deps],
         ),
         accesspoint_lib,
         applink_lib,

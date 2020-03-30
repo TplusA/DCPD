@@ -42,9 +42,13 @@
 #include "actor_id.h"
 #include "messages.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-enum"
+#include "json.hh"
+#pragma GCC diagnostic pop
+
 #include <cstring>
 #include <cerrno>
-#include <jsoncpp/json.h>
 
 static void unknown_signal(const char *iface_name, const char *signal_name,
                            const char *sender_name)
@@ -347,58 +351,59 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
     return TRUE;
 }
 
-static const Json::Value &
+static nlohmann::json
 lookup_field(GDBusMethodInvocation *invocation,
-             const Json::Value &json, const char *field,
-             Json::ValueType expected_type = Json::nullValue,
+             const nlohmann::json &json, const char *field,
+             nlohmann::json::value_t expected_type = nlohmann::json::value_t::null,
              bool must_exist = true)
 {
-    const auto &result(json[field]);
+    const auto &result(json.find(field));
 
-    if(result.isNull())
+    if(result == json.end())
     {
-        if(must_exist)
-        {
-            g_dbus_method_invocation_return_error(
-                invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-                "Required field missing: \"%s\"", field);
-            throw std::runtime_error("Required field missing");
-        }
-    }
-    else if(result.type() != expected_type)
-    {
-        if(expected_type != Json::nullValue)
-        {
-            g_dbus_method_invocation_return_error(
-                invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-                "Field of unexpected type: \"%s\"", field);
-            throw std::runtime_error("Unexpected field type");
-        }
+        if(!must_exist)
+            return nullptr;
+
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Required field missing: \"%s\"", field);
+        throw std::runtime_error("Required field missing");
     }
 
-    return result;
+    if(result->type() != expected_type &&
+       expected_type != nlohmann::json::value_t::null)
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Field of unexpected type: \"%s\"", field);
+        throw std::runtime_error("Unexpected field type");
+    }
+
+    return *result;
 }
 
 static bool copy_if_available(GDBusMethodInvocation *invocation,
-                              const Json::Value &json, const char *field,
+                              const nlohmann::json &json, const char *field,
                               Maybe<std::string> &dest)
 {
-    const auto &s(lookup_field(invocation, json, field, Json::stringValue, false));
+    const auto &s(lookup_field(invocation, json, field,
+                               nlohmann::json::value_t::string, false));
 
-    if(!s.isString())
+    if(!s.is_string())
         return false;
 
-    dest = s.asString();
+    dest = s.get<std::string>();
     return true;
 }
 
 static bool copy_if_available(GDBusMethodInvocation *invocation,
-                              const Json::Value &json, const char *field,
+                              const nlohmann::json &json, const char *field,
                               Maybe<std::vector<std::string>> &dest)
 {
-    const auto &in(lookup_field(invocation, json, field, Json::arrayValue, false));
+    const auto &in(lookup_field(invocation, json, field,
+                                nlohmann::json::value_t::array, false));
 
-    if(!in.isArray())
+    if(!in.is_array())
         return false;
 
     dest.set_known();
@@ -408,7 +413,7 @@ static bool copy_if_available(GDBusMethodInvocation *invocation,
 
     for(const auto &s : in)
     {
-        if(!s.isString())
+        if(!s.is_string())
         {
             g_dbus_method_invocation_return_error(
                 invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
@@ -416,23 +421,23 @@ static bool copy_if_available(GDBusMethodInvocation *invocation,
             throw std::runtime_error("Unexpected array value type");
         }
 
-        out.push_back(s.asString());
+        out.push_back(s.get<std::string>());
     }
 
     return true;
 }
 
 static void set_common_service_configuration(GDBusMethodInvocation *invocation,
-                                             const Json::Value &json,
+                                             const nlohmann::json &json,
                                              Network::ConfigRequest &req)
 {
     const auto &cfg(lookup_field(invocation, json,
-                                 "configuration", Json::objectValue));
+                                 "configuration", nlohmann::json::value_t::object));
 
     const auto &ipv4_config(lookup_field(invocation, cfg, "ipv4_config",
-                                         Json::objectValue, false));
+                                         nlohmann::json::value_t::object, false));
 
-    if(!ipv4_config.isNull())
+    if(!ipv4_config.is_null())
     {
         copy_if_available(invocation, ipv4_config, "address", req.ipv4_address_);
         copy_if_available(invocation, ipv4_config, "dhcp_method", req.dhcpv4_mode_);
@@ -441,9 +446,9 @@ static void set_common_service_configuration(GDBusMethodInvocation *invocation,
     }
 
     const auto &ipv6_config(lookup_field(invocation, cfg, "ipv6_config",
-                                         Json::objectValue, false));
+                                         nlohmann::json::value_t::object, false));
 
-    if(!ipv6_config.isNull())
+    if(!ipv6_config.is_null())
     {
         copy_if_available(invocation, ipv6_config, "address", req.ipv6_address_);
         copy_if_available(invocation, ipv6_config, "dhcp_method", req.dhcpv6_mode_);
@@ -452,9 +457,9 @@ static void set_common_service_configuration(GDBusMethodInvocation *invocation,
     }
 
     const auto &proxy_config(lookup_field(invocation, cfg, "proxy_config",
-                                          Json::objectValue, false));
+                                          nlohmann::json::value_t::object, false));
 
-    if(!proxy_config.isNull())
+    if(!proxy_config.is_null())
     {
         copy_if_available(invocation, proxy_config, "method", req.proxy_method_);
         copy_if_available(invocation, proxy_config, "auto_config_pac_url", req.proxy_pac_url_);
@@ -468,7 +473,7 @@ static void set_common_service_configuration(GDBusMethodInvocation *invocation,
 }
 
 static void parse_device_info(GDBusMethodInvocation *invocation,
-                              const Json::Value &json,
+                              const nlohmann::json &json,
                               Connman::Technology tech,
                               Connman::Address<Connman::AddressType::MAC> &mac)
 {
@@ -483,13 +488,13 @@ static void parse_device_info(GDBusMethodInvocation *invocation,
     }
 
     const auto &device_info(lookup_field(invocation, json, "device_info",
-                                         Json::objectValue));
+                                         nlohmann::json::value_t::object));
 
     if(!mac.empty())
         return;
 
     const auto &mac_string(lookup_field(invocation, device_info, "mac",
-                                        Json::stringValue).asString());
+                                        nlohmann::json::value_t::string).get<std::string>());
 
     try
     {
@@ -506,7 +511,7 @@ static void parse_device_info(GDBusMethodInvocation *invocation,
 }
 
 static bool set_wlan_service_configuration(GDBusMethodInvocation *invocation,
-                                           const Json::Value &json,
+                                           const nlohmann::json &json,
                                            Connman::Technology tech,
                                            Network::ConfigRequest &req)
 {
@@ -521,14 +526,14 @@ static bool set_wlan_service_configuration(GDBusMethodInvocation *invocation,
     }
 
     const auto &wlan_settings(lookup_field(invocation, json, "wlan_settings",
-                                           Json::objectValue,
+                                           nlohmann::json::value_t::object,
                                            tech == Connman::Technology::WLAN));
-    if(wlan_settings.isNull())
+    if(wlan_settings.is_null())
         return false;
 
     req.wlan_security_mode_ =
         lookup_field(invocation, wlan_settings, "security",
-                     Json::stringValue).asString();
+                     nlohmann::json::value_t::string).get<std::string>();
 
     if(!copy_if_available(invocation, wlan_settings, "ssid", req.wlan_ssid_hex_) &&
        !copy_if_available(invocation, wlan_settings, "name", req.wlan_ssid_ascii_))
@@ -541,18 +546,18 @@ static bool set_wlan_service_configuration(GDBusMethodInvocation *invocation,
 
     req.wlan_wpa_passphrase_ascii_ =
         lookup_field(invocation, wlan_settings, "passphrase",
-                     Json::stringValue).asString();
+                     nlohmann::json::value_t::string).get<std::string>();
 
     return true;
 }
 
 static bool set_network_service_configuration(
-        GDBusMethodInvocation *invocation, const Json::Value &json,
+        GDBusMethodInvocation *invocation, const nlohmann::json &json,
         Connman::Technology tech, Network::ConfigRequest &req,
         Connman::Address<Connman::AddressType::MAC> &mac)
 {
     const auto &auto_connect(lookup_field(invocation, json, "auto_connect",
-                                          Json::stringValue).asString());
+                                          nlohmann::json::value_t::string).get<std::string>());
 
     if(auto_connect == "no")
         req.when_ = Network::ConfigRequest::ApplyWhen::NEVER;
@@ -577,21 +582,21 @@ static bool set_network_service_configuration(
 }
 
 static bool parse_json_from_buffer(GDBusMethodInvocation *invocation,
-                                   Json::Value &json, const char *buffer,
+                                   nlohmann::json &json, const char *buffer,
                                    size_t buffer_size, const char *what)
 {
-    Json::CharReaderBuilder reader_builder;
-    reader_builder["collectComments"] = false;
-    std::unique_ptr<Json::CharReader> reader(reader_builder.newCharReader());
-    std::string errors;
-
-    if(reader->parse(buffer, buffer + buffer_size, &json, &errors))
+    try
+    {
+        json = nlohmann::json::parse(buffer, buffer + buffer_size);
         return true;
-
-    g_dbus_method_invocation_return_error(
-        invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-        "Failed parsing JSON data (%s): %s", what, errors.c_str());
-    return false;
+    }
+    catch(const std::exception &e)
+    {
+        g_dbus_method_invocation_return_error(
+            invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+            "Failed parsing JSON data (%s): %s", what, e.what());
+        return false;
+    }
 }
 
 static bool determine_tech_and_mac_from_service_name(
@@ -627,54 +632,6 @@ static bool determine_tech_and_mac_from_service_name(
     }
 }
 
-/*!
- * Wrapper for non-movable objects that should be move captured by a lambda.
- *
- * This is primarily needed for C++ 98 stuff that only knows about swap() and
- * nothing about move semantics.
- *
- * In addition, in case the lambda must be stored in a std::function, this
- * class implements a copy constructor which throws when invoked. This operator
- * is required by std::function because by standard std::function is copyable.
- * Thus, by throwing at runtime, we avoid accidental deep copies of large
- * objects when we really wanted pure move. This also allows move-only objects
- * being passed to std::function objects.
- */
-template <typename T>
-class MoveToFunction
-{
-  private:
-    T value_;
-
-  public:
-    MoveToFunction &operator=(const MoveToFunction &) = delete;
-
-    MoveToFunction(const MoveToFunction &):
-        value_{}
-    {
-        throw std::runtime_error("MoveToFunction objects shall not be copied");
-    }
-
-    MoveToFunction(MoveToFunction &&src)
-    {
-        std::swap(value_, src.value_);
-    }
-
-    MoveToFunction &operator=(MoveToFunction &&src)
-    {
-        std::swap(value_, src.value_);
-        return *this;
-    }
-
-    explicit MoveToFunction(T &value)
-    {
-        std::swap(value_, value);
-    }
-
-    const T &get() const { return value_; }
-    T &get() { return value_; }
-};
-
 gboolean
 dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
                                              GDBusMethodInvocation *invocation,
@@ -682,7 +639,7 @@ dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
                                              const gchar *configuration,
                                              gpointer user_data)
 {
-    Json::Value json;
+    nlohmann::json json;
     if(!parse_json_from_buffer(invocation, json,
                                configuration, strlen(configuration),
                                "network configuration request"))
@@ -695,11 +652,9 @@ dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
                                                  tech, mac))
         return TRUE;
 
-    MoveToFunction<Json::Value> json_moved(json);
-
     MainLoop::post(
         [object, invocation, user_data, tech,
-         mac(std::move(mac)), json(std::move(json_moved))]
+         mac(std::move(mac)), json(std::move(json))]
         () mutable
         {
             Network::ConfigRequest req;
@@ -708,8 +663,7 @@ dbusmethod_network_set_service_configuration(tdbusdcpdNetwork *object,
             try
             {
                 has_wlan_settings =
-                    set_network_service_configuration(invocation, json.get(),
-                                                      tech, req, mac);
+                    set_network_service_configuration(invocation, json, tech, req, mac);
             }
             catch(const std::runtime_error &e)
             {
@@ -1175,16 +1129,16 @@ bool handle_audiopath_json_request(GDBusMethodInvocation *invocation,
                                    const char *json, const char *const *extra,
                                    std::string *result)
 {
-    Json::Value request;
+    nlohmann::json request;
     if(!parse_json_from_buffer(invocation, request, json, strlen(json),
                                "audio path configuration request"))
         return false;
 
     const auto &q(request["query"]);
-    if(!q.isNull())
+    if(!q.is_null())
     {
         const auto &what(q["what"]);
-        if(what.isNull() || !what.isString())
+        if(what.is_null() || !what.is_string())
         {
             g_dbus_method_invocation_return_error(
                 invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
@@ -1205,7 +1159,8 @@ bool handle_audiopath_json_request(GDBusMethodInvocation *invocation,
         {
             g_dbus_method_invocation_return_error(
                 invocation, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
-                "Unknown audio path configuration query \"%s\"", what.asCString());
+                "Unknown audio path configuration query \"%s\"",
+                what.get<std::string>().c_str());
             return false;
         }
     }
