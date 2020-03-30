@@ -281,13 +281,9 @@ int Regs::Appliance::DCP::write_87_appliance_id(const uint8_t *data, size_t leng
     }
     else
     {
-        char buffer[length + 1];
-
-        std::copy(data, data + length, buffer);
-        buffer[length] = '\0';
-
-        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, log_message, buffer);
-        configproxy_set_string(nullptr, appliance_id_key, buffer);
+        std::string buffer(reinterpret_cast<const char *>(data), length);
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, log_message, buffer.c_str());
+        configproxy_set_string(nullptr, appliance_id_key, buffer.c_str());
     }
 
     if(init())

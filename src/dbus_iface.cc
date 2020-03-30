@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -589,8 +589,8 @@ static bool is_shutdown_inhibited()
 
 static const struct dbussignal_shutdown_iface logind_shutdown_functions =
 {
-    .is_inhibitor_lock_taken = is_shutdown_inhibited,
-    .allow_shutdown = DBus::unlock_shutdown_sequence,
+    is_shutdown_inhibited,
+    DBus::unlock_shutdown_sequence,
 };
 
 static struct dbus_process_data process_data;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -672,20 +672,16 @@ static size_t get_filename_length_if_is_opkg_feed_file(const char *path)
         return 0;
 }
 
-static char *generate_opkg_feed_filename(char *buffer, size_t buffer_size,
-                                         const char *name, size_t name_len)
+static std::string
+generate_opkg_feed_filename(const char *name, size_t name_len)
 {
-    log_assert(buffer_size > 0);
     log_assert(name_len > 0);
 
-    const size_t beyond = sizeof(opkg_configuration_path) + name_len;
-    log_assert(beyond <= buffer_size);
+    std::string buffer(opkg_configuration_path);
+    buffer += '/';
+    std::copy(name, name + name_len, std::back_inserter(buffer));
 
-    memcpy(buffer, opkg_configuration_path, sizeof(opkg_configuration_path) - 1);
-    buffer[sizeof(opkg_configuration_path) - 1] = '/';
-    memcpy(buffer + sizeof(opkg_configuration_path), name, name_len + 1);
-
-    return &buffer[beyond];
+    return buffer;
 }
 
 static int find_opkg_feed_configuration_file(const char *path,
@@ -784,7 +780,6 @@ static int generate_opkg_feed_files_if_necessary()
         return -1;
     }
 
-    char path_buffer[1024];
     char content_buffer[4096];
     bool failed = false;
 
@@ -822,24 +817,12 @@ static int generate_opkg_feed_files_if_necessary()
         if(strchr(feed_name, ' ') != NULL)
             continue;
 
-        char *beyond_generated =
-            generate_opkg_feed_filename(path_buffer, sizeof(path_buffer),
-                                        feed_name,
+        auto path_buffer =
+            generate_opkg_feed_filename(feed_name,
                                         section->name_length - (sizeof(required_prefix) - 1));
+        path_buffer += opkg_feed_config_suffix;
 
-        log_assert(*beyond_generated == '\0');
-
-        if(beyond_generated - path_buffer < (ptrdiff_t)sizeof(opkg_feed_config_suffix))
-        {
-            msg_error(ENOMEM, LOG_ERR,
-                      "Path of feed configuration file too long");
-            failed = true;
-            break;
-        }
-
-        strcpy(beyond_generated, opkg_feed_config_suffix);
-
-        const int fd = os_file_new(path_buffer);
+        const int fd = os_file_new(path_buffer.c_str());
 
         if(fd < 0)
         {
@@ -1324,10 +1307,7 @@ static int delete_opkg_feed_configuration_file(const char *path,
     if(name_len == 0)
         return 0;
 
-    char buffer[sizeof(opkg_configuration_path) + 1 + name_len];
-
-    generate_opkg_feed_filename(buffer, sizeof(buffer), path, name_len);
-    os_file_delete(buffer);
+    os_file_delete(generate_opkg_feed_filename(path, name_len).c_str());
 
     *(bool *)user_data = true;
 

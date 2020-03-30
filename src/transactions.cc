@@ -29,8 +29,6 @@
 #include "messages.h"
 #include "hexdump.h"
 
-#include <cstddef>
-#include <cstring>
 #include <algorithm>
 
 enum class DCPSYNCPacketType
@@ -384,7 +382,7 @@ static ReadToBufferResult read_to_buffer(uint8_t *dest, size_t count,
 
                 /* we retry reading up to 40 times with a delay of 25 ms in
                  * between, so that's at least one second, but not much more */
-                static const struct timespec t = { .tv_sec =0, .tv_nsec = 25L * 1000L * 1000L, };
+                static const struct timespec t = {0, 25L * 1000L * 1000L};
                 os_nanosleep(&t);
 
                 continue;
@@ -851,16 +849,15 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
     }
     else
     {
-        uint8_t merged_buffer[DCPSYNC_HEADER_SIZE + request_header_.size() + fragsize];
-        size_t merged_size = 0;
+        std::vector<uint8_t> merged_buffer;
+        merged_buffer.reserve(DCPSYNC_HEADER_SIZE + request_header_.size() + fragsize);
+
+        auto out(merged_buffer.begin());
 
         if(tx_sync_.is_enabled() && (flags & TransactionQueue::DUMP_SENT_DCPSYNC) != 0)
         {
             if((flags & TransactionQueue::DUMP_SENT_MERGE_MASK) == TransactionQueue::DUMP_SENT_MERGE_ALL)
-            {
-                memcpy(merged_buffer + merged_size, sync_header, DCPSYNC_HEADER_SIZE);
-                merged_size += DCPSYNC_HEADER_SIZE;
-            }
+                out = std::copy(sync_header, sync_header + DCPSYNC_HEADER_SIZE, out);
             else
             {
                 /* separate dump of DCPSYNC header requested and possible */
@@ -871,22 +868,19 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
         }
 
         if((flags & TransactionQueue::DUMP_SENT_DCP_HEADER) != 0)
-        {
-            /* TODO: std::copy() */
-            memcpy(merged_buffer + merged_size,
-                   request_header_.data(), request_header_.size());
-            merged_size += request_header_.size();
-        }
+            out = std::copy(request_header_.begin(), request_header_.end(), out);
 
         if((flags & TransactionQueue::DUMP_SENT_DCP_PAYLOAD) != 0)
         {
-            /* TODO: std::copy() */
-            memcpy(merged_buffer + merged_size,
-                   &payload_.data()[current_fragment_offset_], fragsize);
-            merged_size += fragsize;
+            const auto from(std::next(payload_.begin(), current_fragment_offset_));
+            out = std::copy(from, std::next(from, fragsize), out);
         }
 
-        hexdump_to_log(MESSAGE_LEVEL_IMPORTANT, merged_buffer, merged_size,
+        BUG_IF(size_t(std::distance(merged_buffer.begin(), out)) < merged_buffer.size(),
+               "Reserved size too small");
+
+        hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
+                       merged_buffer.data(), merged_buffer.size(),
                        "Sent to DCP peer");
     }
 }

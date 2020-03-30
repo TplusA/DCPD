@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,6 +28,7 @@
 #include "network_device_list.hh"
 #include "dbus_handlers_connman_manager.hh"
 #include "messages.h"
+#include "guard.hh"
 
 #include <dirent.h>
 
@@ -979,70 +980,40 @@ void network_prefs_disable_ipv4(struct network_prefs *prefs)
     modify_pref(prefs->section, "DHCP", "");
 }
 
-/* taken from versions before f03d914 */
-struct config_filename_template
-{
-    const char *const config_template;
-    const size_t size_including_zero_terminator;
-    const size_t replacement_start_offset;
-};
-
-static const char config_filename_template_for_builtin_interfaces[] =
+static const std::string config_filename_template_for_builtin_interfaces =
     "builtin_xxxxxxxxxxxx.config";
 
-static char *generate_network_config_file_name(const char *connman_config_path,
-                                               const Connman::Address<Connman::AddressType::MAC> *const ethernet_mac)
+static std::string
+generate_network_config_file_name(const char *connman_config_path,
+                                  const Connman::Address<Connman::AddressType::MAC> *const ethernet_mac)
 {
-    static const char fixed_name_for_wlan_config[] = "wlan_device.config";
-
     const bool is_wired = (ethernet_mac != nullptr);
-    static const struct config_filename_template cfg_template =
+
+    std::string filename(connman_config_path);
+    filename += '/';
+
+    if(!is_wired)
     {
-        .config_template = config_filename_template_for_builtin_interfaces,
-        .size_including_zero_terminator = sizeof(config_filename_template_for_builtin_interfaces),
-        .replacement_start_offset = 8,
-    };
-
-    const size_t prefix_length = strlen(connman_config_path);
-    const size_t total_length =
-        prefix_length + 1 + (is_wired
-                             ? cfg_template.size_including_zero_terminator
-                             : sizeof(fixed_name_for_wlan_config));
-
-    char *filename = static_cast<char *>(malloc(total_length));
-
-    if(filename == nullptr)
-    {
-        msg_out_of_memory("network configuration filename");
-        return nullptr;
-    }
-
-    memcpy(filename, connman_config_path, prefix_length);
-    filename[prefix_length] = '/';
-
-    if(is_wired)
-        memcpy(filename + prefix_length + 1, cfg_template.config_template,
-               cfg_template.size_including_zero_terminator);
-    else
-    {
-        memcpy(filename + prefix_length + 1, fixed_name_for_wlan_config,
-               sizeof(fixed_name_for_wlan_config));
-
+        filename += "wlan_device.config";
         return filename;
     }
 
-    char *const dest =
-        filename + prefix_length + 1 + cfg_template.replacement_start_offset;
+    // 8 is the offset of the template region
+    const size_t dest_pos = filename.length() + 8;
+    filename += config_filename_template_for_builtin_interfaces;
+    auto out = std::next(filename.begin(), dest_pos);
 
-    const auto mac_string(ethernet_mac->get_string());
+    const auto &mac_string(ethernet_mac->get_string());
 
-    for(size_t i = 0, j = 0; i < 6 * 2; i += 2, j += 3)
+    for(size_t i = 0, j = 0; i < 6; ++i, j += 3)
     {
-        log_assert(dest[i + 0] == 'x');
-        log_assert(dest[i + 1] == 'x');
+        log_assert(*out == 'x');
+        *out = tolower(mac_string[j + 0]);
+        std::advance(out, 1);
 
-        dest[i + 0] = tolower(mac_string[j + 0]);
-        dest[i + 1] = tolower(mac_string[j + 1]);
+        log_assert(*out == 'x');
+        *out = tolower(mac_string[j + 1]);
+        std::advance(out, 1);
     }
 
     return filename;
@@ -1295,7 +1266,7 @@ static int delete_old_config(const char *path, unsigned char dtype,
     const char required_suffix[] = ".config";
     const size_t name_length = strlen(name);
 
-    if(name_length != sizeof(config_filename_template_for_builtin_interfaces) - 1)
+    if(name_length != config_filename_template_for_builtin_interfaces.length())
         return 0;
 
     if(strncmp(name, required_prefix, sizeof(required_prefix) - 1) != 0)
@@ -1337,14 +1308,13 @@ void network_prefs_migrate_old_network_configuration_files(const char *connman_c
     const auto &devices(locked_devices.first);
     const auto ethernet_mac(devices.get_auto_select_mac_address(Connman::Technology::ETHERNET));
 
-    char *old_ethernet_config_filename =
-        (ethernet_mac.empty()
-         ? nullptr
-         : generate_network_config_file_name(connman_config_path, &ethernet_mac));
-    char *old_wlan_config_filename =
-        generate_network_config_file_name(connman_config_path, NULL);
+    const std::string old_ethernet_config_filename = ethernet_mac.empty()
+        ? ""
+        : generate_network_config_file_name(connman_config_path, &ethernet_mac);
+    const std::string old_wlan_config_filename =
+        generate_network_config_file_name(connman_config_path, nullptr);
 
-    if(old_ethernet_config_filename == NULL && old_wlan_config_filename == NULL)
+    if(old_ethernet_config_filename.empty() && old_wlan_config_filename.empty())
     {
         msg_vinfo(MESSAGE_LEVEL_DIAG,
                   "No need to migrate old network configuration");
@@ -1354,66 +1324,69 @@ void network_prefs_migrate_old_network_configuration_files(const char *connman_c
     struct ini_file old_ethernet_config;
     struct ini_file old_wlan_config;
 
-    const bool have_old_ethernet_config =
-        (old_ethernet_config_filename != NULL)
-        ? (inifile_parse_from_file(&old_ethernet_config, old_ethernet_config_filename) == 0)
-        : false;
-    const bool have_old_wlan_config =
-        (old_wlan_config_filename != NULL)
-        ? (inifile_parse_from_file(&old_wlan_config, old_wlan_config_filename) == 0)
-        : false;
+    const bool have_old_ethernet_config = old_ethernet_config_filename.empty()
+        ? false
+        : (inifile_parse_from_file(&old_ethernet_config,
+                                   old_ethernet_config_filename.c_str()) == 0);
 
-    if(have_old_ethernet_config || have_old_wlan_config)
+    const bool have_old_wlan_config = old_wlan_config_filename.empty()
+        ? false
+        : (inifile_parse_from_file(&old_wlan_config,
+                                   old_wlan_config_filename.c_str()) == 0);
+
+    const Guard free_configs(
+            [have_old_ethernet_config, &old_ethernet_config,
+             have_old_wlan_config, &old_wlan_config]
+            {
+                if(have_old_ethernet_config)
+                    inifile_free(&old_ethernet_config);
+
+                if(have_old_wlan_config)
+                    inifile_free(&old_wlan_config);
+            });
+
+    if(!have_old_ethernet_config && !have_old_wlan_config)
+        return;
+
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "MIGRATING OLD NETWORK CONFIGURATION");
+
+    struct network_prefs *ethernet_prefs;
+    struct network_prefs *wlan_prefs;
+    struct network_prefs_handle *prefs =
+        network_prefs_open_rw(&ethernet_prefs, &wlan_prefs);
+
+    bool succeeded = false;
+
+    if(prefs == nullptr)
+        msg_error(0, LOG_ERR,
+                  "Failed reading or creating new configuration file");
+    else
     {
-        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "MIGRATING OLD NETWORK CONFIGURATION");
+        if(have_old_ethernet_config)
+            migrate_old_config(prefs, ethernet_prefs,
+                               &old_ethernet_config, true,
+                               old_ethernet_config_filename.c_str());
 
-        struct network_prefs *ethernet_prefs;
-        struct network_prefs *wlan_prefs;
-        struct network_prefs_handle *prefs =
-            network_prefs_open_rw(&ethernet_prefs, &wlan_prefs);
+        if(have_old_wlan_config)
+            migrate_old_config(prefs, wlan_prefs,
+                               &old_wlan_config, false,
+                               old_wlan_config_filename.c_str());
 
-        bool succeeded = false;
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,  "Writing new network configuration file");
+        succeeded = (network_prefs_write_to_file(prefs) == 0);
 
-        if(prefs == NULL)
-            msg_error(0, LOG_ERR,
-                      "Failed reading or creating new configuration file");
-        else
-        {
-            if(have_old_ethernet_config)
-                migrate_old_config(prefs, ethernet_prefs,
-                                   &old_ethernet_config, true,
-                                   old_ethernet_config_filename);
-
-            if(have_old_wlan_config)
-                migrate_old_config(prefs, wlan_prefs,
-                                   &old_wlan_config, false,
-                                   old_wlan_config_filename);
-
-            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,  "Writing new network configuration file");
-            succeeded = (network_prefs_write_to_file(prefs) == 0);
-
-            network_prefs_close(prefs);
-
-            if(succeeded)
-                delete_old_config_files(connman_config_path,
-                                        old_ethernet_config_filename,
-                                        old_wlan_config_filename);
-        }
+        network_prefs_close(prefs);
 
         if(succeeded)
-            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                      "Migrated old network configuration");
-        else
-            msg_error(0, LOG_ERR,
-                      "Migration of old network configuration FAILED");
+            delete_old_config_files(connman_config_path,
+                                    old_ethernet_config_filename.c_str(),
+                                    old_wlan_config_filename.c_str());
     }
 
-    if(have_old_ethernet_config)
-        inifile_free(&old_ethernet_config);
-
-    if(have_old_wlan_config)
-        inifile_free(&old_wlan_config);
-
-    free(old_ethernet_config_filename);
-    free(old_wlan_config_filename);
+    if(succeeded)
+        msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+                  "Migrated old network configuration");
+    else
+        msg_error(0, LOG_ERR,
+                  "Migration of old network configuration FAILED");
 }
