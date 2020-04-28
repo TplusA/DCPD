@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -536,6 +536,6 @@ void test_write_drcp_result_failed()
     cut_assert_equal_memory("FF\n", 3, buffer.data(), buffer.size());
 }
 
-};
+}
 
 /*!@}*/

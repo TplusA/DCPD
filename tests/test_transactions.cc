@@ -356,7 +356,7 @@ void test_find_transaction_by_nonexistent_serial()
                queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_INVALID, fn));
 }
 
-};
+}
 
 namespace dcp_transaction_tests_with_specific_register_config
 {
@@ -887,7 +887,7 @@ void test_big_data_is_sent_to_slave_in_fragments()
     network_prefs_deinit();
 }
 
-};
+}
 
 namespace dcp_transaction_tests
 {
@@ -2379,7 +2379,7 @@ void test_waiting_for_master_ack_interrupted_by_slave_read_transaction()
     configproxy_deinit();
 }
 
-};
+}
 
 /*!@}*/
 

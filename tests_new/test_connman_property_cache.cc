@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -141,7 +141,7 @@ TEST_CASE_FIXTURE(PropertyCacheTestsFixture, "Set boolean r/w value directly")
 
     CHECK(props_.cache_.set<Connman::TestProperties::Property::GLOBAL_BOOL_VALUE>(false));
     CHECK_FALSE(props_.cache_.lookup<Connman::TestProperties::Property::GLOBAL_BOOL_VALUE>());
-};
+}
 
 TEST_CASE_FIXTURE(PropertyCacheTestsFixture, "Set string r/w value directly")
 {
@@ -150,7 +150,7 @@ TEST_CASE_FIXTURE(PropertyCacheTestsFixture, "Set string r/w value directly")
 
     CHECK(props_.cache_.set<Connman::TestProperties::Property::GLOBAL_STRING_VALUE>("bar"));
     CHECK(props_.cache_.lookup<Connman::TestProperties::Property::GLOBAL_STRING_VALUE>() == "bar");
-};
+}
 
 TEST_CASE_FIXTURE(PropertyCacheTestsFixture, "Setting boolean read-only value throws (direct)")
 {

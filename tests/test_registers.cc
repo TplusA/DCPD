@@ -1327,7 +1327,7 @@ void test_assert_all_registers_are_checked_by_unit_tests()
     cppcut_assert_equal(level_ranges[1].code, highest_checked_version);
 }
 
-};
+}
 
 namespace spi_registers_tests_drc
 {
@@ -1697,7 +1697,7 @@ void test_slave_drc_power_off()
     cppcut_assert_equal(0, Regs::DRCP::DCP::write_drcp_command(buffer, sizeof(buffer)));
 }
 
-};
+}
 
 namespace spi_registers_protocol_level
 {
@@ -2129,7 +2129,7 @@ void test_negotiation_requires_at_least_one_range()
     cppcut_assert_equal(uint8_t(UINT8_MAX), buffer[0]);
 }
 
-};
+}
 
 namespace spi_registers_networking
 {
@@ -5100,7 +5100,7 @@ void test_network_status__ethernet_unavailable___wlan_unavailable()
                            NETWORK_STATUS_CONNECTION_NONE});
 }
 
-};
+}
 
 namespace spi_registers_upnp
 {
@@ -5692,7 +5692,7 @@ void test_set_all_upnp_variables()
                             os_write_buffer.data(), os_write_buffer.size());
 }
 
-};
+}
 
 namespace spi_registers_file_transfer
 {
@@ -6747,7 +6747,7 @@ void test_feed_configuration_with_more_than_two_fields_is_accepted()
     reg->write(url_buffer, sizeof(url_buffer));
 }
 
-};
+}
 
 namespace spi_registers_play_app_stream
 {
@@ -8567,7 +8567,7 @@ void test_pause_and_continue()
     expect_current_title_and_url("Second FLAC", "http://app-provided.url.org/second.flac");
 }
 
-};
+}
 
 namespace spi_registers_media_services
 {
@@ -8975,7 +8975,7 @@ void test_no_junk_after_password_allowed()
     write_buffer_expect_failure(reg, data, sizeof(data) - 1,-1);
 }
 
-};
+}
 
 namespace spi_registers_search
 {
@@ -9207,7 +9207,7 @@ void test_embedded_search_parameter_specification_must_not_be_empty()
     write_buffer_expect_failure(reg, reinterpret_cast<const uint8_t *>(query), sizeof(query), -1);
 }
 
-};
+}
 
 namespace spi_registers_misc
 {
@@ -9856,7 +9856,7 @@ void test_playback_stream_seek_boundaries()
     reg->write(buffer_max, sizeof(buffer_max));
 }
 
-};
+}
 
 namespace spi_registers_audio_sources
 {

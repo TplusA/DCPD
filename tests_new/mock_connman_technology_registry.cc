@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -51,7 +51,7 @@ TechnologyPropertiesWIFI::Containers::keys
     "TetheringPassphrase",
 };
 
-TechnologyPropertiesWIFI::~TechnologyPropertiesWIFI() {};
+TechnologyPropertiesWIFI::~TechnologyPropertiesWIFI() {}
 
 template <>
 void TechnologyPropertiesWIFI::send_property_over_dbus<bool>(Property key, const bool &value)
