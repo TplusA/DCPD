@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -105,7 +105,7 @@ gboolean dbusmethod_mixer_set(tdbusmixerVolume *object,
                               gpointer user_data);
 gboolean dbusmethod_mixer_set_relative(tdbusmixerVolume *object,
                                        GDBusMethodInvocation *invocation,
-                                       guint16 id, gdouble step, gboolean is_muted,
+                                       guint16 id, gdouble step, guchar mute_request,
                                        gpointer user_data);
 gboolean dbusmethod_mixer_get(tdbusmixerVolume *object,
                               GDBusMethodInvocation *invocation,

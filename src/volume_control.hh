@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -31,6 +31,15 @@
 namespace Mixer
 {
 
+enum class MuteRequest
+{
+    UNCHANGED,
+    TOGGLE_STATE,
+    SET_UNMUTE,
+    SET_MUTE,
+    LAST_VALUE = SET_MUTE,
+};
+
 class VolumeSettings
 {
   public:
@@ -46,6 +55,24 @@ class VolumeSettings
     {
         volume_.set_unknown();
         is_muted_.set_unknown();
+    }
+};
+
+class VolumeRequest
+{
+  public:
+    Maybe<double> volume_;
+    Maybe<MuteRequest> mute_request_;
+
+    VolumeRequest(const VolumeRequest &) = delete;
+    VolumeRequest &operator=(const VolumeRequest &) = delete;
+
+    explicit VolumeRequest() {}
+
+    void reset()
+    {
+        volume_.set_unknown();
+        mute_request_.set_unknown();
     }
 };
 
@@ -103,6 +130,14 @@ class VolumeControlProperties
     {}
 };
 
+enum class VolumeControlResult
+{
+    OK,
+    IGNORED,
+    UNKNOWN_ID,
+    INVALID,
+};
+
 class VolumeControl
 {
   public:
@@ -112,7 +147,7 @@ class VolumeControl
     std::unique_ptr<VolumeControlProperties> control_properties_;
 
     VolumeSettings appliance_settings_;
-    VolumeSettings requested_;
+    VolumeRequest requested_;
 
   public:
     VolumeControl(const VolumeControl &) = delete;
@@ -132,25 +167,18 @@ class VolumeControl
         return control_properties_.get();
     }
 
-    bool set_new_values(double volume, bool is_muted);
+    VolumeControlResult set_new_values(double volume, bool is_muted);
     bool set_absolute_request(double volume, bool is_muted);
-    bool set_relative_request(double step, bool is_muted);
+    bool set_relative_request(double step, MuteRequest mute_request);
 
     const VolumeSettings &get_settings() const { return appliance_settings_; }
-    const VolumeSettings &get_request() const { return requested_; }
+    const VolumeRequest &get_request() const { return requested_; }
 };
 
 class VolumeControls
 {
   public:
     static constexpr const uint16_t INVALID_CONTROL_ID = UINT16_MAX;
-
-    enum class Result
-    {
-        OK,
-        IGNORED,
-        UNKNOWN_ID,
-    };
 
   private:
     mutable LoggedLock::Mutex lock_;
@@ -165,20 +193,21 @@ class VolumeControls
     static std::pair<VolumeControls *const, LoggedLock::UniqueLock<LoggedLock::Mutex>> get_singleton();
 
     /* replace properties of given control */
-    Result replace_control_properties(uint16_t id,
-                                      std::unique_ptr<VolumeControlProperties> properties,
-                                      Maybe<double> &&initial_volume_level,
-                                      Maybe<bool> &&initial_mute_state);
+    VolumeControlResult
+    replace_control_properties(uint16_t id,
+                               std::unique_ptr<VolumeControlProperties> properties,
+                               Maybe<double> &&initial_volume_level,
+                               Maybe<bool> &&initial_mute_state);
 
     /* set values as reported by the appliance */
-    Result set_values(uint16_t id, double volume, bool is_muted);
+    VolumeControlResult set_values(uint16_t id, double volume, bool is_muted);
 
     /* set request as requested by some part of the Streaming Board */
-    Result request_absolute(uint16_t id, double volume, bool is_muted);
-    Result request_relative(uint16_t id, double step, bool is_muted);
+    VolumeControlResult request_absolute(uint16_t id, double volume, bool is_muted);
+    VolumeControlResult request_relative(uint16_t id, double step, MuteRequest mute_request);
 
-    Result get_current_values(uint16_t id, const VolumeSettings *&values) const;
-    Result get_requested_values(uint16_t id, const VolumeSettings *&values) const;
+    VolumeControlResult get_current_values(uint16_t id, const VolumeSettings *&values) const;
+    VolumeControlResult get_requested_values(uint16_t id, const VolumeRequest *&values) const;
 
     const std::vector<std::unique_ptr<VolumeControl>>::const_iterator begin() const
     {

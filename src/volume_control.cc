@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -146,20 +146,15 @@ int Regs::ApplianceVolumeControl::DCP::write_64_volume_control(const uint8_t *da
         {
             const FixPoint volume(params, params_length);
 
-            if(volume.is_nan())
-            {
-                msg_error(EINVAL, LOG_NOTICE, "Invalid volume control values");
-                break;
-            }
-
             switch(controls.first->set_values(master_id, volume.to_double(),
                                               (params[0] & (1U << 7)) != 0))
             {
-              case Mixer::VolumeControls::Result::OK:
-              case Mixer::VolumeControls::Result::IGNORED:
+              case Mixer::VolumeControlResult::OK:
+              case Mixer::VolumeControlResult::IGNORED:
                 return 0;
 
-              case Mixer::VolumeControls::Result::UNKNOWN_ID:
+              case Mixer::VolumeControlResult::UNKNOWN_ID:
+              case Mixer::VolumeControlResult::INVALID:
                 break;
             }
         }
@@ -240,23 +235,40 @@ ssize_t Regs::ApplianceVolumeControl::DCP::read_64_volume_control(uint8_t *respo
 
     const auto &req(master->get_request());
 
-    if(!req.volume_.is_known() || !req.is_muted_.is_known())
+    if(!req.volume_.is_known() || !req.mute_request_.is_known())
     {
         BUG("No active volume request");
         return 0;
     }
 
     const FixPoint volume(req.volume_.get());
-
     volume.to_buffer(response, 2);
 
-    if(req.is_muted_ == true)
+    const char *mute_request_info = nullptr;
+    switch(req.mute_request_.get())
+    {
+        case Mixer::MuteRequest::UNCHANGED:
+        mute_request_info = "do not touch";
+        break;
+
+        case Mixer::MuteRequest::TOGGLE_STATE:
+        mute_request_info = "toggle";
         response[0] |= 1U << 7;
+        break;
+
+        case Mixer::MuteRequest::SET_UNMUTE:
+        mute_request_info = "unmute";
+        break;
+
+        case Mixer::MuteRequest::SET_MUTE:
+        mute_request_info = "mute";
+        response[0] |= 1U << 7;
+        break;
+    }
 
     msg_vinfo(MESSAGE_LEVEL_NORMAL,
-              "Requesting appliance volume change: level %f (%f), %smuted",
-              volume.to_double(), req.volume_.get(),
-              req.is_muted_ == true ? "" : "not ");
+              "Requesting appliance volume change: level %f (%f), mute request: %s",
+              volume.to_double(), req.volume_.get(), mute_request_info);
 
     return 2;
 }
@@ -280,19 +292,26 @@ Mixer::VolumeControl::set_properties(std::unique_ptr<Mixer::VolumeControlPropert
     return control_properties_.get();
 }
 
-bool Mixer::VolumeControl::set_new_values(double volume, bool is_muted)
+Mixer::VolumeControlResult
+Mixer::VolumeControl::set_new_values(double volume, bool is_muted)
 {
     if(control_properties_ == nullptr)
     {
         msg_error(0, LOG_ERR,
                   "Ignoring volume report for unconfigured volume control");
-        return false;
+        return Mixer::VolumeControlResult::IGNORED;
     }
 
     switch(control_properties_->scale_)
     {
       case Mixer::VolumeScale::STEPS:
       case Mixer::VolumeScale::DECIBEL:
+        if(std::isnan(volume))
+        {
+            msg_error(0, LOG_ERR, "Invalid volume value (NaN)");
+            return Mixer::VolumeControlResult::INVALID;
+        }
+
         break;
 
       case Mixer::VolumeScale::RELATIVE_STEPS:
@@ -300,7 +319,7 @@ bool Mixer::VolumeControl::set_new_values(double volume, bool is_muted)
         {
             msg_error(0, LOG_ERR,
                       "Ignoring volume value report for relative volume control");
-            return false;
+            return Mixer::VolumeControlResult::INVALID;
         }
 
         break;
@@ -313,7 +332,7 @@ bool Mixer::VolumeControl::set_new_values(double volume, bool is_muted)
                                     appliance_settings_.volume_.get(std::numeric_limits<double>::quiet_NaN()),
                                     appliance_settings_.is_muted_.pick(1, 0, 2));
 
-    return true;
+    return Mixer::VolumeControlResult::OK;
 }
 
 bool Mixer::VolumeControl::set_absolute_request(double volume, bool is_muted)
@@ -339,14 +358,14 @@ bool Mixer::VolumeControl::set_absolute_request(double volume, bool is_muted)
     }
 
     requested_.volume_ = clamp(*control_properties_, volume);
-    requested_.is_muted_ = is_muted;
+    requested_.mute_request_ = is_muted ? MuteRequest::SET_MUTE : MuteRequest::SET_UNMUTE;
 
     Regs::get_data().register_changed_notification_fn(64);
 
     return true;
 }
 
-bool Mixer::VolumeControl::set_relative_request(double step, bool is_muted)
+bool Mixer::VolumeControl::set_relative_request(double step, MuteRequest mute_request)
 {
     if(control_properties_ == nullptr)
         return false;
@@ -367,7 +386,7 @@ bool Mixer::VolumeControl::set_relative_request(double step, bool is_muted)
     }
 
     requested_.volume_ = clamp(control_properties_->volume_step_, step);
-    requested_.is_muted_ = is_muted;
+    requested_.mute_request_ = mute_request;
 
     Regs::get_data().register_changed_notification_fn(64);
 
@@ -417,7 +436,7 @@ Mixer::VolumeControls::VolumeControls(std::unique_ptr<VolumeControl> predefined_
         controls_.emplace_back(std::move(predefined_master));
 }
 
-Mixer::VolumeControls::Result
+Mixer::VolumeControlResult
 Mixer::VolumeControls::replace_control_properties(uint16_t id,
         std::unique_ptr<Mixer::VolumeControlProperties> properties,
         Maybe<double> &&initial_volume_level, Maybe<bool> &&initial_mute_state)
@@ -428,7 +447,7 @@ Mixer::VolumeControls::replace_control_properties(uint16_t id,
         const bool changed = ctrl->get_properties() != properties.get();
 
         if(!changed)
-            return Mixer::VolumeControls::Result::IGNORED;
+            return Mixer::VolumeControlResult::IGNORED;
 
         const bool is_first_initialization = (ctrl->get_properties() == nullptr);
         const auto *const props =
@@ -474,16 +493,16 @@ Mixer::VolumeControls::replace_control_properties(uint16_t id,
                                                     std::numeric_limits<double>::quiet_NaN(), 2);
         }
 
-        return Mixer::VolumeControls::Result::OK;
+        return Mixer::VolumeControlResult::OK;
     }
     catch(const std::out_of_range &e)
     {
         msg_error(0, LOG_ERR, "Exception: %s", e.what());;
-        return Mixer::VolumeControls::Result::UNKNOWN_ID;
+        return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
 
-Mixer::VolumeControls::Result
+Mixer::VolumeControlResult
 Mixer::VolumeControls::set_values(uint16_t id, double volume, bool is_muted)
 {
     msg_vinfo(MESSAGE_LEVEL_NORMAL,
@@ -493,20 +512,16 @@ Mixer::VolumeControls::set_values(uint16_t id, double volume, bool is_muted)
     try
     {
         auto &ctrl = lookup_rw(id);
-
-        if(ctrl->set_new_values(volume, is_muted))
-            return Mixer::VolumeControls::Result::OK;
-        else
-            return Mixer::VolumeControls::Result::IGNORED;
+        return ctrl->set_new_values(volume, is_muted);
     }
     catch(const std::out_of_range &e)
     {
         msg_error(0, LOG_ERR, "Exception: %s", e.what());;
-        return Mixer::VolumeControls::Result::UNKNOWN_ID;
+        return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
 
-Mixer::VolumeControls::Result
+Mixer::VolumeControlResult
 Mixer::VolumeControls::request_absolute(uint16_t id, double volume, bool is_muted)
 {
     try
@@ -514,65 +529,65 @@ Mixer::VolumeControls::request_absolute(uint16_t id, double volume, bool is_mute
         auto &ctrl = lookup_rw(id);
 
         if(ctrl->set_absolute_request(volume, is_muted))
-            return Mixer::VolumeControls::Result::OK;
+            return Mixer::VolumeControlResult::OK;
         else
-            return Mixer::VolumeControls::Result::IGNORED;
+            return Mixer::VolumeControlResult::IGNORED;
     }
     catch(const std::out_of_range &e)
     {
         msg_error(0, LOG_ERR, "Exception: %s", e.what());;
-        return Mixer::VolumeControls::Result::UNKNOWN_ID;
+        return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
 
-Mixer::VolumeControls::Result
-Mixer::VolumeControls::request_relative(uint16_t id, double step, bool is_muted)
+Mixer::VolumeControlResult
+Mixer::VolumeControls::request_relative(uint16_t id, double step, MuteRequest mute_request)
 {
     try
     {
         auto &ctrl = lookup_rw(id);
 
-        if(ctrl->set_relative_request(step, is_muted))
-            return Mixer::VolumeControls::Result::OK;
+        if(ctrl->set_relative_request(step, mute_request))
+            return Mixer::VolumeControlResult::OK;
         else
-            return Mixer::VolumeControls::Result::IGNORED;
+            return Mixer::VolumeControlResult::IGNORED;
     }
     catch(const std::out_of_range &e)
     {
         msg_error(0, LOG_ERR, "Exception: %s", e.what());;
-        return Mixer::VolumeControls::Result::UNKNOWN_ID;
+        return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
 
-Mixer::VolumeControls::Result
+Mixer::VolumeControlResult
 Mixer::VolumeControls::get_current_values(uint16_t id,
                                           const Mixer::VolumeSettings *&values) const
 {
     try
     {
         values = &lookup(id)->get_settings();
-        return Mixer::VolumeControls::Result::OK;
+        return Mixer::VolumeControlResult::OK;
     }
     catch(const std::out_of_range &e)
     {
         msg_error(0, LOG_ERR, "Exception: %s", e.what());;
-        return Mixer::VolumeControls::Result::UNKNOWN_ID;
+        return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
 
-Mixer::VolumeControls::Result
+Mixer::VolumeControlResult
 Mixer::VolumeControls::get_requested_values(uint16_t id,
-                                            const Mixer::VolumeSettings *&values) const
+                                            const Mixer::VolumeRequest *&values) const
 {
     try
     {
         values = &lookup(id)->get_request();
-        return Mixer::VolumeControls::Result::OK;
+        return Mixer::VolumeControlResult::OK;
     }
     catch(const std::out_of_range &e)
     {
         msg_error(0, LOG_ERR, "Exception: %s", e.what());;
-        return Mixer::VolumeControls::Result::UNKNOWN_ID;
+        return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
 
