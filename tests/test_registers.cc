@@ -9220,7 +9220,8 @@ static MockDBusIface *mock_dbus_iface;
 static tdbusdcpdPlayback *const dbus_dcpd_playback_iface_dummy =
     reinterpret_cast<tdbusdcpdPlayback *>(0x12345678);
 
-static constexpr char expected_config_filename[] = "/etc/os-release";
+static constexpr char expected_os_release_filename[] = "/etc/os-release";
+static constexpr char expected_strbo_release_filename[] = "/etc/strbo-release";
 
 static constexpr int expected_os_map_file_to_memory_fd = 5;
 
@@ -9315,6 +9316,7 @@ void test_dcp_register_37_has_no_write_handler()
 }
 
 static void do_test_read_image_version(const os_mapped_file_data &config_file,
+                                       bool have_strbo_config_file,
                                        size_t dest_buffer_size,
                                        const char *expected_version_id,
                                        size_t expected_version_id_size,
@@ -9334,7 +9336,14 @@ static void do_test_read_image_version(const os_mapped_file_data &config_file,
 
     auto *reg = Regs::lookup(37);
 
-    mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_config_filename);
+    if(have_strbo_config_file)
+        mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_strbo_release_filename);
+    else
+    {
+        mock_os->expect_os_map_file_to_memory(-1, ENOENT, &config_file, expected_strbo_release_filename);
+        mock_os->expect_os_map_file_to_memory(0, 0, &config_file, expected_os_release_filename);
+    }
+
     mock_os->expect_os_unmap_file(0, &config_file);
 
     if(expected_warning != nullptr)
@@ -9377,7 +9386,32 @@ void test_read_image_version()
 
     static const char expected_version_id[] = "V1.0.0";
 
-    do_test_read_image_version(config_file, 20,
+    do_test_read_image_version(config_file, false, 20,
+                               expected_version_id, sizeof(expected_version_id));
+}
+
+/*!\test
+ * Realistic test with real-life configuration data, new style.
+ */
+void test_read_image_version_from_strbo_release()
+{
+    static char config_file_buffer[] =
+        "STRBO_RELEASE_LINE=\"V2\"\n"
+        "STRBO_FLAVOR=\"stable\"\n"
+        "STRBO_VERSION=\"V2.4.3\"\n"
+        "STRBO_DATETIME=\"20200529120216\"\n"
+        "STRBO_GIT_COMMIT=\"149d8fbc1ca4186d30b75b2e8127b4307f48d41d\"\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_version_id[] = "V2.4.3";
+
+    do_test_read_image_version(config_file, true, 20,
                                expected_version_id, sizeof(expected_version_id));
 }
 
@@ -9400,7 +9434,7 @@ void test_read_image_version_with_version_id_in_first_line()
 
     static const char expected_version_id[] = "V1.0.0";
 
-    do_test_read_image_version(config_file, 20,
+    do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
 }
 
@@ -9423,7 +9457,7 @@ void test_read_image_version_with_version_id_in_last_line()
 
     static const char expected_version_id[] = "V1.0.0";
 
-    do_test_read_image_version(config_file, 20,
+    do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
 }
 
@@ -9446,7 +9480,7 @@ void test_read_image_version_with_version_id_in_last_line_without_newline()
 
     static const char expected_version_id[] = "V1.0.0";
 
-    do_test_read_image_version(config_file, 20,
+    do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
 }
 
@@ -9466,7 +9500,7 @@ void test_read_image_version_with_single_character_version_id()
 
     static const char expected_version_id[] = "X";
 
-    do_test_read_image_version(config_file, 20,
+    do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
 }
 
@@ -9486,7 +9520,7 @@ void test_read_image_version_with_empty_version_id()
 
     static const char expected_version_id[] = "";
 
-    do_test_read_image_version(config_file, 20,
+    do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
 }
 
@@ -9506,7 +9540,7 @@ void test_read_image_version_with_small_buffer()
 
     static const char expected_version_id[] = "beta-20.8";
 
-    do_test_read_image_version(config_file, sizeof(expected_version_id),
+    do_test_read_image_version(config_file, false, sizeof(expected_version_id),
                                expected_version_id, sizeof(expected_version_id),
                                "Truncating version ID of length 16 to 9 characters");
 }
@@ -9527,7 +9561,7 @@ void test_read_image_version_with_very_small_buffer()
 
     static const char expected_version_id[] = "";
 
-    do_test_read_image_version(config_file, sizeof(expected_version_id),
+    do_test_read_image_version(config_file, false, sizeof(expected_version_id),
                                expected_version_id, sizeof(expected_version_id),
                                "Truncating version ID of length 14 to 0 characters");
 }
@@ -9546,7 +9580,7 @@ void test_read_image_version_with_zero_size_buffer()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    do_test_read_image_version(config_file, 0, nullptr, 0,
+    do_test_read_image_version(config_file, false, 0, nullptr, 0,
                                "Cannot copy version ID to zero length buffer");
 }
 

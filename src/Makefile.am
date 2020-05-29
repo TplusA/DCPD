@@ -24,7 +24,7 @@ ACLOCAL_AMFLAGS = -I ../m4
 bin_PROGRAMS = dcpd
 
 dcpd_SOURCES = \
-    dcpd.cc os.c os.h named_pipe.c named_pipe.h \
+    dcpd.cc os.c os.h os.hh named_pipe.c named_pipe.h \
     registers.hh registers_priv.hh register_response_writer.hh \
     dcp_over_tcp.c dcp_over_tcp.h mainloop.hh logged_lock.hh \
     smartphone_app_send.cc smartphone_app_send.hh smartphone_app.hh \

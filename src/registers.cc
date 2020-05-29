@@ -50,6 +50,7 @@
 #include "dcpregs_status.hh"
 #include "dcpregs_datetime.hh"
 #include "string_trim.hh"
+#include "os.hh"
 
 #include <cstring>
 #include <cinttypes>
@@ -136,12 +137,34 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 37 handler %p %zu", response, length);
 
-    static const char osrelease_filename[] = "/etc/os-release";
-    static const char key[] = "VERSION_ID=";
-
     struct os_mapped_file_data f;
-    if(os_map_file_to_memory(&f, osrelease_filename) < 0)
-        return -1;
+    const char *x_release_filename = nullptr;
+    const char *key = nullptr;
+    size_t key_length;
+
+    {
+        static const char strbo_release_filename[] = "/etc/strbo-release";
+        static const char strbo_release_key[] = "STRBO_VERSION=";
+        static const char os_release_filename[] = "/etc/os-release";
+        static const char os_release_key[] = "VERSION_ID=";
+
+        OS::SuppressErrorsGuard no_errors;
+
+        if(os_map_file_to_memory(&f, strbo_release_filename) == 0)
+        {
+            x_release_filename = strbo_release_filename;
+            key = strbo_release_key;
+            key_length = sizeof(strbo_release_key) - 1;
+        }
+        else if(os_map_file_to_memory(&f, os_release_filename) == 0)
+        {
+            x_release_filename = os_release_filename;
+            key = os_release_key;
+            key_length = sizeof(os_release_key) - 1;
+        }
+        else
+            return -1;
+    }
 
     auto *const content = static_cast<const char *>(f.ptr);
     bool ok = false;
@@ -150,14 +173,34 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     {
         const size_t remaining = f.length - i;
 
-        if(remaining < sizeof(key) - 1)
+        if(remaining < key_length)
             break;
 
-        if(memcmp(key, content + i, sizeof(key) - 1) == 0)
+        if(memcmp(key, content + i, key_length) == 0)
         {
-            i += sizeof(key) - 1;
+            i += key_length;
 
-            const size_t id_length = skip_to_eol(content, f.length, i) - i;
+            const size_t id_length_raw = skip_to_eol(content, f.length, i) - i;
+            const bool values_are_quoted = id_length_raw > 0 && content[i] == '"';
+
+            if(values_are_quoted)
+            {
+                if(id_length_raw < 2)
+                {
+                    msg_error(0, LOG_ERR, "Quoted version ID too short");
+                    break;
+                }
+
+                if(content[i + id_length_raw - 1] != '"')
+                {
+                    msg_error(0, LOG_ERR, "Missing quotation mark in version ID");
+                    break;
+                }
+
+                ++i;
+            }
+
+            const size_t id_length = id_length_raw - (values_are_quoted ? 2 : 0);
             const size_t bytes_to_fill =
                 length > id_length + 1 ? id_length + 1 : length;
 
@@ -192,7 +235,7 @@ static ssize_t read_37_image_version(uint8_t *response, size_t length)
     os_unmap_file(&f);
 
     if(!ok)
-        msg_error(0, LOG_ERR, "No VERSION_ID in %s", osrelease_filename);
+        msg_error(0, LOG_ERR, "No VERSION_ID in %s", x_release_filename);
 
     return ok ? (ssize_t)length : -1;
 }
