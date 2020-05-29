@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,6 +24,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstddef>
 
 /*!
  * \addtogroup app_link

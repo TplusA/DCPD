@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -29,6 +29,9 @@
 
 #include <array>
 #include <algorithm>
+#include <string>
+#include <stdexcept>
+#include <cerrno>
 
 static const char system_language_code_key[]     = "@drcpd::i18n:language_code";
 static const char system_language_variant_key[]  = "@drcpd::i18n:country_code";

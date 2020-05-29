@@ -26,6 +26,7 @@
 #include "applink_variables.hh"
 #include "messages.h"
 
+#include <string>
 #include <cstring>
 #include <cerrno>
 

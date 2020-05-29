@@ -81,6 +81,8 @@ void TransactionQueue::Transaction::log_register_write(LogWrite what) const
               suffix);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtype-limits"
 uint16_t TransactionQueue::Queue::mk_dcpsync_serial()
 {
     if(next_dcpsync_serial_ < DCPSYNC_MASTER_SERIAL_MIN ||
@@ -91,6 +93,7 @@ uint16_t TransactionQueue::Queue::mk_dcpsync_serial()
 
     return next_dcpsync_serial_++;
 }
+#pragma GCC diagnostic pop
 
 TransactionQueue::TXSync::TXSync(Queue &queue, InitialType init_type,
                                  uint8_t command, Channel channel)
@@ -326,12 +329,15 @@ std::unique_ptr<TransactionQueue::Transaction> TransactionQueue::Queue::pop()
     return result;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtype-limits"
 static inline bool is_serial_out_of_range(const uint16_t serial)
 {
     return
         !((serial >= DCPSYNC_MASTER_SERIAL_MIN && serial <= DCPSYNC_MASTER_SERIAL_MAX) ||
           (serial >= DCPSYNC_SLAVE_SERIAL_MIN && serial <= DCPSYNC_SLAVE_SERIAL_MAX));
 }
+#pragma GCC diagnostic pop
 
 TransactionQueue::ProcessResult
 TransactionQueue::Queue::apply_to_dcpsync_serial(uint16_t serial,
