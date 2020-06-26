@@ -48,6 +48,7 @@
 #include "dcpregs_mediaservices.hh"
 #include "dcpregs_searchparameters.hh"
 #include "dcpregs_status.hh"
+#include "dcpregs_system_update.hh"
 #include "dcpregs_datetime.hh"
 #include "string_trim.hh"
 #include "os.hh"
@@ -57,7 +58,7 @@
 #include <array>
 #include <algorithm>
 
-#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 9)
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 10)
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -294,7 +295,7 @@ static int write_95_max_bitrate(const uint8_t *data, size_t length)
  *
  * \note The entries must be sorted by address for the binary search.
  */
-static const std::array<Regs::Register, 54> register_map
+static const std::array<Regs::Register, 55> register_map
 {
     /* Protocol level negotiation */
     Regs::Register("protocol level negotiation", 1,
@@ -627,6 +628,12 @@ static const std::array<Regs::Register, 54> register_map
                    REGISTER_MK_VERSION(1, 0, 2),
                    16,
                    Regs::PlayStream::DCP::read_210_current_cover_art_hash),
+
+    /* Streaming Board update parameters */
+    Regs::Register("StrBo update parameters", 211,
+                   REGISTER_MK_VERSION(1, 0, 10),
+                   32 * 1024,
+                   Regs::SystemUpdate::DCP::write_211_strbo_update_parameters),
 
     /* Continue playing, next stream has this title (fallback title) */
     Regs::Register("next plain stream title", 238,

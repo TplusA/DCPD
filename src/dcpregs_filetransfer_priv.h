@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2017, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -38,6 +38,7 @@
 
 #define HCR_COMMAND_CATEGORY_UPDATE_FROM_INET   0x27
 #define HCR_COMMAND_UPDATE_MAIN_SYSTEM          0x20
+#define HCR_COMMAND_UPDATE_STREAMING_BOARD      0x21
 
 /*
  * Definitions for HCR status register (41)

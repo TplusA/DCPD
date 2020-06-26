@@ -93,3 +93,16 @@ test('AuPaL Parser',
     args: ['--reporters=strboxml', '--out=test_aupal_parser.junit.xml'],
     suite: 'new',
 )
+
+test('Registers System Update',
+    executable('test_registers_system_update',
+        ['test_registers_system_update.cc',
+         'mock_messages.cc'],
+        include_directories: '../src',
+        link_with: [testrunner_lib, registers_lib, rest_api_light_lib],
+        cpp_args: '-DDOCTEST_CONFIG_TREAT_CHAR_STAR_AS_STRING',
+        build_by_default: false),
+    workdir: meson.current_build_dir(),
+    args: ['--reporters=strboxml', '--out=test_registers_system_update.junit.xml'],
+    suite: 'new',
+)

@@ -47,6 +47,7 @@
 #include "connman_scan.hh"
 #include "networkprefs.h"
 #include "accesspoint_manager.hh"
+#include "rest_api.hh"
 #include "configproxy.h"
 #include "configuration_dcpd.hh"
 #include "configuration.hh"
@@ -977,6 +978,8 @@ static bool main_loop_init(const struct parameters *parameters,
 
     if(dot_init(dot) < 0)
         ret = false;
+
+    Rest::init();
 
     return ret;
 }

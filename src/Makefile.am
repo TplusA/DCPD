@@ -42,6 +42,7 @@ dcpd_SOURCES = \
     dcpregs_upnpname.hh dcpregs_upnpserver.hh dcpregs_audiosources.hh dcpregs_volume.hh \
     dcpregs_searchparameters.hh dcpregs_appliance.hh dcpregs_internationalization.hh \
     dcpregs_accesspoint.hh dcpregs_datetime.hh dcpregs_audiopaths.hh \
+    dcpregs_system_update.hh \
     audiopath_minidsl.hh json.hh \
     connman_iter.c connman_iter.h connman_scan.cc connman_scan.hh \
     connman_common.c connman_common.h \
@@ -100,6 +101,8 @@ noinst_LTLIBRARIES = \
     libconnman_dbus.la \
     libaccesspoint.la \
     libplainplayer.la \
+    librest_api.la \
+    librest_api_light.la \
     liblogind_dbus.la \
     libsystemd_dbus.la \
     libjsonio_dbus.la \
@@ -129,6 +132,7 @@ libregisters_la_SOURCES = \
     dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
     dcpregs_searchparameters.cc dcpregs_searchparameters.hh \
     dcpregs_datetime.cc dcpregs_datetime.hh \
+    dcpregs_system_update.cc dcpregs_system_update.hh dcpregs_system_update_json.hh \
     dcpregs_status.hh \
     volume_control.cc volume_control.hh dcpregs_volume.hh fixpoint.hh \
     dbus_handlers_connman_manager.hh networkprefs.h \
@@ -146,6 +150,14 @@ libregisters_la_SOURCES = \
 nodist_libregisters_la_SOURCES = do_update_sh.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 libregisters_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+librest_api_light_la_SOURCES = rest_api.cc rest_api.hh
+librest_api_light_la_CFLAGS = $(AM_CFLAGS)
+librest_api_light_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+librest_api_la_SOURCES = rest_api.cc rest_api_curl.cc rest_api.hh
+librest_api_la_CFLAGS = $(AM_CFLAGS)
+librest_api_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libservicelist_la_SOURCES = \
     connman_service_list.cc connman_service_list.hh \

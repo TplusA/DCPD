@@ -25,7 +25,8 @@ check_PROGRAMS = \
     test_connman_property_cache \
     test_access_point \
     test_plainplayer \
-    test_aupal_parser
+    test_aupal_parser \
+    test_registers_system_update
 
 TESTS = run_tests.sh
 
@@ -97,6 +98,17 @@ test_plainplayer_LDADD = \
     $(top_builddir)/src/libplainplayer.la
 test_plainplayer_CPPFLAGS = $(AM_CPPFLAGS)
 test_plainplayer_CXXFLAGS = $(AM_CXXFLAGS)
+
+test_registers_system_update_SOURCES = \
+    test_registers_system_update.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_registers_system_update_LDADD = \
+    libtestrunner.la \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/librest_api_light.la
+test_registers_system_update_CPPFLAGS = $(AM_CPPFLAGS)
+test_registers_system_update_CXXFLAGS = $(AM_CXXFLAGS)
 
 doctest: $(check_PROGRAMS)
 	for p in $(check_PROGRAMS); do \

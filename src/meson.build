@@ -134,11 +134,21 @@ registers_lib = static_library('registers',
         'dcpregs_audiopaths.cc', 'dcpregs_playstream.cc',
         'dcpregs_stream_speed.cc', 'dcpregs_mediaservices.cc',
         'dcpregs_searchparameters.cc', 'dcpregs_datetime.cc',
+        'dcpregs_system_update.cc',
         'volume_control.cc', 'coverart.cc', 'md5.cc', 'gvariantwrapper.cc',
         do_update_sh_h,
     ],
     dependencies: [glib_deps, config_h],
     include_directories: dbus_iface_defs_includes
+)
+
+rest_api_light_lib = static_library('rest_api_light',
+    'rest_api.cc', dependencies: config_h
+)
+
+rest_api_lib = static_library('rest_api',
+    ['rest_api.cc', 'rest_api_curl.cc'],
+    dependencies: [dependency('curlpp'), config_h]
 )
 
 servicelist_lib = static_library('servicelist',
@@ -175,6 +185,7 @@ executable(
         ),
         accesspoint_lib,
         applink_lib,
+        rest_api_lib,
         audiopath_minidsl_lib,
         configproxy_lib,
         connman_service_lib,

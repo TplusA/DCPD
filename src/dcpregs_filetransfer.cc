@@ -25,6 +25,7 @@
 
 #include "dcpregs_filetransfer.hh"
 #include "dcpregs_filetransfer_priv.h"
+#include "dcpregs_system_update.hh"
 #include "coverart.hh"
 #include "dbus_iface_deep.h"
 #include "registers_priv.hh"
@@ -980,10 +981,13 @@ static int do_write_download_control(const uint8_t *data)
         else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
             BUG("Restore to factory defaults not implemented");
     }
-    else if(data[0] == HCR_COMMAND_CATEGORY_UPDATE_FROM_INET &&
-            data[1] == HCR_COMMAND_UPDATE_MAIN_SYSTEM)
+    else if(data[0] == HCR_COMMAND_CATEGORY_UPDATE_FROM_INET)
     {
-        return try_start_system_update();
+        if(data[1] == HCR_COMMAND_UPDATE_MAIN_SYSTEM)
+            return try_start_system_update();
+
+        if(data[1] == HCR_COMMAND_UPDATE_STREAMING_BOARD)
+            return Regs::SystemUpdate::process_update_request() ? 0 : -1;
     }
 
     msg_error(ENOSYS, LOG_ERR, "Unsupported command");
