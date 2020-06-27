@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -464,7 +464,8 @@ class UniqueLock
     {
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: create, attempt to lock %s",
-                  get_context_hints().c_str(), this, lock_name_);
+                  get_context_hints().c_str(), static_cast<const void *>(this),
+                  lock_name_);
         lock();
     }
 
@@ -476,7 +477,8 @@ class UniqueLock
     {
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: created with unlocked %s",
-                  get_context_hints().c_str(), this, lock_name_);
+                  get_context_hints().c_str(), static_cast<const void *>(this),
+                  lock_name_);
     }
 
     UniqueLock(UniqueLock &&src):
@@ -487,7 +489,8 @@ class UniqueLock
     {
         src.moved_from_ = true;
         msg_vinfo(logged_mutex_.get_log_level(), "<%s> UniqueLock %p: moved to %p",
-                  get_context_hints().c_str(), &src, this);
+                  get_context_hints().c_str(), static_cast<const void *>(&src),
+                  static_cast<const void *>(this));
     }
 
     ~UniqueLock()
@@ -497,7 +500,8 @@ class UniqueLock
 
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: destroy with %s owned by <%08lx>",
-                  get_context_hints().c_str(), this, lock_name_, get_mutex_owner());
+                  get_context_hints().c_str(), static_cast<const void *>(this),
+                  lock_name_, get_mutex_owner());
 
         if(lock_.owns_lock())
             MTraits::destroy_owned(logged_mutex_);
@@ -507,20 +511,23 @@ class UniqueLock
     {
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: lock %s",
-                  get_context_hints().c_str(), this, lock_name_);
+                  get_context_hints().c_str(), static_cast<const void *>(this),
+                  lock_name_);
         logged_mutex_.about_to_lock(false);
         lock_.lock();
         MTraits::set_owner(logged_mutex_);
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: locked %s",
-                  get_context_hints().c_str(), this, lock_name_);
+                  get_context_hints().c_str(), static_cast<const void *>(this),
+                  lock_name_);
     }
 
     void unlock()
     {
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: unlock %s",
-                  get_context_hints().c_str(), this, lock_name_);
+                  get_context_hints().c_str(), static_cast<const void *>(this),
+                  lock_name_);
         MTraits::clear_owner(logged_mutex_);
         lock_.unlock();
     }
@@ -529,7 +536,8 @@ class UniqueLock
     {
         msg_vinfo(logged_mutex_.get_log_level(),
                   "<%s> UniqueLock %p: get raw unique_lock for %s",
-                  get_context_hints().c_str(), this, lock_name_);
+                  get_context_hints().c_str(), static_cast<const void *>(this),
+                  lock_name_);
         return lock_;
     }
 

@@ -41,7 +41,17 @@ AM_CXXFLAGS = $(CXXWARNINGS)
 LIBS += $(CPPCUTTER_LIBS)
 
 check_LTLIBRARIES = \
-    test_registers.la \
+    test_registers_basics.la \
+    test_registers_response_writer.la \
+    test_registers_drcp.la \
+    test_registers_networking.la \
+    test_registers_upnp.la \
+    test_registers_file_transfer.la \
+    test_registers_play_app_stream.la \
+    test_registers_media_services.la \
+    test_registers_audio_sources.la \
+    test_registers_search.la \
+    test_registers_misc.la \
     test_drcpdcomm.la \
     test_transactions.la \
     test_xmodem.la \
@@ -64,36 +74,180 @@ test_applink_la_LIBADD = \
 test_applink_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 test_applink_la_CXXFLAGS = $(AM_CXXFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
-test_registers_la_SOURCES = \
-    test_registers.cc \
-    ../src/dcpregs_filetransfer_priv.h \
-    ../src/stream_id.h ../src/stream_id.hh \
+test_registers_basics_la_SOURCES = \
+    test_registers_basics.cc \
+    test_registers_common.hh \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_registers_basics_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_basics_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_basics_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+
+test_registers_response_writer_la_SOURCES = test_registers_response_writer.cc
+test_registers_response_writer_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_response_writer_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_drcp_la_SOURCES = \
+    test_registers_drcp.cc \
+    test_registers_common.hh \
     mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
     mock_dbus_iface.hh mock_dbus_iface.cc \
-    mock_file_transfer_dbus.hh mock_file_transfer_dbus.cc \
-    mock_streamplayer_dbus.hh mock_streamplayer_dbus.cc \
-    mock_credentials_dbus.hh mock_credentials_dbus.cc \
-    mock_airable_dbus.hh mock_airable_dbus.cc \
-    mock_artcache_dbus.hh mock_artcache_dbus.cc \
     mock_audiopath_dbus.hh mock_audiopath_dbus.cc \
     mock_logind_manager_dbus.hh mock_logind_manager_dbus.cc \
+    mock_os.hh mock_os.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_registers_drcp_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_drcp_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_drcp_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_networking_la_SOURCES = \
+    test_registers_networking.cc \
+    test_registers_common.hh \
     mock_connman.hh mock_connman.cc \
     mock_os.hh mock_os.cc \
     mock_messages.hh mock_messages.cc \
     mock_backtrace.hh mock_backtrace.cc \
     mock_expectation.hh
-test_registers_la_LIBADD = \
+test_registers_networking_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libinifile.la \
+    $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libconnman_service.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_networking_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_networking_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_upnp_la_SOURCES = \
+    test_registers_upnp.cc \
+    test_registers_common.hh \
+    mock_os.hh mock_os.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_registers_upnp_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_upnp_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_upnp_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_file_transfer_la_SOURCES = \
+    test_registers_file_transfer.cc \
+    test_registers_common.hh \
+    mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_file_transfer_dbus.hh mock_file_transfer_dbus.cc \
+    mock_logind_manager_dbus.hh mock_logind_manager_dbus.cc \
+    mock_os.hh mock_os.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_registers_file_transfer_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libplainplayer.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libconnman_technology_registry.la \
+    $(top_builddir)/src/libinifile.la \
+    $(top_builddir)/src/libxmodem.la
+test_registers_file_transfer_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_file_transfer_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_play_app_stream_la_SOURCES = \
+    test_registers_play_app_stream.cc \
+    test_registers_common.hh \
+    mock_streamplayer_dbus.hh mock_streamplayer_dbus.cc \
+    mock_artcache_dbus.hh mock_artcache_dbus.cc \
+    mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
+    mock_audiopath_dbus.hh mock_audiopath_dbus.cc \
+    mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_backtrace.hh mock_backtrace.cc \
+    mock_expectation.hh
+test_registers_play_app_stream_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libplainplayer.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_play_app_stream_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_play_app_stream_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_media_services_la_SOURCES = \
+    test_registers_media_services.cc \
+    test_registers_common.hh \
+    mock_messages.hh mock_messages.cc \
+    mock_credentials_dbus.hh mock_credentials_dbus.cc \
+    mock_airable_dbus.hh mock_airable_dbus.cc \
+    mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_expectation.hh
+test_registers_media_services_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_media_services_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_media_services_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_audio_sources_la_SOURCES = \
+    test_registers_audio_sources.cc \
+    test_registers_common.hh \
+    mock_audiopath_dbus.hh mock_audiopath_dbus.cc \
+    mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_backtrace.hh mock_backtrace.cc \
+    mock_expectation.hh
+test_registers_audio_sources_la_LIBADD = \
     $(top_builddir)/src/libregisters.la \
     $(top_builddir)/src/libplainplayer.la \
     $(top_builddir)/src/libshutdown_guard.la \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libservicelist.la \
-    $(top_builddir)/src/libconnman_service.la \
-    $(top_builddir)/src/libconnman_technology_registry.la \
-    $(top_builddir)/src/libinifile.la \
-    $(top_builddir)/src/libxmodem.la
-test_registers_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
-test_registers_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_audio_sources_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_audio_sources_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_search_la_SOURCES = \
+    test_registers_search.cc \
+    test_registers_common.hh \
+    mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
+    mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_registers_search_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la \
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_search_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_search_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
+
+test_registers_misc_la_SOURCES = \
+    test_registers_misc.cc \
+    test_registers_common.hh \
+    mock_dcpd_dbus.hh mock_dcpd_dbus.cc \
+    mock_dbus_iface.hh mock_dbus_iface.cc \
+    mock_os.hh mock_os.cc \
+    mock_messages.hh mock_messages.cc \
+    mock_expectation.hh
+test_registers_misc_la_LIBADD = \
+    $(top_builddir)/src/libregisters.la\
+    $(top_builddir)/src/libshutdown_guard.la \
+    $(top_builddir)/src/libnetworkprefs.la \
+    $(top_builddir)/src/libconnman_technology_registry.la
+test_registers_misc_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
+test_registers_misc_la_CXXFLAGS = $(CXXRELAXEDWARNINGS) $(DCPD_DEPENDENCIES_CFLAGS)
 
 test_drcpdcomm_la_SOURCES = \
     test_drcp_communication.cc \

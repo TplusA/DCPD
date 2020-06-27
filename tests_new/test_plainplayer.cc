@@ -26,9 +26,16 @@
 #include <doctest.h>
 
 #include "plainplayer.hh"
+#include "logged_lock.hh"
 
 #include "mock_messages.hh"
 #include "mock_backtrace.hh"
+
+#if LOGGED_LOCKS_ENABLED && LOGGED_LOCKS_THREAD_CONTEXTS
+thread_local LoggedLock::Context LoggedLock::context;
+#endif
+
+#if !LOGGED_LOCKS_ENABLED
 
 TEST_SUITE_BEGIN("Plain URL player");
 
@@ -802,3 +809,5 @@ TEST_CASE_FIXTURE(Fixture,
 }
 
 TEST_SUITE_END();
+
+#endif /* !LOGGED_LOCKS_ENABLED  */
