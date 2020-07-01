@@ -709,7 +709,7 @@ static void set_update_package_feed_configuration(bool have_regular_inifile,
      * from our file, then generate opkg configuration files, then start the
      * update */
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                                    "Attempting to START SYSTEM UPDATE");
+                                    "Attempting to START SYSTEM UPDATE (opkg)");
 
     mock_os->expect_os_foreach_in_path(0, 0, opkg_configuration_path, items_after);
 
@@ -839,7 +839,7 @@ void test_set_update_package_feed_configuration_with_regular_and_override()
 static void feed_configuration_file_is_created_on_system_update(bool have_override_inifile)
 {
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                                    "Attempting to START SYSTEM UPDATE");
+                                    "Attempting to START SYSTEM UPDATE (opkg)");
 
     mock_os->expect_os_foreach_in_path(0, 0, opkg_configuration_path);
 

@@ -879,7 +879,8 @@ bool Regs::FileTransfer::hcr_is_system_update_in_progress()
 
 static int try_start_system_update()
 {
-    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Attempting to START SYSTEM UPDATE");
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
+              "Attempting to START SYSTEM UPDATE (opkg)");
 
     if(generate_opkg_feed_files_if_necessary() < 0)
         return -1;
