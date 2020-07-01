@@ -42,6 +42,15 @@ class RestConfig
     {}
 
     const std::string &base_url() const { return base_url_; }
+
+    void update_base_url(std::string &&url)
+    {
+        if(!url.empty() && url != base_url_)
+        {
+            base_url_ = std::move(url);
+            msg_info("Updated REST API base URL: %s", base_url_.c_str());
+        }
+    }
 };
 
 static RestConfig rest_config;
@@ -49,6 +58,11 @@ static RestConfig rest_config;
 const std::string &Rest::get_base_url()
 {
     return rest_config.base_url();
+}
+
+void Rest::set_base_url(std::string &&url)
+{
+    rest_config.update_base_url(std::move(url));
 }
 
 Rest::Result

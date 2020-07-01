@@ -103,7 +103,9 @@ bool Regs::SystemUpdate::process_update_request()
     return false;
 }
 
-static const std::string &to_request_key(std::string &&token)
+static const std::string empty_string;
+
+static const std::string &to_request_key(const std::string &token)
 {
     static const std::unordered_map<std::string, std::string> keys
     {
@@ -121,8 +123,7 @@ static const std::string &to_request_key(std::string &&token)
     {
         msg_error(EINVAL, LOG_WARNING,
                   "Unrecognized request parameter \"%s\"", token.c_str());
-        static const std::string empty;
-        return empty;
+        return empty_string;
     }
 }
 
@@ -158,7 +159,9 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
             std::find_if_not(std::reverse_iterator<const char *>(assignment),
                              std::reverse_iterator<const char *>(pos),
                              is_space);
-        const auto &token(to_request_key(std::string(pos, (&*token_end) + 1)));
+        const std::string raw_token(pos, (&*token_end) + 1);
+        const bool configure_api_url = (raw_token == "X-dcpd-rest-api-url");
+        const auto &token(configure_api_url ? empty_string : to_request_key(raw_token));
 
         /* find beginning of assigned value */
         pos = std::find_if_not(std::next(assignment), end, is_space);
@@ -170,6 +173,8 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
 
             if(!token.empty())
                 params.get_rw()[token] = std::string(pos, value_end);
+            else if(configure_api_url)
+                Rest::set_base_url(std::string(pos, value_end));
 
             if(value_end < end)
                 pos = std::next(value_end);
@@ -202,6 +207,8 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
 
                     if(!token.empty())
                         params.get_rw()[token] = std::move(value);
+                    else if(configure_api_url)
+                        Rest::set_base_url(std::move(value));
 
                     ++pos;
                     break;

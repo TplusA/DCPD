@@ -89,6 +89,7 @@ class Result
 
 void init();
 const std::string &get_base_url();
+void set_base_url(std::string &&url);
 Result get_entry(const char *category, const char *sub);
 Result get_entry_from_root_json(const nlohmann::json &root_json,
                                 const char *category, const char *sub);
