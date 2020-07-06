@@ -44,6 +44,23 @@ static void add_to_hash(MD5::Context &ctx, size_t size)
     MD5::update(ctx, reinterpret_cast<const uint8_t *>(&size), sizeof(size));
 }
 
+static void add_to_hash(MD5::Context &ctx, uint8_t val)
+{
+    static const uint8_t marker[] = { 0x2b, 0x2e };
+    MD5::update(ctx, marker, sizeof(marker));
+    MD5::update(ctx, &val, sizeof(val));
+}
+
+static void add_to_hash(MD5::Context &ctx, bool val)
+{
+    static const uint8_t marker[] = { 0x3c, 0x81 };
+    MD5::update(ctx, marker, sizeof(marker));
+
+    static const uint8_t false_val[] = { 0 };
+    static const uint8_t true_val[] = { 1 };
+    MD5::update(ctx, val ? true_val : false_val, 1);
+}
+
 static void add_to_hash(MD5::Context &ctx, const MD5::Hash &hash)
 {
     static const uint8_t marker[] = { 0xcb, 0x49 };
@@ -234,7 +251,7 @@ static void set_if_known(nlohmann::json &item, const char *field,
     if(value.is_known())
     {
         item[field] = value.get();
-        add_to_hash(ctx, item[field].get<std::string>());
+        add_to_hash(ctx, item[field].get<T>());
     }
     else
         add_missing_to_hash(ctx);
@@ -248,7 +265,7 @@ static void set_if_known(nlohmann::json &item, const char *field,
     if(value.is_known())
     {
         item[field] = get(value);
-        add_to_hash(ctx, item[field].get<std::string>());
+        add_to_hash(ctx, item[field].get<OutT>());
     }
     else
         add_missing_to_hash(ctx);
