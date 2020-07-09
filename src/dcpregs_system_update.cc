@@ -127,16 +127,84 @@ static const std::string &to_request_key(const std::string &token)
     }
 }
 
+enum class TokenKind
+{
+    DIRECT_MAPPING,
+    SET_REST_API_URL,
+    SET_UPDATE_STYLE,
+};
+
+static TokenKind determine_token_kind(const std::string &raw_token)
+{
+    static const std::unordered_map<std::string, TokenKind> keys
+    {
+        { "style",               TokenKind::SET_UPDATE_STYLE },
+        { "X-dcpd-rest-api-url", TokenKind::SET_REST_API_URL },
+    };
+
+    const auto &found(keys.find(raw_token));
+    return found == keys.end() ? TokenKind::DIRECT_MAPPING : found->second;
+}
+
+static void handle_token(TokenKind kind, std::string &&value,
+                         Maybe<std::unordered_map<std::string, std::string>> &params,
+                         Maybe<std::unordered_map<std::string, bool>> &flags)
+{
+    switch(kind)
+    {
+      case TokenKind::DIRECT_MAPPING:
+        break;
+
+      case TokenKind::SET_UPDATE_STYLE:
+        if(value == "force-half-recovery")
+        {
+            auto &fl(flags.get_rw());
+            fl["force_update_through_image_files"] = true;
+            fl["force_recovery_system_update"] = false;
+            fl["keep_user_data"] = true;
+        }
+        else if(value == "force-recovery")
+        {
+            auto &fl(flags.get_rw());
+            fl["force_update_through_image_files"] = true;
+            fl["force_recovery_system_update"] = false;
+            fl["keep_user_data"] = false;
+        }
+        else if(value == "force-full-recovery")
+        {
+            auto &fl(flags.get_rw());
+            fl["force_update_through_image_files"] = true;
+            fl["force_recovery_system_update"] = true;
+            fl["keep_user_data"] = false;
+        }
+        else
+            APPLIANCE_BUG("Bad update style \"%s\" (ignored)", value.c_str());
+
+        return;
+
+      case TokenKind::SET_REST_API_URL:
+        Rest::set_base_url(std::move(value));
+        return;
+    }
+
+    MSG_UNREACHABLE();
+}
+
 static inline bool is_space(char ch) noexcept { return ch == ' '; }
 
 static inline bool is_space_or_null(char ch) noexcept
 { return ch == ' ' || ch == '\0'; }
 
 static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>> &params,
+                             Maybe<std::unordered_map<std::string, bool>> &flags,
                              const char *in_ptr, const char *end_ptr)
 {
     params.set_known();
     params->clear();
+
+    flags.set_known();
+    flags->clear();
+    flags.get_rw()["keep_user_data"] = true;
 
     if(in_ptr == end_ptr)
         return true;
@@ -160,8 +228,10 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                              std::reverse_iterator<const char *>(pos),
                              is_space);
         const std::string raw_token(pos, (&*token_end) + 1);
-        const bool configure_api_url = (raw_token == "X-dcpd-rest-api-url");
-        const auto &token(configure_api_url ? empty_string : to_request_key(raw_token));
+        const auto token_kind = determine_token_kind(raw_token);
+        const auto &token(token_kind != TokenKind::DIRECT_MAPPING
+                          ? empty_string
+                          : to_request_key(raw_token));
 
         /* find beginning of assigned value */
         pos = std::find_if_not(std::next(assignment), end, is_space);
@@ -171,10 +241,10 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
             /* simple unquoted string */
             const auto value_end = std::find_if(pos, end, is_space);
 
-            if(!token.empty())
+            if(token_kind != TokenKind::DIRECT_MAPPING)
+                handle_token(token_kind, std::string(pos, value_end), params, flags);
+            else if(!token.empty())
                 params.get_rw()[token] = std::string(pos, value_end);
-            else if(configure_api_url)
-                Rest::set_base_url(std::string(pos, value_end));
 
             if(value_end < end)
                 pos = std::next(value_end);
@@ -205,10 +275,10 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                         value += *ch;
                     }
 
-                    if(!token.empty())
+                    if(token_kind != TokenKind::DIRECT_MAPPING)
+                        handle_token(token_kind, std::move(value), params, flags);
+                    else if(!token.empty())
                         params.get_rw()[token] = std::move(value);
-                    else if(configure_api_url)
-                        Rest::set_base_url(std::move(value));
 
                     ++pos;
                     break;
@@ -226,18 +296,24 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
 }
 
 static Maybe<std::unordered_map<std::string, std::string>> strbo_update_parameters;
+static Maybe<std::unordered_map<std::string, bool>> strbo_update_flags;
 
 void Regs::SystemUpdate::init()
 {
     strbo_update_parameters.set_unknown();
+    strbo_update_flags.set_unknown();
 }
 
 nlohmann::json Regs::SystemUpdate::get_update_request()
 {
-    if(!strbo_update_parameters.is_known())
+    if(!strbo_update_parameters.is_known() || !strbo_update_flags.is_known())
         return nullptr;
 
     nlohmann::json req(strbo_update_parameters.get());
+
+    for(const auto &kv : strbo_update_flags.get())
+        req[kv.first] = kv.second;
+
     req["id"] = "strbo";
     return req;
 }
@@ -247,10 +323,11 @@ int Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(const uint8_t *da
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 211 handler %p %zu", data, length);
 
     const char *in = reinterpret_cast<const char *>(data);
-    if(parse_parameters(strbo_update_parameters, in, in + length))
+    if(parse_parameters(strbo_update_parameters, strbo_update_flags, in, in + length))
         return 0;
 
     msg_error(0, LOG_ERR, "Failed parsing update request");
     strbo_update_parameters.set_unknown();
+    strbo_update_flags.set_unknown();
     return -1;
 }

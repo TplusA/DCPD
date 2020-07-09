@@ -69,19 +69,21 @@ TEST_CASE_FIXTURE(FixtureParser,
 {
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(nullptr, 0) == 0);
     const auto req(Regs::SystemUpdate::get_update_request());
-    CHECK(req.is_object());
-    CHECK(req.size() == 1);
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 2);
     CHECK(req.at("id").get<std::string>() == "strbo");
+    CHECK(req.at("keep_user_data").get<bool>());
 }
 
 static void check_flavor_version_repo_values(const nlohmann::json &req)
 {
-    CHECK(req.is_object());
-    CHECK(req.size() == 4);
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 5);
     CHECK(req.at("id").get<std::string>() == "strbo");
     CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V2");
     CHECK(req.at("target_version").get<std::string>() == "V2.3.4.5");
     CHECK(req.at("target_flavor").get<std::string>() == "beta");
+    CHECK(req.at("keep_user_data").get<bool>());
 }
 
 TEST_CASE_FIXTURE(FixtureParser,
@@ -129,12 +131,13 @@ TEST_CASE_FIXTURE(FixtureParser, "Quoted values may contains spaces")
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
     const auto req(Regs::SystemUpdate::get_update_request());
-    CHECK(req.is_object());
-    CHECK(req.size() == 4);
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 5);
     CHECK(req.at("id").get<std::string>() == "strbo");
     CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V2");
     CHECK(req.at("target_version").get<std::string>() == "  V space ");
     CHECK(req.at("target_flavor").get<std::string>() == "beta carotene");
+    CHECK(req.at("keep_user_data").get<bool>());
 }
 
 TEST_CASE_FIXTURE(FixtureParser,
@@ -148,23 +151,25 @@ TEST_CASE_FIXTURE(FixtureParser,
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
     const auto req(Regs::SystemUpdate::get_update_request());
-    CHECK(req.is_object());
-    CHECK(req.size() == 4);
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 5);
     CHECK(req.at("id").get<std::string>() == "strbo");
     CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V2");
     CHECK(req.at("target_version").get<std::string>() == "V \"\\\\5");
     CHECK(req.at("target_flavor").get<std::string>() == " beta carotene (\"carot\")");
+    CHECK(req.at("keep_user_data").get<bool>());
 }
 
 static void check_line_flavor_version_repo_values(const nlohmann::json &req)
 {
-    CHECK(req.is_object());
-    CHECK(req.size() == 5);
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 6);
     CHECK(req.at("id").get<std::string>() == "strbo");
     CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V4");
     CHECK(req.at("target_version").get<std::string>() == "V4.1.0.2");
     CHECK(req.at("target_flavor").get<std::string>() == "beta");
     CHECK(req.at("target_release_line").get<std::string>() == "V4");
+    CHECK(req.at("keep_user_data").get<bool>());
 }
 
 TEST_CASE_FIXTURE(FixtureParser,
@@ -266,14 +271,20 @@ Rest::Result Rest::get_entry(const char *category, const char *sub)
     return Rest::get_entry_from_root_json(root_json, category, sub);
 }
 
+static std::function<void(const nlohmann::json &)> send_request_check;
+
 Rest::Result Rest::send_request(const std::string &url, nlohmann::json &&request)
 {
     CHECK(url == "http://localhost:8467/v1/system/devices/self");
-    CHECK(request.is_object());
+    REQUIRE(request.is_object());
     CHECK(request.size() == 1);
     CHECK(request.at("update").is_array());
     CHECK(request["update"].size() == 1);
-    check_line_flavor_version_repo_values(request["update"][0]);
+
+    REQUIRE(send_request_check != nullptr);
+    send_request_check(request["update"][0]);
+    send_request_check = nullptr;
+
     return Rest::Result(200, {});
 }
 
@@ -334,6 +345,97 @@ TEST_CASE_FIXTURE(FixtureProcess, "Full set of parameters")
     expect<MockMessages::MsgVinfo>(
             mock_messages, MESSAGE_LEVEL_IMPORTANT,
             "Attempting to START SYSTEM UPDATE (rpm/images)", false);
+    send_request_check = check_line_flavor_version_repo_values;
+    CHECK(Regs::SystemUpdate::process_update_request());
+}
+
+static void check_partial_recovery_request(const nlohmann::json &req)
+{
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 8);
+    CHECK(req.at("id").get<std::string>() == "strbo");
+    CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V3");
+    CHECK(req.at("target_version").get<std::string>() == "V3.1.99");
+    CHECK(req.at("target_flavor").get<std::string>() == "foo");
+    CHECK(req.at("target_release_line").get<std::string>() == "V3");
+}
+
+static void check_full_recovery_request(const nlohmann::json &req)
+{
+    check_partial_recovery_request(req);
+    CHECK(req.at("force_update_through_image_files").get<bool>());
+    CHECK(req.at("force_recovery_system_update").get<bool>());
+    CHECK_FALSE(req.at("keep_user_data").get<bool>());
+}
+
+static void check_regular_recovery_request(const nlohmann::json &req)
+{
+    check_partial_recovery_request(req);
+    CHECK(req.at("force_update_through_image_files").get<bool>());
+    CHECK_FALSE(req.at("force_recovery_system_update").get<bool>());
+    CHECK_FALSE(req.at("keep_user_data").get<bool>());
+}
+
+static void check_half_recovery_request(const nlohmann::json &req)
+{
+    check_partial_recovery_request(req);
+    CHECK(req.at("force_update_through_image_files").get<bool>());
+    CHECK_FALSE(req.at("force_recovery_system_update").get<bool>());
+    CHECK(req.at("keep_user_data").get<bool>());
+}
+
+TEST_CASE_FIXTURE(FixtureProcess,
+                  "Force full recovery (update recovery system, update "
+                  "recovery data, recovery with wiping user data)")
+{
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V3 flavor=foo version=V3.1.99 line=V3 "
+        "style=force-full-recovery";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+
+    expect<MockMessages::MsgVinfo>(
+            mock_messages, MESSAGE_LEVEL_IMPORTANT,
+            "Attempting to START SYSTEM UPDATE (rpm/images)", false);
+    send_request_check = check_full_recovery_request;
+    CHECK(Regs::SystemUpdate::process_update_request());
+}
+
+TEST_CASE_FIXTURE(FixtureProcess,
+                  "Force regular recovery (recovery with wiping user data)")
+{
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V3 flavor=foo version=V3.1.99 line=V3 "
+        "style=force-recovery";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+
+    expect<MockMessages::MsgVinfo>(
+            mock_messages, MESSAGE_LEVEL_IMPORTANT,
+            "Attempting to START SYSTEM UPDATE (rpm/images)", false);
+    send_request_check = check_regular_recovery_request;
+    CHECK(Regs::SystemUpdate::process_update_request());
+}
+
+TEST_CASE_FIXTURE(FixtureProcess,
+                  "Force half recovery (recovery, keep user data)")
+{
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V3 flavor=foo version=V3.1.99 line=V3 "
+        "style=force-half-recovery";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+
+    expect<MockMessages::MsgVinfo>(
+            mock_messages, MESSAGE_LEVEL_IMPORTANT,
+            "Attempting to START SYSTEM UPDATE (rpm/images)", false);
+    send_request_check = check_half_recovery_request;
     CHECK(Regs::SystemUpdate::process_update_request());
 }
 
