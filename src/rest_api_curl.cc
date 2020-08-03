@@ -145,7 +145,7 @@ Rest::Result Rest::send_request(const std::string &url, nlohmann::json &&request
     easy.setOpt(curlpp::Options::Url(url));
     easy.setOpt(curlpp::Options::HttpHeader({content_type_json}));
 
-    const auto str(request.dump());
+    const auto &str(request.dump());
     size_t str_pos = 0;
     easy.setOpt(curlpp::Options::ReadFunction(
         [&str, &str_pos]
