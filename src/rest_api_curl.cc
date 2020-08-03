@@ -154,6 +154,8 @@ Rest::Result Rest::send_request(const std::string &url, nlohmann::json &&request
             return read_callback(out, size, nmemb, str, str_pos);
         }));
 
+    easy.setOpt(curlpp::Options::PostFieldSize(str.length()));
+
     std::ostringstream response;
     easy.setOpt(curlpp::Options::WriteStream(&response));
 
