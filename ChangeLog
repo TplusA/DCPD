@@ -1,3 +1,28 @@
+2020-08-04  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.8 released.
+
+	* System update: Update requests can be written to register 211. This
+	  is the new way for sending update parameters to the Streaming Board.
+	  The client is supposed to send a few variable assignments through
+	  this register so that the Streaming Board can make sense of them.
+
+	  The update is started by sending 0x27 0x21 to register 40 (download
+	  control register). This triggers an update by sending a
+	  corresponding request to the REST API.
+
+	  That is, there is no update logic implemented inside of dcpd. We
+	  only collect data and do the communication with the REST API.
+
+	* DCP protocol: Protocol level bumped to 1.0.10.
+
+	* Networking: Fix serialization of network configuration into JSON
+	  objects for REST API support. It worked up until the change of the
+	  JSON library in v5.6, now it works again.
+
+	* Unit tests: Split register tests into multiple files for speed and
+	  to support future porting efforts to doctest.
+
 2020-06-02  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.7 released.
