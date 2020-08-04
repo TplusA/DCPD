@@ -122,6 +122,111 @@ TEST_CASE_FIXTURE(FixtureParser, "Values may be quoted")
     check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
 }
 
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Request evaluation can be stopped for too low register versions")
+{
+    REQUIRE(Regs::SystemUpdate::get_register_protocol_version() == 0);
+
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
+        "stop_below=1 line=V2 future=extension";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+    check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+}
+
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Request evaluation can be stopped for too high register versions")
+{
+    REQUIRE(Regs::SystemUpdate::get_register_protocol_version() == 0);
+
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
+        "stop_above=-1 line=V2 future=extension";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+    check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+}
+
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Request evaluation can be stopped for certain register versions")
+{
+    REQUIRE(Regs::SystemUpdate::get_register_protocol_version() == 0);
+
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
+        "stop=2,6,3,0 line=V2 future=extension";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+    check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+}
+
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Request evaluation does not stop for lower than current version")
+{
+    REQUIRE(Regs::SystemUpdate::get_register_protocol_version() == 0);
+
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
+        "stop_below=0 line=V2";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+
+    const auto &req(Regs::SystemUpdate::get_update_request());
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 6);
+    CHECK(req.at("target_version").get<std::string>() == "V2.3.4.5");
+    CHECK(req.at("target_release_line").get<std::string>() == "V2");
+}
+
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Request evaluation does not stop for higher than current version")
+{
+    REQUIRE(Regs::SystemUpdate::get_register_protocol_version() == 0);
+
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
+        "stop_above=0 line=V2";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+
+    const auto &req(Regs::SystemUpdate::get_update_request());
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 6);
+    CHECK(req.at("target_version").get<std::string>() == "V2.3.4.5");
+    CHECK(req.at("target_release_line").get<std::string>() == "V2");
+}
+
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Request evaluation does not stop if condition is not met")
+{
+    REQUIRE(Regs::SystemUpdate::get_register_protocol_version() == 0);
+
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
+        "stop=2,6,3 line=V2";
+
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == 0);
+
+    const auto &req(Regs::SystemUpdate::get_update_request());
+    REQUIRE(req.is_object());
+    CHECK(req.size() == 6);
+    CHECK(req.at("target_version").get<std::string>() == "V2.3.4.5");
+    CHECK(req.at("target_release_line").get<std::string>() == "V2");
+}
+
 TEST_CASE_FIXTURE(FixtureParser, "Quoted values may contains spaces")
 {
     const char request[] =

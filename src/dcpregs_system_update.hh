@@ -38,6 +38,7 @@ namespace SystemUpdate
 
 void init();
 bool process_update_request();
+static inline unsigned int get_register_protocol_version() { return 0; }
 
 namespace DCP
 {

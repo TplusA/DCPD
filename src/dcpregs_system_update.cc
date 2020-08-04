@@ -31,6 +31,7 @@
 
 #include <unordered_map>
 #include <string>
+#include <sstream>
 #include <algorithm>
 
 bool Regs::SystemUpdate::process_update_request()
@@ -132,6 +133,9 @@ enum class TokenKind
     DIRECT_MAPPING,
     SET_REST_API_URL,
     SET_UPDATE_STYLE,
+    MAYBE_STOP_FOR,
+    MAYBE_STOP_BELOW,
+    MAYBE_STOP_ABOVE,
 };
 
 static TokenKind determine_token_kind(const std::string &raw_token)
@@ -139,6 +143,9 @@ static TokenKind determine_token_kind(const std::string &raw_token)
     static const std::unordered_map<std::string, TokenKind> keys
     {
         { "style",               TokenKind::SET_UPDATE_STYLE },
+        { "stop",                TokenKind::MAYBE_STOP_FOR },
+        { "stop_below",          TokenKind::MAYBE_STOP_BELOW },
+        { "stop_above",          TokenKind::MAYBE_STOP_ABOVE },
         { "X-dcpd-rest-api-url", TokenKind::SET_REST_API_URL },
     };
 
@@ -146,7 +153,33 @@ static TokenKind determine_token_kind(const std::string &raw_token)
     return found == keys.end() ? TokenKind::DIRECT_MAPPING : found->second;
 }
 
-static void handle_token(TokenKind kind, std::string &&value,
+static bool should_stop_for(const std::string &version_spec, int version)
+{
+    std::istringstream ss(version_spec);
+
+    while(ss.good())
+    {
+        std::string temp;
+        std::getline(ss, temp, ',');
+
+        if(std::stoi(temp) == version)
+            return true;
+    }
+
+    return false;
+}
+
+static bool should_stop_below(const std::string &version_spec, int version)
+{
+    return std::stoi(version_spec) > version;
+}
+
+static bool should_stop_above(const std::string &version_spec, int version)
+{
+    return std::stoi(version_spec) < version;
+}
+
+static bool handle_token(TokenKind kind, std::string &&value,
                          Maybe<std::unordered_map<std::string, std::string>> &params,
                          Maybe<std::unordered_map<std::string, bool>> &flags)
 {
@@ -180,14 +213,27 @@ static void handle_token(TokenKind kind, std::string &&value,
         else
             APPLIANCE_BUG("Bad update style \"%s\" (ignored)", value.c_str());
 
-        return;
+        return false;
 
       case TokenKind::SET_REST_API_URL:
         Rest::set_base_url(std::move(value));
-        return;
+        return false;
+
+      case TokenKind::MAYBE_STOP_FOR:
+        return should_stop_for(value,
+                               Regs::SystemUpdate::get_register_protocol_version());
+
+      case TokenKind::MAYBE_STOP_BELOW:
+        return should_stop_below(value,
+                                 Regs::SystemUpdate::get_register_protocol_version());
+
+      case TokenKind::MAYBE_STOP_ABOVE:
+        return should_stop_above(value,
+                                 Regs::SystemUpdate::get_register_protocol_version());
     }
 
     MSG_UNREACHABLE();
+    return false;
 }
 
 static inline bool is_space(char ch) noexcept { return ch == ' '; }
@@ -235,6 +281,7 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
 
         /* find beginning of assigned value */
         pos = std::find_if_not(std::next(assignment), end, is_space);
+        bool stop = false;
 
         if(*pos != '"')
         {
@@ -242,7 +289,7 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
             const auto value_end = std::find_if(pos, end, is_space);
 
             if(token_kind != TokenKind::DIRECT_MAPPING)
-                handle_token(token_kind, std::string(pos, value_end), params, flags);
+                stop = handle_token(token_kind, std::string(pos, value_end), params, flags);
             else if(!token.empty())
                 params.get_rw()[token] = std::string(pos, value_end);
 
@@ -276,7 +323,7 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                     }
 
                     if(token_kind != TokenKind::DIRECT_MAPPING)
-                        handle_token(token_kind, std::move(value), params, flags);
+                        stop = handle_token(token_kind, std::move(value), params, flags);
                     else if(!token.empty())
                         params.get_rw()[token] = std::move(value);
 
@@ -290,6 +337,9 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                     return false;
             }
         }
+
+        if(stop)
+            pos = end;
     }
 
     return true;
