@@ -130,6 +130,8 @@ static struct gerbera_iface_data
     GDBusConnection *connection;
     guint gerbera_watcher;
     tdbusGerberaContentManager *cm_iface;
+    bool creating_proxy;
+    bool has_appeared;
     void (*content_manager_iface_available_notification)(bool);
 }
 gerbera_iface_data;
@@ -189,29 +191,47 @@ static void created_gerbera_cm_proxy(GObject *source_object, GAsyncResult *res,
         data->connection = g_dbus_proxy_get_connection(G_DBUS_PROXY(data->cm_iface));
         g_signal_connect(data->cm_iface, "g-signal",
                          G_CALLBACK(dbussignal_gerbera), nullptr);
+        data->content_manager_iface_available_notification(data->has_appeared);
     }
+}
+
+static void create_gerbera_cm_proxy(GDBusConnection *connection,
+                                    struct gerbera_iface_data *data)
+{
+    if(data->creating_proxy)
+        return;
+
+    data->creating_proxy = true;
+    tdbus_gerbera_content_manager_proxy_new(connection,
+                                            G_DBUS_PROXY_FLAGS_NONE,
+                                            "io.gerbera.ContentManager",
+                                            "/io/gerbera/ContentManager", nullptr,
+                                            created_gerbera_cm_proxy,
+                                            &gerbera_iface_data);
 }
 
 static void gerbera_appeared(GDBusConnection *connection, const gchar *name,
                              const gchar *name_owner, gpointer user_data)
 {
     auto *const data = static_cast<struct gerbera_iface_data *>(user_data);
-    data->content_manager_iface_available_notification(true);
+    data->has_appeared = true;
+
+    if(data->cm_iface == nullptr)
+        create_gerbera_cm_proxy(connection, data);
+    else
+        data->content_manager_iface_available_notification(true);
 }
 
 static void gerbera_vanished(GDBusConnection *connection, const gchar *name,
                              gpointer user_data)
 {
     auto *const data = static_cast<struct gerbera_iface_data *>(user_data);
-    data->content_manager_iface_available_notification(false);
+    data->has_appeared = false;
 
     if(data->cm_iface == nullptr)
-        tdbus_gerbera_content_manager_proxy_new(connection,
-                                                G_DBUS_PROXY_FLAGS_NONE,
-                                                "io.gerbera.ContentManager",
-                                                "/io/gerbera/ContentManager", nullptr,
-                                                created_gerbera_cm_proxy,
-                                                &gerbera_iface_data);
+        create_gerbera_cm_proxy(connection, data);
+    else
+        data->content_manager_iface_available_notification(false);
 }
 
 static void try_export_iface(GDBusConnection *connection,
