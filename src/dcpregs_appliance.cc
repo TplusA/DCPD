@@ -49,6 +49,7 @@ enum class ApplianceID
     MP3000HV,
     MP3100HV,
     MP8,
+    MP200,
     SD3100HV,
     SDV3100HV,
     CALA_CDR,
@@ -122,6 +123,7 @@ static void setup_primary_network_devices_for_appliance(ApplianceID appliance,
         break;
 
       case ApplianceID::MP8:
+      case ApplianceID::MP200:
         Regs::NetworkConfig::set_primary_technology(Connman::Technology::ETHERNET);
         network_prefs_update_primary_network_devices("/sys/bus/usb/devices/1-1.1:1.0",
                                                      "/sys/bus/usb/devices/1-1.4:1.0",
@@ -172,6 +174,7 @@ static ApplianceID map_appliance_id(const char *name)
         std::move(std::make_pair("MP3000HV",   ApplianceID::MP3000HV)),
         std::move(std::make_pair("MP3100HV",   ApplianceID::MP3100HV)),
         std::move(std::make_pair("MP8",        ApplianceID::MP8)),
+        std::move(std::make_pair("MP200",      ApplianceID::MP200)),
         std::move(std::make_pair("SD3100HV",   ApplianceID::SD3100HV)),
         std::move(std::make_pair("SDV3100HV",  ApplianceID::SDV3100HV)),
         std::move(std::make_pair("CalaCDR",    ApplianceID::CALA_CDR)),
