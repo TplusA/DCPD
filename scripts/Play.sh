@@ -1,2 +1,2 @@
 #! /bin/sh
-exec ./send_drcp_command.sh -- w 0xb3
+exec $(dirname $0)/send_drcp_command.sh -- w 0xb3

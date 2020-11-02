@@ -51,4 +51,4 @@ in
         ;;
 esac
 
-exec ./send_dcp_command.sh "$DEST" -- w $BYTES
+exec $(dirname $0)/send_dcp_command.sh "$DEST" -- w $BYTES
