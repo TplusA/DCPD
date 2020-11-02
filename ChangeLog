@@ -1,3 +1,23 @@
+2020-11-04  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.11 released.
+
+	* Networking: Fix serialization of network configuration into JSON
+	  objects for REST API support. There were two type errors leading to
+	  exceptions, and the WLAN security options were not reported as array
+	  of strings as promised by the documentation.
+
+	* Airable: Do not filter out network interfaces with locally
+	  administered MAC addresses, but provide information whether or not
+	  the device ID derived from the MAC address is valid. That is, access
+	  to Airable servers is supposed to be blocked by the Airable list
+	  broker now.
+
+	* Memory management: Using GVariant wrapper for safer management of
+	  GLib variant objects.
+
+	* Misc: Test scripts were slightly improved.
+
 2020-08-20  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.10 released.
