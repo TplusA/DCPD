@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1470,9 +1470,7 @@ static bool parse_wlan_data(const char *prop, GVariant *value,
     if(strcmp(prop, "Name") == 0)
         data.network_name_ = g_variant_get_string(value, NULL);
     else if(strcmp(prop, "Security") == 0)
-    {
         process_wlan_security_info(value, data.security_, data.wps_capability_);
-    }
     else if(strcmp(prop, "Strength") == 0)
         data.strength_ = g_variant_get_byte(value);
     else
