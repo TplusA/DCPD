@@ -92,10 +92,11 @@ static void add_to_hash(MD5::Context &ctx, const std::string &s)
     }
 }
 
+template <typename T>
 static void add_to_hash(MD5::Context &ctx, const nlohmann::json &obj, const char *field)
 {
     if(obj.find(field) != obj.end())
-        add_to_hash(ctx, obj[field].get<std::string>());
+        add_to_hash(ctx, obj[field].get<T>());
     else
         add_missing_to_hash(ctx);
 }
@@ -294,10 +295,10 @@ static bool fill_ipv4_settings(nlohmann::json &json, MD5::Context &ctx,
     if(!ipv4.get_gateway().empty())
         json["gateway"] = ipv4.get_gateway().get_string();
 
-    add_to_hash(ctx, json, "dhcp_method");
-    add_to_hash(ctx, json, "address");
-    add_to_hash(ctx, json, "netmask");
-    add_to_hash(ctx, json, "gateway");
+    add_to_hash<std::string>(ctx, json, "dhcp_method");
+    add_to_hash<std::string>(ctx, json, "address");
+    add_to_hash<std::string>(ctx, json, "netmask");
+    add_to_hash<std::string>(ctx, json, "gateway");
 
     return !json.is_null();
 }
@@ -325,10 +326,10 @@ static bool fill_ipv6_settings(nlohmann::json &json, MD5::Context &ctx,
     if(!ipv6.get_gateway().empty())
         json["gateway"] = ipv6.get_gateway().get_string();
 
-    add_to_hash(ctx, json, "dhcp_method");
-    add_to_hash(ctx, json, "address");
-    add_to_hash(ctx, json, "prefix_length");
-    add_to_hash(ctx, json, "gateway");
+    add_to_hash<std::string>(ctx, json, "dhcp_method");
+    add_to_hash<std::string>(ctx, json, "address");
+    add_to_hash<std::string>(ctx, json, "prefix_length");
+    add_to_hash<std::string>(ctx, json, "gateway");
 
     return !json.is_null();
 }
@@ -389,8 +390,8 @@ static void fill_proxy_settings(nlohmann::json &json, MD5::Context &ctx,
     if(!proxy.get_pac_url().empty())
         json["auto_config_pac_url"] = proxy.get_pac_url();
 
-    add_to_hash(ctx, json, "method");
-    add_to_hash(ctx, json, "auto_config_pac_url");
+    add_to_hash<std::string>(ctx, json, "method");
+    add_to_hash<std::string>(ctx, json, "auto_config_pac_url");
 
     fill_string_array(json, "proxy_servers", ctx, proxy.get_proxy_servers(), allow_empty);
     fill_string_array(json, "excluded_hosts", ctx, proxy.get_excluded_hosts(), allow_empty);
@@ -467,7 +468,7 @@ static void add_services_from_connman(nlohmann::json &srv,
             {"cached", is_cached},
         };
 
-        add_to_hash(ctx, item, "id");
+        add_to_hash<std::string>(ctx, item, "id");
 
         set_if_known<Connman::ServiceState, std::string>(
             item, "state", ctx, sd.state_,
@@ -513,7 +514,7 @@ static void add_services_from_connman(nlohmann::json &srv,
 
           case Connman::Technology::ETHERNET:
             item["name"] = "Ethernet (wired)";
-            add_to_hash(ctx, item, "name");
+            add_to_hash<std::string>(ctx, item, "name");
             break;
 
           case Connman::Technology::WLAN:
@@ -523,7 +524,7 @@ static void add_services_from_connman(nlohmann::json &srv,
                 if(tech_data.network_name_.is_known())
                 {
                     item["name"] = tech_data.network_name_.get();
-                    add_to_hash(ctx, item, "name");
+                    add_to_hash<std::string>(ctx, item, "name");
                 }
                 else
                 {
@@ -532,8 +533,15 @@ static void add_services_from_connman(nlohmann::json &srv,
                 }
 
                 set_if_known(item, "ssid", ctx, tech_data.network_ssid_);
-                set_if_known(item, "security", ctx, tech_data.security_);
                 set_if_known(item, "strength", ctx, tech_data.strength_);
+
+                if(tech_data.security_.is_known())
+                {
+                    item["security"] = { tech_data.security_.get() };
+                    add_to_hash(ctx, tech_data.security_.get());
+                }
+                else
+                    add_missing_to_hash(ctx);
 
                 if(tech_data.wps_capability_.is_known())
                 {
@@ -555,12 +563,14 @@ static void add_services_from_connman(nlohmann::json &srv,
                         break;
                     }
 
-                    add_to_hash(ctx, item, "wps_capability");
-                    add_to_hash(ctx, item, "wps_active");
+                    add_to_hash<bool>(ctx, item, "wps_capability");
+                    add_to_hash<bool>(ctx, item, "wps_active");
                 }
                 else
                     add_missing_to_hash(ctx);
             }
+
+            break;
         }
 
         service_hashes.emplace_back(item["id"].get<std::string>(), MD5::Hash());
@@ -666,7 +676,7 @@ static void add_service_from_prefs(nlohmann::json &srv,
 
             temp = network_prefs_get_security(prefs);
             if(temp != nullptr)
-                item["security"] = temp;
+                item["security"] = { temp };
         }
     }
 
@@ -728,9 +738,9 @@ static void hash_sorted_nic_macs(MD5::Context &ctx, const nlohmann::json &nics)
         add_to_hash(ctx, mac);
 
         const auto &nic(nics[mac]);
-        add_to_hash(ctx, nic, "technology");
-        add_to_hash(ctx, nic, "device_name");
-        add_to_hash(ctx, nic, "is_secondary");
+        add_to_hash<std::string>(ctx, nic, "technology");
+        add_to_hash<std::string>(ctx, nic, "device_name");
+        add_to_hash<bool>(ctx, nic, "is_secondary");
     }
 }
 
