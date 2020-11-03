@@ -785,7 +785,6 @@ void test_spurious_deselection_of_audio_source_emits_bug_message()
 {
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Plain URL audio source not selected");
-    mock_backtrace->expect_backtrace_log();
     streaming_regs->audio_source_deselected();
 }
 

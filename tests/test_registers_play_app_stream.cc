@@ -588,7 +588,6 @@ static void set_next_url(const std::string title, const std::string url,
       case SetTitleAndURLFlowAssumptions::DESELECTED__PLAYING__SELECT:
         mock_messages->expect_msg_error(0, LOG_CRIT,
                 "BUG: Attempted to set next stream without prior audio source selection");
-        mock_backtrace->expect_backtrace_log();
 
         if(expected_stream_key != nullptr)
             expected_stream_key->release();
@@ -929,7 +928,6 @@ void test_start_stream_and_deselect_audio_source_with_unexpected_stop_notificati
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: App stream 271 stopped in unexpected state DESELECTED");
-    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     streaming_regs->stop_notification(OurStream::make(15).get());
     register_changed_data->check(std::array<uint8_t, 2>{75, 76});
@@ -1261,7 +1259,6 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_early_start_notif
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Non-app stream 129 started while plain URL player is selected");
-    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     const auto bad_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
     GVariantWrapper dummy_stream_key;
@@ -1308,7 +1305,6 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_late_start_notifi
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Non-app stream 129 started while plain URL player is selected");
-    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
@@ -1380,7 +1376,6 @@ void test_quick_start_stop_single_stream()
     /* late D-Bus signals are ignored */
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: App stream 257 started in unexpected state STOPPED_REQUESTED");
-    mock_backtrace->expect_backtrace_log();
     register_changed_data->check();
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);

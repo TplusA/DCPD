@@ -283,7 +283,6 @@ TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
 TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
                   "Cannot spawn access point without D-Bus connectivity")
 {
-    mock_backtrace->expect(std::make_unique<MockBacktrace::Log>());
     mock_messages->expect(
         std::make_unique<MockMessages::MsgError>(0, LOG_CRIT,
                                                  "BUG: Technology registry unavailable (no D-Bus connection)",
@@ -307,7 +306,6 @@ TEST_CASE_FIXTURE(AccessPointModeTestsBasicFixture,
 
     RequestDoneData done_data;
 
-    mock_backtrace->expect(std::make_unique<MockBacktrace::Log>());
     mock_messages->expect(
         std::make_unique<MockMessages::MsgError>(0, LOG_CRIT, "BUG: AP spawn request before start", true));
 

@@ -346,12 +346,10 @@ void test_find_transaction_by_nonexistent_serial()
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Tried to find transaction with invalid serial 0x8000");
-    mock_backtrace->expect_backtrace_log();
     cut_assert(TransactionQueue::ProcessResult::ERROR ==
                queue->apply_to_dcpsync_serial(DCPSYNC_MASTER_SERIAL_INVALID, fn));
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
         "BUG: Tried to find transaction with invalid serial 0x0000");
-    mock_backtrace->expect_backtrace_log();
     cut_assert(TransactionQueue::ProcessResult::ERROR ==
                queue->apply_to_dcpsync_serial(DCPSYNC_SLAVE_SERIAL_INVALID, fn));
 }
@@ -1838,7 +1836,6 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     read_data->set(write_unsupported_register);
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Slave requested register 0x0a, but is not implemented");
-    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_error(0, LOG_ERR, "Transaction %p failed in state %d");
     read_data->set(write_unknown_data, internal_skip_command_size);
     read_data->set(write_unknown_data, sizeof(write_unknown_data) - internal_skip_command_size);
@@ -2057,7 +2054,6 @@ void test_bad_register_addresses_are_handled_in_push_transactions()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");
-    mock_backtrace->expect_backtrace_log();
 
     cut_assert_false(TransactionQueue::push_register_to_slave(*queue, 42,
                                                               TransactionQueue::Channel::SPI));
@@ -2072,7 +2068,6 @@ void test_bad_register_addresses_are_handled_in_fragmented_transactions()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Master requested register 0x2a, but is not implemented");
-    mock_backtrace->expect_backtrace_log();
 
     static const uint8_t dummy = 23U;
     auto frags(TransactionQueue::fragments_from_data(*queue,

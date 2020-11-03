@@ -574,7 +574,6 @@ void test_sending_empty_command_triggers_bug_message()
                        [] (int, bool) { cut_fail("unexpected call"); });
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
             "BUG: Ignoring empty applink command in out queue for peer 42");
-    mock_backtrace->expect_backtrace_log();
     peer.send_to_queue(default_peer_fd, std::string());
     cppcut_assert_equal(size_t(1), notifications);
     cut_assert_true(peer.send_one_from_queue_to_peer(default_peer_fd));

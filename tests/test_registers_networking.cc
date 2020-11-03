@@ -2060,7 +2060,6 @@ void test_set_wlan_security_mode_wep()
     mock_messages->expect_msg_error(0, LOG_CRIT,
                                     "BUG: Support for insecure WLAN mode "
                                     "\"WEP\" not implemented");
-    mock_backtrace->expect_backtrace_log();
     mock_messages->expect_msg_error(EINVAL, LOG_ERR,
                                     "Cannot set WLAN parameters, security mode missing");
 

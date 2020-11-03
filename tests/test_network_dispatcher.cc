@@ -172,7 +172,6 @@ void test_fd_cannot_be_registered_twice()
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to register already registered fd 42");
-    mock_backtrace->expect_backtrace_log();
     cut_assert_false(nwdispatcher.add_connection(42, dispatch_fd));
 }
 
@@ -330,7 +329,6 @@ void test_unregister_unregistered_fd_from_empty_registry_returns_error()
 {
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to unregister nonexistent fd 1");
-    mock_backtrace->expect_backtrace_log();
     cut_assert_false(nwdispatcher.remove_connection(1));
 }
 
@@ -344,7 +342,6 @@ void test_unregister_unregistered_fd_returns_error()
 
     mock_messages->expect_msg_error_formatted(0, LOG_CRIT,
                                               "BUG: Attempted to unregister nonexistent fd 1");
-    mock_backtrace->expect_backtrace_log();
     cut_assert_false(nwdispatcher.remove_connection(1));
 }
 
