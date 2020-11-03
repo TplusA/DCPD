@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -44,8 +44,9 @@ struct ApplianceValues
     {
         APPLIANCE_NAME,
         DEVICE_ID,
+        DEVICE_ID_IS_VALID,
 
-        LAST_ID = DEVICE_ID,
+        LAST_ID = DEVICE_ID_IS_VALID,
     };
 
     static constexpr size_t NUMBER_OF_KEYS = static_cast<size_t>(KeyID::LAST_ID) + 1;
@@ -54,13 +55,17 @@ struct ApplianceValues
 
     std::string appliance_name_;
     std::string device_id_;
+    bool device_id_is_valid_;
 
-    ApplianceValues() {}
+    ApplianceValues():
+        device_id_is_valid_(false)
+    {}
 
     explicit ApplianceValues(std::string &&appliance_name,
-                             std::string &&device_id):
+                             std::string &&device_id, bool device_id_is_valid):
         appliance_name_(std::move(appliance_name)),
-        device_id_(std::move(device_id))
+        device_id_(std::move(device_id)),
+        device_id_is_valid_(device_id_is_valid)
     {}
 };
 
@@ -106,8 +111,12 @@ class ConfigKey: public ConfigKeyBase<ApplianceValues>
 
 template <ApplianceValues::KeyID ID> struct UpdateTraits;
 
-CONFIGURATION_UPDATE_TRAITS(UpdateTraits, ApplianceValues, APPLIANCE_NAME, appliance_name_);
-CONFIGURATION_UPDATE_TRAITS(UpdateTraits, ApplianceValues, DEVICE_ID,      device_id_);
+CONFIGURATION_UPDATE_TRAITS(UpdateTraits, ApplianceValues,
+                            APPLIANCE_NAME, appliance_name_);
+CONFIGURATION_UPDATE_TRAITS(UpdateTraits, ApplianceValues,
+                            DEVICE_ID, device_id_);
+CONFIGURATION_UPDATE_TRAITS(UpdateTraits, ApplianceValues,
+                            DEVICE_ID_IS_VALID, device_id_is_valid_);
 
 template <>
 class UpdateSettings<ApplianceValues>
@@ -150,6 +159,13 @@ class UpdateSettings<ApplianceValues>
         Regs::UPnPName::set_device_uuid(temp);
 
         return ret;
+    }
+
+    bool device_id_is_valid(const bool &is_valid)
+    {
+        return
+            settings_.update<ApplianceValues::KeyID::DEVICE_ID_IS_VALID,
+                             UpdateTraits<ApplianceValues::KeyID::DEVICE_ID_IS_VALID>>(is_valid);
     }
 };
 

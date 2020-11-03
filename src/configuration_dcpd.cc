@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -66,6 +66,21 @@ unbox_device_id(Configuration::UpdateSettings<Configuration::ApplianceValues> &d
     return Configuration::InsertResult::UPDATED;
 }
 
+static Configuration::InsertResult
+unbox_device_id_is_valid(Configuration::UpdateSettings<Configuration::ApplianceValues> &dest,
+                         GVariantWrapper &&src)
+{
+    bool temp;
+
+    if(!Configuration::default_unbox(temp, std::move(src)))
+        return Configuration::InsertResult::VALUE_TYPE_INVALID;
+
+    if(!dest.device_id_is_valid(temp))
+        return Configuration::InsertResult::UNCHANGED;
+
+    return Configuration::InsertResult::UPDATED;
+}
+
 const std::array<const Configuration::ConfigKey, Configuration::ApplianceValues::NUMBER_OF_KEYS>
 Configuration::ApplianceValues::all_keys
 {
@@ -80,8 +95,9 @@ Configuration::ApplianceValues::all_keys
                                        UpdateTraits<Configuration::ApplianceValues::KeyID::ID>>, \
                              UNBOX)
 
-    ENTRY(APPLIANCE_NAME, "id",        unbox_appliance_name),
-    ENTRY(DEVICE_ID,      "device_id", unbox_device_id),
+    ENTRY(APPLIANCE_NAME,     "id",                 unbox_appliance_name),
+    ENTRY(DEVICE_ID,          "device_id",          unbox_device_id),
+    ENTRY(DEVICE_ID_IS_VALID, "device_id_is_valid", unbox_device_id_is_valid),
 
 #undef ENTRY
 };
