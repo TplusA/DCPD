@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -145,10 +145,7 @@ static bool process_address(Connman::Technology technology,
     }
 
     if(Connman::is_locally_administered_mac_address(mac_address))
-    {
         msg_error(0, LOG_ERR, "MAC address is locally administered");
-        return false;
-    }
 
     return true;
 }
