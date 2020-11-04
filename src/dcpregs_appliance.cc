@@ -65,6 +65,8 @@ enum class ApplianceID
 
 static const char appliance_id_key[]        = "@dcpd:appliance:appliance:id";
 static const char appliance_device_id_key[] = "@dcpd:appliance:appliance:device_id";
+static const char appliance_device_id_is_valid_key[] =
+                                    "@dcpd:appliance:appliance:device_id_is_valid";
 
 static constexpr uint16_t APPLIANCE_STATUS_BIT_AUDIO_PATH_READY = (1U << 0);
 static constexpr uint16_t APPLIANCE_STATUS_BIT_IS_IN_STANDBY    = (1U << 1);
@@ -76,8 +78,17 @@ static void set_device_id_by_mac(const Connman::Technology tech)
     const auto locked_devices(Connman::NetworkDeviceList::get_singleton_for_update());
     auto &devices(locked_devices.first);
 
+    const auto &mac(devices.get_auto_select_mac_address(tech));
+    const bool is_local(is_locally_administered_mac_address(mac));
+
+    if(is_local)
+        configproxy_set_bool(nullptr, appliance_device_id_is_valid_key, false);
+
     configproxy_set_string(nullptr, appliance_device_id_key,
-                           devices.get_auto_select_mac_address(tech).get_string().c_str());
+                           mac.get_string().c_str());
+
+    if(!is_local)
+        configproxy_set_bool(nullptr, appliance_device_id_is_valid_key, true);
 }
 
 static void set_device_id_for_testing()
@@ -85,10 +96,12 @@ static void set_device_id_for_testing()
     /* ID was generated from 1 MiB of random data */
     configproxy_set_string(nullptr, appliance_device_id_key,
                            "4203b53e75db97e29fabd27cf1a6e9f2");
+    configproxy_set_bool(nullptr, appliance_device_id_is_valid_key, true);
 }
 
 static void set_device_id_none()
 {
+    configproxy_set_bool(nullptr, appliance_device_id_is_valid_key, false);
     configproxy_set_string(nullptr, appliance_device_id_key, "");
 }
 

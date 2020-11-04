@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -52,6 +52,7 @@ void configproxy_notify_configuration_changed(const char *origin,
 
 typedef bool (*PatchUint32Fn)(uint32_t *value);
 
+bool configproxy_set_bool(const char *origin, const char *key, bool value);
 bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value);
 bool configproxy_set_uint32_from_string(const char *origin, const char *key,
                                         const char *string, size_t len,

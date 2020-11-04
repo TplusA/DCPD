@@ -1447,7 +1447,7 @@ int main(int argc, char *argv[])
     static const char appliance_ini_file[] = "/var/local/etc/appliance.ini";
     static Configuration::ApplianceValues appliance_ini_defaults(
                 std::move(std::string("!unknown!")),
-                "");
+                "", false);
     Configuration::ConfigManager<Configuration::ApplianceValues>
         config_manager(appliance_ini_file, appliance_ini_defaults);
 

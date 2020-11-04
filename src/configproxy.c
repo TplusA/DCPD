@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -503,6 +503,16 @@ void configproxy_notify_configuration_changed(const char *origin,
                                                  g_variant_builder_end(&builder));
     else
         g_variant_builder_clear(&builder);
+}
+
+bool configproxy_set_bool(const char *origin, const char *key, bool value)
+{
+    const char *local_key;
+    const struct ConfigurationOwner *owner =
+        find_owner_by_key(&configproxy_data, key, &local_key);
+
+    return set(origin, owner, local_key,
+               g_variant_new_variant(g_variant_new_boolean(value)));
 }
 
 bool configproxy_set_uint32(const char *origin, const char *key, uint32_t value)
