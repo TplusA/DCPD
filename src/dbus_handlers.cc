@@ -232,7 +232,7 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
             strcmp(signal_name, "PositionChanged") == 0 ||
             strcmp(signal_name, "PlaybackModeChanged") == 0 ||
             strcmp(signal_name, "SpeedChanged") == 0 ||
-            strcmp(signal_name, "Paused") == 0)
+            strcmp(signal_name, "PauseState") == 0)
     {
         /* ignore */
     }
