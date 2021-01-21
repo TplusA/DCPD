@@ -78,9 +78,10 @@ TEST_CASE_FIXTURE(FixtureParser,
 static void check_flavor_version_repo_values(const nlohmann::json &req)
 {
     REQUIRE(req.is_object());
-    CHECK(req.size() == 5);
+    CHECK(req.size() == 6);
     CHECK(req.at("id").get<std::string>() == "strbo");
     CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V2");
+    CHECK(req.at("target_release_line").get<std::string>() == "V2");
     CHECK(req.at("target_version").get<std::string>() == "V2.3.4.5");
     CHECK(req.at("target_flavor").get<std::string>() == "beta");
     CHECK(req.at("keep_user_data").get<bool>());
@@ -88,22 +89,28 @@ static void check_flavor_version_repo_values(const nlohmann::json &req)
 
 TEST_CASE_FIXTURE(FixtureParser,
                   "Change of flavor, version number, and repository URL "
-                  "within the current release line")
+                  "without specifying release line is an error")
 {
     const char request[] =
         "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5";
 
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: line",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
-                sizeof(request) - 1) == 0);
-    check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
 }
 
 TEST_CASE_FIXTURE(FixtureParser,
                   "Spaces and trailing null characters are ignored")
 {
     const char request[] =
-        "   url= https://packages.ta-hifi.de/StrBo/V2   flavor   =  beta version =V2.3.4.5  \0 ";
+        "   url= https://packages.ta-hifi.de/StrBo/V2   flavor   =  beta version =V2.3.4.5 line   = V2 \0 ";
 
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
@@ -114,7 +121,7 @@ TEST_CASE_FIXTURE(FixtureParser,
 TEST_CASE_FIXTURE(FixtureParser, "Values may be quoted")
 {
     const char request[] =
-        "url=\"https://packages.ta-hifi.de/StrBo/V2\" flavor=\"beta\" version=\"V2.3.4.5\"";
+        "url=\"https://packages.ta-hifi.de/StrBo/V2\" flavor=\"beta\" version=\"V2.3.4.5\" line=\"V2\"";
 
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
@@ -131,10 +138,16 @@ TEST_CASE_FIXTURE(FixtureParser,
         "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
         "stop_below=1 line=V2 future=extension";
 
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: line",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
-                sizeof(request) - 1) == 0);
-    check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
 }
 
 TEST_CASE_FIXTURE(FixtureParser,
@@ -146,10 +159,16 @@ TEST_CASE_FIXTURE(FixtureParser,
         "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
         "stop_above=-1 line=V2 future=extension";
 
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: line",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
-                sizeof(request) - 1) == 0);
-    check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
 }
 
 TEST_CASE_FIXTURE(FixtureParser,
@@ -161,10 +180,16 @@ TEST_CASE_FIXTURE(FixtureParser,
         "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
         "stop=2,6,3,0 line=V2 future=extension";
 
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: line",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
-                sizeof(request) - 1) == 0);
-    check_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
 }
 
 TEST_CASE_FIXTURE(FixtureParser,
@@ -230,16 +255,17 @@ TEST_CASE_FIXTURE(FixtureParser,
 TEST_CASE_FIXTURE(FixtureParser, "Quoted values may contains spaces")
 {
     const char request[] =
-        "url = \"https://packages.ta-hifi.de/StrBo/V2\" flavor = \"beta carotene\" version  =   \"  V space \"      ";
+        "url = \"https://packages.ta-hifi.de/StrBo/V2\" flavor = \"beta carotene\" version  =   \"  V space \"   line = \"red  line  \"     ";
 
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
     const auto req(Regs::SystemUpdate::get_update_request());
     REQUIRE(req.is_object());
-    CHECK(req.size() == 5);
+    CHECK(req.size() == 6);
     CHECK(req.at("id").get<std::string>() == "strbo");
     CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V2");
+    CHECK(req.at("target_release_line").get<std::string>() == "red  line  ");
     CHECK(req.at("target_version").get<std::string>() == "  V space ");
     CHECK(req.at("target_flavor").get<std::string>() == "beta carotene");
     CHECK(req.at("keep_user_data").get<bool>());
@@ -250,16 +276,17 @@ TEST_CASE_FIXTURE(FixtureParser,
                   "including quotation marks")
 {
     const char request[] =
-        "url=\"https\\://packages\\.ta-hifi.de\\/StrBo/V2\" flavor=\"\\ beta carotene (\\\"carot\\\")\" version=\"V\\ \\\"\\\\\\\\5\"";
+        "url=\"https\\://packages\\.ta-hifi.de\\/StrBo/V2\" flavor=\"\\ beta carotene (\\\"carot\\\")\" version=\"V\\ \\\"\\\\\\\\5\" line=\"\\\"red, red line\\\"\"";
 
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
     const auto req(Regs::SystemUpdate::get_update_request());
     REQUIRE(req.is_object());
-    CHECK(req.size() == 5);
+    CHECK(req.size() == 6);
     CHECK(req.at("id").get<std::string>() == "strbo");
     CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V2");
+    CHECK(req.at("target_release_line").get<std::string>() == "\"red, red line\"");
     CHECK(req.at("target_version").get<std::string>() == "V \"\\\\5");
     CHECK(req.at("target_flavor").get<std::string>() == " beta carotene (\"carot\")");
     CHECK(req.at("keep_user_data").get<bool>());
@@ -311,6 +338,81 @@ TEST_CASE_FIXTURE(FixtureParser, "Unknown keys are ignored and dumped to log")
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
     check_line_flavor_version_repo_values(Regs::SystemUpdate::get_update_request());
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Base URL is missing")
+{
+    const char request[] = "flavor=beta version=V4.1.0.2 line=V4";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: url",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Only Base URL is specified")
+{
+    const char request[] = "url=http://packages.org/strbo";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: flavor line version",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Target flavor is missing")
+{
+    const char request[] = "url=http://packages.org/strbo version=V4.1.0.2 line=V4";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: flavor",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Target version is missing")
+{
+    const char request[] = "url=http://packages.org/strbo flavor=beta line=V4";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: version",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Target line is missing")
+{
+    const char request[] = "url=http://packages.org/strbo flavor=beta version=V4.1.0.2";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Incomplete version specification; missing: line",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
 }
 
 TEST_SUITE_END();
@@ -454,20 +556,29 @@ TEST_CASE_FIXTURE(FixtureProcess, "Full set of parameters")
     CHECK(Regs::SystemUpdate::process_update_request());
 }
 
-static void check_partial_recovery_request(const nlohmann::json &req)
+static void check_partial_recovery_request(const nlohmann::json &req, bool with_update_parameters)
 {
     REQUIRE(req.is_object());
-    CHECK(req.size() == 8);
+
+    if(with_update_parameters)
+        CHECK(req.size() == 8);
+    else
+        CHECK(req.size() == 4);
+
     CHECK(req.at("id").get<std::string>() == "strbo");
-    CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V3");
-    CHECK(req.at("target_version").get<std::string>() == "V3.1.99");
-    CHECK(req.at("target_flavor").get<std::string>() == "foo");
-    CHECK(req.at("target_release_line").get<std::string>() == "V3");
+
+    if(with_update_parameters)
+    {
+        CHECK(req.at("base_url").get<std::string>() == "https://packages.ta-hifi.de/StrBo/V3");
+        CHECK(req.at("target_version").get<std::string>() == "V3.1.99");
+        CHECK(req.at("target_flavor").get<std::string>() == "foo");
+        CHECK(req.at("target_release_line").get<std::string>() == "V3");
+    }
 }
 
 static void check_full_recovery_request(const nlohmann::json &req)
 {
-    check_partial_recovery_request(req);
+    check_partial_recovery_request(req, true);
     CHECK(req.at("force_update_through_image_files").get<bool>());
     CHECK(req.at("force_recovery_system_update").get<bool>());
     CHECK_FALSE(req.at("keep_user_data").get<bool>());
@@ -475,7 +586,7 @@ static void check_full_recovery_request(const nlohmann::json &req)
 
 static void check_regular_recovery_request(const nlohmann::json &req)
 {
-    check_partial_recovery_request(req);
+    check_partial_recovery_request(req, false);
     CHECK(req.at("force_update_through_image_files").get<bool>());
     CHECK_FALSE(req.at("force_recovery_system_update").get<bool>());
     CHECK_FALSE(req.at("keep_user_data").get<bool>());
@@ -483,7 +594,7 @@ static void check_regular_recovery_request(const nlohmann::json &req)
 
 static void check_half_recovery_request(const nlohmann::json &req)
 {
-    check_partial_recovery_request(req);
+    check_partial_recovery_request(req, false);
     CHECK(req.at("force_update_through_image_files").get<bool>());
     CHECK_FALSE(req.at("force_recovery_system_update").get<bool>());
     CHECK(req.at("keep_user_data").get<bool>());
@@ -511,9 +622,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
 TEST_CASE_FIXTURE(FixtureProcess,
                   "Force regular recovery (recovery with wiping user data)")
 {
-    const char request[] =
-        "url=https://packages.ta-hifi.de/StrBo/V3 flavor=foo version=V3.1.99 line=V3 "
-        "style=force-recovery";
+    const char request[] = "style=force-recovery";
 
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
@@ -529,9 +638,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
 TEST_CASE_FIXTURE(FixtureProcess,
                   "Force half recovery (recovery, keep user data)")
 {
-    const char request[] =
-        "url=https://packages.ta-hifi.de/StrBo/V3 flavor=foo version=V3.1.99 line=V3 "
-        "style=force-half-recovery";
+    const char request[] = "style=force-half-recovery";
 
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),

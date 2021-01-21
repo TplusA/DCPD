@@ -153,7 +153,15 @@ static TokenKind determine_token_kind(const std::string &raw_token)
     return found == keys.end() ? TokenKind::DIRECT_MAPPING : found->second;
 }
 
-static bool should_stop_for(const std::string &version_spec, int version)
+enum class HandleTokenResult
+{
+    CONTINUE,
+    STOP_EVALUATION,
+    FAILED,
+};
+
+static HandleTokenResult should_stop_for(const std::string &version_spec,
+                                         int version)
 {
     std::istringstream ss(version_spec);
 
@@ -163,26 +171,36 @@ static bool should_stop_for(const std::string &version_spec, int version)
         std::getline(ss, temp, ',');
 
         if(std::stoi(temp) == version)
-            return true;
+            return HandleTokenResult::STOP_EVALUATION;
     }
 
-    return false;
+    return HandleTokenResult::CONTINUE;
 }
 
-static bool should_stop_below(const std::string &version_spec, int version)
+static HandleTokenResult should_stop_below(const std::string &version_spec,
+                                           int version)
 {
-    return std::stoi(version_spec) > version;
+    return std::stoi(version_spec) > version
+        ? HandleTokenResult::STOP_EVALUATION
+        : HandleTokenResult::CONTINUE;
 }
 
-static bool should_stop_above(const std::string &version_spec, int version)
+static HandleTokenResult should_stop_above(const std::string &version_spec,
+                                           int version)
 {
-    return std::stoi(version_spec) < version;
+    return std::stoi(version_spec) < version
+        ? HandleTokenResult::STOP_EVALUATION
+        : HandleTokenResult::CONTINUE;
 }
 
-static bool handle_token(TokenKind kind, std::string &&value,
-                         Maybe<std::unordered_map<std::string, std::string>> &params,
-                         Maybe<std::unordered_map<std::string, bool>> &flags)
+static HandleTokenResult
+handle_token(TokenKind kind, std::string &&value,
+             Maybe<std::unordered_map<std::string, std::string>> &params,
+             Maybe<std::unordered_map<std::string, bool>> &flags,
+             Maybe<bool> &update_parameters_expected)
 {
+    bool failed = false;
+
     switch(kind)
     {
       case TokenKind::DIRECT_MAPPING:
@@ -191,33 +209,46 @@ static bool handle_token(TokenKind kind, std::string &&value,
       case TokenKind::SET_UPDATE_STYLE:
         if(value == "force-half-recovery")
         {
+            failed = update_parameters_expected == true;
             auto &fl(flags.get_rw());
             fl["force_update_through_image_files"] = true;
             fl["force_recovery_system_update"] = false;
             fl["keep_user_data"] = true;
+            update_parameters_expected = false;
         }
         else if(value == "force-recovery")
         {
+            failed = update_parameters_expected == true;
             auto &fl(flags.get_rw());
             fl["force_update_through_image_files"] = true;
             fl["force_recovery_system_update"] = false;
             fl["keep_user_data"] = false;
+            update_parameters_expected = false;
         }
         else if(value == "force-full-recovery")
         {
+            failed = update_parameters_expected == false;
             auto &fl(flags.get_rw());
             fl["force_update_through_image_files"] = true;
             fl["force_recovery_system_update"] = true;
             fl["keep_user_data"] = false;
+            update_parameters_expected = true;
         }
         else
             APPLIANCE_BUG("Bad update style \"%s\" (ignored)", value.c_str());
 
-        return false;
+        if(failed)
+        {
+            APPLIANCE_BUG("Update style %s is incompatible with other parameters",
+                          value.c_str());
+            return HandleTokenResult::FAILED;
+        }
+
+        return HandleTokenResult::CONTINUE;
 
       case TokenKind::SET_REST_API_URL:
         Rest::set_base_url(std::move(value));
-        return false;
+        return HandleTokenResult::CONTINUE;
 
       case TokenKind::MAYBE_STOP_FOR:
         return should_stop_for(value,
@@ -233,7 +264,7 @@ static bool handle_token(TokenKind kind, std::string &&value,
     }
 
     MSG_UNREACHABLE();
-    return false;
+    return HandleTokenResult::CONTINUE;
 }
 
 static inline bool is_space(char ch) noexcept { return ch == ' '; }
@@ -254,6 +285,8 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
 
     if(in_ptr == end_ptr)
         return true;
+
+    Maybe<bool> update_parameters_expected;
 
     const char *pos = std::find_if_not(in_ptr, end_ptr, is_space);
     const char *const end =
@@ -281,7 +314,7 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
 
         /* find beginning of assigned value */
         pos = std::find_if_not(std::next(assignment), end, is_space);
-        bool stop = false;
+        auto stop = HandleTokenResult::CONTINUE;
 
         if(*pos != '"')
         {
@@ -289,7 +322,8 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
             const auto value_end = std::find_if(pos, end, is_space);
 
             if(token_kind != TokenKind::DIRECT_MAPPING)
-                stop = handle_token(token_kind, std::string(pos, value_end), params, flags);
+                stop = handle_token(token_kind, std::string(pos, value_end),
+                                    params, flags, update_parameters_expected);
             else if(!token.empty())
                 params.get_rw()[token] = std::string(pos, value_end);
 
@@ -323,7 +357,8 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                     }
 
                     if(token_kind != TokenKind::DIRECT_MAPPING)
-                        stop = handle_token(token_kind, std::move(value), params, flags);
+                        stop = handle_token(token_kind, std::move(value), params, flags,
+                                            update_parameters_expected);
                     else if(!token.empty())
                         params.get_rw()[token] = std::move(value);
 
@@ -338,11 +373,49 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
             }
         }
 
-        if(stop)
+        switch(stop)
+        {
+          case HandleTokenResult::CONTINUE:
+            break;
+
+          case HandleTokenResult::STOP_EVALUATION:
             pos = end;
+            break;
+
+          case HandleTokenResult::FAILED:
+            return false;
+        }
     }
 
-    return true;
+    static const std::array<std::pair<std::string, std::string>, 4> update_parameters
+    {
+        std::make_pair("base_url", "url"),
+        std::make_pair("target_flavor", "flavor"),
+        std::make_pair("target_release_line", "line"),
+        std::make_pair("target_version", "version"),
+    };
+
+    const unsigned int param_count =
+        std::count_if(update_parameters.begin(), update_parameters.end(),
+                      [&params] (const auto &key)
+                      { return params->find(key.first) != params->end(); });
+
+    if(param_count == 0)
+        return update_parameters_expected.pick(false, true, true);
+
+    if(param_count == update_parameters.size())
+        return update_parameters_expected.pick(true, false, true);
+
+    std::ostringstream os;
+
+    for(const auto &key : update_parameters)
+        if(params->find(key.first) == params->end())
+            os << ' ' << key.second;
+
+    APPLIANCE_BUG("Incomplete version specification; missing:%s",
+                  os.str().c_str());
+
+    return false;
 }
 
 static Maybe<std::unordered_map<std::string, std::string>> strbo_update_parameters;
