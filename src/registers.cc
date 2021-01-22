@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -53,10 +53,9 @@
 #include "string_trim.hh"
 #include "os.hh"
 
-#include <cstring>
-#include <cinttypes>
 #include <array>
 #include <algorithm>
+#include <unordered_map>
 
 #define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 10)
 
@@ -126,119 +125,174 @@ static ssize_t read_17_device_status(uint8_t *response, size_t length)
     return length;
 }
 
-static size_t skip_to_eol(const char *str, size_t len, size_t offset)
+static size_t skip_to_char(char ch, const char *str, size_t len, size_t offset)
 {
-    while(offset < len && str[offset] != '\n')
+    while(offset < len && str[offset] != ch)
         ++offset;
 
     return offset;
 }
 
-static ssize_t read_37_image_version(uint8_t *response, size_t length)
+static std::unordered_map<std::string, std::string>
+read_release_info(bool &succeeded, bool &is_v1_release)
 {
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 37 handler %p %zu", response, length);
-
     struct os_mapped_file_data f;
     const char *x_release_filename = nullptr;
-    const char *key = nullptr;
-    size_t key_length;
 
     {
         static const char strbo_release_filename[] = "/etc/strbo-release";
-        static const char strbo_release_key[] = "STRBO_VERSION=";
         static const char os_release_filename[] = "/etc/os-release";
-        static const char os_release_key[] = "VERSION_ID=";
 
         OS::SuppressErrorsGuard no_errors;
 
         if(os_map_file_to_memory(&f, strbo_release_filename) == 0)
         {
             x_release_filename = strbo_release_filename;
-            key = strbo_release_key;
-            key_length = sizeof(strbo_release_key) - 1;
+            is_v1_release = false;
         }
         else if(os_map_file_to_memory(&f, os_release_filename) == 0)
         {
             x_release_filename = os_release_filename;
-            key = os_release_key;
-            key_length = sizeof(os_release_key) - 1;
+            is_v1_release = true;
         }
         else
-            return -1;
+        {
+            succeeded = false;
+            return {};
+        }
     }
 
+    succeeded = true;
+
     auto *const content = static_cast<const char *>(f.ptr);
-    bool ok = false;
+    std::unordered_map<std::string, std::string> result;
 
     for(size_t i = 0; i < f.length; ++i)
     {
-        const size_t remaining = f.length - i;
+        const size_t assign_pos = skip_to_char('=', content, f.length, i);
 
-        if(remaining < key_length)
-            break;
-
-        if(memcmp(key, content + i, key_length) == 0)
+        if(assign_pos >= f.length)
         {
-            i += key_length;
-
-            const size_t id_length_raw = skip_to_eol(content, f.length, i) - i;
-            const bool values_are_quoted = id_length_raw > 0 && content[i] == '"';
-
-            if(values_are_quoted)
-            {
-                if(id_length_raw < 2)
-                {
-                    msg_error(0, LOG_ERR, "Quoted version ID too short");
-                    break;
-                }
-
-                if(content[i + id_length_raw - 1] != '"')
-                {
-                    msg_error(0, LOG_ERR, "Missing quotation mark in version ID");
-                    break;
-                }
-
-                ++i;
-            }
-
-            const size_t id_length = id_length_raw - (values_are_quoted ? 2 : 0);
-            const size_t bytes_to_fill =
-                length > id_length + 1 ? id_length + 1 : length;
-
-            if(length <= id_length)
-            {
-                if(length > 0)
-                    msg_error(0, LOG_NOTICE,
-                              "Truncating version ID of length %zu to %zu characters",
-                              id_length, length - 1);
-                else
-                    msg_error(0, LOG_NOTICE,
-                              "Cannot copy version ID to zero length buffer");
-            }
-
-            if(bytes_to_fill > 0)
-            {
-                memcpy(response, content + i, bytes_to_fill - 1);
-                memset(response + bytes_to_fill - 1, 0, length - bytes_to_fill + 1);
-            }
-            else if(length > 0)
-                memset(response, 0, length);
-
-            ok = true;
-            length = bytes_to_fill;
-
+            msg_error(0, LOG_ERR, "Invalid content in %s", x_release_filename);
+            succeeded = false;
             break;
         }
 
-        i = skip_to_eol(content, f.length, i);
+        std::string key(content + i, assign_pos - i);
+        i = assign_pos + 1;
+
+        if(i >= f.length)
+        {
+            msg_error(0, LOG_ERR, "Truncated content in %s", x_release_filename);
+            succeeded = false;
+            break;
+        }
+
+        const size_t id_length_raw = skip_to_char('\n', content, f.length, i) - i;
+        const bool values_are_quoted = id_length_raw > 0 && content[i] == '"';
+
+        if(values_are_quoted)
+        {
+            if(id_length_raw < 2)
+            {
+                msg_error(0, LOG_ERR, "Quoted value too short in %s", x_release_filename);
+                succeeded = false;
+                break;
+            }
+
+            if(content[i + id_length_raw - 1] != '"')
+            {
+                msg_error(0, LOG_ERR, "Missing quotation mark in %s", x_release_filename);
+                succeeded = false;
+                break;
+            }
+
+            ++i;
+        }
+
+        const size_t id_length = id_length_raw - (values_are_quoted ? 2 : 0);
+        result.emplace(std::move(key), std::string(content + i, id_length));
+
+        i += id_length_raw - (values_are_quoted ? 1 : 0);
     }
 
     os_unmap_file(&f);
+    return result;
+}
 
-    if(!ok)
-        msg_error(0, LOG_ERR, "No VERSION_ID in %s", x_release_filename);
+static size_t fill_in_release_information(const std::unordered_map<std::string, std::string> &info,
+                                          bool is_v1_release, uint8_t *response, size_t length)
+{
+    static const char *v1_keys[] = { "VERSION_ID", nullptr };
+    static const char *v2_keys[] = { "STRBO_VERSION", "STRBO_FLAVOR", "STRBO_RELEASE_LINE", nullptr };
+    const char **keys = is_v1_release ? v1_keys : v2_keys;
+    size_t out_offset = 0;
 
-    return ok ? (ssize_t)length : -1;
+    for(const char **key = keys; *key != nullptr; ++key)
+    {
+        const auto &kv(info.find(*key));
+
+        if(kv == info.end())
+        {
+            msg_error(0, LOG_NOTICE, "Version info key %s does not exist", *key);
+
+            if(out_offset < length)
+                response[out_offset++] = '\0';
+            else
+                msg_error(0, LOG_WARNING,
+                          "Response buffer too small even for a single zero for %s",
+                          *key);
+        }
+        else if(out_offset + kv->second.length() + 1 < length)
+        {
+            std::copy(kv->second.begin(), kv->second.end(), response + out_offset);
+            out_offset += kv->second.length();
+            response[out_offset++] = '\0';
+        }
+        else
+        {
+            const size_t remaining_size = length - out_offset;
+
+            if(remaining_size > 0)
+            {
+                msg_error(0, LOG_NOTICE,
+                          "Truncating value \"%s\" (%s) of length %zu to %zu characters",
+                          kv->second.c_str(), kv->first.c_str(),
+                          kv->second.length(), remaining_size - 1);
+                std::copy(kv->second.begin(),
+                          std::next(kv->second.begin(), remaining_size - 1),
+                          response + out_offset);
+                out_offset += remaining_size - 1;
+                response[out_offset++] = '\0';
+            }
+            else
+                msg_error(0, LOG_NOTICE,
+                          "Cannot copy value \"%s\" (%s) to full response buffer",
+                          kv->second.c_str(), kv->first.c_str());
+        }
+    }
+
+    if(out_offset < length)
+        std::fill(response + out_offset, response + length, 0);
+
+    return out_offset;
+}
+
+static ssize_t read_37_image_version(uint8_t *response, size_t length)
+{
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "read 37 handler %p %zu", response, length);
+
+    bool succeeded;
+    bool is_v1_release;
+    auto release_info(read_release_info(succeeded, is_v1_release));
+
+    if(succeeded)
+        length = fill_in_release_information(release_info, is_v1_release,
+                                             response, length);
+    else
+        msg_error(0, LOG_ERR, "No version information found");
+
+    return succeeded ? (ssize_t)length : -1;
 }
 
 static bool to_kbits(uint32_t *value)

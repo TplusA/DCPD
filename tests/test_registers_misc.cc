@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -259,7 +259,56 @@ void test_read_image_version_from_strbo_release()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_version_id[] = "V2.4.3";
+    static const char expected_version_id[] = "V2.4.3\0stable\0V2";
+
+    do_test_read_image_version(config_file, true, 20,
+                               expected_version_id, sizeof(expected_version_id));
+}
+
+/*!\test
+ * Read out V2 version information using a too small response buffer.
+ */
+void test_read_image_version_from_strbo_release_using_too_small_buffer()
+{
+    static char config_file_buffer[] =
+        "STRBO_RELEASE_LINE=\"V2\"\n"
+        "STRBO_FLAVOR=\"stable\"\n"
+        "STRBO_VERSION=\"V2.4.3\"\n"
+        "STRBO_DATETIME=\"20200529120216\"\n"
+        "STRBO_GIT_COMMIT=\"149d8fbc1ca4186d30b75b2e8127b4307f48d41d\"\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_version_id[] = "V2.4.3\0stable\0V";
+
+    do_test_read_image_version(config_file, true, 16,
+                               expected_version_id, sizeof(expected_version_id),
+                               "Truncating value \"V2\" (STRBO_RELEASE_LINE) of length 2 to 1 characters");
+}
+
+/*!\test
+ * Check if missing keys are handled correctly.
+ */
+void test_read_image_version_from_incomplete_strbo_release()
+{
+    static char config_file_buffer[] = "STRBO_VERSION=\"V3.1.5\"\n";
+
+    const struct os_mapped_file_data config_file =
+    {
+        .fd = expected_os_map_file_to_memory_fd,
+        .ptr = config_file_buffer,
+        .length = sizeof(config_file_buffer) - 1,
+    };
+
+    static const char expected_version_id[] = "V3.1.5\0\0";
+
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE, "Version info key STRBO_FLAVOR does not exist");
+    mock_messages->expect_msg_error_formatted(0, LOG_NOTICE, "Version info key STRBO_RELEASE_LINE does not exist");
 
     do_test_read_image_version(config_file, true, 20,
                                expected_version_id, sizeof(expected_version_id));
@@ -392,7 +441,7 @@ void test_read_image_version_with_small_buffer()
 
     do_test_read_image_version(config_file, false, sizeof(expected_version_id),
                                expected_version_id, sizeof(expected_version_id),
-                               "Truncating version ID of length 16 to 9 characters");
+                               "Truncating value \"beta-20.82.10524\" (VERSION_ID) of length 16 to 9 characters");
 }
 
 /*!\test
@@ -413,7 +462,7 @@ void test_read_image_version_with_very_small_buffer()
 
     do_test_read_image_version(config_file, false, sizeof(expected_version_id),
                                expected_version_id, sizeof(expected_version_id),
-                               "Truncating version ID of length 14 to 0 characters");
+                               "Truncating value \"20150708122013\" (VERSION_ID) of length 14 to 0 characters");
 }
 
 /*!\test
@@ -431,7 +480,7 @@ void test_read_image_version_with_zero_size_buffer()
     };
 
     do_test_read_image_version(config_file, false, 0, nullptr, 0,
-                               "Cannot copy version ID to zero length buffer");
+                               "Cannot copy value \"20150708122013\" (VERSION_ID) to full response buffer");
 }
 
 /*!\test
