@@ -234,7 +234,7 @@ void test_read_image_version()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_version_id[] = "V1.0.0";
+    static const char expected_version_id[] = "V1.0.0\0\0V1";
 
     do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
@@ -331,7 +331,7 @@ void test_read_image_version_with_version_id_in_first_line()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_version_id[] = "V1.0.0";
+    static const char expected_version_id[] = "V1.0.0\0\0V1";
 
     do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
@@ -354,7 +354,7 @@ void test_read_image_version_with_version_id_in_last_line()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_version_id[] = "V1.0.0";
+    static const char expected_version_id[] = "V1.0.0\0\0V1";
 
     do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
@@ -377,7 +377,7 @@ void test_read_image_version_with_version_id_in_last_line_without_newline()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_version_id[] = "V1.0.0";
+    static const char expected_version_id[] = "V1.0.0\0\0V1";
 
     do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
@@ -397,7 +397,7 @@ void test_read_image_version_with_single_character_version_id()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_version_id[] = "X";
+    static const char expected_version_id[] = "X\0\0V1";
 
     do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
@@ -417,7 +417,7 @@ void test_read_image_version_with_empty_version_id()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    static const char expected_version_id[] = "";
+    static const char expected_version_id[] = "\0\0V1";
 
     do_test_read_image_version(config_file, false, 20,
                                expected_version_id, sizeof(expected_version_id));
@@ -439,9 +439,18 @@ void test_read_image_version_with_small_buffer()
 
     static const char expected_version_id[] = "beta-20.8";
 
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Truncating value \"beta-20.82.10524\" (VERSION_ID) of length 16 to 9 characters");
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Cannot copy value \"\" (STRBO_FLAVOR) to full response buffer");
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Cannot copy value \"V1\" (STRBO_RELEASE_LINE) to full response buffer");
+
     do_test_read_image_version(config_file, false, sizeof(expected_version_id),
-                               expected_version_id, sizeof(expected_version_id),
-                               "Truncating value \"beta-20.82.10524\" (VERSION_ID) of length 16 to 9 characters");
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
@@ -460,9 +469,18 @@ void test_read_image_version_with_very_small_buffer()
 
     static const char expected_version_id[] = "";
 
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Truncating value \"20150708122013\" (VERSION_ID) of length 14 to 0 characters");
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Cannot copy value \"\" (STRBO_FLAVOR) to full response buffer");
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Cannot copy value \"V1\" (STRBO_RELEASE_LINE) to full response buffer");
+
     do_test_read_image_version(config_file, false, sizeof(expected_version_id),
-                               expected_version_id, sizeof(expected_version_id),
-                               "Truncating value \"20150708122013\" (VERSION_ID) of length 14 to 0 characters");
+                               expected_version_id, sizeof(expected_version_id));
 }
 
 /*!\test
@@ -479,8 +497,17 @@ void test_read_image_version_with_zero_size_buffer()
         .length = sizeof(config_file_buffer) - 1,
     };
 
-    do_test_read_image_version(config_file, false, 0, nullptr, 0,
-                               "Cannot copy value \"20150708122013\" (VERSION_ID) to full response buffer");
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Cannot copy value \"20150708122013\" (VERSION_ID) to full response buffer");
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Cannot copy value \"\" (STRBO_FLAVOR) to full response buffer");
+    mock_messages->expect_msg_error_formatted(
+            0, LOG_NOTICE,
+            "Cannot copy value \"V1\" (STRBO_RELEASE_LINE) to full response buffer");
+
+    do_test_read_image_version(config_file, false, 0, nullptr, 0);
 }
 
 /*!\test

@@ -220,13 +220,22 @@ read_release_info(bool &succeeded, bool &is_v1_release)
     return result;
 }
 
-static size_t fill_in_release_information(const std::unordered_map<std::string, std::string> &info,
+static size_t fill_in_release_information(std::unordered_map<std::string, std::string> &info,
                                           bool is_v1_release, uint8_t *response, size_t length)
 {
-    static const char *v1_keys[] = { "VERSION_ID", nullptr };
+    static const char *v1_keys[] = { "VERSION_ID",    "STRBO_FLAVOR", "STRBO_RELEASE_LINE", nullptr };
     static const char *v2_keys[] = { "STRBO_VERSION", "STRBO_FLAVOR", "STRBO_RELEASE_LINE", nullptr };
     const char **keys = is_v1_release ? v1_keys : v2_keys;
     size_t out_offset = 0;
+
+    if(is_v1_release)
+    {
+        if(info.find("STRBO_FLAVOR") == info.end())
+            info["STRBO_FLAVOR"] = "";
+
+        if(info.find("STRBO_RELEASE_LINE") == info.end())
+            info["STRBO_RELEASE_LINE"] = "V1";
+    }
 
     for(const char **key = keys; *key != nullptr; ++key)
     {
