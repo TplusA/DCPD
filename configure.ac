@@ -1,4 +1,4 @@
-dnl Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+dnl Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
 dnl
 dnl This file is part of DCPD.
 dnl
@@ -18,7 +18,7 @@ dnl Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 dnl MA  02110-1301, USA.
 
 AC_PREREQ([2.69])
-AC_INIT([DCPD], [5.11], [r.tiemann@ta-hifi.com])
+AC_INIT([DCPD], [5.12], [r.tiemann@ta-hifi.com])
 AC_CONFIG_AUX_DIR([config])
 AM_INIT_AUTOMAKE([1.11 -Wall -Werror foreign])
 AM_SILENT_RULES([yes])

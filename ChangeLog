@@ -1,3 +1,15 @@
+2021-02-23  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.12 released.
+
+	* Update: More checks for bad update requests.
+
+	* DCP protocol: Extend version information returned in register 37. We
+	  return the flavor and release line along with the release version
+	  number. Older V1.x systems return hard-coded "V1" for the release
+	  line, newer V2.x system take these information from the running
+	  system.
+
 2020-11-04  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.11 released.
@@ -1071,4 +1083,4 @@
 	* First release for testing.
 
 
-Copyright 2015--2020 T+A elektroakustik GmbH & Co. KG
+Copyright 2015--2021 T+A elektroakustik GmbH & Co. KG
