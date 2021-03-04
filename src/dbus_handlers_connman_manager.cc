@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1855,7 +1855,7 @@ static void bug_if_not_processed(const Connman::ServiceList &known_services)
         }
     }
 
-    log_assert(!found_bug);
+    BUG_IF(found_bug, "At least one ConnMan service has NOT been processed");
 }
 #endif /* NDEBUG */
 
