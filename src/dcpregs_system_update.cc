@@ -44,7 +44,7 @@ bool Regs::SystemUpdate::process_update_request()
     if(req == nullptr)
     {
         msg_error(0, LOG_ERR,
-                  "Cannot trigger StrBo update without undefined arguments");
+                  "Cannot trigger StrBo update with undefined arguments");
         return false;
     }
 

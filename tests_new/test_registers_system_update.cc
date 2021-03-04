@@ -536,7 +536,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
             "Attempting to START SYSTEM UPDATE (rpm/images)", false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR,
-            "Cannot trigger StrBo update without undefined arguments", false);
+            "Cannot trigger StrBo update with undefined arguments", false);
     CHECK_FALSE(Regs::SystemUpdate::process_update_request());
 }
 
