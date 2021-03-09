@@ -93,11 +93,22 @@ bool Regs::SystemUpdate::process_update_request()
         break;
 
       case 500:
+      case 502:
+      case 503:
         if(result.error().message().empty())
-            msg_error(0, LOG_ERR, "Server error");
+            msg_error(0, LOG_ERR, "Server error %u", result.get_status_code());
         else
-            msg_error(0, LOG_ERR, "Server error: %s",
+            msg_error(0, LOG_ERR, "Server error %u: %s",
+                      result.get_status_code(),
                       result.error().message().c_str());
+        break;
+
+      default:
+        if(result.error().message().empty())
+            BUG("Unhandled error %u", result.get_status_code());
+        else
+            BUG("Unhandled error %u: %s", result.get_status_code(),
+                result.error().message().c_str());
         break;
     }
 
