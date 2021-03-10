@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -642,10 +642,10 @@ static int try_start_xmodem()
     return ret;
 }
 
-int Regs::FileTransfer::hcr_send_shutdown_request(bool via_dcp_command)
+int Regs::FileTransfer::hcr_send_shutdown_request(const char *reason)
 {
-    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutdown requested%s",
-              via_dcp_command ? " via DCP command" : "");
+    log_assert(reason != nullptr);
+    msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutdown requested: %s", reason);
 
     GError *error = NULL;
     tdbus_logind_manager_call_reboot_sync(dbus_get_logind_manager_iface(), false, NULL, &error);
@@ -976,7 +976,7 @@ static int do_write_download_control(const uint8_t *data)
                 return 0;
             }
             else
-                return Regs::FileTransfer::hcr_send_shutdown_request(true);
+                return Regs::FileTransfer::hcr_send_shutdown_request("DCP command");
         }
         else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
             BUG("Restore to factory defaults not implemented");
@@ -987,7 +987,20 @@ static int do_write_download_control(const uint8_t *data)
             return try_start_system_update();
 
         if(data[1] == HCR_COMMAND_UPDATE_STREAMING_BOARD)
-            return Regs::SystemUpdate::process_update_request() ? 0 : -1;
+        {
+            switch(Regs::SystemUpdate::process_update_request())
+            {
+              case Regs::SystemUpdate::UpdateResult::SUCCESS:
+                return 0;
+
+              case Regs::SystemUpdate::UpdateResult::BAD_CLIENT_REQUEST:
+                return -1;
+
+              case Regs::SystemUpdate::UpdateResult::FAILURE:
+                Regs::FileTransfer::hcr_send_shutdown_request("update failure");
+                return -1;
+            }
+        }
     }
 
     msg_error(ENOSYS, LOG_ERR, "Unsupported command");

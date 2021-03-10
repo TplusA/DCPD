@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -57,7 +57,7 @@ bool hcr_is_system_update_in_progress();
 /*!
  * Shut down (reboot system).
  */
-int hcr_send_shutdown_request(bool via_dcp_command);
+int hcr_send_shutdown_request(const char *reason);
 
 /*!
  * Report download progress.

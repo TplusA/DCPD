@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -36,8 +36,15 @@ namespace Regs
 namespace SystemUpdate
 {
 
+enum class UpdateResult
+{
+    SUCCESS,
+    BAD_CLIENT_REQUEST,
+    FAILURE,
+};
+
 void init();
-bool process_update_request();
+UpdateResult process_update_request();
 static inline unsigned int get_register_protocol_version() { return 0; }
 
 namespace DCP

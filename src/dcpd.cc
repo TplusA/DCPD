@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1352,7 +1352,7 @@ static void *update_watchdog_main(void *user_data)
      * to make any progress. Also, no one has terminated us. Pull the emergency
      * brake and restart.
      */
-    Regs::FileTransfer::hcr_send_shutdown_request(false);
+    Regs::FileTransfer::hcr_send_shutdown_request("opkg timeout");
 
     return nullptr;
 }

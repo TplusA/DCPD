@@ -34,7 +34,8 @@
 #include <sstream>
 #include <algorithm>
 
-bool Regs::SystemUpdate::process_update_request()
+Regs::SystemUpdate::UpdateResult
+Regs::SystemUpdate::process_update_request()
 {
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
               "Attempting to START SYSTEM UPDATE (rpm/images)");
@@ -45,7 +46,7 @@ bool Regs::SystemUpdate::process_update_request()
     {
         msg_error(0, LOG_ERR,
                   "Cannot trigger StrBo update with undefined arguments");
-        return false;
+        return UpdateResult::BAD_CLIENT_REQUEST;
     }
 
     const Rest::Result api_entry(Rest::get_entry("system", "device_info"));
@@ -54,7 +55,7 @@ bool Regs::SystemUpdate::process_update_request()
     {
         msg_error(0, LOG_ERR, "Failed retrieving API node: %s",
                   api_entry.error().message().c_str());
-        return false;
+        return UpdateResult::FAILURE;
     }
 
     const auto url(Rest::mk_url(api_entry.answer(),
@@ -72,7 +73,7 @@ bool Regs::SystemUpdate::process_update_request()
     {
       case 200:
       case 202:
-        return true;
+        return UpdateResult::SUCCESS;
 
       case 0:
         msg_error(0, LOG_ERR,
@@ -82,7 +83,7 @@ bool Regs::SystemUpdate::process_update_request()
 
       case 303:
         msg_error(0, LOG_NOTICE, "Update already in progress, not restarting");
-        break;
+        return UpdateResult::SUCCESS;
 
       case 400:
         if(result.error().message().empty())
@@ -112,7 +113,7 @@ bool Regs::SystemUpdate::process_update_request()
         break;
     }
 
-    return false;
+    return UpdateResult::FAILURE;
 }
 
 static const std::string empty_string;

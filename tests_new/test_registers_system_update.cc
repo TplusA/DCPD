@@ -537,7 +537,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR,
             "Cannot trigger StrBo update with undefined arguments", false);
-    CHECK_FALSE(Regs::SystemUpdate::process_update_request());
+    CHECK(Regs::SystemUpdate::process_update_request() == Regs::SystemUpdate::UpdateResult::BAD_CLIENT_REQUEST);
 }
 
 TEST_CASE_FIXTURE(FixtureProcess, "Full set of parameters")
@@ -553,7 +553,7 @@ TEST_CASE_FIXTURE(FixtureProcess, "Full set of parameters")
             mock_messages, MESSAGE_LEVEL_IMPORTANT,
             "Attempting to START SYSTEM UPDATE (rpm/images)", false);
     send_request_check = check_line_flavor_version_repo_values;
-    CHECK(Regs::SystemUpdate::process_update_request());
+    CHECK(Regs::SystemUpdate::process_update_request() == Regs::SystemUpdate::UpdateResult::SUCCESS);
 }
 
 static void check_partial_recovery_request(const nlohmann::json &req, bool with_update_parameters)
@@ -616,7 +616,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
             mock_messages, MESSAGE_LEVEL_IMPORTANT,
             "Attempting to START SYSTEM UPDATE (rpm/images)", false);
     send_request_check = check_full_recovery_request;
-    CHECK(Regs::SystemUpdate::process_update_request());
+    CHECK(Regs::SystemUpdate::process_update_request() == Regs::SystemUpdate::UpdateResult::SUCCESS);
 }
 
 TEST_CASE_FIXTURE(FixtureProcess,
@@ -632,7 +632,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
             mock_messages, MESSAGE_LEVEL_IMPORTANT,
             "Attempting to START SYSTEM UPDATE (rpm/images)", false);
     send_request_check = check_regular_recovery_request;
-    CHECK(Regs::SystemUpdate::process_update_request());
+    CHECK(Regs::SystemUpdate::process_update_request() == Regs::SystemUpdate::UpdateResult::SUCCESS);
 }
 
 TEST_CASE_FIXTURE(FixtureProcess,
@@ -648,7 +648,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
             mock_messages, MESSAGE_LEVEL_IMPORTANT,
             "Attempting to START SYSTEM UPDATE (rpm/images)", false);
     send_request_check = check_half_recovery_request;
-    CHECK(Regs::SystemUpdate::process_update_request());
+    CHECK(Regs::SystemUpdate::process_update_request() == Regs::SystemUpdate::UpdateResult::SUCCESS);
 }
 
 TEST_SUITE_END();

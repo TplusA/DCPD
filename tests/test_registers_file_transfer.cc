@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -483,7 +483,7 @@ void test_send_reboot_request()
 
     mock_os->expect_os_path_get_type(OS_PATH_TYPE_IO_ERROR, 0, "/tmp/do_update.sh");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
-                                              "Shutdown requested via DCP command");
+                                              "Shutdown requested: DCP command");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
     mock_logind_manager_dbus->expect_tdbus_logind_manager_call_reboot_sync(true, dbus_logind_manager_iface_dummy, false);
     reg->write(hcr_command, sizeof(hcr_command));
