@@ -1,3 +1,13 @@
+2021-03-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 5.13 released.
+
+	* Update: Improve error handling when talking with the REST API.
+
+	* Update: Reboot system if the update has failed according to REST API
+	  status code. We do this because the ARM expects us to reboot when
+	  the update is done. Fail is done, so fail time is reboot time.
+
 2021-02-23  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.12 released.
