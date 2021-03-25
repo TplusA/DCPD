@@ -1,3 +1,17 @@
+2021-03-25  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 6.0 released.
+
+	* DCP protocol: Version bumped to 1.1.0 so that the SPI slave has a
+	  simple way of telling how to update. It could (should) also read out
+	  the Streaming Board version information, but having this distinction
+	  on protocol layer makes a lot of sense.
+
+	* Version: Major version bump because this version is supposed to be
+	  used in V2 series of our Streaming Boards. V1 series must use DCP
+	  versions 1.0.x, so in case we need a new version for V1, we will
+	  branch and continue the v5.x line on that branch.
+
 2021-03-10  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 5.13 released.
