@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -55,9 +55,6 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
 {
     level->code = REGISTER_MK_VERSION(0, 0, 0);
 
-    /* FIXME: This code does not work with a multiple supported ranges */
-    log_assert(number_of_supported_ranges == 1);
-
     for(size_t i = 0; i < number_of_ranges; ++i)
     {
         const uint8_t *const range_spec = &ranges[i * SIZE_OF_PROTOCOL_LEVEL_RANGE_SPEC];
@@ -75,14 +72,17 @@ static bool fill_in_highest_supported_level(const uint8_t *const ranges,
         if(from.code > to.code)
             continue;
 
-        if(from.code > supported[1].code || to.code < supported[0].code)
-            continue;
+        for(size_t v = 0; v < number_of_supported_ranges * 2; v += 2)
+        {
+            if(from.code > supported[v + 1].code || to.code < supported[v + 0].code)
+                continue;
 
-        const Regs::ProtocolLevel overlap_max =
-            (to.code < supported[1].code) ? to : supported[1];
+            const Regs::ProtocolLevel overlap_max =
+                (to.code < supported[v + 1].code) ? to : supported[v + 1];
 
-        if(overlap_max.code > level->code)
-            *level = overlap_max;
+            if(overlap_max.code > level->code)
+                *level = overlap_max;
+        }
     }
 
     return (level->code != 0);

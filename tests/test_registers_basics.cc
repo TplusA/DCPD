@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -90,6 +90,16 @@ class RegisterSetPerVersion
         registers_(registers.data()),
         number_of_registers_(N)
     {}
+
+    constexpr explicit RegisterSetPerVersion(uint8_t version_major,
+                                             uint8_t version_minor,
+                                             uint8_t version_patch):
+        version_major_(version_major),
+        version_minor_(version_minor),
+        version_patch_(version_patch),
+        registers_(nullptr),
+        number_of_registers_(0)
+    {}
 };
 
 static const std::array<uint8_t, 38> existing_registers_v1_0_0 =
@@ -159,7 +169,7 @@ static const std::array<uint8_t, 1> existing_registers_v1_0_10 =
     211,
 };
 
-static const std::array<RegisterSetPerVersion, 11> all_registers
+static const std::array<RegisterSetPerVersion, 12> all_registers
 {
     RegisterSetPerVersion(1, 0, 0, existing_registers_v1_0_0),
     RegisterSetPerVersion(1, 0, 1, existing_registers_v1_0_1),
@@ -172,6 +182,7 @@ static const std::array<RegisterSetPerVersion, 11> all_registers
     RegisterSetPerVersion(1, 0, 8, existing_registers_v1_0_8),
     RegisterSetPerVersion(1, 0, 9, existing_registers_v1_0_9),
     RegisterSetPerVersion(1, 0, 10, existing_registers_v1_0_10),
+    RegisterSetPerVersion(1, 1, 0),
 };
 
 void cut_setup()
@@ -306,7 +317,7 @@ void test_assert_all_registers_are_checked_by_unit_tests()
     const Regs::ProtocolLevel *level_ranges = nullptr;
     const size_t level_ranges_count = Regs::get_supported_protocol_levels(&level_ranges);
 
-    cppcut_assert_equal(size_t(1), level_ranges_count);
+    cppcut_assert_equal(size_t(2), level_ranges_count);
 
     const uint32_t lowest_checked_version(REGISTER_MK_VERSION(all_registers[0].version_major_,
                                                               all_registers[0].version_minor_,
@@ -315,7 +326,7 @@ void test_assert_all_registers_are_checked_by_unit_tests()
                                                                all_registers[all_registers.size() - 1].version_minor_,
                                                                all_registers[all_registers.size() - 1].version_patch_));
     cppcut_assert_equal(level_ranges[0].code, lowest_checked_version);
-    cppcut_assert_equal(level_ranges[1].code, highest_checked_version);
+    cppcut_assert_equal(level_ranges[level_ranges_count * 2 - 1].code, highest_checked_version);
 }
 
 }
@@ -327,7 +338,7 @@ static MockMessages *mock_messages;
 
 static RegisterChangedData *register_changed_data;
 
-static const uint8_t expected_default_protocol_level[3] = { 1, 0, 10, };
+static const uint8_t expected_default_protocol_level[3] = { 1, 1, 0, };
 
 static void register_changed_callback(uint8_t reg_number)
 {
@@ -469,6 +480,9 @@ void test_negotiate_protocol_level_single_range_with_match()
         /* major and minor versions must match */
         { 1, 0, 0, 1, 0, UINT8_MAX, },
 
+        /* major and minor versions must match */
+        { 1, 1, 0, 1, 1, UINT8_MAX, },
+
         /* a range of several supported protocol levels */
         { 1, 0, 0,
           expected_default_protocol_level[0],
@@ -495,6 +509,7 @@ void test_negotiate_protocol_level_single_range_with_match()
         { expected_default_protocol_level[0],
           expected_default_protocol_level[1],
           expected_default_protocol_level[2], },
+        { 1, 0, 10 },
         { expected_default_protocol_level[0],
           expected_default_protocol_level[1],
           expected_default_protocol_level[2], },

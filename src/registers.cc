@@ -57,7 +57,7 @@
 #include <algorithm>
 #include <unordered_map>
 
-#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 0, 10)
+#define CURRENT_PROTOCOL_VERSION_CODE   REGISTER_MK_VERSION(1, 1, 0)
 
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
@@ -772,7 +772,8 @@ size_t Regs::get_supported_protocol_levels(const ProtocolLevel **level_ranges)
     {
 #define MK_RANGE(FROM, TO) { (FROM) }, { (TO) }
 
-        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), CURRENT_PROTOCOL_VERSION_CODE),
+        MK_RANGE(REGISTER_MK_VERSION(1, 0, 0), REGISTER_MK_VERSION(1, 0, 10)),
+        MK_RANGE(REGISTER_MK_VERSION(1, 1, 0), CURRENT_PROTOCOL_VERSION_CODE),
 
 #undef MK_RANGE
     };
