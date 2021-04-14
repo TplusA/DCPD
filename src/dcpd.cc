@@ -48,6 +48,7 @@
 #include "networkprefs.h"
 #include "accesspoint_manager.hh"
 #include "rest_api.hh"
+#include "ethernet_connection_workaround.hh"
 #include "configproxy.h"
 #include "configuration_dcpd.hh"
 #include "configuration.hh"
@@ -1152,6 +1153,7 @@ static void usage(const char *program_name)
            "  --fake-connman Fake use of Connman (fake network support).\n"
            "  --upgrade      Enforce upgrading the system.\n"
            "  --force-upgrade  No, really do it regardless of circumstances.\n"
+           "  --enable-phy-reset  Periodically reset the Ethernet PHY\n"
            "  --session-dbus Connect to session D-Bus.\n"
            "  --system-dbus  Connect to system D-Bus.\n",
            program_name);
@@ -1252,6 +1254,8 @@ static int process_command_line(int argc, char *argv[],
             parameters->is_upgrade_enforced = true;
             parameters->is_upgrade_strongly_enforced = true;
         }
+        else if(strcmp(argv[i], "--enable-phy-reset") == 0)
+            EthernetConnectionWorkaround::required_on_this_kernel(true);
         else
         {
             fprintf(stderr, "Unknown option \"%s\". Please try --help.\n", argv[i]);
