@@ -124,6 +124,7 @@ test_registers_networking_la_LIBADD = \
     $(top_builddir)/src/libnetworkprefs.la \
     $(top_builddir)/src/libinifile.la \
     $(top_builddir)/src/libservicelist.la \
+    $(top_builddir)/src/libworkaround.la \
     $(top_builddir)/src/libconnman_service.la \
     $(top_builddir)/src/libconnman_technology_registry.la
 test_registers_networking_la_CFLAGS = $(AM_CFLAGS) $(DCPD_DEPENDENCIES_CFLAGS)
