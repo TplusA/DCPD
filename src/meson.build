@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2019, 2021  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -119,6 +119,11 @@ network_dispatcher_lib = static_library('network_dispatcher',
 
 network_lib = static_library('network', 'network.c', dependencies: config_h)
 
+workaround_lib = static_library('workaround',
+    'ethernet_connection_workaround.cc',
+    dependencies: [glib_deps, config_h],
+)
+
 plainplayer_lib = static_library('plainplayer',
     'plainplayer.cc', dependencies: [glib_deps, config_h]
 )
@@ -195,6 +200,7 @@ executable(
         network_dispatcher_lib,
         network_lib,
         networkprefs_lib,
+        workaround_lib,
         plainplayer_lib,
         registers_lib,
         servicelist_lib,
