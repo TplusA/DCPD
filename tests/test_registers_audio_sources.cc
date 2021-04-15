@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -429,6 +429,8 @@ void test_selection_of_known_alive_source_reports_selection_asynchronously()
 
     make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x62);
 
+    const auto req_msg(std::string("Requesting activation of audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
@@ -457,6 +459,8 @@ void test_selection_of_known_alive_source_with_async_notification()
 
     make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x62);
 
+    const auto req_msg(std::string("Requesting activation of audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
@@ -487,6 +491,8 @@ void test_selection_of_known_alive_source_is_done_when_possible()
     static const char asrc[] = "strbo.usb";
     static const char player[] = "usb_player";
 
+    const auto req_msg(std::string("Requesting activation of unavailable audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* source is still empty because (1) the audio path (thus the audio source)
@@ -577,6 +583,8 @@ void test_selection_of_known_unusable_source()
                         Regs::AudioSources::DCP::write_81_current_audio_source);
 
     static const char asrc[] = "strbo.upnpcm";
+    const auto req_msg(std::string("Requesting activation of unavailable audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     Regs::AudioSources::selected_source(asrc, false);
@@ -620,6 +628,8 @@ void test_quickly_selecting_audio_source_twice_switches_once()
 
     RequestSourceResultBundle result;
 
+    const auto req_msg(std::string("Requesting activation of audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true,
@@ -632,6 +642,7 @@ void test_quickly_selecting_audio_source_twice_switches_once()
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     cppcut_assert_not_null(std::get<0>(result));
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->check();
     mock_audiopath_dbus->check();
 
@@ -640,9 +651,16 @@ void test_quickly_selecting_audio_source_twice_switches_once()
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* and a few more */
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
+
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
+
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
+
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     reg->write(reinterpret_cast<const uint8_t *>(asrc), sizeof(asrc));
 
     /* finally received the answer for the first request */
@@ -675,6 +693,8 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
     /* request UPnP audio source */
     RequestSourceResultBundle upnp_result;
 
+    auto req_msg(std::string("Requesting activation of audio source \"") + asrc_upnp + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc_upnp, player_upnp, true,
@@ -694,6 +714,8 @@ void test_quickly_selecting_different_audio_source_during_switch_cancels_first_s
      * finished yet */
     RequestSourceResultBundle usb_result;
 
+    req_msg = std::string("Requesting activation of audio source \"") + asrc_usb + '"';
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc_usb, player_usb, true,
@@ -826,6 +848,8 @@ void test_selection_of_real_source_followed_by_idle_source()
 
     make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x42);
 
+    const auto req_msg(std::string("Requesting activation of audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
@@ -882,6 +906,8 @@ void test_selection_of_inactive_state_for_suspend()
 
     make_source_available(asrc, player, "de.tahifi.MySource", "/some/dbus/path", 0x42);
 
+    const auto req_msg(std::string("Requesting activation of audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, false);
@@ -978,6 +1004,8 @@ void test_audio_source_request_option_parser()
 
     auto request_data(GVariantWrapper(g_variant_dict_end(&dict)));
 
+    const auto req_msg(std::string("Requesting activation of audio source \"") + asrc + '"');
+    mock_messages->expect_msg_info_formatted(req_msg.c_str());
     mock_dbus_iface->expect_dbus_get_audiopath_manager_iface(dbus_audiopath_manager_iface_dummy);
     mock_audiopath_dbus->expect_tdbus_aupath_manager_call_request_source(
             dbus_audiopath_manager_iface_dummy, asrc, player, true, nullptr,

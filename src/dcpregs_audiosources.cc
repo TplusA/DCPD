@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1408,7 +1408,11 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
     }
 
     if(i >= length)
+    {
+        msg_error(EINVAL, LOG_NOTICE,
+                  "Audio source request failed: message too long");
         return -1;
+    }
 
     const char *audio_source_name = reinterpret_cast<const char *>(data);;
     size_t audio_source_name_length;
@@ -1479,7 +1483,11 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
 
       case AudioSourceEnableRequest::ENABLE:
         if(src->try_summon())
+        {
+            msg_info("Requesting to enable audio source \"%s\"",
+                     src->id_.c_str());
             return 0;
+        }
 
         msg_error(0, LOG_ERR, "Failed enabling audio source \"%s\"",
                   src->id_.c_str());
@@ -1487,13 +1495,18 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
 
       case AudioSourceEnableRequest::DISABLE:
         if(src->try_kill())
+        {
+            msg_info("Requesting to disable audio source \"%s\"",
+                     src->id_.c_str());
             return 0;
+        }
 
         msg_error(0, LOG_ERR, "Failed disabling audio source \"%s\"",
                   src->id_.c_str());
         return -1;
 
       case AudioSourceEnableRequest::INVALID:
+        msg_error(EINVAL, LOG_NOTICE, "Invalid audio source enable request");
         return -1;
     }
 
@@ -1502,10 +1515,14 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
       case AudioSourceState::ALIVE:
       case AudioSourceState::LOCKED:
       case AudioSourceState::ALIVE_OR_LOCKED:
+        msg_info("Requesting activation of audio source \"%s\"",
+                 src->id_.c_str());
         audio_source_data->request_audio_source(*src, std::move(request_data), true);
         break;
 
       case AudioSourceState::UNAVAILABLE:
+        msg_info("Requesting activation of unavailable audio source \"%s\"",
+                 src->id_.c_str());
         audio_source_data->request_audio_source(*src, std::move(request_data), false);
         break;
 
