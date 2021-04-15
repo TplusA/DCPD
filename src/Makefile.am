@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -82,6 +82,7 @@ noinst_LTLIBRARIES = \
     libxmodem.la \
     libnetwork.la \
     libnetwork_dispatcher.la \
+    libworkaround.la \
     libshutdown_guard.la \
     libdcpd_dbus.la \
     libdbusdl_dbus.la \
@@ -305,6 +306,12 @@ libnetwork_dispatcher_la_SOURCES = \
     network.h messages.h
 libnetwork_dispatcher_la_CFLAGS = $(AM_CFLAGS)
 libnetwork_dispatcher_la_CXXFLAGS = $(AM_CXXFLAGS)
+
+libworkaround_la_SOURCES = \
+    ethernet_connection_workaround.cc \
+    ethernet_connection_workaround.hh
+libworkaround_la_CFLAGS = $(AM_CFLAGS)
+libworkaround_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libshutdown_guard_la_SOURCES = \
     shutdown_guard.c shutdown_guard.h \

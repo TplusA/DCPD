@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -32,6 +32,7 @@
 #include "accesspoint_manager.hh"
 #include "connman_scan.hh"
 #include "dbus_handlers_connman_manager.hh"
+#include "ethernet_connection_workaround.hh"
 #include "string_trim.hh"
 #include "shutdown_guard.h"
 
@@ -2052,10 +2053,30 @@ static void fill_network_status_register_response(uint8_t *response)
         log_assert(fallback_service_data == nullptr);
 
     if(service != nullptr)
-        dump_network_configuration(service->get_service_data());
+    {
+        const auto &sd(service->get_service_data());
+
+        if(sd.device_ != nullptr)
+        {
+            switch(sd.device_->technology_)
+            {
+              case Connman::Technology::ETHERNET:
+                EthernetConnectionWorkaround::disable();
+                break;
+
+              case Connman::Technology::UNKNOWN_TECHNOLOGY:
+              case Connman::Technology::WLAN:
+                EthernetConnectionWorkaround::enable();
+                break;
+            }
+        }
+
+        dump_network_configuration(sd);
+    }
     else
     {
         msg_info("Network: no service configured");
+        EthernetConnectionWorkaround::enable();
         return;
     }
 

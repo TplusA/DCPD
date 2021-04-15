@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2019, 2020, 2021  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -85,7 +85,8 @@ registers_networking_tests = shared_module('test_registers_networking',
     dependencies: [cutter_dep, glib_deps],
     link_with: [
         registers_lib, shutdown_guard_lib, networkprefs_lib, inifile_lib,
-        servicelist_lib, connman_service_lib, connman_technology_registry_lib
+        servicelist_lib, connman_service_lib, connman_technology_registry_lib,
+        workaround_lib,
     ]
 )
 test('Registers Networking',
