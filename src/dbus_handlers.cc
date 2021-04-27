@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -230,6 +230,7 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
     }
     else if(strcmp(signal_name, "MetaDataChanged") == 0 ||
             strcmp(signal_name, "PositionChanged") == 0 ||
+            strcmp(signal_name, "Buffer") == 0 ||
             strcmp(signal_name, "PlaybackModeChanged") == 0 ||
             strcmp(signal_name, "SpeedChanged") == 0 ||
             strcmp(signal_name, "PauseState") == 0)
