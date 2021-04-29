@@ -117,8 +117,10 @@ Regs::SystemUpdate::process_update_request()
 }
 
 static const std::string empty_string;
+static const std::string error_string("__err__");
 
-static const std::string &to_request_key(const std::string &token)
+static const std::string &to_request_key(const std::string &token,
+                                         ptrdiff_t offset)
 {
     static const std::unordered_map<std::string, std::string> keys
     {
@@ -134,6 +136,13 @@ static const std::string &to_request_key(const std::string &token)
     }
     catch(const std::out_of_range &e)
     {
+        if(token.empty())
+        {
+            msg_error(EINVAL, LOG_ERR,
+                      "Assignment to nothing at offset %zu", offset);
+            return error_string;
+        }
+
         msg_error(EINVAL, LOG_WARNING,
                   "Unrecognized request parameter \"%s\"", token.c_str());
         return empty_string;
@@ -306,11 +315,24 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                            std::reverse_iterator<const char *>(in_ptr),
                            is_space_or_null) + 1;
 
+    const auto *const base = in_ptr;
+#define LOCATION(P) ((P) - base)
+
     while(pos < end)
     {
         const auto assignment = std::find(pos, end, '=');
-        if(assignment == end || pos == assignment)
+        if(assignment == end)
+        {
+            msg_error(EINVAL, LOG_ERR,
+                      "No assignments found after offset %zu", LOCATION(pos));
             return false;
+        }
+        else if(pos == assignment)
+        {
+            msg_error(EINVAL, LOG_ERR,
+                      "Assignment to nothing at offset %zu", LOCATION(pos));
+            return false;
+        }
 
         /* drop spaces at beginning and end of token */
         pos = std::find_if_not(pos, assignment, is_space);
@@ -322,7 +344,10 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
         const auto token_kind = determine_token_kind(raw_token);
         const auto &token(token_kind != TokenKind::DIRECT_MAPPING
                           ? empty_string
-                          : to_request_key(raw_token));
+                          : to_request_key(raw_token, LOCATION(pos)));
+
+        if(token == error_string)
+            return false;
 
         /* find beginning of assigned value */
         pos = std::find_if_not(std::next(assignment), end, is_space);
@@ -355,7 +380,12 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                 pos = std::find_if(pos, end,
                         [] (const char ch) { return ch == '\\' || ch == '"'; });
                 if(pos == end)
+                {
+                    msg_error(EINVAL, LOG_ERR,
+                              "Expected closing double quotes for those opened at offset %zu",
+                              LOCATION(v - 1));
                     return false;
+                }
 
                 if(*pos == '"')
                 {
@@ -381,7 +411,11 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                 /* skip escape sequence */
                 pos += 2;
                 if(pos  >= end)
+                {
+                    msg_error(EINVAL, LOG_ERR,
+                              "Escape character at end of parameter string");
                     return false;
+                }
             }
         }
 
@@ -413,10 +447,22 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
                       { return params->find(key.first) != params->end(); });
 
     if(param_count == 0)
-        return update_parameters_expected.pick(false, true, true);
+    {
+        if(update_parameters_expected.pick(false, true, true))
+            return true;
+
+        APPLIANCE_BUG("Recovery update request lacks version and/or url requests");
+        return false;
+    }
 
     if(param_count == update_parameters.size())
-        return update_parameters_expected.pick(true, false, true);
+    {
+        if(update_parameters_expected.pick(true, false, true))
+            return true;
+
+        APPLIANCE_BUG("Pure recovery requests cannot be combined with version or url requests");
+        return false;
+    }
 
     std::ostringstream os;
 

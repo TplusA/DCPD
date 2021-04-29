@@ -87,6 +87,87 @@ static void check_flavor_version_repo_values(const nlohmann::json &req)
     CHECK(req.at("keep_user_data").get<bool>());
 }
 
+TEST_CASE_FIXTURE(FixtureParser, "Assignment to nothingness is an error")
+{
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 =foo flavor=beta";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, EINVAL, LOG_ERR,
+            "Assignment to nothing at offset 41 (Invalid argument)", false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Assignment to nothingness with trailing spaces is an error")
+{
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2    =foo flavor=beta";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, EINVAL, LOG_ERR,
+            "Assignment to nothing at offset 44 (Invalid argument)", false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Missing assigning is an error")
+{
+    const char request[] =
+        "url=https://packages.ta-hifi.de/StrBo/V2 line V2";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, EINVAL, LOG_ERR,
+            "No assignments found after offset 41 (Invalid argument)", false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Missing closing double quotation mark")
+{
+    const char request[] =
+        "url=\"https://packages.ta-hifi.de/StrBo/V2 =foo flavor=beta";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, EINVAL, LOG_ERR,
+            "Expected closing double quotes for those opened at offset 4 (Invalid argument)", false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
+}
+
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Escape character at end of parameter string is detected")
+{
+    const char request[] =
+        "url=\"https://packages.ta-hifi.de/StrBo/V2\\";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, EINVAL, LOG_ERR,
+            "Escape character at end of parameter string (Invalid argument)", false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
+}
+
 TEST_CASE_FIXTURE(FixtureParser,
                   "Change of flavor, version number, and repository URL "
                   "without specifying release line is an error")
@@ -649,6 +730,41 @@ TEST_CASE_FIXTURE(FixtureProcess,
             "Attempting to START SYSTEM UPDATE (rpm/images)", false);
     send_request_check = check_half_recovery_request;
     CHECK(Regs::SystemUpdate::process_update_request() == Regs::SystemUpdate::UpdateResult::SUCCESS);
+}
+
+TEST_CASE_FIXTURE(FixtureParser, "Cannot specify url and version for pure recovery")
+{
+    const char request[] =
+        "line=V2 flavor=stable version=V1.999.20 style=force-half-recovery "
+        "url=http://www.ta-hifi.de/fileadmin/auto_download/StrBo";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Pure recovery requests cannot be combined with version or url requests",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
+}
+
+TEST_CASE_FIXTURE(FixtureParser,
+                  "Must specify url and version for update via images")
+{
+    const char request[] = "style=force-full-recovery";
+
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_CRIT,
+            "APPLIANCE BUG: Recovery update request lacks version and/or url requests",
+            false);
+    expect<MockMessages::MsgError>(
+            mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
+                reinterpret_cast<const uint8_t *>(request),
+                sizeof(request) - 1) == -1);
+    CHECK(Regs::SystemUpdate::get_update_request() == nullptr);
 }
 
 TEST_SUITE_END();
