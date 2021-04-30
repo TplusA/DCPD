@@ -62,6 +62,11 @@
 #define STATUS_REGISTER_READY                   ((uint8_t)0x21)
 #define STATUS_REGISTER_READY_CODE_OK           ((uint8_t)0x00)
 #define STATUS_REGISTER_READY_CODE_POWER_OFF    ((uint8_t)0x01)
+
+#define STATUS_REGISTER_UPDATE                  ((uint8_t)0x22)
+#define STATUS_REGISTER_UPDATE_CODE_ACCEPTED    ((uint8_t)0x01)
+#define STATUS_REGISTER_UPDATE_CODE_REJECTED    ((uint8_t)0x02)
+
 #define STATUS_REGISTER_SYSTEM_ERROR            ((uint8_t)0x24)
 
 const Regs::Register *Regs::register_zero_for_unit_tests = nullptr;
@@ -111,6 +116,20 @@ void Regs::StrBoStatus::set_ready_to_shutdown()
 void Regs::StrBoStatus::set_reboot_required()
 {
     if(update_status_register(STATUS_REGISTER_SYSTEM_ERROR, 0))
+        Regs::get_data().register_changed_notification_fn(17);
+}
+
+void Regs::StrBoStatus::set_system_update_request_accepted()
+{
+    if(update_status_register(STATUS_REGISTER_UPDATE,
+                              STATUS_REGISTER_UPDATE_CODE_ACCEPTED))
+        Regs::get_data().register_changed_notification_fn(17);
+}
+
+void Regs::StrBoStatus::set_system_update_request_rejected()
+{
+    if(update_status_register(STATUS_REGISTER_UPDATE,
+                              STATUS_REGISTER_UPDATE_CODE_REJECTED))
         Regs::get_data().register_changed_notification_fn(17);
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018, 2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -36,6 +36,8 @@ namespace StrBoStatus
 void set_ready();
 void set_ready_to_shutdown();
 void set_reboot_required();
+void set_system_update_request_accepted();
+void set_system_update_request_rejected();
 
 }
 
