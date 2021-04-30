@@ -27,9 +27,30 @@
 
 #include "dcpregs_system_update.hh"
 #include "dcpregs_system_update_json.hh"
+#include "dcpregs_status.hh"
 #include "rest_api.hh"
 
 #include "mock_messages.hh"
+
+static bool expect_update_request_accepted;
+static bool called_update_request_accepted;
+static bool expect_update_request_rejected;
+static bool called_update_request_rejected;
+
+void Regs::StrBoStatus::set_system_update_request_accepted()
+{
+    CHECK(expect_update_request_accepted);
+    CHECK_FALSE(called_update_request_accepted);
+    called_update_request_accepted = true;
+}
+
+void Regs::StrBoStatus::set_system_update_request_rejected()
+{
+    CHECK(expect_update_request_rejected);
+    CHECK_FALSE(called_update_request_rejected);
+    called_update_request_rejected = true;
+}
+
 
 TEST_SUITE_BEGIN("Registers Streaming Board System Update (request parser)");
 
@@ -42,6 +63,11 @@ class FixtureParser
     explicit FixtureParser():
         mock_messages(std::make_unique<MockMessages::Mock>())
     {
+        expect_update_request_accepted = false;
+        called_update_request_accepted = false;
+        expect_update_request_rejected = false;
+        called_update_request_rejected = false;
+
         MockMessages::singleton = mock_messages.get();
         mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
@@ -53,6 +79,8 @@ class FixtureParser
         try
         {
             mock_messages->done();
+            CHECK(expect_update_request_accepted == called_update_request_accepted);
+            CHECK(expect_update_request_rejected == called_update_request_rejected);
         }
         catch(...)
         {
@@ -67,6 +95,7 @@ TEST_CASE_FIXTURE(FixtureParser,
                   "Empty request triggers system update within "
                   "current release line")
 {
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(nullptr, 0) == 0);
     const auto req(Regs::SystemUpdate::get_update_request());
     REQUIRE(req.is_object());
@@ -97,6 +126,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Assignment to nothingness is an error")
             "Assignment to nothing at offset 41 (Invalid argument)", false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -113,6 +143,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Assignment to nothingness with trailing spaces
             "Assignment to nothing at offset 44 (Invalid argument)", false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -129,6 +160,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Missing assigning is an error")
             "No assignments found after offset 41 (Invalid argument)", false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -145,6 +177,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Missing closing double quotation mark")
             "Expected closing double quotes for those opened at offset 4 (Invalid argument)", false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -162,6 +195,7 @@ TEST_CASE_FIXTURE(FixtureParser,
             "Escape character at end of parameter string (Invalid argument)", false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -181,6 +215,7 @@ TEST_CASE_FIXTURE(FixtureParser,
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -193,6 +228,7 @@ TEST_CASE_FIXTURE(FixtureParser,
     const char request[] =
         "   url= https://packages.ta-hifi.de/StrBo/V2   flavor   =  beta version =V2.3.4.5 line   = V2 \0 ";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -204,6 +240,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Values may be quoted")
     const char request[] =
         "url=\"https://packages.ta-hifi.de/StrBo/V2\" flavor=\"beta\" version=\"V2.3.4.5\" line=\"V2\"";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -225,6 +262,7 @@ TEST_CASE_FIXTURE(FixtureParser,
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -246,6 +284,7 @@ TEST_CASE_FIXTURE(FixtureParser,
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -267,6 +306,7 @@ TEST_CASE_FIXTURE(FixtureParser,
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -282,6 +322,7 @@ TEST_CASE_FIXTURE(FixtureParser,
         "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
         "stop_below=0 line=V2";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -302,6 +343,7 @@ TEST_CASE_FIXTURE(FixtureParser,
         "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
         "stop_above=0 line=V2";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -322,6 +364,7 @@ TEST_CASE_FIXTURE(FixtureParser,
         "url=https://packages.ta-hifi.de/StrBo/V2 flavor=beta version=V2.3.4.5 "
         "stop=2,6,3 line=V2";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -338,6 +381,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Quoted values may contains spaces")
     const char request[] =
         "url = \"https://packages.ta-hifi.de/StrBo/V2\" flavor = \"beta carotene\" version  =   \"  V space \"   line = \"red  line  \"     ";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -359,6 +403,7 @@ TEST_CASE_FIXTURE(FixtureParser,
     const char request[] =
         "url=\"https\\://packages\\.ta-hifi.de\\/StrBo/V2\" flavor=\"\\ beta carotene (\\\"carot\\\")\" version=\"V\\ \\\"\\\\\\\\5\" line=\"\\\"red, red line\\\"\"";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -392,6 +437,7 @@ TEST_CASE_FIXTURE(FixtureParser,
     const char request[] =
         "url=https://packages.ta-hifi.de/StrBo/V4 flavor=beta version=V4.1.0.2 line=V4";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -415,6 +461,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Unknown keys are ignored and dumped to log")
             mock_messages, EINVAL, LOG_WARNING,
             "Unrecognized request parameter \"qux\" (Invalid argument)",
             false);
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -431,6 +478,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Base URL is missing")
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -446,6 +494,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Only Base URL is specified")
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -461,6 +510,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Target flavor is missing")
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -476,6 +526,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Target version is missing")
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -491,6 +542,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Target line is missing")
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -588,6 +640,11 @@ class FixtureProcess
     explicit FixtureProcess():
         mock_messages(std::make_unique<MockMessages::Mock>())
     {
+        expect_update_request_accepted = false;
+        called_update_request_accepted = false;
+        expect_update_request_rejected = false;
+        called_update_request_rejected = false;
+
         MockMessages::singleton = mock_messages.get();
         mock_messages->ignore_messages_with_level_or_above(MESSAGE_LEVEL_TRACE);
 
@@ -599,6 +656,8 @@ class FixtureProcess
         try
         {
             mock_messages->done();
+            CHECK(expect_update_request_accepted == called_update_request_accepted);
+            CHECK(expect_update_request_rejected == called_update_request_rejected);
         }
         catch(...)
         {
@@ -626,6 +685,7 @@ TEST_CASE_FIXTURE(FixtureProcess, "Full set of parameters")
     const char request[] =
         "url=https://packages.ta-hifi.de/StrBo/V4 flavor=beta version=V4.1.0.2 line=V4";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -689,6 +749,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
         "url=https://packages.ta-hifi.de/StrBo/V3 flavor=foo version=V3.1.99 line=V3 "
         "style=force-full-recovery";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -705,6 +766,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
 {
     const char request[] = "style=force-recovery";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -721,6 +783,7 @@ TEST_CASE_FIXTURE(FixtureProcess,
 {
     const char request[] = "style=force-half-recovery";
 
+    expect_update_request_accepted = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == 0);
@@ -744,6 +807,7 @@ TEST_CASE_FIXTURE(FixtureParser, "Cannot specify url and version for pure recove
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);
@@ -761,6 +825,7 @@ TEST_CASE_FIXTURE(FixtureParser,
             false);
     expect<MockMessages::MsgError>(
             mock_messages, 0, LOG_ERR, "Failed parsing update request", false);
+    expect_update_request_rejected = true;
     CHECK(Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(
                 reinterpret_cast<const uint8_t *>(request),
                 sizeof(request) - 1) == -1);

@@ -25,6 +25,7 @@
 
 #include "dcpregs_system_update.hh"
 #include "dcpregs_system_update_json.hh"
+#include "dcpregs_status.hh"
 #include "rest_api.hh"
 #include "messages.h"
 #include "maybe.hh"
@@ -505,10 +506,14 @@ int Regs::SystemUpdate::DCP::write_211_strbo_update_parameters(const uint8_t *da
 
     const char *in = reinterpret_cast<const char *>(data);
     if(parse_parameters(strbo_update_parameters, strbo_update_flags, in, in + length))
+    {
+        Regs::StrBoStatus::set_system_update_request_accepted();
         return 0;
+    }
 
     msg_error(0, LOG_ERR, "Failed parsing update request");
     strbo_update_parameters.set_unknown();
     strbo_update_flags.set_unknown();
+    Regs::StrBoStatus::set_system_update_request_rejected();
     return -1;
 }
