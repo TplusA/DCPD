@@ -33,6 +33,7 @@
 #include "inifile.h"
 #include "logged_lock.hh"
 #include "shutdown_guard.h"
+#include "os.hh"
 
 #include <cstring>
 
@@ -650,17 +651,20 @@ int Regs::FileTransfer::hcr_send_shutdown_request(const char *reason)
 
 bool Regs::FileTransfer::hcr_is_system_update_in_progress()
 {
-    switch(os_path_get_type("/system-update"))
+    OS::SuppressErrorsGuard no_errors;
+
+    switch(os_path_get_type("/var/local/data/system_update_data/system_update.sh"))
     {
       case OS_PATH_TYPE_IO_ERROR:
         return false;
 
-      case OS_PATH_TYPE_DIRECTORY:
+      case OS_PATH_TYPE_FILE:
+        msg_info("System update in progress");
         return true;
 
-      case OS_PATH_TYPE_FILE:
+      case OS_PATH_TYPE_DIRECTORY:
       case OS_PATH_TYPE_OTHER:
-        BUG("Update symlink exists, but is not a directory");
+        BUG("Update script exists, but is not a file");
         break;
     }
 
