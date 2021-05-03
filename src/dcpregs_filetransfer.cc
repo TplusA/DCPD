@@ -861,17 +861,17 @@ static const char update_shell_script_file[] = "/tmp/do_update.sh";
 
 bool Regs::FileTransfer::hcr_is_system_update_in_progress()
 {
-    switch(os_path_get_type(update_shell_script_file))
+    switch(os_path_get_type("/system-update"))
     {
       case OS_PATH_TYPE_IO_ERROR:
         return false;
 
-      case OS_PATH_TYPE_FILE:
+      case OS_PATH_TYPE_DIRECTORY:
         return true;
 
-      case OS_PATH_TYPE_DIRECTORY:
+      case OS_PATH_TYPE_FILE:
       case OS_PATH_TYPE_OTHER:
-        BUG("Update script exists, but is not a file");
+        BUG("Update symlink exists, but is not a directory");
         break;
     }
 

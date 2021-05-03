@@ -481,7 +481,7 @@ void test_send_reboot_request()
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
 
-    mock_os->expect_os_path_get_type(OS_PATH_TYPE_IO_ERROR, 0, "/tmp/do_update.sh");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_IO_ERROR, 0, "/system-update");
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_IMPORTANT,
                                               "Shutdown requested: DCP command");
     mock_dbus_iface->expect_dbus_get_logind_manager_iface(dbus_logind_manager_iface_dummy);
@@ -500,7 +500,7 @@ void test_send_reboot_request_during_update()
     static constexpr uint8_t hcr_command[] =
         { HCR_COMMAND_CATEGORY_RESET, HCR_COMMAND_REBOOT_SYSTEM };
 
-    mock_os->expect_os_path_get_type(OS_PATH_TYPE_FILE, 0, "/tmp/do_update.sh");
+    mock_os->expect_os_path_get_type(OS_PATH_TYPE_DIRECTORY, 0, "/system-update");
     mock_messages->expect_msg_error(0, LOG_ERR,
         "System reboot request ignored, we are in the middle of an update");
     reg->write(hcr_command, sizeof(hcr_command));
