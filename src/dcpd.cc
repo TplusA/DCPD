@@ -927,9 +927,6 @@ struct parameters
     bool run_in_foreground;
     bool connect_to_session_dbus;
     Connman::Mode with_connman;
-    bool is_fixing_broken_update_state;
-    bool is_upgrade_enforced;
-    bool is_upgrade_strongly_enforced;
 };
 
 static bool main_loop_init(const struct parameters *parameters,
@@ -1079,54 +1076,6 @@ error_dcpspi_fifo_in:
     return -1;
 }
 
-/*!
- * Check whether or not opkg state is consistent, trigger update if not.
- */
-static bool is_system_update_required()
-{
-    if(os_path_get_type("/tmp/dcpd_avoid_update_check.stamp") == OS_PATH_TYPE_FILE)
-    {
-        /* someone doesn't want us to do this check */
-        return false;
-    }
-
-    const int result =
-        os_system(true, "/bin/sh -c 'test -z \"$(sudo /usr/bin/opkg list-upgradable)\"'");
-
-    return result != EXIT_SUCCESS;
-}
-
-static void push_register_to_nowhere(uint8_t reg_number) {}
-
-static int trigger_system_upgrade(bool is_enforced)
-{
-    msg_set_verbose_level(MESSAGE_LEVEL_INFO_MAX);
-
-    if(is_enforced)
-    {
-        msg_info("**** Forced system upgrade ****");
-        os_file_close(os_file_new("/tmp/force_system_upgrade.stamp"));
-    }
-    else
-        msg_info("**** Incomplete or broken upgrade state detected ****");
-
-    Regs::init(push_register_to_nowhere, nullptr);
-
-    static const uint8_t update_command[] =
-    {
-        HCR_COMMAND_CATEGORY_UPDATE_FROM_INET,
-        HCR_COMMAND_UPDATE_MAIN_SYSTEM,
-    };
-
-    if(Regs::FileTransfer::DCP::write_40_download_control(update_command,
-                                                          sizeof(update_command)) != 0)
-        return EXIT_FAILURE;
-
-    sleep(60);
-
-    return EXIT_SUCCESS;
-}
-
 static void shutdown(struct files *files)
 {
     fifo_close_and_delete(&files->drcp_fifo.in_fd, files->drcp_fifo_in_name);
@@ -1151,8 +1100,6 @@ static void usage(const char *program_name)
            "  --odrcp name   Name of the named pipe the DRCP daemon reads from.\n"
            "  --no-connman   Disable use of Connman (no network support).\n"
            "  --fake-connman Fake use of Connman (fake network support).\n"
-           "  --upgrade      Enforce upgrading the system.\n"
-           "  --force-upgrade  No, really do it regardless of circumstances.\n"
            "  --enable-phy-reset  Periodically reset the Ethernet PHY\n"
            "  --session-dbus Connect to session D-Bus.\n"
            "  --system-dbus  Connect to system D-Bus.\n",
@@ -1167,9 +1114,6 @@ static int process_command_line(int argc, char *argv[],
     parameters->run_in_foreground = false;
     parameters->connect_to_session_dbus = true;
     parameters->with_connman = Connman::Mode::REGULAR;
-    parameters->is_fixing_broken_update_state = false;
-    parameters->is_upgrade_enforced = false;
-    parameters->is_upgrade_strongly_enforced = false;
 
     files->dcpspi_fifo_in_name = "/tmp/spi_to_dcp";
     files->dcpspi_fifo_out_name = "/tmp/dcp_to_spi";
@@ -1247,13 +1191,6 @@ static int process_command_line(int argc, char *argv[],
             parameters->with_connman = Connman::Mode::NONE;
         else if(strcmp(argv[i], "--fake-connman") == 0)
             parameters->with_connman = Connman::Mode::FAKE_CONNMAN;
-        else if(strcmp(argv[i], "--upgrade") == 0)
-            parameters->is_upgrade_enforced = true;
-        else if(strcmp(argv[i], "--force-upgrade") == 0)
-        {
-            parameters->is_upgrade_enforced = true;
-            parameters->is_upgrade_strongly_enforced = true;
-        }
         else if(strcmp(argv[i], "--enable-phy-reset") == 0)
             EthernetConnectionWorkaround::required_on_this_kernel(true);
         else
@@ -1274,91 +1211,6 @@ static int process_command_line(int argc, char *argv[],
 static void signal_handler(int signum, siginfo_t *info, void *ucontext)
 {
     keep_running = false;
-}
-
-static bool delay_seconds(int seconds)
-{
-    while(seconds > 0)
-    {
-        if(!keep_running)
-            return false;
-
-        static const struct timespec one_second = {1, 0};
-        os_nanosleep(&one_second);
-
-        --seconds;
-    }
-
-    return true;
-}
-
-static void *update_watchdog_main(void *user_data)
-{
-    LoggedLock::set_context_name("Update watchdog");
-
-    msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-              "UPDOG: Update in progress, watching opkg");
-
-    sigset_t sigset;
-
-    sigfillset(&sigset);
-    pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
-
-    bool is_opkg_running = true;
-
-    for(int tries = 90; tries > 0; --tries)
-    {
-        if(os_system(false, "/usr/bin/pgrep opkg") != EXIT_SUCCESS)
-        {
-            is_opkg_running = false;
-            break;
-        }
-
-        if(!keep_running)
-            break;
-
-        if(tries > 1)
-        {
-            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                      "UPDOG: Opkg still running, check again later...");
-
-            if(!delay_seconds(10))
-                break;
-        }
-    }
-
-    if(keep_running)
-    {
-        if(is_opkg_running)
-            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                      "UPDOG: Opkg is STILL running, rebooting now");
-        else
-        {
-            msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
-                      "UPDOG: Opkg is not running anymore, rebooting soon");
-
-            /* we should give the system some time to shut down by itself in
-             * case opkg has just finished and shutdown is already in progress
-             * anyway */
-            delay_seconds(60);
-        }
-    }
-
-    if(!keep_running)
-    {
-        /* we've been killed */
-        msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "UPDOG: Killed, shutting down");
-        return nullptr;
-    }
-
-    /*
-     * We have checked on that opkg process for 15 minutes, but it doesn't seem
-     * to make any progress. Also, no one has terminated us. Pull the emergency
-     * brake and restart.
-     */
-    Regs::FileTransfer::hcr_send_shutdown_request("opkg timeout");
-
-    return nullptr;
 }
 
 int main(int argc, char *argv[])
@@ -1400,40 +1252,12 @@ int main(int argc, char *argv[])
     int register_changed_fd;
 
     if(setup(&parameters, &files, &primitive_queue_fd, &register_changed_fd) < 0)
-        parameters.is_fixing_broken_update_state = true;
+        return EXIT_FAILURE;
 
     const bool is_upgrading = Regs::FileTransfer::hcr_is_system_update_in_progress();
 
     if(is_upgrading)
-    {
-        /* revert the possible decision to fix a broken state as we are in the
-         * middle of an update and things may not be as they should be under
-         * normal conditions; only do it if really forced to */
-        parameters.is_fixing_broken_update_state = false;
-        parameters.is_upgrade_enforced = parameters.is_upgrade_strongly_enforced;
         push_register_filter_set(17);
-    }
-
-    if(!is_upgrading && !parameters.is_fixing_broken_update_state &&
-       !parameters.is_upgrade_enforced)
-        parameters.is_fixing_broken_update_state = is_system_update_required();
-
-    if(parameters.is_fixing_broken_update_state ||
-       parameters.is_upgrade_enforced)
-        return trigger_system_upgrade(parameters.is_upgrade_enforced);
-
-    if(is_upgrading)
-    {
-        errno = 0;
-
-        static pthread_t th;
-
-        if(pthread_create(&th, nullptr, update_watchdog_main, nullptr) != 0)
-            msg_error(errno, LOG_ERR,
-                      "Failed creating update script watchdog thread");
-        else
-            pthread_detach(th);
-    }
 
     /*!
      * Data for smartphone connection.

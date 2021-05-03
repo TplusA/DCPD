@@ -148,7 +148,6 @@ libregisters_la_SOURCES = \
     shutdown_guard.h \
     $(DBUS_IFACES)/de_tahifi_lists_errors.h \
     drcp_command_codes.h messages.h
-nodist_libregisters_la_SOURCES = do_update_sh.h
 libregisters_la_CFLAGS = $(AM_CFLAGS)
 libregisters_la_CXXFLAGS = $(AM_CXXFLAGS)
 
@@ -388,8 +387,6 @@ BUILT_SOURCES = \
 
 CLEANFILES = $(BUILT_SOURCES)
 
-EXTRA_DIST = do_update.sh
-
 de_tahifi_dcpd-doc.h: de_tahifi_dcpd.stamp
 de_tahifi_dcpd-doc.md: de_tahifi_dcpd.stamp
 de_tahifi_dcpd.c: de_tahifi_dcpd.stamp
@@ -533,9 +530,3 @@ org_freedesktop_systemd1.stamp: $(DBUS_IFACES)/org_freedesktop_systemd1.xml
 	$(GDBUS_CODEGEN) --generate-c-code=org_freedesktop_systemd1 --c-namespace tdbus_systemd --interface-prefix org.freedesktop.systemd1. $<
 	$(DBUS_IFACES)/extract_documentation.py -i $< -o org_freedesktop_systemd1-doc.md -H org_freedesktop_systemd1-doc.h -c tdbus_systemd -s org.freedesktop.systemd1. -n "Systemd Manager"
 	touch $@
-
-do_update_sh.h: do_update.sh
-	echo 'static const uint8_t shell_script_content[] =' >$@
-	echo '{' >>$@
-	od -An -tx1 -v <$^ | sed 's/ / 0x/g;s/^ //;s/ /, /g;s/$$/,/' >>$@
-	echo '};' >>$@

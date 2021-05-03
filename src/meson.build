@@ -25,11 +25,6 @@ config_h = declare_dependency(
                             configuration: config_data),
     include_directories: '.')
 
-do_update_sh_h = custom_target('update script',
-    input: 'do_update.sh', output: 'do_update_sh.h',
-    command: [generate_script_header, '@INPUT@', '@OUTPUT@']
-)
-
 gnome = import('gnome')
 
 dbus_iface_dir = '../dbus_interfaces'
@@ -141,7 +136,6 @@ registers_lib = static_library('registers',
         'dcpregs_searchparameters.cc', 'dcpregs_datetime.cc',
         'dcpregs_system_update.cc',
         'volume_control.cc', 'coverart.cc', 'md5.cc', 'gvariantwrapper.cc',
-        do_update_sh_h,
     ],
     dependencies: [glib_deps, config_h],
     include_directories: dbus_iface_defs_includes
