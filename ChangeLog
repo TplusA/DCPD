@@ -1,3 +1,14 @@
+2021-05-03  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.0 released.
+
+	* Updates: Detect systemd offline update and avoid sending status
+	  register 17 around if an update is in progress.
+
+	* Updates: Remove dependencies on opkg.
+
+	* DCP: Add status bits for update requests.
+
 2021-04-27  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 6.2 released.
