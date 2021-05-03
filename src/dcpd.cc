@@ -948,7 +948,7 @@ static bool main_loop_init(const struct parameters *parameters,
                            Connman::WLANTools &wlan_tools,
                            Connman::WLANManager *&connman,
                            const Regs::PlayStream::StreamingRegistersIface &streaming_regs,
-                           struct dcp_over_tcp_data *dot, bool is_upgrading)
+                           struct dcp_over_tcp_data *dot)
 {
     Connman::set_networking_mode(parameters->with_connman);
 
@@ -961,7 +961,6 @@ static bool main_loop_init(const struct parameters *parameters,
 
     static const char network_preferences_dir[] = "/var/local/etc";
     static const char network_preferences_file[] = "network.ini";
-    static const char connman_config_dir[] = "/var/local/etc/connman";
     static char network_preferences_full_file[sizeof(network_preferences_dir) +
                                               sizeof(network_preferences_file)];
 
@@ -971,10 +970,6 @@ static bool main_loop_init(const struct parameters *parameters,
     network_prefs_init(network_preferences_dir, network_preferences_full_file);
 
     Regs::Appliance::init();
-
-    if(!is_upgrading)
-        network_prefs_migrate_old_network_configuration_files(connman_config_dir);
-
     Regs::init(push_register_to_slave, &wlan_tools);
     Regs::FileTransfer::set_picture_provider(streaming_regs.get_picture_provider());
 
@@ -1321,7 +1316,7 @@ int main(int argc, char *argv[])
     static auto streaming_regs(Regs::PlayStream::mk_streaming_registers());
 
     main_loop_init(&parameters, config_manager, appconn, wlan_tools,
-                   connman, *streaming_regs, &dot, is_upgrading);
+                   connman, *streaming_regs, &dot);
 
     if(connman == nullptr ||
        DBus::setup(parameters.connect_to_session_dbus,

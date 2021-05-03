@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -95,8 +95,6 @@ void network_prefs_put_wlan_config(struct network_prefs *prefs,
                                    const char *passphrase,
                                    bool *have_new_passphrase);
 void network_prefs_disable_ipv4(struct network_prefs *prefs);
-
-void network_prefs_migrate_old_network_configuration_files(const char *connman_config_path);
 
 #ifdef __cplusplus
 }

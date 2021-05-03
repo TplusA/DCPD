@@ -260,21 +260,6 @@ test('XMODEM',
     suite: 'old',
 )
 
-networkprefs_tests = shared_module('test_networkprefs',
-    ['test_networkprefs.cc','mock_os.cc', 'mock_messages.cc'],
-    cpp_args: '-Wno-pedantic',
-    include_directories: '../src',
-    dependencies: cutter_dep,
-    link_with: [
-        networkprefs_lib, servicelist_lib, connman_service_lib, inifile_lib
-    ]
-)
-test('Network Preferences',
-    cutter_wrap, args: [cutter_wrap_args, networkprefs_tests.full_path()],
-    depends: networkprefs_tests,
-    suite: 'old',
-)
-
 network_dispatcher_tests = shared_module('test_network_dispatcher',
     ['test_network_dispatcher.cc', 'mock_os.cc', 'mock_messages.cc',
      'mock_backtrace.cc'],
