@@ -50,7 +50,8 @@ void init();
 void deinit();
 
 /*!
- * Check whether or not opkg is in the middle of performing an update.
+ * Check whether or not systemd is in the middle of performing an offline
+ * update.
  */
 bool hcr_is_system_update_in_progress();
 
@@ -99,29 +100,7 @@ ssize_t read_44_xmodem_data(uint8_t *response, size_t length);
 int write_45_xmodem_command(const uint8_t *data, size_t length);
 
 /*!
- * Set URL of file to download, or set update package feed configuration.
- *
- * The space character is used to tell regular file URLs from feed
- * configuration:
- * - In case the URL passed in \p data contains no space character, the string
- *   is used as URL of a file to be downloaded (see
- *   #HCR_COMMAND_FILE_TRANSFER_DOWNLOAD).
- * - In case the URL contains a single space character, the string is
- *   interpreted as the base URL of a package feed followed by the name of a
- *   release (see #HCR_COMMAND_UPDATE_MAIN_SYSTEM).
- * - In case the URL contains more than one space character, it is rejected.
- *
- * Package feed updates are written to an internal configuration file owned by
- * \c dcpd. If the feed configuration passed in \p data is actually different
- * from the settings stored in the configuration file, then all \c opkg feed
- * configuration files are deleted from the system configuration, and after
- * that the internal configuration file is updated.
- *
- * When the command for a system update is sent to register 40, the \c opkg
- * configuration files are generated from the internal configuration file if
- * and only if no feed configuration file is found in the system configuration
- * directory. This approach minimizes the amount of write accesses to flash
- * memory.
+ * Set URL of file to download.
  */
 int write_209_download_url(const uint8_t *data, size_t length);
 }
