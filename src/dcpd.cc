@@ -584,7 +584,7 @@ static void handle_connman_manager_events(unsigned int wait_result,
 static struct
 {
     bool is_filter_active;
-    uint32_t regs[8];
+    std::array<uint32_t, 8> regs;
 }
 push_register_filter;
 
@@ -594,6 +594,19 @@ static void push_register_filter_set(uint8_t reg_number)
 
     push_register_filter.is_filter_active = true;
     push_register_filter.regs[reg_number >> 5] |= mask;
+    msg_info("Blocking emission of register %u", reg_number);
+}
+
+static void push_register_filter_clear(uint8_t reg_number)
+{
+    const uint32_t mask = 1U << (reg_number & 0x1f);
+
+    push_register_filter.regs[reg_number >> 5] &= ~mask;
+    push_register_filter.is_filter_active =
+        std::any_of(push_register_filter.regs.begin(),
+                    push_register_filter.regs.end(),
+                    [] (const auto &r) { return r != 0; });
+    msg_info("Allowing emission of register %u", reg_number);
 }
 
 static inline bool push_register_filter_is_filtered(uint8_t reg_number)
@@ -766,7 +779,7 @@ static void handle_transaction_exception(DCPDState &state,
 static void main_loop(struct files *files,
                       struct dcp_over_tcp_data *dot,
                       Applink::AppConnections &appconn,
-                      Connman::WLANManager &connman,
+                      Connman::WLANManager &connman, bool is_upgrading,
                       int primitive_queue_fd, int register_changed_fd)
 {
     static struct DCPDState state;
@@ -786,7 +799,7 @@ static void main_loop(struct files *files,
     state.drcp_buffer.clear();
     state.drcp_buffer_expected_size = 0;
 
-    Regs::StrBoStatus::set_ready();
+    Regs::StrBoStatus::set_ready(is_upgrading, false);
 
     msg_info("Ready for accepting traffic");
 
@@ -1208,6 +1221,17 @@ static int process_command_line(int argc, char *argv[],
     return 0;
 }
 
+static gboolean check_update_progress(gpointer user_data)
+{
+    if(Regs::FileTransfer::hcr_is_system_update_in_progress())
+        return TRUE;
+
+    msg_info("System update completed");
+    push_register_filter_clear(17);
+    Regs::StrBoStatus::set_ready(false, true);
+    return FALSE;
+}
+
 static void signal_handler(int signum, siginfo_t *info, void *ucontext)
 {
     keep_running = false;
@@ -1257,7 +1281,10 @@ int main(int argc, char *argv[])
     const bool is_upgrading = Regs::FileTransfer::hcr_is_system_update_in_progress();
 
     if(is_upgrading)
+    {
         push_register_filter_set(17);
+        g_timeout_add(3000, check_update_progress, nullptr);
+    }
 
     /*!
      * Data for smartphone connection.
@@ -1360,7 +1387,7 @@ int main(int argc, char *argv[])
 
     Regs::Appliance::configure();
 
-    main_loop(&files, &dot, appconn, *connman,
+    main_loop(&files, &dot, appconn, *connman, is_upgrading,
               primitive_queue_fd, register_changed_fd);
 
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutting down");

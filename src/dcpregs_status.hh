@@ -33,7 +33,7 @@ namespace Regs
 namespace StrBoStatus
 {
 
-void set_ready();
+void set_ready(bool is_updating, bool force_status_update);
 void set_ready_to_shutdown();
 void set_reboot_required();
 void set_system_update_request_accepted();

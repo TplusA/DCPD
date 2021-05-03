@@ -94,10 +94,11 @@ static bool update_status_register(uint8_t status, uint8_t code)
     return true;
 }
 
-void Regs::StrBoStatus::set_ready()
+void Regs::StrBoStatus::set_ready(bool is_updating, bool force_status_update)
 {
     if(update_status_register(STATUS_REGISTER_READY,
-                              STATUS_REGISTER_READY_CODE_OK))
+                              STATUS_REGISTER_READY_CODE_OK) ||
+       force_status_update)
     {
         /* send device status register (17) and network status register (50) */
         const auto &config(Regs::get_data());

@@ -529,7 +529,7 @@ void test_status_byte_without_ready_notification_is_all_zero()
  */
 void test_status_byte_after_ready_notification()
 {
-    Regs::StrBoStatus::set_ready();
+    Regs::StrBoStatus::set_ready(false, false);
 
     auto *reg = Regs::lookup(17);
     uint8_t buffer[2];
@@ -587,11 +587,11 @@ void test_status_byte_after_reboot_required_notification()
  */
 void test_status_byte_updates_are_only_sent_if_changed()
 {
-    Regs::StrBoStatus::set_ready();
+    Regs::StrBoStatus::set_ready(false, false);
     static constexpr std::array<uint8_t, 2> expected_regs_for_ready = { 17, 50 };
     register_changed_data->check(expected_regs_for_ready);
 
-    Regs::StrBoStatus::set_ready();
+    Regs::StrBoStatus::set_ready(false, false);
     register_changed_data->check();
 
     Regs::StrBoStatus::set_ready_to_shutdown();
