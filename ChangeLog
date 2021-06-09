@@ -1,3 +1,12 @@
+2021-06-09  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.1 released.
+
+	* D-Bus: Fix readout of network configuration while there is no WLAN
+	  dongle plugged in.
+
+	* Misc: Fix some compiler warnings and compilation error with gcc 11.
+
 2021-05-03  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.0 released.
