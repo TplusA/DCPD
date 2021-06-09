@@ -306,13 +306,6 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
 
     switch(apman.get_status())
     {
-      case Network::AccessPoint::Status::UNKNOWN:
-        /* transient state, unlucky client should try again later */
-        g_dbus_method_invocation_return_error(
-            invocation, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-            "Failed reading out configuration in unknown state");
-        break;
-
       case Network::AccessPoint::Status::PROBING_STATUS:
         /* transient state, unlucky client should try again later */
         g_dbus_method_invocation_return_error(
@@ -336,6 +329,7 @@ gboolean dbusmethod_network_get_all(tdbusdcpdNetwork *object,
 
         break;
 
+      case Network::AccessPoint::Status::UNKNOWN:
       case Network::AccessPoint::Status::ACTIVATING:
       case Network::AccessPoint::Status::ACTIVE:
         {
