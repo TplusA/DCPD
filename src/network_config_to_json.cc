@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -594,7 +594,7 @@ static void add_service_from_prefs(nlohmann::json &srv,
     if(prefs == nullptr)
         return;
 
-    std::array<char, 256> buffer;
+    std::array<char, 256> buffer {};
     if(network_prefs_generate_service_name(prefs, buffer.data(), buffer.size(),
                                            true) == 0)
         return;

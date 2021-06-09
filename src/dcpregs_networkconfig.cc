@@ -2526,7 +2526,7 @@ ssize_t Regs::NetworkConfig::DCP::read_93_ibss(uint8_t *response, size_t length)
 
 int Regs::NetworkConfig::DCP::write_93_ibss(const uint8_t *data, size_t length)
 {
-    std::array<char, 9> buffer;
+    std::array<char, 9> buffer {};
 
     if(data_length_is_in_unexpected_range(length, 4, buffer.size() - 1))
         return -1;
@@ -2622,7 +2622,7 @@ ssize_t Regs::NetworkConfig::DCP::read_101_wpa_cipher(uint8_t *response, size_t 
 
 int Regs::NetworkConfig::DCP::write_101_wpa_cipher(const uint8_t *data, size_t length)
 {
-    std::array<char, 9> buffer;
+    std::array<char, 9> buffer {};
 
     if(data_length_is_in_unexpected_range(length, 3, buffer.size() - 1))
         return -1;

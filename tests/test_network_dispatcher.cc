@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -75,11 +75,8 @@ static void connection_died_callback(int fd)
     ++iface_check_data.connection_died_called;;
 }
 
-static const Network::DispatchHandlers dispatch_fd
-{
-    .handle_incoming_data = handle_incoming_data_callback,
-    .connection_died = connection_died_callback,
-};
+static const Network::DispatchHandlers
+dispatch_fd(handle_incoming_data_callback, connection_died_callback);
 
 static Network::Dispatcher &nwdispatcher(Network::Dispatcher::get_singleton());
 

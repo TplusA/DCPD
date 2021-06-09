@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -113,7 +113,7 @@ static Key read_key_assignment(ParserContext &ctx)
     const char *const assignment = static_cast<const char *>(ctx.file.ptr) + ctx.pos;
     size_t key_index = 0;
 
-    for(const auto k : keys)
+    for(const auto &k : keys)
     {
         if(k.compare(0, k.length(), assignment, k.length()) != 0 ||
            assignment[k.length()] != '=')

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -468,7 +468,7 @@ static uint16_t extract_dcpsync_data_size(const std::array<uint8_t, DCPSYNC_HEAD
 static DCPSYNCPacketType read_dcpsync_header(TransactionQueue::TXSync &ts,
                                              const int fd)
 {
-    std::array<uint8_t, DCPSYNC_HEADER_SIZE> buffer;
+    std::array<uint8_t, DCPSYNC_HEADER_SIZE> buffer {};
 
     if(fd < 0)
     {
