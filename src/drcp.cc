@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -29,6 +29,7 @@
 
 #include <array>
 #include <algorithm>
+#include <limits>
 #include <cerrno>
 
 bool Drcp::determine_xml_size(int in_fd, std::string &xml_string, size_t &expected_size)
