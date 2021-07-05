@@ -1,7 +1,42 @@
 #! /bin/sh
 
-# http://streams.radiobob.de/bob-live/mp3-192/airable/
-URL='0x68 0x74 0x74 0x70 0x3a 0x2f 0x2f 0x73 0x74 0x72 0x65 0x61 0x6d 0x73 0x2e 0x72 0x61 0x64 0x69 0x6f 0x62 0x6f 0x62 0x2e 0x64 0x65 0x2f 0x62 0x6f 0x62 0x2d 0x6c 0x69 0x76 0x65 0x2f 0x6d 0x70 0x33 0x2d 0x31 0x39 0x32 0x2f 0x61 0x69 0x72 0x61 0x62 0x6c 0x65 0x2f'
+ADDR='r1000e'
 
-$(dirname $0)/send_dcp_command.sh r1000e -- w 78 '0x61 0x62 0x63'
-exec $(dirname $0)/send_dcp_command.sh r1000e -- w 79 $URL
+string_to_hex()
+{
+    HEXSTRING=
+    for C in $(echo -n "$1" | xxd -c 1 -i | sed 's/.*\(0x..\).*/\1/')
+    do
+        HEXSTRING="${HEXSTRING}${C} "
+    done
+}
+
+if test $# -ne 1 && test $# -ne 4
+then
+    echo "Usage: $0 <url> [<artist> <album> <title>]"
+    exit 1
+fi
+
+string_to_hex "$1"
+URL="${HEXSTRING}"
+
+if test $# -eq 4
+then
+    ARTIST="$2"
+    ALBUM="$3"
+    TITLE="$4"
+else
+    ARTIST=
+    ALBUM=
+    TITLE=
+fi
+
+string_to_hex "${ARTIST}"
+METADATA="${HEXSTRING}"
+string_to_hex "${ALBUM}"
+METADATA="${METADATA}0x1f ${HEXSTRING}"
+string_to_hex "${TITLE}"
+METADATA="${METADATA}0x1f ${HEXSTRING}"
+
+$(dirname $0)/send_dcp_command.sh ${ADDR} -- w 78 ${METADATA}
+exec $(dirname $0)/send_dcp_command.sh ${ADDR} -- w 79 ${URL}
