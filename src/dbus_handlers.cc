@@ -1005,6 +1005,10 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
             /* ignore silently, not interesting at the moment */
         }
     }
+    else if(strcmp(signal_name, "ExternalOAuthLoginRequested") == 0)
+    {
+        /* ignore */
+    }
     else
         unknown_signal(iface_name, signal_name, sender_name);
 }
