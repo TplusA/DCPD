@@ -27,7 +27,7 @@
 class PeriodicPHYReset
 {
   private:
-    constexpr static guint INTERVAL = 5000;
+    constexpr static guint INTERVAL = 15000;
 
     bool inhibited_;
     bool active_;
