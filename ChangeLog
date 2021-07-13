@@ -1,3 +1,10 @@
+2021-07-13  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.2 released.
+
+	* Networking: Periodically reset Ethernet PHY every 15 seconds while
+	  Ethernet is not active.
+
 2021-06-09  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.1 released.
