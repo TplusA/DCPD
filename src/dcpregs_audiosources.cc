@@ -710,7 +710,7 @@ static void add_to_queue(SlavePushCommandQueue &q,
 class AudioSourceData
 {
   public:
-    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 12;
+    static constexpr const size_t NUMBER_OF_DEFAULT_SOURCES = 13;
 
   private:
     LoggedLock::Mutex lock_;
@@ -953,6 +953,7 @@ void Regs::AudioSources::init()
         AudioSource("strbo.usb",      "USB devices",             AudioSource::IS_BROWSABLE),
         AudioSource("strbo.upnpcm",   "UPnP media servers",      AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_LAN),
         AudioSource("strbo.plainurl", "TA Control",              AudioSource::REQUIRES_LAN),
+        AudioSource("strbo.rest",     "REST API Control",        AudioSource::REQUIRES_LAN),
         AudioSource("airable",        "Airable",                 AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
         AudioSource("airable.radios", "Airable Internet Radios", AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
         AudioSource("airable.feeds",  "Airable Podcasts",        AudioSource::IS_BROWSABLE | AudioSource::REQUIRES_INTERNET),
