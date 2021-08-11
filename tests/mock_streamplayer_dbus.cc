@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,6 +30,7 @@
 #include "mock_streamplayer_dbus.hh"
 
 #include "stream_id.hh"
+#include "gvariantwrapper.hh"
 
 enum class StreamplayerFn
 {
@@ -114,6 +115,7 @@ class MockStreamplayerDBus::Expectation
         int64_t arg_stop_pos_;
         const char *arg_stop_pos_units_;
         int16_t arg_keep_first_n_;
+        GVariantWrapper arg_meta_data_;
 
         explicit Data(StreamplayerFn fn):
             function_id_(fn),
@@ -191,7 +193,7 @@ class MockStreamplayerDBus::Expectation
                          const MD5::Hash &stream_key,
                          gint64 arg_start_position, const gchar *arg_start_units,
                          gint64 arg_stop_position, const gchar *arg_stop_units,
-                         gint16 arg_keep_first_n_entries,
+                         gint16 arg_keep_first_n_entries, GVariant *arg_meta_data,
                          gboolean expected_out_fifo_overflow,
                          gboolean expected_out_is_playing):
         Expectation(StreamplayerFn::urlfifo_call_push, retval, object)
@@ -205,6 +207,7 @@ class MockStreamplayerDBus::Expectation
         data_.arg_stop_pos_ = arg_stop_position;
         data_.arg_stop_pos_units_ = arg_stop_units;
         data_.arg_keep_first_n_ = arg_keep_first_n_entries;
+        data_.arg_meta_data_ = GVariantWrapper(arg_meta_data);
         data_.ret_overflow_ = expected_out_fifo_overflow;
         data_.ret_is_playing_ = expected_out_is_playing;
     }
@@ -252,9 +255,9 @@ void MockStreamplayerDBus::expect_tdbus_splay_urlfifo_call_next_sync(gboolean re
     expectations_->add(Expectation(StreamplayerFn::urlfifo_call_next, retval, object));
 }
 
-void MockStreamplayerDBus::expect_tdbus_splay_urlfifo_call_push_sync(gboolean retval, tdbussplayURLFIFO *object, guint16 arg_stream_id, const gchar *arg_stream_url, const MD5::Hash &arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, gboolean expected_out_fifo_overflow, gboolean expected_out_is_playing)
+void MockStreamplayerDBus::expect_tdbus_splay_urlfifo_call_push_sync(gboolean retval, tdbussplayURLFIFO *object, guint16 arg_stream_id, const gchar *arg_stream_url, const MD5::Hash &arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean expected_out_fifo_overflow, gboolean expected_out_is_playing)
 {
-    expectations_->add(Expectation(retval, object, arg_stream_id, arg_stream_url, arg_stream_key, arg_start_position, arg_start_units, arg_stop_position, arg_stop_units, arg_keep_first_n_entries, expected_out_fifo_overflow, expected_out_is_playing));
+    expectations_->add(Expectation(retval, object, arg_stream_id, arg_stream_url, arg_stream_key, arg_start_position, arg_start_units, arg_stop_position, arg_stop_units, arg_keep_first_n_entries, arg_meta_data, expected_out_fifo_overflow, expected_out_is_playing));
 }
 
 void MockStreamplayerDBus::expect_tdbus_splay_playback_call_start_sync(gboolean retval, tdbussplayPlayback *object)
@@ -316,7 +319,7 @@ gboolean tdbus_splay_urlfifo_call_next_sync(tdbussplayURLFIFO *proxy, GCancellab
     return expect.d.ret_bool_;
 }
 
-gboolean tdbus_splay_urlfifo_call_push_sync(tdbussplayURLFIFO *proxy, guint16 arg_stream_id, const gchar *arg_stream_url, GVariant *arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, gboolean *out_fifo_overflow, gboolean *out_is_playing, GCancellable *cancellable, GError **error)
+gboolean tdbus_splay_urlfifo_call_push_sync(tdbussplayURLFIFO *proxy, guint16 arg_stream_id, const gchar *arg_stream_url, GVariant *arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean *out_fifo_overflow, gboolean *out_is_playing, GCancellable *cancellable, GError **error)
 {
     const auto &expect(mock_streamplayer_dbus_singleton->expectations_->get_next_expectation(__func__));
 
@@ -329,7 +332,9 @@ gboolean tdbus_splay_urlfifo_call_push_sync(tdbussplayURLFIFO *proxy, guint16 ar
     cppcut_assert_equal(expect.d.arg_stop_pos_, arg_start_position);
     cppcut_assert_equal(expect.d.arg_stop_pos_units_, arg_stop_units);
     cppcut_assert_equal(expect.d.arg_keep_first_n_, arg_keep_first_n_entries);
+    cut_assert(expect.d.arg_meta_data_ != nullptr);
 
+    /* stream key must be the same */
     gsize stream_key_len;
     gconstpointer stream_key_data =
         g_variant_get_fixed_array(arg_stream_key, &stream_key_len,
@@ -342,6 +347,13 @@ gboolean tdbus_splay_urlfifo_call_push_sync(tdbussplayURLFIFO *proxy, guint16 ar
     cut_assert_true(g_variant_is_floating(arg_stream_key));
     g_variant_unref(arg_stream_key);
 
+    /* preset meta data must be the same */
+    cut_assert(arg_meta_data != nullptr);
+    cut_assert(g_variant_equal(GVariantWrapper::get(expect.d.arg_meta_data_),
+                               arg_meta_data));
+    g_variant_unref(arg_meta_data);
+
+    /* return some data */
     if(out_fifo_overflow != NULL)
         *out_fifo_overflow = expect.d.ret_overflow_;
 

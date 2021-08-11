@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -408,7 +408,9 @@ static void set_start_playing_expectations(const std::string expected_artist,
         mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
             stream_id.get().get_raw_id(), url.c_str(), hash,
-            0, "ms", 0, "ms", -2, FALSE, assume_already_playing);
+            0, "ms", 0, "ms", -2,
+            g_variant_new_array(reinterpret_cast<const GVariantType *>("(ss)"), nullptr, 0),
+            FALSE, assume_already_playing);
         mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
         mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
             dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
@@ -558,7 +560,9 @@ static void set_next_url(const std::string title, const std::string url,
             mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
                 TRUE, dbus_streamplayer_urlfifo_iface_dummy,
                 stream_id.get().get_raw_id(), url.c_str(), hash,
-                0, "ms", 0, "ms", 0, FALSE,
+                0, "ms", 0, "ms", 0,
+                g_variant_new_array(reinterpret_cast<const GVariantType *>("(ss)"), nullptr, 0),
+                FALSE,
                 flow_assumptions == SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED);
             mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
             mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(

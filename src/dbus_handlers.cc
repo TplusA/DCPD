@@ -712,13 +712,19 @@ void dbussignal_audiopath_manager(GDBusProxy *proxy, const gchar *sender_name,
     else if(strcmp(signal_name, "PathActivated") == 0 ||
             strcmp(signal_name, "PathDeferred") == 0)
     {
+        const bool is_deferred = strcmp(signal_name, "PathDeferred") == 0;
         const gchar *source_id;
         const gchar *player_id;
 
-        g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
-        Regs::AudioSources::selected_source(source_id, strcmp(signal_name, "PathDeferred") == 0);
+        if(is_deferred)
+            g_variant_get(parameters, "(&s&s)", &source_id, &player_id);
+        else
+            g_variant_get(parameters, "(&s&s@a{sv})", &source_id, &player_id, nullptr);
+
+        Regs::AudioSources::selected_source(source_id, is_deferred);
     }
-    else if(strcmp(signal_name, "PlayerRegistered") == 0)
+    else if(strcmp(signal_name, "PathReactivated") == 0 ||
+            strcmp(signal_name, "PlayerRegistered") == 0)
     {
         /* ignore */
     }
