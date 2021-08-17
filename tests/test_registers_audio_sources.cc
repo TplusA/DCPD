@@ -166,11 +166,12 @@ class ExpectedSourceData
     }
 };
 
-static const std::array<ExpectedSourceData, 12> predefined_sources
+static const std::array<ExpectedSourceData, 13> predefined_sources
 {
     ExpectedSourceData("strbo.usb",            "USB devices",             true),
     ExpectedSourceData("strbo.upnpcm",         "UPnP media servers",      true),
     ExpectedSourceData("strbo.plainurl",       "TA Control",              false),
+    ExpectedSourceData("strbo.rest",           "REST API Control",        false),
     ExpectedSourceData("airable",              "Airable",                 true),
     ExpectedSourceData("airable.radios",       "Airable Internet Radios", true),
     ExpectedSourceData("airable.feeds",        "Airable Podcasts",        true),

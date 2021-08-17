@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -791,6 +791,8 @@ class StreamingRegisters:
                                           sizeof(stream_key.key_[0])),
                 0, "ms", 0, "ms",
                 is_first ? -2 : 0,
+                g_variant_new_array(reinterpret_cast<const GVariantType *>("(ss)"),
+                                    nullptr, 0),
                 &fifo_overflow, &is_playing,
                 nullptr, &error))
         {
