@@ -1,3 +1,11 @@
+2021-08-24  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.3 released.
+
+	* Audio sources: Added source for REST API clients (strbo.rest).
+
+	* Audio sources: Avoid deadlock during audio source selection.
+
 2021-07-13  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.2 released.
