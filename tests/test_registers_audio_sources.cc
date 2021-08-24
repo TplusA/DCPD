@@ -57,6 +57,12 @@ thread_local LoggedLock::Context LoggedLock::context;
 
 MainLoop::Queue MainLoop::detail::queued_work;
 
+void MainLoop::detail::notify_main_loop()
+{
+    for(const auto &f : queued_work.take())
+        f();
+}
+
 /*!
  * \addtogroup registers_tests Unit tests
  */
