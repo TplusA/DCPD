@@ -29,6 +29,7 @@
 #include "register_push_queue.hh"
 #include "dbus_iface_deep.h"
 #include "dbus_common.h"
+#include "mainloop.hh"
 #include "string_trim.hh"
 #include "gvariantwrapper.hh"
 #include "maybe.hh"
@@ -1540,16 +1541,28 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
 
 void Regs::AudioSources::source_available(const char *source_id)
 {
-    LOGGED_LOCK_CONTEXT_HINT;
-    auto lock(audio_source_data->lock());
+    /*
+     * We are running in D-Bus context right now, and the
+     * #AudioSourceData::audio_source_available_notification() function makes a
+     * synchronous D-Bus call to the same process which has invoked us.
+     * Therefore, we must execute our call from the main loop to avoid a
+     * deadlock.
+     */
+    MainLoop::post(
+        [src_id = std::string(source_id)] ()
+        {
+            LOGGED_LOCK_CONTEXT_HINT;
+            auto lock(audio_source_data->lock());
 
-    AudioSource *src = audio_source_data->lookup(source_id);
+            AudioSource *src = audio_source_data->lookup(src_id.c_str());
 
-    if(src == nullptr)
-        return;
+            if(src == nullptr)
+                return;
 
-    if(audio_source_data->audio_source_available_notification(*src))
-        add_to_queue(*push_80_command_queue, GetAudioSourcesCommand::SOURCES_CHANGED);
+            if(audio_source_data->audio_source_available_notification(*src))
+                add_to_queue(*push_80_command_queue, GetAudioSourcesCommand::SOURCES_CHANGED);
+        }
+    );
 }
 
 void Regs::AudioSources::selected_source(const char *source_id,
