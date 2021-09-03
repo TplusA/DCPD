@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -241,14 +241,18 @@ gboolean tdbus_credentials_read_call_get_known_categories_sync(tdbuscredentialsR
     cppcut_assert_not_null(expect.d.ret_categories_data_);
 
     GVariantBuilder builder;
-    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ssas)"));
 
     for(const auto &category : *expect.d.ret_categories_data_)
     {
         cppcut_assert_not_null(category.first);
         cppcut_assert_not_null(category.second);
 
-        g_variant_builder_add(&builder, "(ss)", category.first, category.second);
+        GVariantBuilder ctypes_builder;
+        g_variant_builder_init(&ctypes_builder, G_VARIANT_TYPE("as"));
+        g_variant_builder_add(&ctypes_builder, "s", "preset");
+        g_variant_builder_add(&builder, "(ssas)", category.first, category.second,
+                              &ctypes_builder);
     }
 
     *out_categories = g_variant_builder_end(&builder);
