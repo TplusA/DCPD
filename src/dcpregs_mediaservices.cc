@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -247,12 +247,23 @@ static void xml_escape(char *const buffer, const size_t buffer_size,
     buffer[out_pos] = '\0';
 }
 
+static bool contains_string(GVariantIter *ctypes, const char *needle)
+{
+    const char *value;
+
+    while(g_variant_iter_loop(ctypes, "&s", &value))
+        if(strcmp(value, needle) == 0)
+            return true;
+
+    return false;
+}
+
 static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
-                                      GVariant *service_ids_and_names_variant)
+                                      GVariantWrapper &&catinfo)
 {
     bool retval = true;
     const size_t number_of_services =
-        g_variant_n_children(service_ids_and_names_variant);
+        g_variant_n_children(GVariantWrapper::get(catinfo));
 
     if(number_of_services == 0)
     {
@@ -268,14 +279,22 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
 
     for(size_t i = 0; i < number_of_services; ++i)
     {
-        GVariant *temp = g_variant_get_child_value(service_ids_and_names_variant, i);
-        GVariantWrapper id_and_name(temp, GVariantWrapper::Transfer::JUST_MOVE);
+        GVariantWrapper id_and_name(
+            g_variant_get_child_value(GVariantWrapper::get(catinfo), i),
+            GVariantWrapper::Transfer::JUST_MOVE);
 
         const gchar *id;
         const gchar *name;
-        g_variant_get(GVariantWrapper::get(id_and_name), "(&s&s)", &id, &name);
+        GVariantIter *supported_credential_types = nullptr;
 
-        temp = NULL;
+        g_variant_get(GVariantWrapper::get(id_and_name), "(&s&sas)",
+                      &id, &name, &supported_credential_types);
+
+        const bool has_oauth = contains_string(supported_credential_types, "oauth");
+        g_variant_iter_free(supported_credential_types);
+        supported_credential_types = nullptr;
+
+        GVariant *temp = NULL;
         char *default_user = NULL;
         GError *error = NULL;
 
@@ -299,11 +318,14 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
         xml_escape(buffer_first,  sizeof(buffer_first),  id);
         xml_escape(buffer_second, sizeof(buffer_second), name);
 
+        os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second
+           << "\" has_oauth=\"" << (has_oauth ? "true" : "false") << "\"";
+
         if(number_of_credentials == 0)
-            os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second << "\"/>";
+            os << "/>";
         else
         {
-            os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second << "\">";
+            os << ">";
 
             for(size_t j = 0; j < number_of_credentials; ++j)
             {
@@ -360,9 +382,9 @@ bool Regs::MediaServices::DCP::read_106_media_service_list(std::vector<uint8_t> 
     if(dbus_common_handle_dbus_error(&error, "Get categories") < 0)
         return false;
 
-    bool ret = fill_buffer_with_services(buffer, service_ids_and_names_variant);
-
-    g_variant_unref(service_ids_and_names_variant);
+    bool ret =
+        fill_buffer_with_services(buffer,
+                                  GVariantWrapper(service_ids_and_names_variant));
 
     return ret;
 }

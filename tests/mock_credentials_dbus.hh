@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,6 +25,10 @@
 #include "de_tahifi_credentials.h"
 #include "mock_expectation.hh"
 
+#include <tuple>
+#include <vector>
+#include <string>
+
 class MockCredentialsDBus
 {
   public:
@@ -41,7 +45,8 @@ class MockCredentialsDBus
     void init();
     void check() const;
 
-    using ReadGetKnownCategoriesData = std::vector<std::pair<const char *, const char *>>;
+    using ReadGetKnownCategoriesData =
+        std::vector<std::tuple<const char *, const char *, std::vector<std::string>>>;
     void expect_tdbus_credentials_read_call_get_known_categories_sync(gboolean retval, tdbuscredentialsRead *object, const ReadGetKnownCategoriesData &categories);
 
     using ReadGetCredentialsData = std::vector<std::pair<const char *, const char *>>;
