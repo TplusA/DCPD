@@ -1,3 +1,9 @@
+2021-09-06  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.4 released.
+
+	* DCP: Report OAuth capabilities along with the music services.
+
 2021-08-24  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.3 released.
