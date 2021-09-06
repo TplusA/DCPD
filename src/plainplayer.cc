@@ -156,22 +156,28 @@ class Player:
         ++next_free_stream_id_;
         return true;
     }
+
+  public:
+    static const char *state_to_string(Player::State state)
+    {
+        switch(state)
+        {
+          case Player::State::DESELECTED: return "DESELECTED";
+          case Player::State::DESELECTED_AWAITING_SELECTION: return "DESELECTED_AWAITING_SELECTION";
+          case Player::State::STOPPED_REQUESTED: return "STOPPED_REQUESTED";
+          case Player::State::STOPPED: return "STOPPED";
+          case Player::State::PLAYING_REQUESTED: return "PLAYING_REQUESTED";
+          case Player::State::PLAYING: return "PLAYING";
+          case Player::State::PLAYING_BUT_STOPPED: return "PLAYING_BUT_STOPPED";
+        }
+
+        return "*** UNKNOWN ***";
+    }
 };
 
 static const char *to_string(Player::State state)
 {
-    switch(state)
-    {
-      case Player::State::DESELECTED: return "DESELECTED";
-      case Player::State::DESELECTED_AWAITING_SELECTION: return "DESELECTED_AWAITING_SELECTION";
-      case Player::State::STOPPED_REQUESTED: return "STOPPED_REQUESTED";
-      case Player::State::STOPPED: return "STOPPED";
-      case Player::State::PLAYING_REQUESTED: return "PLAYING_REQUESTED";
-      case Player::State::PLAYING: return "PLAYING";
-      case Player::State::PLAYING_BUT_STOPPED: return "PLAYING_BUT_STOPPED";
-    }
-
-    return "*** UNKNOWN ***";
+    return Player::state_to_string(state);
 }
 
 void Player::activate(const std::function<void()> &request_audio_source)
