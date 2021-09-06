@@ -247,6 +247,17 @@ static void xml_escape(char *const buffer, const size_t buffer_size,
     buffer[out_pos] = '\0';
 }
 
+static bool contains_string(GVariantIter *ctypes, const char *needle)
+{
+    const char *value;
+
+    while(g_variant_iter_loop(ctypes, "&s", &value))
+        if(strcmp(value, needle) == 0)
+            return true;
+
+    return false;
+}
+
 static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
                                       GVariantWrapper &&catinfo)
 {
@@ -279,6 +290,7 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
         g_variant_get(GVariantWrapper::get(id_and_name), "(&s&sas)",
                       &id, &name, &supported_credential_types);
 
+        const bool has_oauth = contains_string(supported_credential_types, "oauth");
         g_variant_iter_free(supported_credential_types);
         supported_credential_types = nullptr;
 
@@ -306,11 +318,14 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
         xml_escape(buffer_first,  sizeof(buffer_first),  id);
         xml_escape(buffer_second, sizeof(buffer_second), name);
 
+        os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second
+           << "\" has_oauth=\"" << (has_oauth ? "true" : "false") << "\"";
+
         if(number_of_credentials == 0)
-            os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second << "\"/>";
+            os << "/>";
         else
         {
-            os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second << "\">";
+            os << ">";
 
             for(size_t j = 0; j < number_of_credentials; ++j)
             {

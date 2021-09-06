@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -213,10 +213,10 @@ void test_read_out_external_media_services()
 
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories =
     {
-        std::make_pair("tidal",  "TIDAL"),
-        std::make_pair("qobuz",  "Qobuz"),
-        std::make_pair("deezer", "Deezer"),
-        std::make_pair("funny",  "Service w/o default user"),
+        std::make_tuple("tidal",  "TIDAL", std::vector<std::string>{"oauth", "preset"}),
+        std::make_tuple("qobuz",  "Qobuz", std::vector<std::string>{}),
+        std::make_tuple("deezer", "Deezer", std::vector<std::string>{}),
+        std::make_tuple("funny",  "Service w/o default user", std::vector<std::string>{}),
     };
 
     const MockCredentialsDBus::ReadGetCredentialsData accounts_tidal =
@@ -259,16 +259,16 @@ void test_read_out_external_media_services()
 
     const std::string expected_answer =
         "<services count=\"4\">"
-        "<service id=\"tidal\" name=\"TIDAL\">"
+        "<service id=\"tidal\" name=\"TIDAL\" has_oauth=\"true\">"
         "<account login=\"tidal.user@somewhere.com\" password=\"1234qwerasdf\" default=\"true\"/>"
         "</service>"
-        "<service id=\"qobuz\" name=\"Qobuz\">"
+        "<service id=\"qobuz\" name=\"Qobuz\" has_oauth=\"false\">"
         "<account login=\"Some guy\" password=\"secret\"/>"
         "<account login=\"qobuz.user@somewhere.com\" password=\"abcdef\" default=\"true\"/>"
         "<account login=\"Someone else\" password=\"password\"/>"
         "</service>"
-        "<service id=\"deezer\" name=\"Deezer\"/>"
-        "<service id=\"funny\" name=\"Service w/o default user\">"
+        "<service id=\"deezer\" name=\"Deezer\" has_oauth=\"false\"/>"
+        "<service id=\"funny\" name=\"Service w/o default user\" has_oauth=\"false\">"
         "<account login=\"Not the default\" password=\"funny&amp;&quot;42&gt;\"/>"
         "</service>"
         "</services>";
@@ -297,8 +297,8 @@ void test_read_out_unconfigured_external_media_services()
 
     const MockCredentialsDBus::ReadGetKnownCategoriesData categories =
     {
-        std::make_pair("tidal",  "TIDAL"),
-        std::make_pair("deezer", "Deezer"),
+        std::make_tuple("tidal",  "TIDAL", std::vector<std::string>{"oauth", "preset"}),
+        std::make_tuple("deezer", "Deezer", std::vector<std::string>{}),
     };
 
     const MockCredentialsDBus::ReadGetCredentialsData no_accounts;
@@ -318,8 +318,8 @@ void test_read_out_unconfigured_external_media_services()
 
     const std::string expected_answer =
         "<services count=\"2\">"
-        "<service id=\"tidal\" name=\"TIDAL\"/>"
-        "<service id=\"deezer\" name=\"Deezer\"/>"
+        "<service id=\"tidal\" name=\"TIDAL\" has_oauth=\"true\"/>"
+        "<service id=\"deezer\" name=\"Deezer\" has_oauth=\"false\"/>"
         "</services>";
     cut_assert_equal_memory(expected_answer.c_str(), expected_answer.size(),
                             buffer.data(), buffer.size());

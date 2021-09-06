@@ -245,13 +245,20 @@ gboolean tdbus_credentials_read_call_get_known_categories_sync(tdbuscredentialsR
 
     for(const auto &category : *expect.d.ret_categories_data_)
     {
-        cppcut_assert_not_null(category.first);
-        cppcut_assert_not_null(category.second);
+        cppcut_assert_not_null(std::get<0>(category));
+        cppcut_assert_not_null(std::get<1>(category));
 
         GVariantBuilder ctypes_builder;
         g_variant_builder_init(&ctypes_builder, G_VARIANT_TYPE("as"));
-        g_variant_builder_add(&ctypes_builder, "s", "preset");
-        g_variant_builder_add(&builder, "(ssas)", category.first, category.second,
+
+        if(std::get<2>(category).empty())
+            g_variant_builder_add(&ctypes_builder, "s", "preset");
+        else
+            for(const auto &auth_type : std::get<2>(category))
+                g_variant_builder_add(&ctypes_builder, "s", auth_type.c_str());
+
+        g_variant_builder_add(&builder, "(ssas)",
+                              std::get<0>(category), std::get<1>(category),
                               &ctypes_builder);
     }
 
