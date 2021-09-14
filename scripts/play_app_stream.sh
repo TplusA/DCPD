@@ -34,9 +34,9 @@ fi
 string_to_hex "${ARTIST}"
 METADATA="${HEXSTRING}"
 string_to_hex "${ALBUM}"
-METADATA="${METADATA}0x1f ${HEXSTRING}"
+METADATA="${METADATA}0x1d ${HEXSTRING}"
 string_to_hex "${TITLE}"
-METADATA="${METADATA}0x1f ${HEXSTRING}"
+METADATA="${METADATA}0x1d ${HEXSTRING}"
 
 $(dirname $0)/send_dcp_command.sh ${ADDR} -- w 78 ${METADATA}
 exec $(dirname $0)/send_dcp_command.sh ${ADDR} -- w 79 ${URL}
