@@ -731,7 +731,6 @@ bool TransactionQueue::Transaction::do_read_register()
                       reg_->address_, reg_->name_.c_str(), n);
 
         payload_.resize(n);
-
         return true;
     }
     else
@@ -1357,7 +1356,7 @@ TransactionQueue::fragments_from_data(Queue &queue, const uint8_t *data,
     const auto *reg = lookup_register_for_transaction(register_address, true);
 
     if(reg == nullptr)
-        return result;;
+        return result;
 
     size_t i = 0;
 

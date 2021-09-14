@@ -157,7 +157,7 @@ class MockAudiopathDBus::Expectation
         data_.out_player_id_ = out_player_id;
         data_.out_switched_ = out_switched;
         data_.arg_object_ = static_cast<void *>(object);
-        data_.manager_request_source_waiting_fn_ = wait_for_result_fn;;
+        data_.manager_request_source_waiting_fn_ = wait_for_result_fn;
     }
 
     explicit Expectation(AudiopathFn fn, bool retval, tdbusaupathManager *object,
@@ -171,7 +171,7 @@ class MockAudiopathDBus::Expectation
         data_.out_player_id_ = out_player_id;
         data_.out_switched_ = out_switched;
         data_.arg_object_ = static_cast<void *>(object);
-        data_.manager_request_source_waiting_fn_ = wait_for_result_fn;;
+        data_.manager_request_source_waiting_fn_ = wait_for_result_fn;
         data_.arg_request_data_ = std::move(request_data);
     }
 

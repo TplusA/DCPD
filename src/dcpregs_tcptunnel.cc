@@ -137,7 +137,7 @@ class TcpTunnel
 
     PeerID get_peer_id(int fd) const
     {
-        const auto it = peer_descriptor_to_id_.find(fd);;
+        const auto it = peer_descriptor_to_id_.find(fd);
         return it != peer_descriptor_to_id_.end() ? it->second : PeerID();
     }
 

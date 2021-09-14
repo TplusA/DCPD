@@ -497,7 +497,7 @@ Mixer::VolumeControls::replace_control_properties(uint16_t id,
     }
     catch(const std::out_of_range &e)
     {
-        msg_error(0, LOG_ERR, "Exception: %s", e.what());;
+        msg_error(0, LOG_ERR, "Exception: %s", e.what());
         return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
@@ -516,7 +516,7 @@ Mixer::VolumeControls::set_values(uint16_t id, double volume, bool is_muted)
     }
     catch(const std::out_of_range &e)
     {
-        msg_error(0, LOG_ERR, "Exception: %s", e.what());;
+        msg_error(0, LOG_ERR, "Exception: %s", e.what());
         return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
@@ -535,7 +535,7 @@ Mixer::VolumeControls::request_absolute(uint16_t id, double volume, bool is_mute
     }
     catch(const std::out_of_range &e)
     {
-        msg_error(0, LOG_ERR, "Exception: %s", e.what());;
+        msg_error(0, LOG_ERR, "Exception: %s", e.what());
         return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
@@ -554,7 +554,7 @@ Mixer::VolumeControls::request_relative(uint16_t id, double step, MuteRequest mu
     }
     catch(const std::out_of_range &e)
     {
-        msg_error(0, LOG_ERR, "Exception: %s", e.what());;
+        msg_error(0, LOG_ERR, "Exception: %s", e.what());
         return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
@@ -570,7 +570,7 @@ Mixer::VolumeControls::get_current_values(uint16_t id,
     }
     catch(const std::out_of_range &e)
     {
-        msg_error(0, LOG_ERR, "Exception: %s", e.what());;
+        msg_error(0, LOG_ERR, "Exception: %s", e.what());
         return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }
@@ -586,7 +586,7 @@ Mixer::VolumeControls::get_requested_values(uint16_t id,
     }
     catch(const std::out_of_range &e)
     {
-        msg_error(0, LOG_ERR, "Exception: %s", e.what());;
+        msg_error(0, LOG_ERR, "Exception: %s", e.what());
         return Mixer::VolumeControlResult::UNKNOWN_ID;
     }
 }

@@ -108,7 +108,7 @@ void cut_teardown()
 void test_full_transmission_of_small_data()
 {
     static constexpr uint8_t data[] = { 0x60, 0x70, 0x80, 0x90 };
-    set_file_data(data);;
+    set_file_data(data);
 
     cppcut_assert_equal(XMODEM_RESULT_LAST_BLOCK,
                         xmodem_process(&xmodem, XMODEM_COMMAND_NACK_CRC));
@@ -149,7 +149,7 @@ void test_full_transmission_of_small_data()
 void test_full_transmission_of_whole_block()
 {
     static constexpr uint8_t data[BLOCK_SIZE] = { 0x20, 0x30, 0x40, };
-    set_file_data(data);;
+    set_file_data(data);
 
     cppcut_assert_equal(XMODEM_RESULT_LAST_BLOCK,
                         xmodem_process(&xmodem, XMODEM_COMMAND_NACK_CRC));
@@ -182,7 +182,7 @@ void test_full_transmission_of_whole_block()
 void test_full_transmission_of_two_whole_blocks()
 {
     static constexpr uint8_t data[2 * BLOCK_SIZE] = { 0x20, 0x30, 0x40, };
-    set_file_data(data);;
+    set_file_data(data);
 
     cppcut_assert_equal(XMODEM_RESULT_OK,
                         xmodem_process(&xmodem, XMODEM_COMMAND_NACK_CRC));
@@ -242,7 +242,7 @@ void test_full_transmission_of_big_data()
         memset(data + offset, block, this_block_size);
     }
 
-    set_file_data(data);;
+    set_file_data(data);
 
     for(uint8_t block = 1; block <= NUMBER_OF_BLOCKS; ++block)
     {
@@ -284,7 +284,7 @@ void test_full_transmission_of_big_data()
 void test_abort_transmission_after_failed_retries()
 {
     static constexpr uint8_t data[] = { 0xa0, 0xb0, 0xc0, 0xd0 };
-    set_file_data(data);;
+    set_file_data(data);
 
     cppcut_assert_equal(XMODEM_RESULT_LAST_BLOCK,
                         xmodem_process(&xmodem, XMODEM_COMMAND_NACK_CRC));
@@ -337,7 +337,7 @@ void test_very_unreliable_connection()
             data[offset + (sizeof(data) % BLOCK_SIZE) - 1] = block;
     }
 
-    set_file_data(data);;
+    set_file_data(data);
 
     cppcut_assert_equal(XMODEM_RESULT_OK,
                         xmodem_process(&xmodem, XMODEM_COMMAND_NACK_CRC));

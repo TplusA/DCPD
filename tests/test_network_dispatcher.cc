@@ -72,7 +72,7 @@ static bool handle_incoming_data_callback(int fd)
 
 static void connection_died_callback(int fd)
 {
-    ++iface_check_data.connection_died_called;;
+    ++iface_check_data.connection_died_called;
 }
 
 static const Network::DispatchHandlers

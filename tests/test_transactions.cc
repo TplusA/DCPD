@@ -1627,7 +1627,7 @@ void test_big_slave_transaction()
     reg_0_fragment[9] = 0xe2;
     ++dcpsync_header[3];
     dcpsync_header[4] = 0x00;
-    dcpsync_header[5] = DCP_HEADER_SIZE + reg_0_fragment[2];;
+    dcpsync_header[5] = DCP_HEADER_SIZE + reg_0_fragment[2];
 
     read_data->set(dcpsync_header);
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);
@@ -1762,7 +1762,7 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     reg_0_fragment[9] = 0xe2;
     ++dcpsync_header[3];
     dcpsync_header[4] = 0x00;
-    dcpsync_header[5] = DCP_HEADER_SIZE + reg_0_fragment[2];;
+    dcpsync_header[5] = DCP_HEADER_SIZE + reg_0_fragment[2];
 
     read_data->set(dcpsync_header);
     read_data->set(reg_0_fragment.data(), DCP_HEADER_SIZE);

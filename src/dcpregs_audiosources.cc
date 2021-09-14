@@ -1416,7 +1416,7 @@ int Regs::AudioSources::DCP::write_81_current_audio_source(const uint8_t *data, 
         return -1;
     }
 
-    const char *audio_source_name = reinterpret_cast<const char *>(data);;
+    const char *audio_source_name = reinterpret_cast<const char *>(data);
     size_t audio_source_name_length;
     std::string audio_source_name_buffer;
     GVariantDict dict;
