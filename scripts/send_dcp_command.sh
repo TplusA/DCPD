@@ -110,4 +110,4 @@ HEXLENLO=$(echo $HEXLEN | cut -b 3-4)
 HEXCOMMAND="$HEXDCPCOMMAND $HEXCODE $HEXLENLO $HEXLENHI $HEXARGUMENTS"
 
 echo "Sending '$HEXCOMMAND' to $HOST:$PORT"
-echo "0 $HEXCOMMAND" | xxd -r -c 256 | nc -N "$HOST" "$PORT" | hexdump -C
+echo "$HEXCOMMAND" | python3 -c 'import sys; sys.stdout.buffer.write(bytes.fromhex(sys.stdin.read()))' | nc -N "$HOST" "$PORT" | hexdump -C

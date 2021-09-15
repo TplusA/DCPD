@@ -105,7 +105,7 @@ do
 
     HEXCOMMAND="$HEXDCPCOMMAND $HEXCODE $HEXLENLO $HEXLENHI"
 
-    echo -n "0 $HEXCOMMAND" | xxd -r | cat /dev/stdin "$PAYLOAD_FILE" >>"$TEMPFILE"
+    echo -n "$HEXCOMMAND" | python3 -c 'import sys; sys.stdout.buffer.write(bytes.fromhex(sys.stdin.read()))' | cat /dev/stdin "$PAYLOAD_FILE" >>"$TEMPFILE"
 done
 
 echo 'Sending command with total size of '$(stat -c %s "$TEMPFILE")" to $HOST:$PORT"
