@@ -223,37 +223,24 @@ void TransactionQueue::Transaction::init(InitialType init_type,
 }
 
 TransactionQueue::Transaction::Transaction(Queue &queue, InitialType init_type,
-                                           Channel channel, bool mark_as_pinned):
+                                           const Regs::Register *const reg,
+                                           Channel channel, Pinned mark_as_pinned):
     is_pinned_(mark_as_pinned),
     channel_(channel),
     tx_sync_(queue, init_type, 'c', channel),
     queue_(queue)
 {
-    init(init_type, nullptr, false);
-}
+    init(init_type, reg, false);
 
-TransactionQueue::Transaction::Transaction(Queue &queue, const Regs::Register &reg,
-                                           bool is_register_push, Channel channel):
-    is_pinned_(false),
-    channel_(channel),
-    tx_sync_(queue,
-             is_register_push
-             ? TransactionQueue::InitialType::MASTER_FOR_REGISTER
-             : TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
-             'c', channel),
-    queue_(queue)
-{
-    const TransactionQueue::InitialType init_type = is_register_push
-        ? TransactionQueue::InitialType::MASTER_FOR_REGISTER
-        : TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA;
-    init(init_type, &reg, false);
+    if(reg != nullptr)
+    {
+        bind_to_register(*reg, DCP_COMMAND_MULTI_WRITE_REGISTER);
 
-    bind_to_register(reg, DCP_COMMAND_MULTI_WRITE_REGISTER);
-
-    /* fill in request header */
-    request_header_[0] = command_;
-    request_header_[1] = reg.address_;
-    dcp_put_header_data(&request_header_[DCP_HEADER_DATA_OFFSET], 0);
+        /* fill in request header */
+        request_header_[0] = command_;
+        request_header_[1] = reg->address_;
+        dcp_put_header_data(&request_header_[DCP_HEADER_DATA_OFFSET], 0);
+    }
 }
 
 void TransactionQueue::Transaction::reset_for_slave()
@@ -1157,7 +1144,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
                 {
                     auto temp = new_for_queue(queue_,
                                               TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                                              channel_, false);
+                                              channel_, Pinned::NOT_PINNED);
                     bool failed;
 
                     if(temp == nullptr)
@@ -1362,7 +1349,9 @@ TransactionQueue::fragments_from_data(Queue &queue, const uint8_t *data,
 
     while(i < length)
     {
-        auto t = Transaction::new_for_queue(queue, *reg, false, channel);
+        auto t = Transaction::new_for_queue(queue,
+                                            InitialType::MASTER_FOR_DRCPD_DATA,
+                                            *reg, channel);
 
         if(t == nullptr)
             break;
@@ -1384,7 +1373,9 @@ TransactionQueue::fragments_from_data(Queue &queue, const uint8_t *data,
         result.clear();
     else if((length % DCP_PACKET_MAX_PAYLOAD_SIZE) == 0)
     {
-        auto t = Transaction::new_for_queue(queue, *reg, false, channel);
+        auto t = Transaction::new_for_queue(queue,
+                                            InitialType::MASTER_FOR_DRCPD_DATA,
+                                            *reg, channel);
 
         if(t != nullptr)
             result.emplace_back(std::move(t));
@@ -1402,6 +1393,9 @@ bool TransactionQueue::push_register_to_slave(Queue &queue,
     const auto *reg = lookup_register_for_transaction(register_address, true);
 
     return (reg != nullptr)
-        ? queue.append(Transaction::new_for_queue(queue, *reg, true, channel))
+        ? queue.append(Transaction::new_for_queue(
+                            queue,
+                            TransactionQueue::InitialType::MASTER_FOR_REGISTER,
+                            *reg, channel))
         : false;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -195,6 +195,13 @@ class OOONackException: public ProtocolException
  */
 class Transaction
 {
+  public:
+    enum class Pinned
+    {
+        NOT_PINNED,
+        INTENDED_AS_PREALLOCATED,
+    };
+
   private:
     enum class State
     {
@@ -222,7 +229,7 @@ class Transaction
         COMPLETED,
     };
 
-    const bool is_pinned_;
+    const Pinned is_pinned_;
     const Channel channel_;
 
     State state_;
@@ -245,24 +252,28 @@ class Transaction
 
   private:
     explicit Transaction(Queue &queue, InitialType init_type,
-                         Channel channel, bool mark_as_pinned);
-    explicit Transaction(Queue &queue, const Regs::Register &reg,
-                         bool is_register_push, Channel channel);
+                         const Regs::Register *const reg,
+                         Channel channel, Pinned mark_as_pinned);
 
   public:
     static std::unique_ptr<Transaction>
-    new_for_queue(Queue &queue, InitialType init_type, Channel channel, bool mark_as_pinned)
+    new_for_queue(Queue &queue, InitialType init_type, Channel channel,
+                  Pinned mark_as_pinned)
     {
-        return std::unique_ptr<Transaction>(new Transaction(queue, init_type,
-                                                            channel, mark_as_pinned));
+        /* no std::make_unique because the ctor is private */
+        return std::unique_ptr<Transaction>(
+                            new Transaction(queue, init_type, nullptr,
+                                            channel, mark_as_pinned));
     }
 
     static std::unique_ptr<Transaction>
-    new_for_queue(Queue &queue, const Regs::Register &reg,
-                  bool is_register_push, Channel channel)
+    new_for_queue(Queue &queue, InitialType init_type,
+                  const Regs::Register &reg, Channel channel)
     {
-        return std::unique_ptr<Transaction>(new Transaction(queue, reg,
-                                                            is_register_push, channel));
+        /* no std::make_unique because the ctor is private */
+        return std::unique_ptr<Transaction>(
+                            new Transaction(queue, init_type, &reg,
+                                            channel, Pinned::NOT_PINNED));
     }
 
     /*!
@@ -276,7 +287,7 @@ class Transaction
      * This flag is only advisory and is used by client code for managing
      * pre-allocated objects.
      */
-    bool is_pinned() const { return is_pinned_; }
+    bool is_pinned() const { return is_pinned_ != Pinned::NOT_PINNED; }
 
     /*!
      * Return communication channel used by this transaction.

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -186,7 +186,8 @@ void test_allocation_and_deallocation_of_single_transaction_object_spi()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
     cut_assert(TransactionQueue::Channel::SPI == t->get_channel());
     cut_assert_false(t->is_pinned());
@@ -202,7 +203,8 @@ void test_pinned_transaction_object()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
-                TransactionQueue::Channel::SPI, true);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::INTENDED_AS_PREALLOCATED);
     cppcut_assert_not_null(t.get());
     cut_assert_true(t->is_pinned());
 }
@@ -215,7 +217,8 @@ void test_allocation_and_deallocation_of_single_transaction_object_inet()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
-                TransactionQueue::Channel::INET, false);
+                TransactionQueue::Channel::INET,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
     cut_assert(TransactionQueue::Channel::INET == t->get_channel());
 
@@ -259,7 +262,8 @@ void test_dequeue_from_list_of_length_one()
     auto t = TransactionQueue::Transaction::new_for_queue(
                     *queue,
                     TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
-                    TransactionQueue::Channel::SPI, false);
+                    TransactionQueue::Channel::SPI,
+                    TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
     auto *const raw_ptr = t.get();
 
@@ -283,7 +287,8 @@ static void make_short_queue(TransactionQueue::Queue &q,
         auto t = TransactionQueue::Transaction::new_for_queue(
                         q,
                         TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
-                        TransactionQueue::Channel::SPI, false);
+                        TransactionQueue::Channel::SPI,
+                        TransactionQueue::Transaction::Pinned::NOT_PINNED);
         cppcut_assert_not_null(t.get());
         raw_pointers.push_back(t.get());
         q.append(std::move(t));
@@ -506,7 +511,8 @@ void test_register_read_request_size_1_transaction()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
@@ -604,7 +610,8 @@ void test_register_read_request_size_16_transaction()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
@@ -677,7 +684,8 @@ void test_register_multi_step_read_request_transaction()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
@@ -772,7 +780,8 @@ void test_big_data_is_sent_to_slave_in_fragments()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
     cut_assert_true(queue->append(std::move(t)));
 
@@ -781,7 +790,8 @@ void test_big_data_is_sent_to_slave_in_fragments()
     t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::MASTER_FOR_DRCPD_DATA,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
     cut_assert_true(queue->append(std::move(t)));
 
@@ -1062,7 +1072,8 @@ void test_register_write_request_transaction()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
@@ -1107,7 +1118,8 @@ void test_register_simple_write_not_supported()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
@@ -1140,7 +1152,8 @@ void test_register_multi_read_not_supported()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] =
@@ -1171,7 +1184,8 @@ void test_junk_bytes_are_ignored()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t dcpsync_header[] = { 'c', 0x00, 0x66, 0x08, 0x00, DCP_HEADER_SIZE, };
@@ -1555,7 +1569,8 @@ void test_big_slave_transaction()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_header { 'c', UINT8_MAX, 0x31, 0xc5, };
@@ -1690,7 +1705,8 @@ void test_big_slave_transaction_with_size_of_multiple_of_256()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     std::array<uint8_t, DCPSYNC_HEADER_SIZE> dcpsync_header { 'c', UINT8_MAX, 0x31, 0xc5, };
@@ -1803,7 +1819,8 @@ void test_bad_register_addresses_are_handled_in_slave_write_transactions()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     static const uint8_t write_unknown_data[] =
@@ -2092,7 +2109,8 @@ void test_waiting_for_command_interrupted_by_ack()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,
@@ -2142,7 +2160,8 @@ void test_waiting_for_command_interrupted_by_nack()
     auto t = TransactionQueue::Transaction::new_for_queue(
                 *queue,
                 TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                TransactionQueue::Channel::SPI, false);
+                TransactionQueue::Channel::SPI,
+                TransactionQueue::Transaction::Pinned::NOT_PINNED);
     cppcut_assert_not_null(t.get());
 
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_TRACE,

@@ -785,15 +785,19 @@ static void main_loop(struct files *files,
     static struct DCPDState state;
 
     state.preallocated_spi_slave_transaction =
-        TransactionQueue::Transaction::new_for_queue(state.master_transaction_queue,
-                                                     TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                                                     TransactionQueue::Channel::SPI, true);
+        TransactionQueue::Transaction::new_for_queue(
+            state.master_transaction_queue,
+            TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+            TransactionQueue::Channel::SPI,
+            TransactionQueue::Transaction::Pinned::INTENDED_AS_PREALLOCATED);
     state.preallocated_spi_slave_transaction_raw_pointer = state.preallocated_spi_slave_transaction.get();
 
     state.preallocated_inet_slave_transaction =
-        TransactionQueue::Transaction::new_for_queue(state.master_transaction_queue,
-                                                     TransactionQueue::InitialType::SLAVE_BY_SLAVE,
-                                                     TransactionQueue::Channel::INET, true);
+        TransactionQueue::Transaction::new_for_queue(
+            state.master_transaction_queue,
+            TransactionQueue::InitialType::SLAVE_BY_SLAVE,
+            TransactionQueue::Channel::INET,
+            TransactionQueue::Transaction::Pinned::INTENDED_AS_PREALLOCATED);
     state.preallocated_inet_slave_transaction_raw_pointer = state.preallocated_inet_slave_transaction.get();
 
     state.drcp_buffer.clear();
