@@ -31,6 +31,7 @@
 #include "actor_id.h"
 #include "gvariantwrapper.hh"
 #include "gerrorwrapper.hh"
+#include "xmlescape.hh"
 #include "messages.h"
 
 #include <unordered_map>
@@ -189,61 +190,6 @@ int Regs::MediaServices::DCP::write_106_media_service_list(const uint8_t *data,
     return set_credentials(string_data, login, password_buffer);
 }
 
-static const std::string *xml_escape_character(const char ch)
-{
-    static const std::unordered_map<char, const std::string> escapes =
-    {
-        {'&', "&amp;"},
-        {'<',  "&lt;"},
-        {'>',  "&gt;"},
-        {'\'', "&apos;"},
-        {'"',  "&quot;"},
-    };
-
-    const auto &it(escapes.find(ch));
-    return it != escapes.end() ? &it->second : nullptr;
-}
-
-static void xml_escape(char *const buffer, const size_t buffer_size,
-                       const char *const input)
-{
-    log_assert(input != nullptr);
-
-    size_t out_pos = 0;
-
-    for(size_t i = 0; out_pos < buffer_size; ++i)
-    {
-        const char ch = input[i];
-
-        if(ch == '\0')
-            break;
-
-        const std::string *seq = xml_escape_character(ch);
-
-        if(seq == nullptr)
-            buffer[out_pos++] = ch;
-        else if(seq->length() < buffer_size - out_pos)
-        {
-            std::copy(seq->begin(), seq->end(), &buffer[out_pos]);
-            out_pos += seq->length();
-        }
-        else
-        {
-            std::fill(buffer + out_pos, buffer + buffer_size, 0);
-            out_pos = buffer_size;
-            break;
-        }
-    }
-
-    if(out_pos >= buffer_size)
-    {
-        msg_error(0, LOG_ERR, "Buffer too small for XML-escaping");
-        out_pos = buffer_size - 1;
-    }
-
-    buffer[out_pos] = '\0';
-}
-
 static bool contains_string(GVariantIter *ctypes, const char *needle)
 {
     const char *value;
@@ -310,13 +256,7 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
         GVariantWrapper credentials(temp);
         const size_t number_of_credentials = g_variant_n_children(GVariantWrapper::get(credentials));
 
-        static char buffer_first[1024];
-        static char buffer_second[1024];
-
-        xml_escape(buffer_first,  sizeof(buffer_first),  id);
-        xml_escape(buffer_second, sizeof(buffer_second), name);
-
-        os << "<service id=\"" << buffer_first << "\" name=\"" << buffer_second
+        os << "<service id=\"" << XmlEscape(id) << "\" name=\"" << XmlEscape(name)
            << "\" has_oauth=\"" << (has_oauth ? "true" : "false") << "\"";
 
         if(number_of_credentials == 0)
@@ -335,11 +275,8 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
                 g_variant_get(GVariantWrapper::get(login_and_password), "(&s&s)",
                               &login, &password);
 
-                xml_escape(buffer_first,  sizeof(buffer_first),  login);
-                xml_escape(buffer_second, sizeof(buffer_second), password);
-
-                os << "<account login=\"" << buffer_first << "\""
-                   << " password=\"" << buffer_second << "\""
+                os << "<account login=\"" << XmlEscape(login) << "\""
+                   << " password=\"" << XmlEscape(password) << "\""
                    << ((std::strcmp(login, default_user) == 0) ? " default=\"true\"" : "")
                    << "/>";
             }

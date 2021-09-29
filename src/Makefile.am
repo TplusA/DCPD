@@ -130,7 +130,7 @@ libregisters_la_SOURCES = \
     dcpregs_audiopaths.cc dcpregs_audiopaths.hh \
     dcpregs_playstream.cc dcpregs_playstream.hh \
     dcpregs_stream_speed.cc dcpregs_stream_speed.hh \
-    dcpregs_mediaservices.cc dcpregs_mediaservices.hh \
+    dcpregs_mediaservices.cc dcpregs_mediaservices.hh xmlescape.hh \
     dcpregs_searchparameters.cc dcpregs_searchparameters.hh \
     dcpregs_datetime.cc dcpregs_datetime.hh \
     dcpregs_system_update.cc dcpregs_system_update.hh dcpregs_system_update_json.hh \
