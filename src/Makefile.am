@@ -51,7 +51,7 @@ dcpd_SOURCES = \
     connman_technology_registry.hh connman_property_cache.hh \
     network_device.hh network_device_list.hh \
     stream_id.h stream_id.hh plainplayer.hh coverart.hh gvariantwrapper.hh md5.hh \
-    dbus_common.c dbus_common.h \
+    dbus_common.c dbus_common.h gerrorwrapper.hh \
     dbus_iface.cc dbus_iface.hh dbus_iface_deep.h \
     dbus_handlers.h dbus_handlers_connman_agent.hh connman_agent.h \
     dbus_handlers_connman_manager.hh \

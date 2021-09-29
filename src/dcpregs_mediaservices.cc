@@ -30,6 +30,7 @@
 #include "dbus_iface_deep.h"
 #include "actor_id.h"
 #include "gvariantwrapper.hh"
+#include "gerrorwrapper.hh"
 #include "messages.h"
 
 #include <unordered_map>
@@ -262,8 +263,9 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
                                       GVariantWrapper &&catinfo)
 {
     bool retval = true;
-    const size_t number_of_services =
-        g_variant_n_children(GVariantWrapper::get(catinfo));
+    const size_t number_of_services = GVariantWrapper::get(catinfo) != nullptr
+        ? g_variant_n_children(GVariantWrapper::get(catinfo))
+        :0;
 
     if(number_of_services == 0)
     {
@@ -366,25 +368,23 @@ bool Regs::MediaServices::DCP::read_106_media_service_list(std::vector<uint8_t> 
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 106 handler");
 
-    if(dbus_get_credentials_read_iface() == NULL)
+    if(dbus_get_credentials_read_iface() == nullptr)
     {
         msg_error(0, LOG_ERR,
                   "Cannot read out service list, no Airable D-Bus proxy");
         return false;
     }
 
-    GVariant *service_ids_and_names_variant = NULL;
-    GError *error = NULL;
+    GVariant *service_ids_and_names_variant = nullptr;
+    GErrorWrapper error;
 
     tdbus_credentials_read_call_get_known_categories_sync(dbus_get_credentials_read_iface(),
                                                           &service_ids_and_names_variant,
-                                                          NULL, &error);
-    if(dbus_common_handle_dbus_error(&error, "Get categories") < 0)
-        return false;
+                                                          nullptr, error.await());
 
-    bool ret =
-        fill_buffer_with_services(buffer,
-                                  GVariantWrapper(service_ids_and_names_variant));
-
-    return ret;
+    if(error.log_failure("D-Bus: Get categories"))
+        return fill_buffer_with_services(buffer, GVariantWrapper(nullptr));
+    else
+        return fill_buffer_with_services(buffer,
+                                         GVariantWrapper(service_ids_and_names_variant));
 }
