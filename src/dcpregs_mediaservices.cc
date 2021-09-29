@@ -37,79 +37,75 @@
 #include <sstream>
 #include <cstring>
 
-static int delete_credentials(const char *service_id, bool logout_on_failure,
-                              int *delete_ret_ptr)
+static bool delete_credentials(const char *service_id, bool logout_on_failure,
+                               bool *delete_failed_ptr)
 {
-    GError *error = NULL;
-    gchar *dummy = NULL;
+    GErrorWrapper error;
+    gchar *dummy = nullptr;
 
     tdbus_credentials_write_call_delete_credentials_sync(dbus_get_credentials_write_iface(),
                                                          service_id,
                                                          "", &dummy,
-                                                         NULL, &error);
+                                                         nullptr, error.await());
 
-    const int delete_ret = dbus_common_handle_dbus_error(&error, "Delete credentials");
+    const bool delete_failed = error.log_failure("D-Bus: Delete credentials");
 
-    if(delete_ret_ptr != NULL)
-        *delete_ret_ptr = delete_ret;
+    if(delete_failed_ptr != nullptr)
+        *delete_failed_ptr = delete_failed;
 
-    if(delete_ret < 0)
+    if(delete_failed)
     {
         if(!logout_on_failure)
-            return delete_ret;
+            return false;
     }
     else
     {
-        if(dummy == NULL || dummy[0] != '\0')
+        if(dummy == nullptr || dummy[0] != '\0')
             BUG("Expected empty default user");
 
         g_free(dummy);
 
-        if(delete_ret_ptr == NULL && delete_ret == 0)
+        if(delete_failed_ptr == nullptr && !delete_failed)
             Regs::AudioSources::set_have_credentials(service_id, false);
     }
 
-    if(dbus_get_airable_sec_iface() != NULL)
+    if(dbus_get_airable_sec_iface() != nullptr)
         tdbus_airable_call_external_service_logout_sync(dbus_get_airable_sec_iface(),
                                                         service_id, "",
                                                         true, ACTOR_ID_LOCAL_UI,
-                                                        NULL, &error);
+                                                        nullptr, error.await());
     else
         BUG("Cannot logout from %s, have no Airable D-Bus proxy", service_id);
 
-    const int logout_ret = dbus_common_handle_dbus_error(&error, "Service logout");
-
-    if(logout_ret != 0)
-        return logout_ret;
-    else
-        return delete_ret;
+    const bool logout_failed = error.log_failure("D-Bus: Service logout");
+    return !(logout_failed || delete_failed);
 }
 
 static int set_credentials(const char *service_id,
                            const char *login, const char *password)
 {
-    int delete_ret = -1;
-    (void)delete_credentials(service_id, true, &delete_ret);
+    bool delete_failed = true;
+    (void)delete_credentials(service_id, true, &delete_failed);
 
-    GError *error = NULL;
+    GErrorWrapper error;
 
     tdbus_credentials_write_call_set_credentials_sync(dbus_get_credentials_write_iface(),
                                                       service_id,
                                                       login, password, TRUE,
-                                                      NULL, &error);
+                                                      nullptr, error.await());
 
-    const int ret = dbus_common_handle_dbus_error(&error, "Set credentials");
+    const bool failed = error.log_failure("D-Bus: Set credentials");
 
-    if(ret == 0)
+    if(!failed)
         Regs::AudioSources::set_have_credentials(service_id, true);
-    else if(delete_ret == 0)
+    else if(!delete_failed)
         Regs::AudioSources::set_have_credentials(service_id, false);
 
     tdbus_airable_call_external_service_login_sync(dbus_get_airable_sec_iface(),
                                                    service_id, login, true,
-                                                   ACTOR_ID_LOCAL_UI, NULL, NULL);
+                                                   ACTOR_ID_LOCAL_UI, nullptr, nullptr);
 
-    return ret;
+    return failed ? -1 : 0;
 }
 
 int Regs::MediaServices::DCP::write_106_media_service_list(const uint8_t *data,
@@ -117,11 +113,11 @@ int Regs::MediaServices::DCP::write_106_media_service_list(const uint8_t *data,
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "write 106 handler %p %zu", data, length);
 
-    if(dbus_get_credentials_write_iface() == NULL)
+    if(dbus_get_credentials_write_iface() == nullptr)
     {
         msg_error(0, LOG_ERR,
                   "Cannot write service credentials, no Airable D-Bus proxy");
-        return false;
+        return -1;
     }
 
     if(length == 0)
@@ -179,7 +175,7 @@ int Regs::MediaServices::DCP::write_106_media_service_list(const uint8_t *data,
     }
 
     if(login_length == 0)
-        return delete_credentials(string_data, false, NULL);
+        return delete_credentials(string_data, false, nullptr) ? 0 : -1;
 
     char password_buffer[256];
     size_t safe_password_length = password_length;
@@ -296,16 +292,16 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
         g_variant_iter_free(supported_credential_types);
         supported_credential_types = nullptr;
 
-        GVariant *temp = NULL;
-        char *default_user = NULL;
-        GError *error = NULL;
+        GVariant *temp = nullptr;
+        char *default_user = nullptr;
+        GErrorWrapper error;
 
         tdbus_credentials_read_call_get_credentials_sync(read_iface, id,
                                                          &temp,
                                                          &default_user,
-                                                         NULL, &error);
+                                                         nullptr, error.await());
 
-        if(dbus_common_handle_dbus_error(&error, "Get credentials") < 0)
+        if(error.log_failure("D-Bus: Get credentials"))
         {
             retval = false;
             break;
