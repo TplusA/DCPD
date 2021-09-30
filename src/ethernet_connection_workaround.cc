@@ -91,6 +91,13 @@ class PeriodicPHYReset
         return false;
     }
 
+    void kickstart() const
+    {
+        /* don't interfere with periodic reset */
+        if(!active_)
+            do_reset_now(false);
+    }
+
   private:
     static gboolean idle_fn(gpointer user_data)
     {
@@ -107,10 +114,16 @@ class PeriodicPHYReset
             return FALSE;
         }
 
-        msg_vinfo(MESSAGE_LEVEL_DIAG, "Resetting Ethernet PHY (cable check)");
-        os_system(false, "sudo /sbin/mii-tool -R eth0");
-
+        do_reset_now(true);
         return TRUE;
+    }
+
+    static void do_reset_now(bool is_periodic)
+    {
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "Resetting Ethernet PHY (%s cable check)",
+                  is_periodic ? "periodic" : "spontaneous");
+        os_system(false, "sudo /sbin/mii-tool -R eth0");
     }
 };
 
@@ -124,6 +137,11 @@ bool EthernetConnectionWorkaround::enable()
 bool EthernetConnectionWorkaround::disable()
 {
     return phy_reset_.stop();
+}
+
+void EthernetConnectionWorkaround::kickstart()
+{
+    phy_reset_.kickstart();
 }
 
 void EthernetConnectionWorkaround::required_on_this_kernel(bool is_required)

@@ -2055,23 +2055,44 @@ static void fill_network_status_register_response(uint8_t *response)
     if(service != nullptr)
     {
         const auto &sd(service->get_service_data());
+        static const int kickstart_countdown_initial_value = 13;  // should be ~1 minute
+        static int kickstart_countdown;
 
         if(sd.device_ != nullptr)
         {
             switch(sd.device_->technology_)
             {
               case Connman::Technology::ETHERNET:
-                EthernetConnectionWorkaround::disable();
+                if(EthernetConnectionWorkaround::disable())
+                    kickstart_countdown = kickstart_countdown_initial_value;
                 break;
 
               case Connman::Technology::UNKNOWN_TECHNOLOGY:
               case Connman::Technology::WLAN:
-                EthernetConnectionWorkaround::enable();
+                if(EthernetConnectionWorkaround::enable())
+                    kickstart_countdown = 0;
                 break;
             }
         }
 
         dump_network_configuration(sd);
+
+        if(kickstart_countdown > 0)
+        {
+            if(sd.active_.ipsettings_v4_.is_known() &&
+               !sd.active_.ipsettings_v4_->is_configuration_valid() &&
+               sd.active_.ipsettings_v6_.is_known() &&
+               !sd.active_.ipsettings_v6_->is_configuration_valid())
+            {
+                if(--kickstart_countdown == 0)
+                {
+                    EthernetConnectionWorkaround::kickstart();
+                    kickstart_countdown = kickstart_countdown_initial_value;
+                }
+            }
+            else
+                kickstart_countdown = 0;
+        }
     }
     else
     {
