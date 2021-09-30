@@ -1,3 +1,22 @@
+2021-10-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.5 released.
+
+	* DCP: Reading out of register 106 is much faster now in case the
+	  network connection doesn't work. It runs into a D-Bus timeout (long
+	  before the TCP/IP timeout is hit), and then returns an empty list of
+	  media services. In previous versions, the function returned nothing
+	  to the SPI slave.
+
+	* Playback: Preset meta data set via registers 78 and 238 are not
+	  emitted via StreamInfo signal anymore. Instead, we send these data
+	  along with the stream URL to the player queue so that drcpd and the
+	  REST API can pick them up from there.
+
+	* Networking: Extend the Ethernet PHY reset workaround a bit so that
+	  invalid IP configuration in Ethernet mode can still trigger a PHY
+	  reset, but only once per minute.
+
 2021-09-06  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.4 released.
