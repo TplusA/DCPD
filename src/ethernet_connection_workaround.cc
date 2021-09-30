@@ -56,31 +56,39 @@ class PeriodicPHYReset
         inhibited_ = is_inhibited;
     }
 
-    void start_background_task()
+    bool start_background_task()
     {
         if(inhibited_)
-            return;
+            return false;
 
         if(active_)
-            return;
+            return false;
 
         msg_info("Starting periodic Ethernet PHY reset");
         active_ = true;
 
         if(source_id_ == 0)
+        {
             source_id_ = g_timeout_add(INTERVAL, idle_fn, this);
+            return true;
+        }
+
+        return false;
     }
 
-    void stop()
+    bool stop()
     {
         if(inhibited_)
-            return;
+            return false;
 
         if(active_)
         {
             msg_info("Stopping periodic Ethernet PHY reset");
             active_ = false;
+            return true;
         }
+
+        return false;
     }
 
   private:
@@ -108,14 +116,14 @@ class PeriodicPHYReset
 
 static PeriodicPHYReset phy_reset_;
 
-void EthernetConnectionWorkaround::enable()
+bool EthernetConnectionWorkaround::enable()
 {
-    phy_reset_.start_background_task();
+    return phy_reset_.start_background_task();
 }
 
-void EthernetConnectionWorkaround::disable()
+bool EthernetConnectionWorkaround::disable()
 {
-    phy_reset_.stop();
+    return phy_reset_.stop();
 }
 
 void EthernetConnectionWorkaround::required_on_this_kernel(bool is_required)
