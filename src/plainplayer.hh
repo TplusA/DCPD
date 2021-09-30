@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -58,13 +58,17 @@ class StreamInfo
     explicit StreamInfo(std::string &&artist, std::string &&album,
                         std::string &&title, std::string &&alttrack,
                         std::string &&url):
-        artist_(artist),
-        album_(album),
-        title_(title),
-        alttrack_(alttrack),
-        url_(url)
+        artist_(std::move(artist)),
+        album_(std::move(album)),
+        title_(std::move(title)),
+        alttrack_(std::move(alttrack)),
+        url_(std::move(url))
     {}
 };
+
+#ifdef GLIB_CHECK_VERSION
+GVariant *to_gvariant(const StreamInfo &si);
+#endif /* GLIB_CHECK_VERSION */
 
 class PlainPlayerNotifications;
 

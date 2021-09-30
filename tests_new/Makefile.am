@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2018, 2019, 2020, 2021  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -95,7 +95,8 @@ test_plainplayer_SOURCES = \
     mock_expectation.hh
 test_plainplayer_LDADD = \
     libtestrunner.la \
-    $(top_builddir)/src/libplainplayer.la
+    $(top_builddir)/src/libplainplayer.la \
+    $(DCPD_DEPENDENCIES_LIBS)
 test_plainplayer_CPPFLAGS = $(AM_CPPFLAGS)
 test_plainplayer_CXXFLAGS = $(AM_CXXFLAGS)
 

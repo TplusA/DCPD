@@ -791,8 +791,7 @@ class StreamingRegisters:
                                           sizeof(stream_key.key_[0])),
                 0, "ms", 0, "ms",
                 is_first ? -2 : 0,
-                g_variant_new_array(reinterpret_cast<const GVariantType *>("(ss)"),
-                                    nullptr, 0),
+                to_gvariant(stream_info),
                 &fifo_overflow, &is_playing,
                 nullptr, &error))
         {
@@ -807,12 +806,6 @@ class StreamingRegisters:
             BUG("Pushed stream with clear request, got FIFO overflow");
             return false;
         }
-
-        tdbus_dcpd_playback_emit_stream_info(
-                dbus_get_playback_iface(), stream_id.get().get_raw_id(),
-                stream_info.artist_.c_str(), stream_info.album_.c_str(),
-                stream_info.title_.c_str(), stream_info.alttrack_.c_str(),
-                stream_info.url_.c_str());
 
         if(!is_playing && !is_start_requested &&
            !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020, 2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -23,10 +23,23 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <glib.h>
+
 #include "plainplayer.hh"
 #include "dbus_iface_deep.h"
 #include "maybe.hh"
 #include "logged_lock.hh"
+
+GVariant *Regs::PlayStream::to_gvariant(const StreamInfo &si)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
+    g_variant_builder_add(&builder, "(ss)", "artist", si.artist_.c_str());
+    g_variant_builder_add(&builder, "(ss)", "album", si.album_.c_str());
+    g_variant_builder_add(&builder, "(ss)", "title", si.title_.c_str());
+    g_variant_builder_add(&builder, "(ss)", "x-drcpd-title", si.alttrack_.c_str());
+    return g_variant_builder_end(&builder);
+}
 
 class Player:
     public Regs::PlayStream::PlainPlayer,

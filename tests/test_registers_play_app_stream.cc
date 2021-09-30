@@ -336,6 +336,19 @@ static GVariantWrapper hash_to_variant(const MD5::Hash &hash)
                                                      sizeof(hash[0])));
 }
 
+static GVariant *
+to_stream_meta_data(const std::string &artist, const std::string &album,
+                    const std::string &title, const std::string &alttrack)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
+    g_variant_builder_add(&builder, "(ss)", "artist", artist.c_str());
+    g_variant_builder_add(&builder, "(ss)", "album", album.c_str());
+    g_variant_builder_add(&builder, "(ss)", "title", title.c_str());
+    g_variant_builder_add(&builder, "(ss)", "x-drcpd-title", alttrack.c_str());
+    return g_variant_builder_end(&builder);
+}
+
 static void set_start_playing_expectations(const std::string expected_artist,
                                            const std::string expected_album,
                                            const std::string expected_title,
@@ -409,14 +422,9 @@ static void set_start_playing_expectations(const std::string expected_artist,
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
             stream_id.get().get_raw_id(), url.c_str(), hash,
             0, "ms", 0, "ms", -2,
-            g_variant_new_array(reinterpret_cast<const GVariantType *>("(ss)"), nullptr, 0),
+            to_stream_meta_data(expected_artist, expected_album,
+                                expected_title, expected_alttrack),
             FALSE, assume_already_playing);
-        mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-        mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
-            dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-            expected_artist.c_str(), expected_album.c_str(),
-            expected_title.c_str(), expected_alttrack.c_str(),
-            url.c_str());
 
         expecting_play_view_activation = true;
 
@@ -561,13 +569,9 @@ static void set_next_url(const std::string title, const std::string url,
                 TRUE, dbus_streamplayer_urlfifo_iface_dummy,
                 stream_id.get().get_raw_id(), url.c_str(), hash,
                 0, "ms", 0, "ms", 0,
-                g_variant_new_array(reinterpret_cast<const GVariantType *>("(ss)"), nullptr, 0),
+                to_stream_meta_data("", "", title, title),
                 FALSE,
                 flow_assumptions == SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED);
-            mock_dbus_iface->expect_dbus_get_playback_iface(dbus_dcpd_playback_iface_dummy);
-            mock_dcpd_dbus->expect_tdbus_dcpd_playback_emit_stream_info(
-                dbus_dcpd_playback_iface_dummy, stream_id.get().get_raw_id(),
-                "", "", title.c_str(), title.c_str(), url.c_str());
 
             if(flow_assumptions != SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED)
             {
