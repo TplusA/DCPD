@@ -25,8 +25,9 @@
 namespace EthernetConnectionWorkaround
 {
 
-void enable();
-void disable();
+bool enable();
+bool disable();
+void kickstart();
 void required_on_this_kernel(bool is_required);
 
 }

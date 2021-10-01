@@ -56,31 +56,46 @@ class PeriodicPHYReset
         inhibited_ = is_inhibited;
     }
 
-    void start_background_task()
+    bool start_background_task()
     {
         if(inhibited_)
-            return;
+            return false;
 
         if(active_)
-            return;
+            return false;
 
         msg_info("Starting periodic Ethernet PHY reset");
         active_ = true;
 
         if(source_id_ == 0)
+        {
             source_id_ = g_timeout_add(INTERVAL, idle_fn, this);
+            return true;
+        }
+
+        return false;
     }
 
-    void stop()
+    bool stop()
     {
         if(inhibited_)
-            return;
+            return false;
 
         if(active_)
         {
             msg_info("Stopping periodic Ethernet PHY reset");
             active_ = false;
+            return true;
         }
+
+        return false;
+    }
+
+    void kickstart() const
+    {
+        /* don't interfere with periodic reset */
+        if(!active_)
+            do_reset_now(false);
     }
 
   private:
@@ -99,23 +114,34 @@ class PeriodicPHYReset
             return FALSE;
         }
 
-        msg_vinfo(MESSAGE_LEVEL_DIAG, "Resetting Ethernet PHY (cable check)");
-        os_system(false, "sudo /sbin/mii-tool -R eth0");
-
+        do_reset_now(true);
         return TRUE;
+    }
+
+    static void do_reset_now(bool is_periodic)
+    {
+        msg_vinfo(MESSAGE_LEVEL_DIAG,
+                  "Resetting Ethernet PHY (%s cable check)",
+                  is_periodic ? "periodic" : "spontaneous");
+        os_system(false, "sudo /sbin/mii-tool -R eth0");
     }
 };
 
 static PeriodicPHYReset phy_reset_;
 
-void EthernetConnectionWorkaround::enable()
+bool EthernetConnectionWorkaround::enable()
 {
-    phy_reset_.start_background_task();
+    return phy_reset_.start_background_task();
 }
 
-void EthernetConnectionWorkaround::disable()
+bool EthernetConnectionWorkaround::disable()
 {
-    phy_reset_.stop();
+    return phy_reset_.stop();
+}
+
+void EthernetConnectionWorkaround::kickstart()
+{
+    phy_reset_.kickstart();
 }
 
 void EthernetConnectionWorkaround::required_on_this_kernel(bool is_required)
