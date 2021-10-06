@@ -1005,6 +1005,8 @@ tokenize_meta_data(const std::string &src)
             dest.push_back(ch);
     }
 
+    dest.push_back('\0');
+
     return std::make_tuple(std::move(dest), artist, album);
 }
 
