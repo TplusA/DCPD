@@ -815,12 +815,26 @@ bool TransactionQueue::Transaction::process_nack(uint16_t serial, uint8_t ttl)
     return true;
 }
 
+//
+// Uncomment for white-listing registers in log_dcp_data().
+//
+// #include <set>
+
 void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
                                                  const uint8_t *sync_header,
                                                  const size_t fragsize) const
 {
     if((flags & TransactionQueue::DUMP_SENT_MASK) == TransactionQueue::DUMP_SENT_NONE)
         return;
+
+    //
+    // Uncomment and edit for white-listing registers.
+    //
+    /*
+    static const std::set<uint8_t> white_list { 71, 75, 76 };
+    if(white_list.find(reg_->address_) == white_list.end())
+        return;
+    */
 
     if((flags & TransactionQueue::DUMP_SENT_MERGE_MASK) == TransactionQueue::DUMP_SENT_MERGE_NONE)
     {
