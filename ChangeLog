@@ -1,3 +1,9 @@
+2021-10-15  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.6 released.
+
+	* DCP: Avoid spurious empty URL in register 76 while playing.
+
 2021-10-01  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.5 released.

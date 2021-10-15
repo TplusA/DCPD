@@ -20,7 +20,7 @@
 #
 
 project('DCPD', ['cpp', 'c'],
-    version: '7.5',
+    version: '7.6',
     default_options: ['warning_level=3', 'cpp_std=c++14', 'buildtype=plain'])
 
 PACKAGE = 'dcpd'
