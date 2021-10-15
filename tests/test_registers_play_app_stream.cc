@@ -827,7 +827,7 @@ void test_start_stream_stop_stream_and_deselect_audio_source()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG,
                                     "Send title and URL to SPI slave");
     GVariantWrapper skey;
-    streaming_regs->start_notification(OurStream::make().get(),
+    streaming_regs->start_notification(OurStream::make().get(), "",
                                        GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
@@ -896,7 +896,7 @@ void test_start_stream_and_deselect_audio_source_with_correct_stop_notification(
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper skey;
-    streaming_regs->start_notification(OurStream::make().get(),
+    streaming_regs->start_notification(OurStream::make().get(), "",
                                        GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_current_title_and_url("Test stream", "http://app-provided.url.org/stream.flac");
@@ -927,7 +927,7 @@ void test_start_stream_and_deselect_audio_source_with_unexpected_stop_notificati
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper skey;
-    streaming_regs->start_notification(OurStream::make().get(),
+    streaming_regs->start_notification(OurStream::make().get(), "",
                                        GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_current_title_and_url("Test stream", "http://app-provided.url.org/stream.flac");
@@ -1130,7 +1130,7 @@ void test_start_stream_then_start_another_stream()
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper hash_first;
     expect_cover_art_notification(skey_first, GVariantWrapper(), cached_image_first, &hash_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1149,7 +1149,7 @@ void test_start_stream_then_start_another_stream()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_cover_art_notification(skey_second, hash_first, cached_image_second);
-    streaming_regs->start_notification(stream_id_second.get(),
+    streaming_regs->start_notification(stream_id_second.get(), "",
                                        GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1184,7 +1184,7 @@ void test_start_stream_then_quickly_start_another_stream()
 
     mock_messages->expect_msg_info_formatted("App stream 257 started, but we are waiting for 258");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 1>{210});
     mock_messages->check();
@@ -1193,7 +1193,7 @@ void test_start_stream_then_quickly_start_another_stream()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    streaming_regs->start_notification(stream_id_second.get(),
+    streaming_regs->start_notification(stream_id_second.get(), "",
                                        GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1210,7 +1210,7 @@ void test_app_can_start_stream_while_other_source_is_playing()
 {
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    streaming_regs->start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI),
+    streaming_regs->start_notification(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI), "",
                                        GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check({210});
     expect_current_title_and_url("", "");
@@ -1227,7 +1227,7 @@ void test_app_can_start_stream_while_other_source_is_playing()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    streaming_regs->start_notification(stream_id.get(),
+    streaming_regs->start_notification(stream_id.get(), "",
                                        GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1259,7 +1259,7 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_early_start_notif
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    streaming_regs->start_notification(stream_id.get(),
+    streaming_regs->start_notification(stream_id.get(), "",
                                        GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1271,7 +1271,7 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_early_start_notif
     const auto bad_stream_id(ID::Stream::make_for_source(STREAM_ID_SOURCE_UI));
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    streaming_regs->start_notification(bad_stream_id,
+    streaming_regs->start_notification(bad_stream_id, "",
                                        GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check(std::array<uint8_t, 4>{79, 75, 76, 210});
     expect_current_title_and_url("", "");
@@ -1301,7 +1301,7 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_late_start_notifi
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    streaming_regs->start_notification(stream_id.get(),
+    streaming_regs->start_notification(stream_id.get(), "",
                                        GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1316,7 +1316,7 @@ void test_non_app_stream_starts_while_plain_url_is_active_with_late_start_notifi
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    streaming_regs->start_notification(bad_stream_id,
+    streaming_regs->start_notification(bad_stream_id, "",
                                        GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check(std::array<uint8_t, 4>{79, 75, 76, 210});
     expect_current_title_and_url("UI stream", "http://ui-provided.url.org/loud.flac");
@@ -1339,7 +1339,7 @@ static void start_stop_single_stream(bool with_notifications)
         mock_messages->expect_msg_info_formatted("Next app stream 257");
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         expect_empty_cover_art_notification(skey);
-        streaming_regs->start_notification(stream_id.get(),
+        streaming_regs->start_notification(stream_id.get(), "",
                                            GVariantWrapper::move(skey));
         register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
         mock_messages->check();
@@ -1387,7 +1387,7 @@ void test_quick_start_stop_single_stream()
     register_changed_data->check();
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    streaming_regs->start_notification(OurStream::make().get(),
+    streaming_regs->start_notification(OurStream::make().get(), "",
                                        GVariantWrapper::move(dummy_stream_key));
     register_changed_data->check(std::array<uint8_t, 1>{210});
     expect_current_title_and_url("", "");
@@ -1442,7 +1442,7 @@ void test_url_is_not_sent_to_spi_slave_if_unchanged()
 
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    streaming_regs->start_notification(stream_id,
+    streaming_regs->start_notification(stream_id, "",
                                        GVariantWrapper::move(dummy_stream_key));
 
     register_changed_data->check({210});
@@ -1484,7 +1484,7 @@ void test_nothing_is_sent_to_spi_slave_if_title_and_url_unchanged()
 
     GVariantWrapper dummy_stream_key;
     expect_empty_cover_art_notification(dummy_stream_key);
-    streaming_regs->start_notification(stream_id,
+    streaming_regs->start_notification(stream_id, "",
                                        GVariantWrapper::move(dummy_stream_key));
 
     register_changed_data->check({210});
@@ -1535,7 +1535,7 @@ void test_start_stream_and_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
@@ -1553,7 +1553,7 @@ void test_start_stream_and_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    streaming_regs->start_notification(stream_id_second.get(),
+    streaming_regs->start_notification(stream_id_second.get(), "",
                                        GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
@@ -1600,7 +1600,7 @@ void test_play_multiple_tracks_in_a_row()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1625,7 +1625,7 @@ void test_play_multiple_tracks_in_a_row()
         mock_messages->expect_msg_info_formatted(buffer);
         mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
         expect_empty_cover_art_notification(skey);
-        streaming_regs->start_notification(stream_id.get(),
+        streaming_regs->start_notification(stream_id.get(), "",
                                            GVariantWrapper::move(skey));
         register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
         mock_messages->check();
@@ -1678,7 +1678,7 @@ void test_start_stream_and_quickly_queue_next()
     mock_messages->expect_msg_vinfo_formatted(MESSAGE_LEVEL_DIAG, "Pushed next stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1687,7 +1687,7 @@ void test_start_stream_and_quickly_queue_next()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    streaming_regs->start_notification(stream_id_second.get(),
+    streaming_regs->start_notification(stream_id_second.get(), "",
                                        GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1717,7 +1717,7 @@ void test_queue_next_after_stop_notification_is_not_ignored()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1789,7 +1789,7 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1828,7 +1828,7 @@ void test_queued_stream_can_be_changed_as_long_as_it_is_not_played()
     mock_messages->expect_msg_info_formatted("Next app stream 260");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_fourth);
-    streaming_regs->start_notification(stream_id_fourth.get(),
+    streaming_regs->start_notification(stream_id_fourth.get(), "",
                                        GVariantWrapper::move(skey_fourth));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();
@@ -1852,7 +1852,7 @@ void test_pause_and_continue()
     mock_messages->expect_msg_info_formatted("Next app stream 257");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     mock_messages->check();
@@ -1872,7 +1872,7 @@ void test_pause_and_continue()
      * starting the same stream is treated as continue from pause */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
     register_changed_data->check();
@@ -1880,7 +1880,7 @@ void test_pause_and_continue()
     /* also works a second time */
     mock_messages->expect_msg_info_formatted("Continue with app stream 257");
     expect_empty_cover_art_notification(skey_first);
-    streaming_regs->start_notification(stream_id_first.get(),
+    streaming_regs->start_notification(stream_id_first.get(), "",
                                        GVariantWrapper::move(skey_first));
     expect_current_title_and_url("First FLAC", "http://app-provided.url.org/first.flac");
     register_changed_data->check();
@@ -1889,7 +1889,7 @@ void test_pause_and_continue()
     mock_messages->expect_msg_info_formatted("Next app stream 258");
     mock_messages->expect_msg_vinfo(MESSAGE_LEVEL_DIAG, "Send title and URL to SPI slave");
     expect_empty_cover_art_notification(skey_second);
-    streaming_regs->start_notification(stream_id_second.get(),
+    streaming_regs->start_notification(stream_id_second.get(), "",
                                        GVariantWrapper::move(skey_second));
     register_changed_data->check(std::array<uint8_t, 4>{239, 75, 76, 210});
     expect_next_url_empty();

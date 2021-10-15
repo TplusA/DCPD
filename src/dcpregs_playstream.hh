@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017--2021  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -58,7 +58,7 @@ class StreamingRegistersIface
     virtual void audio_source_selected() = 0;
     virtual void audio_source_deselected() = 0;
     virtual void set_title_and_url(ID::Stream stream_id, std::string &&title, std::string &&url) = 0;
-    virtual void start_notification(ID::Stream stream_id, void *stream_key_variant) = 0;
+    virtual void start_notification(ID::Stream stream_id, const char *stream_url, void *stream_key_variant) = 0;
     virtual void stop_notification(ID::Stream stream_id) = 0;
     virtual void stop_notification(ID::Stream stream_id, const char *reason, std::vector<ID::Stream> &&dropped_ids) = 0;
     virtual void cover_art_notification(void *stream_key_variant) = 0;

@@ -185,13 +185,17 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
         /* some stream started or continued playing */
         check_parameter_assertions(parameters, 6);
 
-        GVariant *val = g_variant_get_child_value(parameters, 0);
-        uint16_t stream_id = g_variant_get_uint16(val);
-        g_variant_unref(val);
+        guint16 raw_stream_id;
+        GVariant *stream_key_variant;
+        const gchar *url_string;
+
+        g_variant_get(parameters, "(q@ay&sbaqa(ss))",
+                      &raw_stream_id, &stream_key_variant, &url_string,
+                      nullptr, nullptr, nullptr);
 
         auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
-        regs.start_notification(ID::Stream::make_from_raw_id(stream_id),
-                                g_variant_get_child_value(parameters, 1));
+        regs.start_notification(ID::Stream::make_from_raw_id(raw_stream_id),
+                                url_string, stream_key_variant);
     }
     else if(strcmp(signal_name, "Stopped") == 0)
     {

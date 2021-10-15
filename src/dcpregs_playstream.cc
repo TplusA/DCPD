@@ -189,16 +189,27 @@ class BufferedStreamInfo
 
     SendStreamUpdate clear()
     {
-        return clear(ID::Stream::make_invalid());
+        return clear(ID::Stream::make_invalid(), nullptr);
     }
 
-    SendStreamUpdate clear(const ID::Stream &stream_id)
+    SendStreamUpdate clear(const ID::Stream &stream_id, const char *url)
     {
+        const bool new_url_is_empty = url == nullptr || url[0] == '\0';
+        const bool url_changed =
+            url_.empty() != new_url_is_empty || (!new_url_is_empty && url_ != url);
         const auto update =
-            determine_send_stream_update(!meta_data_.empty(), !url_.empty());
+            determine_send_stream_update(!meta_data_.empty(), url_changed);
         stream_id_ = stream_id;
         meta_data_.clear();
-        url_.clear();
+
+        if(url_changed)
+        {
+            if(new_url_is_empty)
+                url_.clear();
+            else
+                url_ = url;
+        }
+
         return update;
     }
 
@@ -569,7 +580,8 @@ class StreamingRegisters:
     /*!
      * React on start of stream.
      */
-    void start_notification(ID::Stream stream_id, void *stream_key_variant) final override
+    void start_notification(ID::Stream stream_id, const char *stream_url,
+                            void *stream_key_variant) final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
@@ -621,8 +633,8 @@ class StreamingRegisters:
         else
         {
             const auto update =
-                set_currently_playing_stream_id(
-                    stream_id, stream_started,
+                set_currently_playing_stream(
+                    stream_id, stream_url, stream_started,
                     app_stream_id.get().is_valid() && player_has_matching_meta_data
                     ? player_.get()
                     : nullptr);
@@ -832,9 +844,9 @@ class StreamingRegisters:
     }
 
     SendStreamUpdate
-    set_currently_playing_stream_id(const ID::Stream &stream_id,
-                                    StreamStarted &started,
-                                    const Regs::PlayStream::PlainPlayer *const player)
+    set_currently_playing_stream(const ID::Stream &stream_id, const char *stream_url,
+                                 StreamStarted &started,
+                                 const Regs::PlayStream::PlainPlayer *const player)
     {
         started = (stream_info_output_buffer_.matches_id(stream_id)
                    ? StreamStarted::CONTINUED_WITH_SAME
@@ -875,7 +887,7 @@ class StreamingRegisters:
         }
 
         if(player == nullptr)
-            return stream_info_output_buffer_.clear(stream_id);
+            return stream_info_output_buffer_.clear(stream_id, stream_url);
 
         const auto &info(player->get_current_stream_info());
 
@@ -883,7 +895,7 @@ class StreamingRegisters:
             ? stream_info_output_buffer_.set_full(stream_id,
                                                   std::string(info->alttrack_),
                                                   std::string(info->url_))
-            : stream_info_output_buffer_.clear(stream_id);
+            : stream_info_output_buffer_.clear(stream_id, stream_url);
     }
 
     void store_meta_data_and_url(const ID::Stream &stream_id,
