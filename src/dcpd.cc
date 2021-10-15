@@ -895,8 +895,8 @@ static void main_loop(struct files *files,
                         in_fd, out_fd,
                         msg_is_verbose(dump_sent_data_verbose_level)
                         ? (TransactionQueue::DUMP_SENT_DCP_HEADER |
-                        TransactionQueue::DUMP_SENT_DCP_PAYLOAD |
-                        TransactionQueue::DUMP_SENT_MERGE_ALL)
+                           TransactionQueue::DUMP_SENT_DCP_PAYLOAD |
+                           TransactionQueue::DUMP_SENT_MERGE_ALL)
                         : TransactionQueue::DUMP_SENT_NONE))
             {
               case TransactionQueue::ProcessResult::IN_PROGRESS:
