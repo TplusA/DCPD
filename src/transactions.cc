@@ -844,12 +844,11 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
         std::vector<uint8_t> merged_buffer;
         merged_buffer.reserve(DCPSYNC_HEADER_SIZE + request_header_.size() + fragsize);
 
-        auto out(merged_buffer.begin());
-
         if(tx_sync_.is_enabled() && (flags & TransactionQueue::DUMP_SENT_DCPSYNC) != 0)
         {
             if((flags & TransactionQueue::DUMP_SENT_MERGE_MASK) == TransactionQueue::DUMP_SENT_MERGE_ALL)
-                out = std::copy(sync_header, sync_header + DCPSYNC_HEADER_SIZE, out);
+                std::copy(sync_header, sync_header + DCPSYNC_HEADER_SIZE,
+                          std::back_inserter(merged_buffer));
             else
             {
                 /* separate dump of DCPSYNC header requested and possible */
@@ -860,20 +859,24 @@ void TransactionQueue::Transaction::log_dcp_data(DumpFlags flags,
         }
 
         if((flags & TransactionQueue::DUMP_SENT_DCP_HEADER) != 0)
-            out = std::copy(request_header_.begin(), request_header_.end(), out);
+            std::copy(request_header_.begin(), request_header_.end(),
+                      std::back_inserter(merged_buffer));
 
         if((flags & TransactionQueue::DUMP_SENT_DCP_PAYLOAD) != 0)
         {
             const auto from(std::next(payload_.begin(), current_fragment_offset_));
-            out = std::copy(from, std::next(from, fragsize), out);
+            std::copy(from, std::next(from, fragsize), std::back_inserter(merged_buffer));
         }
 
-        BUG_IF(size_t(std::distance(merged_buffer.begin(), out)) < merged_buffer.size(),
-               "Reserved size too small");
+        std::string header("Sent register ");
+        header += std::to_string(int(reg_->address_));
+        header += " (";
+        header += reg_->name_;
+        header += ") to DCP peer";
 
         hexdump_to_log(MESSAGE_LEVEL_IMPORTANT,
                        merged_buffer.data(), merged_buffer.size(),
-                       "Sent to DCP peer");
+                       header.c_str());
     }
 }
 
