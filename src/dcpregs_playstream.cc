@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -511,7 +511,7 @@ class StreamingRegisters:
         };
     }
 
-    void start_first_stream(std::string &&url)
+    void start_first_stream(std::string &&url, const char *reason)
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
@@ -525,12 +525,13 @@ class StreamingRegisters:
         play_request_input_buffer_->first.url_ = std::move(url);
         player_->start(
             std::move(play_request_input_buffer_->first),
-            [this]
+            [this, reason]
             (const auto &stream_info, auto stream_id,
              bool is_first, bool is_start_requested)
             {
                 return do_push_and_start_stream(stream_info, stream_id,
-                                                is_first, is_start_requested);
+                                                is_first, is_start_requested,
+                                                reason);
             });
         play_request_input_buffer_.set_unknown();
     }
@@ -785,7 +786,7 @@ class StreamingRegisters:
     static bool do_push_and_start_stream(
             const Regs::PlayStream::StreamInfo &stream_info,
             Regs::PlayStream::PlainPlayer::StreamID stream_id,
-            bool is_first, bool is_start_requested)
+            bool is_first, bool is_start_requested, const char *reason)
     {
         CoverArt::StreamKey stream_key;
         CoverArt::generate_stream_key_for_app(stream_key, stream_info.url_);
@@ -821,7 +822,7 @@ class StreamingRegisters:
 
         if(!is_playing && !is_start_requested &&
            !tdbus_splay_playback_call_start_sync(dbus_get_streamplayer_playback_iface(),
-                                                 nullptr, &error))
+                                                 reason, nullptr, &error))
         {
             msg_error(0, LOG_NOTICE, "Failed starting stream");
             dbus_common_handle_dbus_error(&error, "Start stream");
@@ -1096,7 +1097,8 @@ int Regs::PlayStream::DCP::write_79_start_play_stream_url(const uint8_t *data, s
     if(copy_string_data(url, data, length, register_description))
     {
         dump_plain_url(url, register_description);
-        dcpregs_streaming_registers->start_first_stream(std::move(url));
+        dcpregs_streaming_registers->start_first_stream(std::move(url),
+                                                        "URL written to register 79");
     }
     else
         dcpregs_streaming_registers->stop_playing("empty URL written to reg 79");

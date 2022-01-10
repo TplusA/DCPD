@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2019, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -46,9 +46,9 @@ class MockStreamplayerDBus
     void expect_tdbus_splay_urlfifo_call_next_sync(gboolean retval, tdbussplayURLFIFO *object);
     void expect_tdbus_splay_urlfifo_call_push_sync(gboolean retval, tdbussplayURLFIFO *object, guint16 arg_stream_id, const gchar *arg_stream_url, const MD5::Hash &arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean expected_out_fifo_overflow, gboolean expected_out_is_playing);
 
-    void expect_tdbus_splay_playback_call_start_sync(gboolean retval, tdbussplayPlayback *object);
+    void expect_tdbus_splay_playback_call_start_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason);
     void expect_tdbus_splay_playback_call_stop_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason);
-    void expect_tdbus_splay_playback_call_pause_sync(gboolean retval, tdbussplayPlayback *object);
+    void expect_tdbus_splay_playback_call_pause_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason);
     void expect_tdbus_splay_playback_call_seek_sync(gboolean retval, tdbussplayPlayback *object, gint64 arg_position, const gchar *arg_position_units);
 };
 

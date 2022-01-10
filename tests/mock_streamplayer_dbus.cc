@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2019, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -260,9 +260,9 @@ void MockStreamplayerDBus::expect_tdbus_splay_urlfifo_call_push_sync(gboolean re
     expectations_->add(Expectation(retval, object, arg_stream_id, arg_stream_url, arg_stream_key, arg_start_position, arg_start_units, arg_stop_position, arg_stop_units, arg_keep_first_n_entries, arg_meta_data, expected_out_fifo_overflow, expected_out_is_playing));
 }
 
-void MockStreamplayerDBus::expect_tdbus_splay_playback_call_start_sync(gboolean retval, tdbussplayPlayback *object)
+void MockStreamplayerDBus::expect_tdbus_splay_playback_call_start_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason)
 {
-    expectations_->add(Expectation(StreamplayerFn::playback_call_start, retval, object));
+    expectations_->add(Expectation(StreamplayerFn::playback_call_start, retval, object, arg_reason));
 }
 
 void MockStreamplayerDBus::expect_tdbus_splay_playback_call_stop_sync(gboolean retval, tdbussplayPlayback *object, const char *arg_reason)
@@ -270,9 +270,9 @@ void MockStreamplayerDBus::expect_tdbus_splay_playback_call_stop_sync(gboolean r
     expectations_->add(Expectation(StreamplayerFn::playback_call_stop, retval, object, arg_reason));
 }
 
-void MockStreamplayerDBus::expect_tdbus_splay_playback_call_pause_sync(gboolean retval, tdbussplayPlayback *object)
+void MockStreamplayerDBus::expect_tdbus_splay_playback_call_pause_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason)
 {
-    expectations_->add(Expectation(StreamplayerFn::playback_call_pause, retval, object));
+    expectations_->add(Expectation(StreamplayerFn::playback_call_pause, retval, object, arg_reason));
 }
 
 void MockStreamplayerDBus::expect_tdbus_splay_playback_call_seek_sync(gboolean retval, tdbussplayPlayback *object, gint64 arg_position, const gchar *arg_position_units)
@@ -366,12 +366,15 @@ gboolean tdbus_splay_urlfifo_call_push_sync(tdbussplayURLFIFO *proxy, guint16 ar
     return expect.d.ret_bool_;
 }
 
-gboolean tdbus_splay_playback_call_start_sync(tdbussplayPlayback *proxy, GCancellable *cancellable, GError **error)
+gboolean tdbus_splay_playback_call_start_sync(tdbussplayPlayback *proxy, const gchar *arg_reason, GCancellable *cancellable, GError **error)
 {
     const auto &expect(mock_streamplayer_dbus_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, StreamplayerFn::playback_call_start);
     cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
+    cppcut_assert_not_null(arg_reason);
+    cut_assert_false(expect.d.arg_string_.empty());
+    cppcut_assert_equal(expect.d.arg_string_.c_str(), arg_reason);
 
     if(error != NULL)
         *error = NULL;
@@ -395,12 +398,15 @@ gboolean tdbus_splay_playback_call_stop_sync(tdbussplayPlayback *proxy, const gc
     return expect.d.ret_bool_;
 }
 
-gboolean tdbus_splay_playback_call_pause_sync(tdbussplayPlayback *proxy, GCancellable *cancellable, GError **error)
+gboolean tdbus_splay_playback_call_pause_sync(tdbussplayPlayback *proxy, const gchar *arg_reason, GCancellable *cancellable, GError **error)
 {
     const auto &expect(mock_streamplayer_dbus_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, StreamplayerFn::playback_call_pause);
     cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
+    cppcut_assert_not_null(arg_reason);
+    cut_assert_false(expect.d.arg_string_.empty());
+    cppcut_assert_equal(expect.d.arg_string_.c_str(), arg_reason);
 
     if(error != NULL)
         *error = NULL;

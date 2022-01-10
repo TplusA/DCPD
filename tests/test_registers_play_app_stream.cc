@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -439,7 +439,7 @@ static void set_start_playing_expectations(const std::string expected_artist,
         mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(
             dbus_streamplayer_playback_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(
-            TRUE, dbus_streamplayer_playback_iface_dummy);
+            TRUE, dbus_streamplayer_playback_iface_dummy, "URL written to register 79");
     }
 
     if(expecting_play_view_activation)
@@ -576,7 +576,8 @@ static void set_next_url(const std::string title, const std::string url,
             if(flow_assumptions != SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED)
             {
                 mock_dbus_iface->expect_dbus_get_streamplayer_playback_iface(dbus_streamplayer_playback_iface_dummy);
-                mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(TRUE, dbus_streamplayer_playback_iface_dummy);
+                mock_streamplayer_dbus->expect_tdbus_splay_playback_call_start_sync(
+                    TRUE, dbus_streamplayer_playback_iface_dummy, "URL written to register 79");
             }
 
             if(!app_is_too_fast)
