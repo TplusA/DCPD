@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -133,10 +133,11 @@ bool Drcp::read_size_from_fd(int in_fd, size_t &expected_size,
 
         if(expecting_size_value)
         {
-            const auto &eol(std::find(&buffer[token_start_pos],
-                                      &buffer[buffer_pos], '\n'));
+            auto *end_of_buffer = buffer.data() + buffer_pos;
+            const auto &eol(std::find(buffer.data() + token_start_pos,
+                                      end_of_buffer, '\n'));
 
-            if(eol < &buffer[buffer_pos])
+            if(eol < end_of_buffer)
             {
                 number_string = &buffer[token_start_pos];
                 *eol = '\0';
