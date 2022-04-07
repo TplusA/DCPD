@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -578,8 +578,8 @@ ssize_t Regs::TCPTunnel::DCP::read_120_tcp_tunnel_read(uint8_t *response, size_t
         if(len < 0)
         {
             msg_error(errno, LOG_ERR,
-                      "Reading data from peer %u failed, closing connection",
-                      register_status.get_peer_id().get_raw_id());
+                      "Reading data from peer %u failed, closing connection (fd %d)",
+                      register_status.get_peer_id().get_raw_id(), peer_fd);
             tunnel->close_and_forget_peer(register_status.get_peer_id());
             register_status.reset();
             return -1;
@@ -595,9 +595,9 @@ ssize_t Regs::TCPTunnel::DCP::read_120_tcp_tunnel_read(uint8_t *response, size_t
 
     if(len == 0)
     {
-        msg_info("Peer %u on port %u has no more data, closing connection",
+        msg_info("Peer %u on port %u has no more data, closing connection (fd %d)",
                  register_status.get_peer_id().get_raw_id(),
-                 register_status.get_tunnel_port());
+                 register_status.get_tunnel_port(), peer_fd);
         tunnel->close_and_forget_peer(register_status.get_peer_id());
     }
 
