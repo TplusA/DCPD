@@ -1,3 +1,13 @@
+2022-04-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.7 released.
+
+	* Playback: Send stream start reason to streamplayer.
+
+	* Tunnel: Improve logs.
+
+	* DRCP: Fix undefined behavior bug.
+
 2021-10-15  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.6 released.
