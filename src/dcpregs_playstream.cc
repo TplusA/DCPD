@@ -753,6 +753,13 @@ class StreamingRegisters:
         do_notify_stream_info(update);
     }
 
+    void drop_notification(ID::Stream stream_id) final override
+    {
+        const auto app_stream_id =
+            Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
+        BUG_IF(app_stream_id.get().is_valid(), "Player dropped an app stream (not implemented)");
+    }
+
     void cover_art_notification(void *stream_key_variant) final override
     {
         LOGGED_LOCK_CONTEXT_HINT;

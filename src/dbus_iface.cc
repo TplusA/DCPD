@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -748,6 +748,10 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
 
     g_signal_connect(streamplayer_iface_data.playback_iface, "g-signal",
                      G_CALLBACK(dbussignal_splay_playback),
+                     dcpd_iface_data.streaming_regs);
+
+    g_signal_connect(streamplayer_iface_data.urlfifo_iface, "g-signal",
+                     G_CALLBACK(dbussignal_splay_urlfifo),
                      dcpd_iface_data.streaming_regs);
 
     g_signal_connect(roonplayer_iface_data.playback_iface, "g-signal",

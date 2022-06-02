@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -240,6 +240,26 @@ void dbussignal_splay_playback(GDBusProxy *proxy, const gchar *sender_name,
             strcmp(signal_name, "PauseState") == 0)
     {
         /* ignore */
+    }
+    else
+        unknown_signal(iface_name, signal_name, sender_name);
+}
+
+void dbussignal_splay_urlfifo(GDBusProxy *proxy, const gchar *sender_name,
+                              const gchar *signal_name, GVariant *parameters,
+                              gpointer user_data)
+{
+    static const char iface_name[] = "de.tahifi.Streamplayer.URLFIFO";
+
+    if(strcmp(signal_name, "Dropped") == 0)
+    {
+        check_parameter_assertions(parameters, 2);
+
+        guint16 raw_stream_id;
+        g_variant_get(parameters, "(q&s)", &raw_stream_id, nullptr);
+
+        auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+        regs.drop_notification(ID::Stream::make_from_raw_id(raw_stream_id));
     }
     else
         unknown_signal(iface_name, signal_name, sender_name);
