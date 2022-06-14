@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -760,6 +760,7 @@ void Regs::deinit()
     Regs::FileTransfer::deinit();
     Regs::AudioSources::deinit();
     Regs::UPnPName::deinit();
+    Regs::TCPTunnel::deinit();
     memset(&registers_private_data, 0, sizeof(registers_private_data));
 }
 

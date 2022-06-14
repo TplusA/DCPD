@@ -239,6 +239,11 @@ class AllTunnels
 
         return true;
     }
+
+    void shutdown()
+    {
+        tunnels_.clear();
+    }
 };
 
 class RegisterStatus
@@ -406,6 +411,11 @@ static bool send_to_peer(const TcpTunnel &tunnel, PeerID peer_id, int peer_fd,
 }
 
 static AllTunnels all_tunnels;
+
+void Regs::TCPTunnel::deinit()
+{
+    all_tunnels.shutdown();
+}
 
 static int tunnel_error(const char *what, uint16_t port, const char *why)
 {

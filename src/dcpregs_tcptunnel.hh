@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -74,6 +74,13 @@ ssize_t read_120_tcp_tunnel_read(uint8_t *response, size_t length);
  */
 int write_121_tcp_tunnel_write(const uint8_t *data, size_t length);
 }
+
+/*!
+ * Explicitly free all resources to avoid crash due to dependency on static
+ * network dispatcher singleton and undefined order of ctor/dtor invocations of
+ * statically allocated objects.
+ */
+void deinit();
 
 }
 
