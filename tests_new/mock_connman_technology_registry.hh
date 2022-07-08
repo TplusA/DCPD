@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -63,13 +63,23 @@ namespace Wifi
 /*! Base class for expectations. */
 class Expectation
 {
+  private:
+    std::string name_;
+    unsigned int sequence_serial_;
+
   public:
     Expectation(const Expectation &) = delete;
     Expectation(Expectation &&) = default;
     Expectation &operator=(const Expectation &) = delete;
     Expectation &operator=(Expectation &&) = default;
-    Expectation() {}
+    Expectation(std::string &&name):
+        name_(std::move(name)),
+        sequence_serial_(std::numeric_limits<unsigned int>::max())
+    {}
     virtual ~Expectation() {}
+    const std::string &get_name() const { return name_; }
+    void set_sequence_serial(unsigned int ss) { sequence_serial_ = ss; }
+    unsigned int get_sequence_serial() const { return sequence_serial_; }
 };
 
 class Mock
@@ -148,6 +158,7 @@ class SendPropertyOverDBus: public Expectation
 
   public:
     explicit SendPropertyOverDBus(Connman::TechnologyPropertiesWIFI::Property property, T &&value):
+        Expectation("SendPropertyOverDBus"),
         property_(property),
         value_(std::move(value))
     {}
@@ -169,6 +180,7 @@ class SetDBusObjectPath: public Expectation
 
   public:
     explicit SetDBusObjectPath(std::string &&path, struct _tdbusconnmanTechnology *proxy):
+        Expectation("SetDBusObjectPath"),
         path_(path),
         proxy_(proxy)
     {}
@@ -190,6 +202,7 @@ class EnsureDBusProxy: public Expectation
 
   public:
     explicit EnsureDBusProxy(bool retval, struct _tdbusconnmanTechnology *proxy):
+        Expectation("EnsureDBusProxy"),
         retval_(retval),
         proxy_(proxy)
     {}
