@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -30,7 +30,11 @@
 #include "dcpregs_status.hh"
 #include "rest_api.hh"
 
+#define MOCK_EXPECTATION_WITH_EXPECTATION_SEQUENCE_SINGLETON
 #include "mock_messages.hh"
+
+std::shared_ptr<MockExpectationSequence> mock_expectation_sequence_singleton =
+    std::make_shared<MockExpectationSequence>();
 
 static bool expect_update_request_accepted;
 static bool called_update_request_accepted;
@@ -63,6 +67,7 @@ class FixtureParser
     explicit FixtureParser():
         mock_messages(std::make_unique<MockMessages::Mock>())
     {
+        mock_expectation_sequence_singleton->reset();
         expect_update_request_accepted = false;
         called_update_request_accepted = false;
         expect_update_request_rejected = false;
@@ -78,6 +83,7 @@ class FixtureParser
     {
         try
         {
+            mock_expectation_sequence_singleton->done();
             mock_messages->done();
             CHECK(expect_update_request_accepted == called_update_request_accepted);
             CHECK(expect_update_request_rejected == called_update_request_rejected);
@@ -640,6 +646,7 @@ class FixtureProcess
     explicit FixtureProcess():
         mock_messages(std::make_unique<MockMessages::Mock>())
     {
+        mock_expectation_sequence_singleton->reset();
         expect_update_request_accepted = false;
         called_update_request_accepted = false;
         expect_update_request_rejected = false;
@@ -655,6 +662,7 @@ class FixtureProcess
     {
         try
         {
+            mock_expectation_sequence_singleton->done();
             mock_messages->done();
             CHECK(expect_update_request_accepted == called_update_request_accepted);
             CHECK(expect_update_request_rejected == called_update_request_rejected);

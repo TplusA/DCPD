@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,6 +28,7 @@
 #include "plainplayer.hh"
 #include "logged_lock.hh"
 
+#define MOCK_EXPECTATION_WITH_EXPECTATION_SEQUENCE_SINGLETON
 #include "mock_messages.hh"
 #include "mock_backtrace.hh"
 
@@ -36,6 +37,9 @@ thread_local LoggedLock::Context LoggedLock::context;
 #endif
 
 #if !LOGGED_LOCKS_ENABLED
+
+std::shared_ptr<MockExpectationSequence> mock_expectation_sequence_singleton =
+    std::make_shared<MockExpectationSequence>();
 
 TEST_SUITE_BEGIN("Plain URL player");
 
@@ -55,6 +59,7 @@ class Fixture
         mock_messages(std::make_unique<MockMessages::Mock>()),
         mock_backtrace(std::make_unique<MockBacktrace::Mock>())
     {
+        mock_expectation_sequence_singleton->reset();
         MockMessages::singleton = mock_messages.get();
         MockBacktrace::singleton = mock_backtrace.get();
     }
@@ -63,6 +68,7 @@ class Fixture
     {
         try
         {
+            mock_expectation_sequence_singleton->done();
             mock_messages->done();
             mock_backtrace->done();
         }

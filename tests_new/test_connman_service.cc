@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -27,10 +27,14 @@
 
 #include "connman_service.hh"
 
+#define MOCK_EXPECTATION_WITH_EXPECTATION_SEQUENCE_SINGLETON
 #include "mock_messages.hh"
 #include "mock_os.hh"
 
 #include <iostream>
+
+std::shared_ptr<MockExpectationSequence> mock_expectation_sequence_singleton =
+    std::make_shared<MockExpectationSequence>();
 
 TEST_SUITE_BEGIN("Parsing ConnMan service names");
 
@@ -118,6 +122,7 @@ class ConnmanMACAddressTestsFixture
         mock_messages(std::make_unique<MockMessages::Mock>()),
         mock_os(std::make_unique<MockOS::Mock>())
     {
+        mock_expectation_sequence_singleton->reset();
         MockMessages::singleton = mock_messages.get();
         MockOS::singleton = mock_os.get();
     }
@@ -126,6 +131,7 @@ class ConnmanMACAddressTestsFixture
     {
         try
         {
+            mock_expectation_sequence_singleton->done();
             mock_messages->done();
             mock_os->done();
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,11 +28,15 @@
 #include "accesspoint_manager.hh"
 #include "mainloop.hh"
 
+#define MOCK_EXPECTATION_WITH_EXPECTATION_SEQUENCE_SINGLETON
 #include "mock_connman_technology_registry.hh"
 #include "mock_backtrace.hh"
 #include "mock_messages.hh"
 
 #if !LOGGED_LOCKS_ENABLED
+
+std::shared_ptr<MockExpectationSequence> mock_expectation_sequence_singleton =
+    std::make_shared<MockExpectationSequence>();
 
 TEST_SUITE_BEGIN("Access point mode management");
 
@@ -114,6 +118,7 @@ class AccessPointModeTestsBasicFixture
         mock_backtrace(std::make_unique<MockBacktrace::Mock>()),
         mock_techreg_wifi(std::make_unique<MockConnmanTechnologyRegistry::Wifi::Mock>(tech_reg))
     {
+        mock_expectation_sequence_singleton->reset();
         queued_work_notified_ = 0;
         MockMessages::singleton = mock_messages.get();
         MockBacktrace::singleton = mock_backtrace.get();
@@ -129,6 +134,7 @@ class AccessPointModeTestsBasicFixture
 
         try
         {
+            mock_expectation_sequence_singleton->done();
             mock_messages->done();
             mock_backtrace->done();
             mock_techreg_wifi->done();
@@ -193,9 +199,9 @@ class AccessPointManagerAPDisabledFixture: public AccessPointModeTestsBasicFixtu
         sd.wifi_tech_proxy = reinterpret_cast<struct _tdbusconnmanTechnology *>(0xb3019ac7);
         sd.wifi_is_powered = true;
         sd.wifi_is_connected = true;
+        tech_reg.connect_to_connman(&sd);
         mock_messages->expect(
             std::make_unique<MockMessages::MsgInfo>("Access point status UNKNOWN -> DISABLED", false));
-        tech_reg.connect_to_connman(&sd);
         apman.start();
         process_queued_work(7);
         mock_messages->done();
@@ -564,6 +570,8 @@ TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
     mock_techreg_wifi->ignore(
         std::make_unique<MockConnmanTechnologyRegistry::Wifi::EnsureDBusProxy>(true, sd.wifi_tech_proxy));
 
+    mock_messages->expect(
+        std::make_unique<MockMessages::MsgInfo>("Access point status DISABLED -> ACTIVATING", false));
     mock_techreg_wifi->expect(
         std::make_unique<MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<std::string>>(
                 Connman::TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER,
@@ -576,8 +584,6 @@ TEST_CASE_FIXTURE(AccessPointManagerAPDisabledFixture,
         std::make_unique<MockConnmanTechnologyRegistry::Wifi::SendPropertyOverDBus<bool>>(
                 Connman::TechnologyPropertiesWIFI::Property::TETHERING, true));
 
-    mock_messages->expect(
-        std::make_unique<MockMessages::MsgInfo>("Access point status DISABLED -> ACTIVATING", false));
     CHECK(int(apman.get_status()) == int(Network::AccessPoint::Status::DISABLED));
     CHECK(apman.activate("MyNet", "12345678"));
 
