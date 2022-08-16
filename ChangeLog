@@ -1,3 +1,15 @@
+2022-08-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.8 released.
+
+	* Stability: Avoid segfault on shutdown.
+
+	* D-Bus: Log de.tahifi.Streamplayer.URLFIFO.Dropped signals so that we
+	  can see if and when streamplayer rejects a stream before playing it.
+
+	* Unit tests: Use mock expectation sequences for better error
+	  messages.
+
 2022-04-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.7 released.
