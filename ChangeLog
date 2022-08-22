@@ -1,3 +1,11 @@
+2022-09-15  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.9 released.
+
+	* Stability: Fix uninitialized memory access.
+
+	* Misc: Fix a few compiler warnings. Extend test scripts.
+
 2022-08-16  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.8 released.
