@@ -1,2 +1,2 @@
 #! /bin/sh
-exec $(dirname $0)/send_drcp_command.sh -- w 0x27
+exec $(dirname $0)/send_drcp_command.sh $1 -- w 0x27
