@@ -278,6 +278,13 @@ bool Player::next(Regs::PlayStream::StreamInfo &&stream)
 {
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
+    /*
+     * TODO: We should filter next requests based on the URL and the register
+     *       by which the URL was passed. In case of 238, we need to ignore
+     *       duplicate URLs and avoid incrementing stream IDs. Instead, a
+     *       prominent BUG log message should be emitted which states that the
+     *       app is buggy because it sends the same information multiple times.
+     */
     switch(state_)
     {
       case State::DESELECTED:
