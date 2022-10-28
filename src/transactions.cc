@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018--2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018--2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -369,12 +369,12 @@ static ReadToBufferResult read_to_buffer(uint8_t *dest, size_t count,
 
         if(len < 0)
         {
-            if(errno == EAGAIN && retry_counter < 40)
+            if(errno == EAGAIN && retry_counter < 400)
             {
                 ++retry_counter;
 
-                /* we retry reading up to 40 times with a delay of 25 ms in
-                 * between, so that's at least one second, but not much more */
+                /* we retry reading up to 400 times with a delay of 25 ms in
+                 * between, so that's at least ten seconds */
                 static const struct timespec t = {0, 25L * 1000L * 1000L};
                 os_nanosleep(&t);
 
