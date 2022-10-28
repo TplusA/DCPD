@@ -1,3 +1,9 @@
+2022-09-28  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.10 released.
+
+	* SPI: Increase timeout for dcpspi communication.
+
 2022-09-15  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.9 released.
