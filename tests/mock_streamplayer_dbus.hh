@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2021--2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -44,7 +44,7 @@ class MockStreamplayerDBus
 
     void expect_tdbus_splay_urlfifo_call_clear_sync(gboolean retval, tdbussplayURLFIFO *object, gint16 arg_keep_first_n_entries, guint expected_out_playing_id = UINT32_MAX, const uint16_t *expected_out_queued_ids = nullptr, size_t expected_out_queued_ids_size = 0, const uint16_t *expected_out_removed_ids = nullptr, size_t expected_out_removed_ids_size = 0);
     void expect_tdbus_splay_urlfifo_call_next_sync(gboolean retval, tdbussplayURLFIFO *object);
-    void expect_tdbus_splay_urlfifo_call_push_sync(gboolean retval, tdbussplayURLFIFO *object, guint16 arg_stream_id, const gchar *arg_stream_url, const MD5::Hash &arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean expected_out_fifo_overflow, gboolean expected_out_is_playing);
+    void expect_tdbus_splay_urlfifo_call_push_sync(gboolean retval, tdbussplayURLFIFO *object, guint16 arg_stream_id, GVariant *arg_stream_urls, const MD5::Hash &arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean expected_out_fifo_overflow, gboolean expected_out_is_playing, const uint16_t *expected_out_dropped_ids_before, size_t expected_out_dropped_ids_before_size, const uint16_t *expected_out_dropped_ids_now, size_t expected_out_dropped_ids_now_size);
 
     void expect_tdbus_splay_playback_call_start_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason);
     void expect_tdbus_splay_playback_call_stop_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason);

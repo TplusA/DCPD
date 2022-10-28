@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2021--2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -45,6 +45,27 @@ enum class StreamplayerFn
     first_valid_streamplayer_fn_id = urlfifo_call_clear,
     last_valid_streamplayer_fn_id = playback_call_seek,
 };
+
+static void uint16_array_to_vector(const uint16_t *arr, size_t arr_size,
+                                   std::vector<stream_id_t> &dest)
+{
+    if(arr != nullptr && arr_size > 0)
+        std::copy(arr, arr + arr_size, std::back_inserter(dest));
+}
+
+static GVariant *
+uint16_array_gvariant_from_vector(const std::vector<stream_id_t> &vec)
+{
+    GVariant *ret;
+
+    if(vec.empty())
+        ret = g_variant_new_fixed_array(G_VARIANT_TYPE_UINT16,
+                                        nullptr, 0, sizeof(uint16_t));
+    else
+        ret = g_variant_new_fixed_array(G_VARIANT_TYPE_UINT16,
+                                        vec.data(), vec.size(), sizeof(uint16_t));
+    return g_variant_take_ref(ret);
+}
 
 static std::ostream &operator<<(std::ostream &os, const StreamplayerFn id)
 {
@@ -104,6 +125,8 @@ class MockStreamplayerDBus::Expectation
         ID::Stream ret_playing_id_;
         std::vector<stream_id_t> ret_queued_ids_;
         std::vector<stream_id_t> ret_removed_ids_;
+        std::vector<stream_id_t> ret_dropped_before_ids_;
+        std::vector<stream_id_t> ret_dropped_now_ids_;
 
         void *arg_object_;
         ID::Stream arg_stream_id_;
@@ -115,6 +138,7 @@ class MockStreamplayerDBus::Expectation
         int64_t arg_stop_pos_;
         const char *arg_stop_pos_units_;
         int16_t arg_keep_first_n_;
+        GVariantWrapper arg_stream_urls_;
         GVariantWrapper arg_meta_data_;
 
         explicit Data(StreamplayerFn fn):
@@ -177,31 +201,30 @@ class MockStreamplayerDBus::Expectation
         data_.arg_keep_first_n_ = arg_keep_first_n_entries;
         data_.ret_playing_id_ = ID::Stream::make_from_raw_id(expected_out_playing_id);
 
-        if(expected_out_queued_ids != nullptr && expected_out_queued_ids_size > 0)
-            std::copy(expected_out_queued_ids,
-                      expected_out_queued_ids + expected_out_queued_ids_size,
-                      std::back_inserter(data_.ret_queued_ids_));
-
-        if(expected_out_removed_ids != nullptr && expected_out_removed_ids_size > 0)
-            std::copy(expected_out_removed_ids,
-                      expected_out_removed_ids + expected_out_removed_ids_size,
-                      std::back_inserter(data_.ret_removed_ids_));
+        uint16_array_to_vector(expected_out_queued_ids, expected_out_queued_ids_size,
+                               data_.ret_queued_ids_);
+        uint16_array_to_vector(expected_out_removed_ids, expected_out_removed_ids_size,
+                               data_.ret_removed_ids_);
     }
 
     explicit Expectation(gboolean retval, tdbussplayURLFIFO *object,
-                         guint16 arg_stream_id, const gchar *arg_stream_url,
+                         guint16 arg_stream_id, GVariant *arg_stream_urls,
                          const MD5::Hash &stream_key,
                          gint64 arg_start_position, const gchar *arg_start_units,
                          gint64 arg_stop_position, const gchar *arg_stop_units,
                          gint16 arg_keep_first_n_entries, GVariant *arg_meta_data,
                          gboolean expected_out_fifo_overflow,
-                         gboolean expected_out_is_playing):
+                         gboolean expected_out_is_playing,
+                         const uint16_t *expected_out_dropped_ids_before,
+                         size_t expected_out_dropped_ids_before_size,
+                         const uint16_t *expected_out_dropped_ids_now,
+                         size_t expected_out_dropped_ids_now_size):
         Expectation(StreamplayerFn::urlfifo_call_push, retval, object)
     {
         data_.arg_stream_id_ = ID::Stream::make_from_raw_id(arg_stream_id);
         data_.arg_stream_key_ = stream_key;
         data_.is_arg_stream_key_set_ = true;
-        data_.arg_string_ = arg_stream_url;
+        data_.arg_stream_urls_ = GVariantWrapper(arg_stream_urls);
         data_.arg_start_pos_ = arg_start_position;
         data_.arg_start_pos_units_ = arg_start_units;
         data_.arg_stop_pos_ = arg_stop_position;
@@ -210,6 +233,12 @@ class MockStreamplayerDBus::Expectation
         data_.arg_meta_data_ = GVariantWrapper(arg_meta_data);
         data_.ret_overflow_ = expected_out_fifo_overflow;
         data_.ret_is_playing_ = expected_out_is_playing;
+        uint16_array_to_vector(expected_out_dropped_ids_before,
+                               expected_out_dropped_ids_before_size,
+                               data_.ret_dropped_before_ids_);
+        uint16_array_to_vector(expected_out_dropped_ids_now,
+                               expected_out_dropped_ids_now_size,
+                               data_.ret_dropped_now_ids_);
     }
 
     explicit Expectation(gboolean retval, tdbussplayPlayback *object,
@@ -255,9 +284,9 @@ void MockStreamplayerDBus::expect_tdbus_splay_urlfifo_call_next_sync(gboolean re
     expectations_->add(Expectation(StreamplayerFn::urlfifo_call_next, retval, object));
 }
 
-void MockStreamplayerDBus::expect_tdbus_splay_urlfifo_call_push_sync(gboolean retval, tdbussplayURLFIFO *object, guint16 arg_stream_id, const gchar *arg_stream_url, const MD5::Hash &arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean expected_out_fifo_overflow, gboolean expected_out_is_playing)
+void MockStreamplayerDBus::expect_tdbus_splay_urlfifo_call_push_sync(gboolean retval, tdbussplayURLFIFO *object, guint16 arg_stream_id, GVariant *arg_stream_urls, const MD5::Hash &arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean expected_out_fifo_overflow, gboolean expected_out_is_playing, const uint16_t *expected_out_dropped_ids_before, size_t expected_out_dropped_ids_before_size, const uint16_t *expected_out_dropped_ids_now, size_t expected_out_dropped_ids_now_size)
 {
-    expectations_->add(Expectation(retval, object, arg_stream_id, arg_stream_url, arg_stream_key, arg_start_position, arg_start_units, arg_stop_position, arg_stop_units, arg_keep_first_n_entries, arg_meta_data, expected_out_fifo_overflow, expected_out_is_playing));
+    expectations_->add(Expectation(retval, object, arg_stream_id, arg_stream_urls, arg_stream_key, arg_start_position, arg_start_units, arg_stop_position, arg_stop_units, arg_keep_first_n_entries, arg_meta_data, expected_out_fifo_overflow, expected_out_is_playing, expected_out_dropped_ids_before, expected_out_dropped_ids_before_size, expected_out_dropped_ids_now, expected_out_dropped_ids_now_size));
 }
 
 void MockStreamplayerDBus::expect_tdbus_splay_playback_call_start_sync(gboolean retval, tdbussplayPlayback *object, const gchar *arg_reason)
@@ -295,10 +324,16 @@ gboolean tdbus_splay_urlfifo_call_clear_sync(tdbussplayURLFIFO *proxy, gint16 ar
         *out_playing_id = expect.d.ret_playing_id_.get_raw_id();
 
     if(out_queued_ids != NULL)
-        cut_fail("returning queued IDs as GVariant not implemented yet");
+        *out_queued_ids =
+            uint16_array_gvariant_from_vector(expect.d.ret_queued_ids_);
+    else
+        cut_assert_true(expect.d.ret_queued_ids_.empty());
 
     if(out_removed_ids != NULL)
-        cut_fail("returning removed IDs as GVariant not implemented yet");
+        *out_removed_ids =
+            uint16_array_gvariant_from_vector(expect.d.ret_removed_ids_);
+    else
+        cut_assert_true(expect.d.ret_removed_ids_.empty());
 
     if(error != NULL)
         *error = NULL;
@@ -319,20 +354,37 @@ gboolean tdbus_splay_urlfifo_call_next_sync(tdbussplayURLFIFO *proxy, GCancellab
     return expect.d.ret_bool_;
 }
 
-gboolean tdbus_splay_urlfifo_call_push_sync(tdbussplayURLFIFO *proxy, guint16 arg_stream_id, const gchar *arg_stream_url, GVariant *arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean *out_fifo_overflow, gboolean *out_is_playing, GCancellable *cancellable, GError **error)
+gboolean tdbus_splay_urlfifo_call_push_sync(tdbussplayURLFIFO *proxy, guint16 arg_stream_id, GVariant *arg_stream_urls, GVariant *arg_stream_key, gint64 arg_start_position, const gchar *arg_start_units, gint64 arg_stop_position, const gchar *arg_stop_units, gint16 arg_keep_first_n_entries, GVariant *arg_meta_data, gboolean *out_fifo_overflow, gboolean *out_is_playing, GVariant **out_dropped_ids_before, GVariant **out_dropped_ids_now, GCancellable *cancellable, GError **error)
 {
     const auto &expect(mock_streamplayer_dbus_singleton->expectations_->get_next_expectation(__func__));
 
     cppcut_assert_equal(expect.d.function_id_, StreamplayerFn::urlfifo_call_push);
     cppcut_assert_equal(expect.d.arg_object_, static_cast<void *>(proxy));
     cppcut_assert_equal(expect.d.arg_stream_id_, ID::Stream::make_from_raw_id(arg_stream_id));
-    cppcut_assert_equal(expect.d.arg_string_.c_str(), arg_stream_url);
     cppcut_assert_equal(expect.d.arg_start_pos_, arg_start_position);
     cppcut_assert_equal(expect.d.arg_start_pos_units_, arg_start_units);
     cppcut_assert_equal(expect.d.arg_stop_pos_, arg_start_position);
     cppcut_assert_equal(expect.d.arg_stop_pos_units_, arg_stop_units);
     cppcut_assert_equal(expect.d.arg_keep_first_n_, arg_keep_first_n_entries);
     cut_assert(expect.d.arg_meta_data_ != nullptr);
+
+    if(out_dropped_ids_before != NULL)
+        *out_dropped_ids_before =
+            uint16_array_gvariant_from_vector(expect.d.ret_dropped_before_ids_);
+    else
+        cut_assert_true(expect.d.ret_dropped_before_ids_.empty());
+
+    if(out_dropped_ids_now != NULL)
+        *out_dropped_ids_now =
+            uint16_array_gvariant_from_vector(expect.d.ret_dropped_now_ids_);
+    else
+        cut_assert_true(expect.d.ret_dropped_now_ids_.empty());
+
+    /* URLs must be the same */
+    cut_assert(arg_stream_urls != nullptr);
+    cut_assert(g_variant_equal(GVariantWrapper::get(expect.d.arg_stream_urls_),
+                               arg_stream_urls));
+    g_variant_unref(arg_stream_urls);
 
     /* stream key must be the same */
     gsize stream_key_len;

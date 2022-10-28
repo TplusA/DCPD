@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -1035,7 +1035,9 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
             /* ignore silently, not interesting at the moment */
         }
     }
-    else if(strcmp(signal_name, "ExternalOAuthLoginRequested") == 0)
+    else if(strcmp(signal_name, "ExternalOAuthLoginRequested") == 0 ||
+            strcmp(signal_name, "DataAvailable") == 0 ||
+            strcmp(signal_name, "DataError") == 0)
     {
         /* ignore */
     }

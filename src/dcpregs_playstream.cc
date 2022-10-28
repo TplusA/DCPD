@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -529,9 +529,9 @@ class StreamingRegisters:
             (const auto &stream_info, auto stream_id,
              bool is_first, bool is_start_requested)
             {
-                return do_push_and_start_stream(stream_info, stream_id,
-                                                is_first, is_start_requested,
-                                                reason);
+                return this->do_push_and_start_stream(stream_info, stream_id,
+                                                      is_first, is_start_requested,
+                                                      reason);
             });
         play_request_input_buffer_.set_unknown();
     }
@@ -757,7 +757,9 @@ class StreamingRegisters:
     {
         const auto app_stream_id =
             Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
-        MSG_BUG_IF(app_stream_id.get().is_valid(), "Player dropped an app stream (not implemented)");
+        MSG_BUG_IF(app_stream_id.get().is_valid(),
+                   "Player dropped app stream %u (not implemented)",
+                   app_stream_id.get().get_raw_id());
     }
 
     void cover_art_notification(void *stream_key_variant) final override
@@ -787,10 +789,21 @@ class StreamingRegisters:
     }
 
   private:
+    void handle_dropped(GVariantWrapper &&ids)
+    {
+        GVariantIter it;
+        if(g_variant_iter_init(&it, GVariantWrapper::get(ids)) == 0)
+            return;
+
+        uint16_t id;
+        while(g_variant_iter_next(&it, "q", &id))
+            drop_notification(ID::Stream::make_from_raw_id(id));
+    }
+
     /*!
      * Push first or next stream to streamplayer, emit meta data, start if necessary
      */
-    static bool do_push_and_start_stream(
+    bool do_push_and_start_stream(
             const Regs::PlayStream::StreamInfo &stream_info,
             Regs::PlayStream::PlainPlayer::StreamID stream_id,
             bool is_first, bool is_start_requested, const char *reason)
@@ -798,13 +811,23 @@ class StreamingRegisters:
         CoverArt::StreamKey stream_key;
         CoverArt::generate_stream_key_for_app(stream_key, stream_info.url_);
 
+        GVariantWrapper urls;
+        {
+            GVariantBuilder builder;
+            g_variant_builder_init(&builder, G_VARIANT_TYPE("a(sb)"));
+            g_variant_builder_add(&builder, "(sb)", stream_info.url_.c_str(), FALSE);
+            urls = GVariantWrapper(g_variant_builder_end(&builder));
+        }
+
         gboolean fifo_overflow;
         gboolean is_playing;
+        GVariant *raw_dropped_ids_before;
+        GVariant *raw_dropped_ids_now;
         GError *error = nullptr;
 
         if(!tdbus_splay_urlfifo_call_push_sync(
                 dbus_get_streamplayer_urlfifo_iface(),
-                stream_id.get().get_raw_id(), stream_info.url_.c_str(),
+                stream_id.get().get_raw_id(), GVariantWrapper::move(urls),
                 g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
                                           stream_key.key_,
                                           sizeof(stream_key.key_),
@@ -813,6 +836,7 @@ class StreamingRegisters:
                 is_first ? -2 : 0,
                 to_gvariant(stream_info),
                 &fifo_overflow, &is_playing,
+                &raw_dropped_ids_before, &raw_dropped_ids_now,
                 nullptr, &error))
         {
             MSG_BUG("Failed pushing stream %u, URL %s to stream player",
@@ -820,6 +844,11 @@ class StreamingRegisters:
             dbus_common_handle_dbus_error(&error, "Push stream to player");
             return false;
         }
+
+        handle_dropped(GVariantWrapper(raw_dropped_ids_before,
+                                       GVariantWrapper::Transfer::JUST_MOVE));
+        handle_dropped(GVariantWrapper(raw_dropped_ids_now,
+                                       GVariantWrapper::Transfer::JUST_MOVE));
 
         if(fifo_overflow)
         {

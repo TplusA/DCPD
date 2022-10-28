@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -336,6 +336,14 @@ static GVariantWrapper hash_to_variant(const MD5::Hash &hash)
                                                      sizeof(hash[0])));
 }
 
+static GVariant *to_url_collection(const std::string &url)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(sb)"));
+    g_variant_builder_add(&builder, "(sb)", url.c_str(), FALSE);
+    return g_variant_builder_end(&builder);
+}
+
 static inline void add_meta_data_item(GVariantBuilder &builder,
                                       const char *key, const std::string &value)
 {
@@ -427,11 +435,11 @@ static void set_start_playing_expectations(const std::string expected_artist,
             dbus_streamplayer_urlfifo_iface_dummy);
         mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
             TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-            stream_id.get().get_raw_id(), url.c_str(), hash,
+            stream_id.get().get_raw_id(), to_url_collection(url), hash,
             0, "ms", 0, "ms", -2,
             to_stream_meta_data(expected_artist, expected_album,
                                 expected_title, expected_alttrack),
-            FALSE, assume_already_playing);
+            FALSE, assume_already_playing, nullptr, 0, nullptr, 0);
 
         expecting_play_view_activation = true;
 
@@ -574,11 +582,12 @@ static void set_next_url(const std::string title, const std::string url,
             mock_dbus_iface->expect_dbus_get_streamplayer_urlfifo_iface(dbus_streamplayer_urlfifo_iface_dummy);
             mock_streamplayer_dbus->expect_tdbus_splay_urlfifo_call_push_sync(
                 TRUE, dbus_streamplayer_urlfifo_iface_dummy,
-                stream_id.get().get_raw_id(), url.c_str(), hash,
+                stream_id.get().get_raw_id(), to_url_collection(url), hash,
                 0, "ms", 0, "ms", 0,
                 to_stream_meta_data("", "", title, title),
                 FALSE,
-                flow_assumptions == SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED);
+                flow_assumptions == SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED,
+                nullptr, 0, nullptr, 0);
 
             if(flow_assumptions != SetTitleAndURLFlowAssumptions::SELECTED__PLAYING__KEEP_SELECTED)
             {
