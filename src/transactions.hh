@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,6 +26,7 @@
 #include "dcpdefs.h"
 #include "registers.hh"
 
+#include <array>
 #include <memory>
 #include <queue>
 #include <functional>

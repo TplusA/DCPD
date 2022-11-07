@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -27,6 +27,7 @@
 
 #include "connman_property_cache.hh"
 
+#include <array>
 #include <iostream>
 
 struct Exceptions

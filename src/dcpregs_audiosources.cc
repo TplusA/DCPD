@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -36,6 +36,7 @@
 #include "messages.h"
 
 #include <string>
+#include <array>
 #include <vector>
 #include <map>
 #include <deque>

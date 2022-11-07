@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -25,6 +25,7 @@
 
 #include "connman_service.hh"
 
+#include <array>
 #include <algorithm>
 
 template <typename ArrayType>
