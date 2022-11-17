@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -299,7 +299,7 @@ class NetworkStatusData
 
     void store_network_status(const uint8_t *status_bytes, size_t length)
     {
-        log_assert(length >= RESPONSE_SIZE);
+        msg_log_assert(length >= RESPONSE_SIZE);
         std::copy(status_bytes, status_bytes + RESPONSE_SIZE,
                   previous_status_bytes_.begin());
     }
@@ -352,7 +352,7 @@ static void update_service_selection(const Connman::ServiceBase *service,
                                      const Connman::ServiceBase *&inactive_match,
                                      const Connman::ServiceBase *&inactive_mismatch)
 {
-    log_assert(active_match == nullptr);
+    msg_log_assert(active_match == nullptr);
 
     if(is_service_online)
     {
@@ -433,7 +433,7 @@ static const Connman::ServiceBase *find_current_service(const Connman::ServiceLi
                                                         const Connman::Technology default_tech,
                                                         const Connman::ServiceBase **fallback)
 {
-    log_assert(default_tech != Connman::Technology::UNKNOWN_TECHNOLOGY);
+    msg_log_assert(default_tech != Connman::Technology::UNKNOWN_TECHNOLOGY);
 
     const Connman::ServiceBase *active_service_match = nullptr;
     const Connman::ServiceBase *active_service_mismatch = nullptr;
@@ -523,7 +523,7 @@ static const Connman::ServiceBase *
 find_best_service_by_technology(const Connman::ServiceList &services,
                                 const Connman::Technology tech)
 {
-    log_assert(tech != Connman::Technology::UNKNOWN_TECHNOLOGY);
+    msg_log_assert(tech != Connman::Technology::UNKNOWN_TECHNOLOGY);
 
     const Connman::ServiceBase *found = nullptr;
     int rank = -1;
@@ -573,7 +573,7 @@ determine_active_network_technology(const Connman::ServiceList &services,
 
         if(s.get_service_data().device_ == nullptr)
         {
-            BUG("Service \"%s\" has no device", it.first.c_str());
+            MSG_BUG("Service \"%s\" has no device", it.first.c_str());
             continue;
         }
 
@@ -644,8 +644,8 @@ static bool is_valid_ip_address_string(const std::string &string,
 
 static int fill_in_missing_ipv4_config_requests(const Network::ConfigRequest &req)
 {
-    log_assert(req.ipv4_address_.is_known() || req.ipv4_netmask_.is_known() ||
-               req.ipv4_gateway_.is_known());
+    msg_log_assert(req.ipv4_address_.is_known() || req.ipv4_netmask_.is_known() ||
+                   req.ipv4_gateway_.is_known());
 
     if(req.ipv4_address_.is_known() && req.ipv4_netmask_.is_known() &&
        req.ipv4_gateway_.is_known())
@@ -655,7 +655,7 @@ static int fill_in_missing_ipv4_config_requests(const Network::ConfigRequest &re
             ? 0
             : -1;
 
-    BUG("%s(): not implemented", __func__);
+    MSG_BUG("%s(): not implemented", __func__);
 
     return -1;
 }
@@ -679,7 +679,7 @@ static int fill_in_missing_ipv4_config_requests(const Network::ConfigRequest &re
 static void fill_in_missing_dns_server_config_requests(NetworkConfigWriteData &wd,
                                                        const Connman::ServiceBase &service)
 {
-    log_assert(wd.is_primary_dns_server_known() || wd.is_secondary_dns_server_known());
+    msg_log_assert(wd.is_primary_dns_server_known() || wd.is_secondary_dns_server_known());
 
     if(wd.is_primary_dns_server_known() && wd.is_secondary_dns_server_known())
     {
@@ -997,7 +997,7 @@ handle_set_wireless_config(Network::ConfigRequest &req,
     switch(target_tech)
     {
       case Connman::Technology::UNKNOWN_TECHNOLOGY:
-        BUG("Tried setting WLAN parameters for unknown technology");
+        MSG_BUG("Tried setting WLAN parameters for unknown technology");
         return Network::WPSMode::NONE;
 
       case Connman::Technology::ETHERNET:
@@ -1020,7 +1020,7 @@ handle_set_wireless_config(Network::ConfigRequest &req,
 
         if(req.wlan_security_mode_ == "wep")
         {
-            BUG("Support for insecure WLAN mode \"WEP\" not implemented");
+            MSG_BUG("Support for insecure WLAN mode \"WEP\" not implemented");
             req.wlan_security_mode_.set_unknown();
         }
     }
@@ -1125,7 +1125,7 @@ static void move_dns_servers_to_config_request(NetworkConfigWriteData &wd,
 static bool apply_changes_to_prefs(Network::ConfigRequest &req,
                                    struct network_prefs *prefs)
 {
-    log_assert(prefs != nullptr);
+    msg_log_assert(prefs != nullptr);
 
     return handle_set_dhcp_mode(req, prefs) &&
            handle_set_static_ipv4_config(req, prefs) &&
@@ -1399,10 +1399,10 @@ static bool process_config_request_from_spi_slave(
             have_new_wlan_passphrase);
     shutdown_guard_unlock(&shutdown_guard);
 
-    log_assert((wps_mode == Network::WPSMode::DIRECT &&
-                (wps_network_name != nullptr || wps_network_ssid != nullptr)) ||
-               (wps_mode != Network::WPSMode::DIRECT &&
-                (wps_network_name == nullptr && wps_network_ssid == nullptr)));
+    msg_log_assert((wps_mode == Network::WPSMode::DIRECT &&
+                    (wps_network_name != nullptr || wps_network_ssid != nullptr)) ||
+                   (wps_mode != Network::WPSMode::DIRECT &&
+                    (wps_network_name == nullptr && wps_network_ssid == nullptr)));
 
     const Connman::Technology tech(cfg_wd.cancel_edit_mode());
 
@@ -1419,7 +1419,7 @@ static bool process_config_request_from_spi_slave(
         return true;
 
       case Network::WPSMode::DIRECT:
-        log_assert(tech == Connman::Technology::WLAN);
+        msg_log_assert(tech == Connman::Technology::WLAN);
         Connman::connect_to_wps_service(
             wps_network_name != nullptr ? wps_network_name->c_str() : nullptr,
             wps_network_ssid != nullptr ? wps_network_ssid->c_str() : nullptr,
@@ -1427,7 +1427,7 @@ static bool process_config_request_from_spi_slave(
         return true;
 
       case Network::WPSMode::SCAN:
-        log_assert(tech == Connman::Technology::WLAN);
+        msg_log_assert(tech == Connman::Technology::WLAN);
         Connman::connect_to_wps_service(nullptr, nullptr,
                                         current_wlan_service_name.data());
         return true;
@@ -1576,7 +1576,7 @@ static bool connect_to_chosen_service(Network::WPSMode wps_mode,
         return true;
 
       case Network::WPSMode::DIRECT:
-        log_assert(target_tech == Connman::Technology::WLAN);
+        msg_log_assert(target_tech == Connman::Technology::WLAN);
 
         if(immediate_activation)
             Connman::connect_to_wps_service(
@@ -1587,7 +1587,7 @@ static bool connect_to_chosen_service(Network::WPSMode wps_mode,
         return true;
 
       case Network::WPSMode::SCAN:
-        log_assert(target_tech == Connman::Technology::WLAN);
+        msg_log_assert(target_tech == Connman::Technology::WLAN);
 
         if(immediate_activation)
             Connman::connect_to_wps_service(nullptr, nullptr, service_to_be_disabled);
@@ -1773,9 +1773,9 @@ int Regs::NetworkConfig::DCP::write_53_active_ip_profile(const uint8_t *data, si
     }
 
     if(!nwconfig_write_data.get_configuration_request().when_.is_known())
-        BUG("Network configuration request application time point unknown");
+        MSG_BUG("Network configuration request application time point unknown");
     else if(nwconfig_write_data.get_configuration_request().when_ != Network::ConfigRequest::ApplyWhen::NOW)
-        BUG("Unexpected network configuration request application time point");
+        MSG_BUG("Unexpected network configuration request application time point");
 
     LOGGED_LOCK_CONTEXT_HINT;
     const auto lock(nwconfig_write_data.lock());
@@ -2050,7 +2050,7 @@ static void fill_network_status_register_response(uint8_t *response)
     if(service == nullptr)
         service = fallback_service_data;
     else
-        log_assert(fallback_service_data == nullptr);
+        msg_log_assert(fallback_service_data == nullptr);
 
     if(service != nullptr)
     {

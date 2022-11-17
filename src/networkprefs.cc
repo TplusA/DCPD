@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -40,7 +40,7 @@ static const char service_prefix[] = "/net/connman/service/";
 enum NetworkPrefsTechnology
 network_prefs_get_technology_by_service_name(const char *name)
 {
-    log_assert(name != NULL);
+    msg_log_assert(name != NULL);
 
     if(strncmp(name, service_prefix, sizeof(service_prefix) - 1) != 0)
         return NWPREFSTECH_UNKNOWN;
@@ -210,14 +210,14 @@ static bool add_new_section_with_defaults(struct ini_file *inifile,
                                           Connman::Technology tech,
                                           const Connman::Address<Connman::AddressType::MAC> &mac_address)
 {
-    log_assert(inifile != NULL);
+    msg_log_assert(inifile != NULL);
 
     struct ini_section *section = NULL;
 
     switch(tech)
     {
       case Connman::Technology::UNKNOWN_TECHNOLOGY:
-        BUG("Attempted to create network configuration section for unknown technology");
+        MSG_BUG("Attempted to create network configuration section for unknown technology");
         return false;
 
       case Connman::Technology::ETHERNET:
@@ -315,7 +315,7 @@ static NetworkPrefsData networkprefs_data;
 enum NetworkPrefsTechnology
 network_prefs_get_technology_by_prefs(const struct network_prefs *prefs)
 {
-    log_assert(prefs != NULL);
+    msg_log_assert(prefs != NULL);
 
     return prefs->technology;
 }
@@ -646,8 +646,8 @@ network_prefs_open_rw(struct network_prefs **ethernet,
 
 void network_prefs_close(struct network_prefs_handle *handle)
 {
-    log_assert(handle == &networkprefs_data.handle);
-    log_assert(handle->file != NULL);
+    msg_log_assert(handle == &networkprefs_data.handle);
+    msg_log_assert(handle->file != NULL);
 
     inifile_free(handle->file);
     handle->file = NULL;
@@ -660,9 +660,9 @@ void network_prefs_close(struct network_prefs_handle *handle)
 
 static inline void assert_writable_file(const struct network_prefs_handle *handle)
 {
-    log_assert(handle == &networkprefs_data.handle);
-    log_assert(handle->file != NULL);
-    log_assert(networkprefs_data.is_writable);
+    msg_log_assert(handle == &networkprefs_data.handle);
+    msg_log_assert(handle->file != NULL);
+    msg_log_assert(networkprefs_data.is_writable);
 }
 
 struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handle,
@@ -683,7 +683,7 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
         break;
 
       case NWPREFSTECH_ETHERNET:
-        log_assert(networkprefs_data.network_ethernet_prefs.section == NULL);
+        msg_log_assert(networkprefs_data.network_ethernet_prefs.section == NULL);
         networkprefs_data.network_ethernet_prefs.section =
             inifile_new_section(&networkprefs_data.file, "ethernet", 8);
         prefs = &networkprefs_data.network_ethernet_prefs;
@@ -691,7 +691,7 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
         break;
 
       case NWPREFSTECH_WLAN:
-        log_assert(networkprefs_data.network_wlan_prefs.section == NULL);
+        msg_log_assert(networkprefs_data.network_wlan_prefs.section == NULL);
         networkprefs_data.network_wlan_prefs.section =
             inifile_new_section(&networkprefs_data.file, "wifi", 4);
         prefs = &networkprefs_data.network_wlan_prefs;
@@ -708,7 +708,7 @@ struct network_prefs *network_prefs_add_prefs(struct network_prefs_handle *handl
 
     if(prefs->section != NULL)
     {
-        BUG("Error occurred, should remove section from file");
+        MSG_BUG("Error occurred, should remove section from file");
         prefs->section = NULL;
     }
 
@@ -725,7 +725,7 @@ bool network_prefs_remove_prefs(struct network_prefs_handle *handle,
     switch(tech)
     {
       case NWPREFSTECH_UNKNOWN:
-        BUG("Attempted to remove preferences for unknown technology %d", tech);
+        MSG_BUG("Attempted to remove preferences for unknown technology %d", tech);
         break;
 
       case NWPREFSTECH_ETHERNET:
@@ -769,7 +769,7 @@ size_t network_prefs_generate_service_name(const struct network_prefs *prefs,
     if(prefs == NULL)
         return 0;
 
-    log_assert(prefs->section != NULL);
+    msg_log_assert(prefs->section != NULL);
 
     const size_t tech_offset =
         with_service_prefix ? sizeof(service_prefix) - 1 : 0;
@@ -881,8 +881,8 @@ enum ModifyResult
 static enum ModifyResult modify_pref(struct ini_section *section,
                                      const char *key, const char *value)
 {
-    log_assert(section != NULL);
-    log_assert(key != NULL);
+    msg_log_assert(section != NULL);
+    msg_log_assert(key != NULL);
 
     if(value == NULL)
     {

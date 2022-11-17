@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -46,7 +46,7 @@ static const uint8_t *extract_data(const GVariantWrapper &container,
 
     if(key != nullptr && len != expected_length)
     {
-        BUG("Unexpected stream key length %zu", len);
+        MSG_BUG("Unexpected stream key length %zu", len);
         key = nullptr;
     }
 

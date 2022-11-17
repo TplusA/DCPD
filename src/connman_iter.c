@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -108,7 +108,7 @@ struct ConnmanServiceIterator *connman_service_iterator_get(void)
 
 void connman_service_iterator_rewind(struct ConnmanServiceIterator *iter)
 {
-    log_assert(iter != NULL);
+    msg_log_assert(iter != NULL);
 
     if(iter->iter_pos > 0)
     {
@@ -147,8 +147,8 @@ void connman_service_iterator_free(struct ConnmanServiceIterator *iter)
 static const char *get_string_value(struct ConnmanServiceIterator *iter,
                                     const char *key)
 {
-    log_assert(iter != NULL);
-    log_assert(key != NULL);
+    msg_log_assert(iter != NULL);
+    msg_log_assert(key != NULL);
 
     free_current_variant(iter);
 
@@ -215,7 +215,7 @@ struct ConnmanServiceSecurityIterator *
 connman_service_iterator_get_security_iterator(struct ConnmanServiceIterator *iter,
                                                size_t *count)
 {
-    log_assert(iter != NULL);
+    msg_log_assert(iter != NULL);
 
     if(count != NULL)
         *count = 0;
@@ -271,7 +271,7 @@ void connman_security_iterator_free(struct ConnmanServiceSecurityIterator *iter)
 
 const char *connman_security_iterator_get_security(struct ConnmanServiceSecurityIterator *iter)
 {
-    log_assert(iter != NULL);
+    msg_log_assert(iter != NULL);
 
     if(iter->current_security_string != NULL)
         return g_variant_get_string(iter->current_security_string, NULL);

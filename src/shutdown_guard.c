@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -58,11 +58,11 @@ struct ShutdownGuard *shutdown_guard_alloc(const char *name)
 
 void shutdown_guard_free(struct ShutdownGuard **sdg)
 {
-    log_assert(sdg != NULL);
+    msg_log_assert(sdg != NULL);
 
     if(*sdg == NULL)
     {
-        BUG("Passed NULL to %s()", __func__);
+        MSG_BUG("Passed NULL to %s()", __func__);
         return;
     }
 
@@ -84,19 +84,19 @@ void shutdown_guard_free(struct ShutdownGuard **sdg)
 
 void shutdown_guard_lock(struct ShutdownGuard *sdg)
 {
-    log_assert(sdg != NULL);
+    msg_log_assert(sdg != NULL);
     g_mutex_lock(&sdg->lock);
 }
 
 void shutdown_guard_unlock(struct ShutdownGuard *sdg)
 {
-    log_assert(sdg != NULL);
+    msg_log_assert(sdg != NULL);
     g_mutex_unlock(&sdg->lock);
 }
 
 bool shutdown_guard_down(struct ShutdownGuard *sdg)
 {
-    log_assert(sdg != NULL);
+    msg_log_assert(sdg != NULL);
 
     msg_vinfo(MESSAGE_LEVEL_DIAG, "Shutdown guard \"%s\" down", sdg->name);
 
@@ -110,6 +110,6 @@ bool shutdown_guard_down(struct ShutdownGuard *sdg)
 
 bool shutdown_guard_is_shutting_down_unlocked(const struct ShutdownGuard *sdg)
 {
-    log_assert(sdg != NULL);
+    msg_log_assert(sdg != NULL);
     return sdg->is_shutting_down;
 }

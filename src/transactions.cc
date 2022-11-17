@@ -255,8 +255,8 @@ lookup_register_for_transaction(uint8_t register_address,
     const auto *reg = Regs::lookup(register_address);
 
     if(reg == nullptr)
-        BUG("%s requested register 0x%02x, but is not implemented",
-            master_not_slave ? "Master" : "Slave", register_address);
+        MSG_BUG("%s requested register 0x%02x, but is not implemented",
+                master_not_slave ? "Master" : "Slave", register_address);
 
     return reg;
 }
@@ -332,7 +332,7 @@ TransactionQueue::Queue::apply_to_dcpsync_serial(uint16_t serial,
 {
     if(is_serial_out_of_range(serial))
     {
-        BUG("Tried to find transaction with invalid serial 0x%04x", serial);
+        MSG_BUG("Tried to find transaction with invalid serial 0x%04x", serial);
         return ProcessResult::ERROR;
     }
 
@@ -346,7 +346,7 @@ TransactionQueue::Queue::apply_to_dcpsync_serial(uint16_t serial,
     if(it == transactions_.end())
         return ProcessResult::ERROR;
 
-    log_assert(*it != nullptr);
+    msg_log_assert(*it != nullptr);
 
     return fn(**it);
 }
@@ -493,7 +493,7 @@ static DCPSYNCPacketType read_dcpsync_header(TransactionQueue::TXSync &ts,
             return DCPSYNCPacketType::COMMAND;
 
         if(ts.get_ttl() > 0)
-            BUG("Got DCP packet with positive TTL");
+            MSG_BUG("Got DCP packet with positive TTL");
 
         error_format_string = unexpected_size_error;
     }
@@ -503,7 +503,7 @@ static DCPSYNCPacketType read_dcpsync_header(TransactionQueue::TXSync &ts,
             return DCPSYNCPacketType::ACK;
 
         if(ts.get_ttl() > 0)
-            BUG("Got ACK with positive TTL");
+            MSG_BUG("Got ACK with positive TTL");
 
         error_format_string = unexpected_size_error;
     }
@@ -614,7 +614,7 @@ bool TransactionQueue::Transaction::fill_payload_buffer(const int fd, bool appen
     const uint16_t size =
         dcp_read_header_data(&request_header_[DCP_HEADER_DATA_OFFSET]);
 
-    log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
+    msg_log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
 
     if(size == 0)
         return true;
@@ -642,10 +642,10 @@ bool TransactionQueue::Transaction::fill_payload_buffer(const int fd, bool appen
     }
 
     if(append)
-        log_assert(!payload_.empty());
+        msg_log_assert(!payload_.empty());
     else
     {
-        log_assert(payload_.empty());
+        msg_log_assert(payload_.empty());
 
         if(offset > 0)
             msg_error(0, LOG_ERR,
@@ -752,8 +752,8 @@ bool TransactionQueue::Transaction::do_read_register()
 
 size_t TransactionQueue::Transaction::get_current_fragment_size() const
 {
-    log_assert((current_fragment_offset_ < payload_.size()) ||
-               (current_fragment_offset_ == 0 && payload_.size() == 0));
+    msg_log_assert((current_fragment_offset_ < payload_.size()) ||
+                   (current_fragment_offset_ == 0 && payload_.size() == 0));
 
     const size_t temp = get_remaining_fragment_size();
 
@@ -976,8 +976,8 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
       case State::SLAVE_READ_DATA:
         allocate_payload_buffer();
 
-        log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER ||
-                   command_ == DCP_COMMAND_READ_REGISTER);
+        msg_log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER ||
+                       command_ == DCP_COMMAND_READ_REGISTER);
 
         if(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER)
         {
@@ -1003,8 +1003,8 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
 
       case State::SLAVE_READ_APPEND:
         {
-            log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
-            log_assert(!payload_.empty());
+            msg_log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
+            msg_log_assert(!payload_.empty());
 
             const size_t previous_pos = payload_.size();
 
@@ -1025,7 +1025,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
       case State::PUSH_TO_SLAVE__INIT:
         allocate_payload_buffer();
 
-        log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
+        msg_log_assert(command_ == DCP_COMMAND_MULTI_WRITE_REGISTER);
 
         state_ = State::SLAVE_PREPARE_ANSWER;
 
@@ -1077,8 +1077,8 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
       case State::MASTER_PREPARE__INIT:
         if(command_ != DCP_COMMAND_MULTI_WRITE_REGISTER)
         {
-            log_assert(command_ == DCP_COMMAND_READ_REGISTER);
-            log_assert(payload_.empty());
+            msg_log_assert(command_ == DCP_COMMAND_READ_REGISTER);
+            msg_log_assert(payload_.empty());
         }
 
         state_ = State::SEND_TO_SLAVE;
@@ -1125,7 +1125,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
             return ProcessResult::FINISHED;
 
         current_fragment_offset_ += DCP_PACKET_MAX_PAYLOAD_SIZE;
-        log_assert(current_fragment_offset_ < payload_.size());
+        msg_log_assert(current_fragment_offset_ < payload_.size());
 
         refresh_as_master_transaction();
         state_ = State::SEND_TO_SLAVE;
@@ -1138,7 +1138,7 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
         return ProcessResult::ERROR;
 
       case State::DCPSYNC_WAIT_FOR_ACK:
-        log_assert(tx_sync_.is_enabled());
+        msg_log_assert(tx_sync_.is_enabled());
 
         {
             TXSync ts;
@@ -1220,12 +1220,12 @@ TransactionQueue::Transaction::process(int from_slave_fd, int to_slave_fd,
 TransactionQueue::ProcessResult
 TransactionQueue::Transaction::process_out_of_order_ack(const OOOAckException &e)
 {
-    log_assert(tx_sync_.is_enabled());
+    msg_log_assert(tx_sync_.is_enabled());
 
     if(e.serial_ != tx_sync_.get_serial())
     {
-        BUG("Serial for out-of-order ACK wrong (0x%04x, expected 0x%04x)",
-            e.serial_, tx_sync_.get_serial());
+        MSG_BUG("Serial for out-of-order ACK wrong (0x%04x, expected 0x%04x)",
+                e.serial_, tx_sync_.get_serial());
         return ProcessResult::ERROR;
     }
 
@@ -1245,15 +1245,15 @@ TransactionQueue::Transaction::process_out_of_order_ack(const OOOAckException &e
       case State::SEND_TO_SLAVE:
       case State::SEND_TO_SLAVE_ACKED:
       case State::SEND_TO_SLAVE_FAILED:
-        BUG("Ignoring out-of-order ACK for 0x%04x in state %d",
-            tx_sync_.get_serial(), int(state_));
+        MSG_BUG("Ignoring out-of-order ACK for 0x%04x in state %d",
+                tx_sync_.get_serial(), int(state_));
         break;
 
       case State::DCPSYNC_WAIT_FOR_ACK:
         if(process_ack(e.serial_))
             return ProcessResult::IN_PROGRESS;
 
-        BUG("Double out-of-order ACK exception");
+        MSG_BUG("Double out-of-order ACK exception");
 
         break;
     }
@@ -1264,12 +1264,12 @@ TransactionQueue::Transaction::process_out_of_order_ack(const OOOAckException &e
 TransactionQueue::ProcessResult
 TransactionQueue::Transaction::process_out_of_order_nack(const OOONackException &e)
 {
-    log_assert(tx_sync_.is_enabled());
+    msg_log_assert(tx_sync_.is_enabled());
 
     if(e.serial_ != tx_sync_.get_serial())
     {
-        BUG("Serial for out-of-order NACK[%u] wrong (0x%04x, expected 0x%04x)",
-            e.ttl_, e.serial_, tx_sync_.get_serial());
+        MSG_BUG("Serial for out-of-order NACK[%u] wrong (0x%04x, expected 0x%04x)",
+                e.ttl_, e.serial_, tx_sync_.get_serial());
         return ProcessResult::ERROR;
     }
 
@@ -1289,15 +1289,15 @@ TransactionQueue::Transaction::process_out_of_order_nack(const OOONackException 
       case State::SEND_TO_SLAVE:
       case State::SEND_TO_SLAVE_ACKED:
       case State::SEND_TO_SLAVE_FAILED:
-        BUG("Ignoring out-of-order NACK[%u] for 0x%04x in state %d",
-            e.ttl_, tx_sync_.get_serial(), int(state_));
+        MSG_BUG("Ignoring out-of-order NACK[%u] for 0x%04x in state %d",
+                e.ttl_, tx_sync_.get_serial(), int(state_));
         break;
 
       case State::DCPSYNC_WAIT_FOR_ACK:
         if(process_nack(e.serial_, e.ttl_))
             return ProcessResult::IN_PROGRESS;
 
-        BUG("Double out-of-order NACK[%u] exception", e.ttl_);
+        MSG_BUG("Double out-of-order NACK[%u] exception", e.ttl_);
 
         break;
     }
@@ -1332,16 +1332,16 @@ bool TransactionQueue::Transaction::is_input_required() const
 
 uint16_t TransactionQueue::Transaction::get_max_data_size() const
 {
-    log_assert(reg_ != nullptr);
-    log_assert(reg_->max_data_size_ > 0);
+    msg_log_assert(reg_ != nullptr);
+    msg_log_assert(reg_->max_data_size_ > 0);
 
     return reg_->max_data_size_;
 }
 
 void TransactionQueue::Transaction::set_payload(const uint8_t *src, size_t length)
 {
-    log_assert(payload_.empty());
-    log_assert(src != nullptr);
+    msg_log_assert(payload_.empty());
+    msg_log_assert(src != nullptr);
 
     payload_.reserve(length);
     std::copy(src, src + length, std::back_inserter(payload_));
@@ -1352,8 +1352,8 @@ TransactionQueue::fragments_from_data(Queue &queue, const uint8_t *data,
                                       size_t length, uint8_t register_address,
                                       Channel channel)
 {
-    log_assert(data != nullptr);
-    log_assert(length > 0);
+    msg_log_assert(data != nullptr);
+    msg_log_assert(length > 0);
 
     std::deque<std::unique_ptr<Transaction>> result;
 
@@ -1378,7 +1378,7 @@ TransactionQueue::fragments_from_data(Queue &queue, const uint8_t *data,
         if(i + size >= length)
             size = length - i;
 
-        log_assert(size > 0);
+        msg_log_assert(size > 0);
         t->set_payload(data + i, size);
 
         result.emplace_back(std::move(t));

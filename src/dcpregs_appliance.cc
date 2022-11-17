@@ -254,7 +254,7 @@ bool Regs::Appliance::init()
         global_appliance_data.id = map_appliance_id(appliance_id);
     else
     {
-        BUG("Have no appliance ID, system may not work");
+        MSG_BUG("Have no appliance ID, system may not work");
         global_appliance_data.id = ApplianceID::UNDEFINED;
     }
 
@@ -349,8 +349,8 @@ int Regs::Appliance::DCP::write_18_appliance_status(const uint8_t *data, size_t 
     AppliancePowerState old_power_state;
 
     if(is_valid && is_in_standby && is_audio_path_usable)
-        APPLIANCE_BUG("Indicating usable audio path in standby mode (0x%04x)",
-                      status);
+        MSG_APPLIANCE_BUG("Indicating usable audio path in standby mode (0x%04x)",
+                          status);
 
     {
         LOGGED_LOCK_CONTEXT_HINT;
@@ -393,13 +393,13 @@ ssize_t Regs::Appliance::DCP::read_19_appliance_control(uint8_t *response, size_
 
     if(global_appliance_data.request_control_mask == 0)
     {
-        BUG("Have no pending appliance control requests");
+        MSG_BUG("Have no pending appliance control requests");
         return -1;
     }
 
     if(((global_appliance_data.request_control_mask |
          global_appliance_data.request_control_bits) & APPLIANCE_STATUS_BIT_IS_VALID) != 0)
-        BUG("Appliance control is-valid flag must be 0");
+        MSG_BUG("Appliance control is-valid flag must be 0");
 
     response[0] = global_appliance_data.request_control_mask >> 8;
     response[1] = global_appliance_data.request_control_mask & 0xff;

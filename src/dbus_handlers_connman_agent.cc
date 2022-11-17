@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -251,7 +251,7 @@ gboolean dbusmethod_connman_agent_release(tdbusconnmanAgent *object,
 {
     enter_agent_handler(invocation);
 
-    BUG("%s(): not implemented yet", __func__);
+    MSG_BUG("%s(): not implemented yet", __func__);
     tdbus_connman_agent_complete_release(object, invocation);
 
     return TRUE;
@@ -356,7 +356,7 @@ gboolean dbusmethod_connman_agent_request_browser(tdbusconnmanAgent *object,
 {
     enter_agent_handler(invocation);
 
-    BUG("%s(): not implemented yet", __func__);
+    MSG_BUG("%s(): not implemented yet", __func__);
     send_error_if_possible(invocation, "We do not have any browser");
 
     return TRUE;
@@ -516,7 +516,7 @@ static bool insert_answer(GVariantBuilder *result_builder,
         nullptr,
     };
 
-    log_assert(!request.is_answered);
+    msg_log_assert(!request.is_answered);
 
     if((preferences != nullptr && prefgetters[size_t(request_id)] == nullptr) ||
        (preferences == nullptr && wpsgetters[size_t(request_id)] == nullptr))
@@ -568,7 +568,7 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
             if((alternates & 1U) == 0)
                 continue;
 
-            log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
+            msg_log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
 
             if(insert_answer(result_builder, requests[size_t(alternate_id)],
                              alternate_id, preferences))
@@ -606,7 +606,7 @@ static void wipe_out_alternates(AllRequests &requests, RequestID related_id)
         if((alternates & 1U) == 0)
             continue;
 
-        log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
+        msg_log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
 
         msg_vinfo(MESSAGE_LEVEL_TRACE,
                   "Wipe out alternate %s for processed %s",
@@ -776,7 +776,7 @@ gboolean dbusmethod_connman_agent_request_peer_authorization(tdbusconnmanAgent *
 {
     enter_agent_handler(invocation);
 
-    BUG("%s(): not implemented yet", __func__);
+    MSG_BUG("%s(): not implemented yet", __func__);
     send_error_if_possible(invocation, "Peer authorization not supported");
 
     return TRUE;
@@ -788,7 +788,7 @@ gboolean dbusmethod_connman_agent_cancel(tdbusconnmanAgent *object,
 {
     enter_agent_handler(invocation);
 
-    BUG("%s(): not implemented yet", __func__);
+    MSG_BUG("%s(): not implemented yet", __func__);
     tdbus_connman_agent_complete_cancel(object, invocation);
 
     return TRUE;

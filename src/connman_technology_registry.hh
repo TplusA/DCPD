@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019, 2023  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -272,13 +272,13 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
         }
         catch(const Connman::TechnologyPropertiesWIFI::Exceptions::NotPending &e)
         {
-            BUG("D-Bus call finished, but have no pending property commit");
+            MSG_BUG("D-Bus call finished, but have no pending property commit");
             notify_watchers(property, TechnologyPropertiesBase::StoreResult::COMMITTED_UNCHANGED);
         }
         catch(...)
         {
             /* we've been called from C, so we *have* to ignore any exceptions */
-            BUG("Got exception while handling end of property sending");
+            MSG_BUG("Got exception while handling end of property sending");
             notify_watchers(property, TechnologyPropertiesBase::StoreResult::UNKNOWN_ERROR);
         }
     }

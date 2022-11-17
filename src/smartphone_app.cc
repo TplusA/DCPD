@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -57,7 +57,7 @@ bool Applink::Peer::send_one_from_queue_to_peer(int fd)
     }
 
     if(command.empty())
-        BUG("Ignoring empty applink command in out queue for peer %d", fd);
+        MSG_BUG("Ignoring empty applink command in out queue for peer %d", fd);
     else if(fd >= 0)
     {
         if(os_write_from_buffer(command.c_str(), command.size(), fd) < 0)
@@ -81,7 +81,7 @@ bool Applink::AppConnections::add_new_peer(int peer_fd)
 {
     if(peers_.find(peer_fd) != peers_.end())
     {
-        BUG("Tried to add peer fd %d twice", peer_fd);
+        MSG_BUG("Tried to add peer fd %d twice", peer_fd);
         return false;
     }
 
@@ -116,7 +116,7 @@ bool Applink::AppConnections::add_new_peer(int peer_fd)
 void Applink::AppConnections::close_and_forget_peer(int peer_fd,
                                                     bool is_registered_with_dispatcher)
 {
-    log_assert(peers_.find(peer_fd) != peers_.end());
+    msg_log_assert(peers_.find(peer_fd) != peers_.end());
 
     msg_info("Smartphone direct connection disconnected (fd %d)", peer_fd);
 
@@ -185,7 +185,7 @@ bool Applink::AppConnections::listen(uint16_t port)
 
     if(server_fd_ >= 0)
     {
-        BUG("Applink server already running");
+        MSG_BUG("Applink server already running");
         return false;
     }
 
@@ -225,7 +225,7 @@ static bool no_airable(const char *why)
        dbus_get_credentials_read_iface() != nullptr)
         return false;
 
-    BUG("Cannot %s, have no Airable D-Bus proxy", why);
+    MSG_BUG("Cannot %s, have no Airable D-Bus proxy", why);
 
     return true;
 }
@@ -240,12 +240,12 @@ static bool process_applink_command(const Applink::Command &command,
     }
 
     const auto *variable = command.get_variable();
-    log_assert(variable != nullptr);
+    msg_log_assert(variable != nullptr);
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "App request: %s", variable->name);
 
-    log_assert(variable->variable_id >= uint16_t(Applink::Variables::FIRST_SUPPORTED_VARIABLE));
-    log_assert(variable->variable_id <= uint16_t(Applink::Variables::LAST_SUPPORTED_VARIABLE));
+    msg_log_assert(variable->variable_id >= uint16_t(Applink::Variables::FIRST_SUPPORTED_VARIABLE));
+    msg_log_assert(variable->variable_id <= uint16_t(Applink::Variables::LAST_SUPPORTED_VARIABLE));
 
     const auto id = Applink::Variables(variable->variable_id);
 
@@ -374,7 +374,7 @@ static bool process_applink_command(const Applink::Command &command,
     answer_for_command = buffer.str();
 
     if(answer_for_command.empty())
-        BUG("Generated zero length applink answer (%s)", variable->name);
+        MSG_BUG("Generated zero length applink answer (%s)", variable->name);
 
     return true;
 }
@@ -382,12 +382,12 @@ static bool process_applink_command(const Applink::Command &command,
 static void process_applink_answer(const Applink::Command &command)
 {
     const auto *variable = command.get_variable();
-    log_assert(variable != nullptr);
+    msg_log_assert(variable != nullptr);
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "App answer: %s", variable->name);
 
-    log_assert(variable->variable_id >= uint16_t(Applink::Variables::FIRST_SUPPORTED_VARIABLE));
-    log_assert(variable->variable_id <= uint16_t(Applink::Variables::LAST_SUPPORTED_VARIABLE));
+    msg_log_assert(variable->variable_id >= uint16_t(Applink::Variables::FIRST_SUPPORTED_VARIABLE));
+    msg_log_assert(variable->variable_id <= uint16_t(Applink::Variables::LAST_SUPPORTED_VARIABLE));
 
     const auto id = Applink::Variables(variable->variable_id);
 
@@ -468,7 +468,7 @@ bool Applink::Peer::handle_incoming_data(int fd)
         switch(result)
         {
           case Applink::ParserResult::HAVE_COMMAND:
-            log_assert(command != nullptr);
+            msg_log_assert(command != nullptr);
             process_applink_command(*command, answer);
 
             if(!answer.empty())
@@ -477,7 +477,7 @@ bool Applink::Peer::handle_incoming_data(int fd)
             break;
 
           case Applink::ParserResult::HAVE_ANSWER:
-            log_assert(command != nullptr);
+            msg_log_assert(command != nullptr);
             process_applink_answer(*command);
             break;
 

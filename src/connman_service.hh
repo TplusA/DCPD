@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -299,7 +299,7 @@ class ServiceBase
 
     bool is_ours() const
     {
-        log_assert(service_data_ != nullptr);
+        msg_log_assert(service_data_ != nullptr);
 
         return (service_data_->device_ != nullptr)
             ? service_data_->device_->is_auto_selected_device()

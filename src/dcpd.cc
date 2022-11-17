@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -190,7 +190,7 @@ static void log_version_info()
 
 static void schedule_transaction(DCPDState &state, std::unique_ptr<TransactionQueue::Transaction> t)
 {
-    log_assert(state.active_transaction == nullptr);
+    msg_log_assert(state.active_transaction == nullptr);
 
     if(t != nullptr)
         state.active_transaction = std::move(t);
@@ -212,7 +212,7 @@ static unsigned int try_schedule_slave_transaction(DCPDState &state,
     if(state.active_transaction != nullptr)
         return retcode;
 
-    log_assert(t != nullptr);
+    msg_log_assert(t != nullptr);
 
     t->reset_for_slave();
 
@@ -502,8 +502,8 @@ static void terminate_active_transaction(DCPDState &state,
             state.preallocated_inet_slave_transaction = std::move(state.active_transaction);
         else
         {
-            BUG("Unknown pinned active transaction %p",
-                static_cast<const void *>(state.active_transaction.get()));
+            MSG_BUG("Unknown pinned active transaction %p",
+                    static_cast<const void *>(state.active_transaction.get()));
             state.active_transaction = nullptr;
         }
     }
@@ -703,7 +703,7 @@ static void replace_active_transaction(DCPDState &state,
 static void handle_transaction_exception(DCPDState &state,
                                          TransactionQueue::ProtocolException &&e)
 {
-    log_assert(state.active_transaction != nullptr);
+    msg_log_assert(state.active_transaction != nullptr);
 
     std::unique_ptr<TransactionQueue::Transaction> t(nullptr);
     auto result = TransactionQueue::ProcessResult::ERROR;
@@ -713,8 +713,8 @@ static void handle_transaction_exception(DCPDState &state,
         /* colliding slave transaction must be processed next because there
          * might be more data in the pipe buffer that belongs to the
          * transaction */
-        log_assert(collision->transaction_ != nullptr);
-        log_assert(collision->transaction_ != state.active_transaction);
+        msg_log_assert(collision->transaction_ != nullptr);
+        msg_log_assert(collision->transaction_ != state.active_transaction);
 
         replace_active_transaction(state, std::move(collision->transaction_));
 
@@ -735,8 +735,8 @@ static void handle_transaction_exception(DCPDState &state,
 
         if(!applied)
         {
-            BUG("Packet serial 0x%04x unknown, dropping out-of-order ACK",
-                oooack->serial_);
+            MSG_BUG("Packet serial 0x%04x unknown, dropping out-of-order ACK",
+                    oooack->serial_);
             result = TransactionQueue::ProcessResult::ERROR;
         }
     }
@@ -754,8 +754,8 @@ static void handle_transaction_exception(DCPDState &state,
 
         if(!applied)
         {
-            BUG("Packet serial 0x%04x unknown, dropping out-of-order NACK",
-                ooonack->serial_);
+            MSG_BUG("Packet serial 0x%04x unknown, dropping out-of-order NACK",
+                    ooonack->serial_);
             result = TransactionQueue::ProcessResult::ERROR;
         }
     }
@@ -768,7 +768,7 @@ static void handle_transaction_exception(DCPDState &state,
       case TransactionQueue::ProcessResult::PUSH_BACK:
       case TransactionQueue::ProcessResult::FINISHED:
       case TransactionQueue::ProcessResult::ERROR:
-        BUG("Unimplemented outcome of transaction exception handling");
+        MSG_BUG("Unimplemented outcome of transaction exception handling");
         break;
     }
 }

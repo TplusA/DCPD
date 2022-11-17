@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -51,7 +51,7 @@ class AccessPointError: public std::runtime_error
     static void bug_on_no_error(Network::AccessPoint::Error error)
     {
         if(error == Network::AccessPoint::Error::OK)
-            BUG("AccessPointError exception without proper error code");
+            MSG_BUG("AccessPointError exception without proper error code");
     }
 };
 
@@ -87,7 +87,7 @@ void Network::AccessPoint::start()
 
     if(started_)
     {
-        BUG("Access point started again");
+        MSG_BUG("Access point started again");
         return;
     }
 
@@ -110,12 +110,12 @@ void Network::AccessPoint::start()
     catch(const Connman::TechnologyRegistryUnavailableError &e)
     {
         /* not connected with D-Bus yet---not OK */
-        BUG("Technology registry unavailable (no D-Bus connection)");
+        MSG_BUG("Technology registry unavailable (no D-Bus connection)");
     }
     catch(...)
     {
         /* huh? */
-        BUG("Unexpected exception from WIFI properties registry");
+        MSG_BUG("Unexpected exception from WIFI properties registry");
     }
 }
 
@@ -310,7 +310,7 @@ bool Network::AccessPoint::spawn_request(std::string &&ssid, std::string &&passp
 
     if(!started_)
     {
-        BUG("AP spawn request before start");
+        MSG_BUG("AP spawn request before start");
         done_notification(RequestResult::FAILED, Error::BUSY, Status::UNKNOWN);
         return false;
     }
@@ -379,7 +379,7 @@ bool Network::AccessPoint::shutdown_request(DoneFn &&done_notification)
 
     if(!started_)
     {
-        BUG("AP shutdown request before start");
+        MSG_BUG("AP shutdown request before start");
         done_notification(RequestResult::FAILED, Error::BUSY, Status::UNKNOWN);
         return false;
     }

@@ -172,7 +172,7 @@ static gpointer process_dbus(gpointer user_data)
 
     auto *data = static_cast<struct dbus_process_data *>(user_data);
 
-    log_assert(data->loop != nullptr);
+    msg_log_assert(data->loop != nullptr);
 
     g_main_loop_run(data->loop);
     return nullptr;
@@ -687,8 +687,8 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
                            bus_acquired, name_acquired, name_lost,
                            &dbus_data_session_bus, destroy_notification);
 
-    log_assert(dbus_data_system_bus.owner_id != 0 ||
-               dbus_data_session_bus.owner_id != 0);
+    msg_log_assert(dbus_data_system_bus.owner_id != 0 ||
+                   dbus_data_session_bus.owner_id != 0);
 
     while((dbus_data_system_bus.owner_id != 0 && dbus_data_system_bus.acquired == 0) ||
           (dbus_data_session_bus.owner_id != 0 && dbus_data_session_bus.acquired == 0))
@@ -715,30 +715,30 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
     if(failed)
         return -1;
 
-    log_assert(dcpd_iface_data.playback_iface != nullptr);
-    log_assert(dcpd_iface_data.views_iface != nullptr);
-    log_assert(dcpd_iface_data.list_navigation_iface != nullptr);
-    log_assert(dcpd_iface_data.list_item_iface != nullptr);
-    log_assert(dcpd_iface_data.network_config_iface != nullptr);
-    log_assert(dcpd_iface_data.audiopath_source_iface != nullptr);
-    log_assert(dcpd_iface_data.audiopath_config_update_iface != nullptr);
-    log_assert(dcpd_iface_data.audiopath_config_request_iface != nullptr);
-    log_assert(dcpd_iface_data.mixer_volume_iface != nullptr);
-    log_assert(dcpd_iface_data.appliance_power_iface != nullptr);
-    log_assert(dcpd_iface_data.configproxy_iface != nullptr);
-    log_assert(dcpd_iface_data.configuration_read_iface != nullptr);
-    log_assert(dcpd_iface_data.configuration_monitor_iface != nullptr);
-    log_assert(dcpd_iface_data.debug_logging_iface != nullptr);
-    log_assert(dcpd_iface_data.debug_logging_config_iface != nullptr);
-    log_assert(filetransfer_iface_data.iface != nullptr);
-    log_assert(streamplayer_iface_data.playback_iface != nullptr);
-    log_assert(streamplayer_iface_data.urlfifo_iface != nullptr);
-    log_assert(roonplayer_iface_data.playback_iface != nullptr);
-    log_assert(artcache_iface_data.artcache_read_iface != nullptr);
-    log_assert(artcache_iface_data.artcache_monitor_iface != nullptr);
-    log_assert(audiopath_iface_data.audiopath_manager_proxy != nullptr);
-    log_assert(audiopath_iface_data.audiopath_appliance_proxy != nullptr);
-    log_assert(connman_iface_data.connman_agent_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.playback_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.views_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.list_navigation_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.list_item_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.network_config_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.audiopath_source_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.audiopath_config_update_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.audiopath_config_request_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.mixer_volume_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.appliance_power_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.configproxy_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.configuration_read_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.configuration_monitor_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.debug_logging_iface != nullptr);
+    msg_log_assert(dcpd_iface_data.debug_logging_config_iface != nullptr);
+    msg_log_assert(filetransfer_iface_data.iface != nullptr);
+    msg_log_assert(streamplayer_iface_data.playback_iface != nullptr);
+    msg_log_assert(streamplayer_iface_data.urlfifo_iface != nullptr);
+    msg_log_assert(roonplayer_iface_data.playback_iface != nullptr);
+    msg_log_assert(artcache_iface_data.artcache_read_iface != nullptr);
+    msg_log_assert(artcache_iface_data.artcache_monitor_iface != nullptr);
+    msg_log_assert(audiopath_iface_data.audiopath_manager_proxy != nullptr);
+    msg_log_assert(audiopath_iface_data.audiopath_appliance_proxy != nullptr);
+    msg_log_assert(connman_iface_data.connman_agent_iface != nullptr);
 
     g_signal_connect(audiopath_iface_data.audiopath_manager_proxy, "g-signal",
                      G_CALLBACK(dbussignal_audiopath_manager), nullptr);
@@ -764,7 +764,7 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
 
     if(connman_iface_data.is_enabled)
     {
-        log_assert(connman_iface_data.connman_manager_iface != nullptr);
+        msg_log_assert(connman_iface_data.connman_manager_iface != nullptr);
 
         Connman::about_to_connect_dbus_signals();
         g_signal_connect(connman_iface_data.connman_manager_iface, "g-signal",
@@ -772,7 +772,7 @@ int DBus::setup(bool connect_to_session_bus, bool with_connman,
                          &connman_wlan);
     }
 
-    log_assert(login1_iface_data.login1_manager_iface != nullptr);
+    msg_log_assert(login1_iface_data.login1_manager_iface != nullptr);
     g_signal_connect(login1_iface_data.login1_manager_iface, "g-signal",
                      G_CALLBACK(dbussignal_logind_manager),
                      (gpointer)&logind_shutdown_functions);
@@ -859,7 +859,7 @@ void DBus::lock_shutdown_sequence(const char *why)
 {
     if(is_shutdown_inhibited())
     {
-        BUG("D-Bus shutdown inhibitor lock already taken");
+        MSG_BUG("D-Bus shutdown inhibitor lock already taken");
         return;
     }
 

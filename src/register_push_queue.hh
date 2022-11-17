@@ -1,5 +1,5 @@
 /*
- * Copyright (C)  2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C)  2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -64,7 +64,7 @@ class PushQueue
 
         if(queue_.empty())
         {
-            BUG("No command in register %u queue", register_);
+            MSG_BUG("No command in register %u queue", register_);
             throw std::out_of_range("");
         }
 

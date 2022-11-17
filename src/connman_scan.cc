@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -70,15 +70,15 @@ class WifiScanner
               const char *object_path, bool is_powered,
               Connman::SiteSurveyDoneFn &&callback)
     {
-        log_assert(object_path != nullptr);
-        log_assert(callback != nullptr);
+        msg_log_assert(object_path != nullptr);
+        msg_log_assert(callback != nullptr);
 
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
         if(tech_reg_ != nullptr)
         {
-            log_assert(&tech_reg == tech_reg_);
+            msg_log_assert(&tech_reg == tech_reg_);
             free_ride(std::move(callback));
             return;
         }
@@ -116,7 +116,7 @@ class WifiScanner
             callbacks_.emplace_back(std::move(callback));
         else
         {
-            BUG("Too many WLAN site survey callbacks registered");
+            MSG_BUG("Too many WLAN site survey callbacks registered");
             callback(Connman::SiteSurveyResult::OUT_OF_MEMORY);
         }
     }
@@ -268,6 +268,6 @@ bool Connman::WLANTools::power_on()
 
 bool Connman::WLANTools::start_site_survey(Connman::SiteSurveyDoneFn callback)
 {
-    log_assert(callback != nullptr);
+    msg_log_assert(callback != nullptr);
     return site_survey_or_just_power_on(tech_reg_, std::move(callback));
 }

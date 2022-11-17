@@ -446,16 +446,16 @@ class StreamingRegisters:
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
-        log_assert(stream_id.get_source() != STREAM_ID_SOURCE_INVALID);
+        msg_log_assert(stream_id.get_source() != STREAM_ID_SOURCE_INVALID);
 
         if(!Regs::PlayStream::PlainPlayer::StreamID::compatible_with(stream_id))
             store_meta_data_and_url(stream_id, std::move(title), std::move(url));
         else
         {
-            BUG("Got title and URL information for app stream ID %u",
-                stream_id.get_raw_id());
-            BUG("+   Title: \"%s\"", title.c_str());
-            BUG("+   URL  : \"%s\"", url.c_str());
+            MSG_BUG("Got title and URL information for app stream ID %u",
+                    stream_id.get_raw_id());
+            MSG_BUG("+   Title: \"%s\"", title.c_str());
+            MSG_BUG("+   URL  : \"%s\"", url.c_str());
         }
     }
 
@@ -615,8 +615,8 @@ class StreamingRegisters:
         }
         else if(player_->is_active())
         {
-            BUG("Non-app stream %u started while plain URL player is selected",
-                stream_id.get_raw_id());
+            MSG_BUG("Non-app stream %u started while plain URL player is selected",
+                    stream_id.get_raw_id());
             player_->notifications().audio_source_deselected();
             notify_app_playback_stopped();
         }
@@ -699,7 +699,7 @@ class StreamingRegisters:
                 break;
 
               case Regs::PlayStream::PlainPlayerNotifications::StopResult::BAD_STATE:
-                BUG("Unexpected stop result %d", int(stopped_result));
+                MSG_BUG("Unexpected stop result %d", int(stopped_result));
                 break;
             }
         }
@@ -744,7 +744,7 @@ class StreamingRegisters:
 
               case Regs::PlayStream::PlainPlayerNotifications::StopResult::STOPPED_EXTERNALLY:
               case Regs::PlayStream::PlainPlayerNotifications::StopResult::BAD_STATE:
-                BUG("Unexpected stop result %d", int(stopped_result));
+                MSG_BUG("Unexpected stop result %d", int(stopped_result));
                 break;
             }
         }
@@ -757,7 +757,7 @@ class StreamingRegisters:
     {
         const auto app_stream_id =
             Regs::PlayStream::PlainPlayer::StreamID::make_from_generic_id(stream_id);
-        BUG_IF(app_stream_id.get().is_valid(), "Player dropped an app stream (not implemented)");
+        MSG_BUG_IF(app_stream_id.get().is_valid(), "Player dropped an app stream (not implemented)");
     }
 
     void cover_art_notification(void *stream_key_variant) final override
@@ -815,15 +815,15 @@ class StreamingRegisters:
                 &fifo_overflow, &is_playing,
                 nullptr, &error))
         {
-            BUG("Failed pushing stream %u, URL %s to stream player",
-                stream_id.get().get_raw_id(), stream_info.url_.c_str());
+            MSG_BUG("Failed pushing stream %u, URL %s to stream player",
+                    stream_id.get().get_raw_id(), stream_info.url_.c_str());
             dbus_common_handle_dbus_error(&error, "Push stream to player");
             return false;
         }
 
         if(fifo_overflow)
         {
-            BUG("Pushed stream with clear request, got FIFO overflow");
+            MSG_BUG("Pushed stream with clear request, got FIFO overflow");
             return false;
         }
 
@@ -864,8 +864,8 @@ class StreamingRegisters:
 
         if(!stream_id.is_valid())
         {
-            BUG("Got start notification for invalid stream ID %u",
-                stream_id.get_raw_id());
+            MSG_BUG("Got start notification for invalid stream ID %u",
+                    stream_id.get_raw_id());
             return stream_info_output_buffer_.clear();
         }
 
@@ -874,8 +874,8 @@ class StreamingRegisters:
           case StreamStarted::CONTINUED_WITH_SAME:
             if(player != nullptr)
             {
-                BUG("Got repeated start notification for app stream %u",
-                    stream_id.get_raw_id());
+                MSG_BUG("Got repeated start notification for app stream %u",
+                        stream_id.get_raw_id());
                 return SendStreamUpdate::NONE;
             }
 
@@ -1156,7 +1156,7 @@ int Regs::PlayStream::DCP::write_239_next_stream_url(const uint8_t *data, size_t
         dcpregs_streaming_registers->push_next_stream(std::move(url));
     }
     else
-        APPLIANCE_BUG("Empty URL written to reg 239");
+        MSG_APPLIANCE_BUG("Empty URL written to reg 239");
 
     return 0;
 }
@@ -1189,7 +1189,7 @@ ssize_t Regs::PlayStream::DCP::read_210_current_cover_art_hash(uint8_t *response
                  response[8], response[9], response[10], response[11],
                  response[12], response[13], response[14], response[15]);
     else
-        BUG("Cover art: Send %zu hash bytes to SPI slave", len);
+        MSG_BUG("Cover art: Send %zu hash bytes to SPI slave", len);
 
     return len;
 }

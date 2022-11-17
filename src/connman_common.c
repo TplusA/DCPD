@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -102,7 +102,7 @@ void connman_common_remove_service_by_object_path(const char *object_path)
 void connman_common_init_dict_from_temp_gvariant(GVariant *temp,
                                                  GVariantDict *dict)
 {
-    log_assert(temp != NULL);
+    msg_log_assert(temp != NULL);
     g_variant_dict_init(dict, temp);
     g_variant_unref(temp);
 }

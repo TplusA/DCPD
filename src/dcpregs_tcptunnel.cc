@@ -61,7 +61,7 @@ class PeerID
 
     void increment()
     {
-        log_assert(is_valid_peer());
+        msg_log_assert(is_valid_peer());
         do { ++id_; } while(!is_valid_peer());
     }
 };
@@ -108,13 +108,13 @@ class TcpTunnel
 
     void set_registered()
     {
-        log_assert(!is_registered_with_dispatcher_);
+        msg_log_assert(!is_registered_with_dispatcher_);
         is_registered_with_dispatcher_ = true;
     }
 
     PeerID add_peer(int peer_fd)
     {
-        log_assert(peer_fd >= 0);
+        msg_log_assert(peer_fd >= 0);
 
         if(peer_id_to_descriptor_.size() >= MAXIMUM_NUMBER_OF_PEERS)
         {
@@ -150,10 +150,10 @@ class TcpTunnel
     void close_and_forget_peer(PeerID peer_id,
                                bool is_registered_with_dispatcher = true)
     {
-        log_assert(peer_id.is_valid_peer());
+        msg_log_assert(peer_id.is_valid_peer());
 
         const auto it = peer_id_to_descriptor_.find(peer_id);
-        log_assert(it != peer_id_to_descriptor_.end());
+        msg_log_assert(it != peer_id_to_descriptor_.end());
 
         const int peer_fd = it->second;
 
@@ -191,8 +191,8 @@ class AllTunnels
 
     TcpTunnel *add_tunnel(uint16_t port, int server_fd)
     {
-        log_assert(port > 0);
-        log_assert(server_fd >= 0);
+        msg_log_assert(port > 0);
+        msg_log_assert(server_fd >= 0);
 
         if(tunnels_.size() >= MAXIMUM_NUMBER_OF_TUNNELS)
             return nullptr;
@@ -227,7 +227,7 @@ class AllTunnels
 
     bool close_and_forget_tunnel(uint16_t port)
     {
-        log_assert(port > 0);
+        msg_log_assert(port > 0);
 
         auto it = tunnels_.find(port);
 
@@ -345,7 +345,7 @@ static bool handle_new_peer(int fd, uint16_t port, AllTunnels &tunnels)
 
     if(t == nullptr)
     {
-        BUG("Tunnel with fd %d unknown, cannot handle new peer", fd);
+        MSG_BUG("Tunnel with fd %d unknown, cannot handle new peer", fd);
         network_close(&fd);
         return false;
     }
@@ -475,11 +475,11 @@ static int open_tunnel(uint16_t port)
                     const auto *t = all_tunnels.get_tunnel_by_port(port);
 
                     if(t != nullptr)
-                        BUG("Server connection on port %u died, "
-                            "but this event is not handled yet", t->port_);
+                        MSG_BUG("Server connection on port %u died, "
+                                "but this event is not handled yet", t->port_);
                     else
-                        BUG("Unknown server connection with fd %d died",
-                            t->port_);
+                        MSG_BUG("Unknown server connection with fd %d died",
+                                t->port_);
                 }
             ))))
     {
@@ -552,8 +552,8 @@ ssize_t Regs::TCPTunnel::DCP::read_120_tcp_tunnel_read(uint8_t *response, size_t
 
     if(tunnel == nullptr)
     {
-        BUG("Tunnel on port %u does not exist, cannot read data",
-            register_status.get_tunnel_port());
+        MSG_BUG("Tunnel on port %u does not exist, cannot read data",
+                register_status.get_tunnel_port());
         register_status.reset();
         return -1;
     }
@@ -563,8 +563,8 @@ ssize_t Regs::TCPTunnel::DCP::read_120_tcp_tunnel_read(uint8_t *response, size_t
 
     if(peer_fd < 0)
     {
-        BUG("No file descriptor for peer %u on port %u",
-            register_status.get_peer_id().get_raw_id(),
+        MSG_BUG("No file descriptor for peer %u on port %u",
+                register_status.get_peer_id().get_raw_id(),
             register_status.get_tunnel_port());
         register_status.reset();
         return -1;

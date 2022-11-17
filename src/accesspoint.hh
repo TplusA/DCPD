@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -98,7 +98,7 @@ class AccessPoint
         virtual ~RequestBase()
         {
             if(!notified_)
-                BUG("Dropping pending AP request notification");
+                MSG_BUG("Dropping pending AP request notification");
         }
 
         void done(RequestResult result, Error error, Status status)

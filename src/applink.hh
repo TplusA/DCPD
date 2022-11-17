@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -172,9 +172,9 @@ class InputBuffer
 
     const char *get_line_at(size_t pos) const
     {
-        log_assert(scan_pos_ >= pos);
-        log_assert(scan_pos_ < data_.size());
-        log_assert(data_[scan_pos_] == '\n');
+        msg_log_assert(scan_pos_ >= pos);
+        msg_log_assert(scan_pos_ < data_.size());
+        msg_log_assert(data_[scan_pos_] == '\n');
 
         return reinterpret_cast<const char *>(&data_[pos]);
     }

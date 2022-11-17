@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -106,7 +106,7 @@ int Regs::UPnPServer::DCP::write_89_upnp_server_command(const uint8_t *data, siz
     if(data[0] < uint8_t(WriteCommand::FIRST_WRITE_COMMAND) ||
        data[0] > uint8_t(WriteCommand::LAST_WRITE_COMMAND))
     {
-        APPLIANCE_BUG("Invalid UPnP server control subcommand %u", data[0]);
+        MSG_APPLIANCE_BUG("Invalid UPnP server control subcommand %u", data[0]);
         return -1;
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -107,10 +107,10 @@ Regs::SystemUpdate::process_update_request()
 
       default:
         if(result.error().message().empty())
-            BUG("Unhandled error %u", result.get_status_code());
+            MSG_BUG("Unhandled error %u", result.get_status_code());
         else
-            BUG("Unhandled error %u: %s", result.get_status_code(),
-                result.error().message().c_str());
+            MSG_BUG("Unhandled error %u: %s", result.get_status_code(),
+                    result.error().message().c_str());
         break;
     }
 
@@ -257,12 +257,12 @@ handle_token(TokenKind kind, std::string &&value,
             update_parameters_expected = true;
         }
         else
-            APPLIANCE_BUG("Bad update style \"%s\" (ignored)", value.c_str());
+            MSG_APPLIANCE_BUG("Bad update style \"%s\" (ignored)", value.c_str());
 
         if(failed)
         {
-            APPLIANCE_BUG("Update style %s is incompatible with other parameters",
-                          value.c_str());
+            MSG_APPLIANCE_BUG("Update style %s is incompatible with other parameters",
+                              value.c_str());
             return HandleTokenResult::FAILED;
         }
 
@@ -452,7 +452,7 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
         if(update_parameters_expected.pick(false, true, true))
             return true;
 
-        APPLIANCE_BUG("Recovery update request lacks version and/or url requests");
+        MSG_APPLIANCE_BUG("Recovery update request lacks version and/or url requests");
         return false;
     }
 
@@ -461,7 +461,7 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
         if(update_parameters_expected.pick(true, false, true))
             return true;
 
-        APPLIANCE_BUG("Pure recovery requests cannot be combined with version or url requests");
+        MSG_APPLIANCE_BUG("Pure recovery requests cannot be combined with version or url requests");
         return false;
     }
 
@@ -471,8 +471,8 @@ static bool parse_parameters(Maybe<std::unordered_map<std::string, std::string>>
         if(params->find(key.first) == params->end())
             os << ' ' << key.second;
 
-    APPLIANCE_BUG("Incomplete version specification; missing:%s",
-                  os.str().c_str());
+    MSG_APPLIANCE_BUG("Incomplete version specification; missing:%s",
+                      os.str().c_str());
 
     return false;
 }

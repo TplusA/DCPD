@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -237,7 +237,7 @@ ssize_t Regs::ApplianceVolumeControl::DCP::read_64_volume_control(uint8_t *respo
 
     if(!req.volume_.is_known() || !req.mute_request_.is_known())
     {
-        BUG("No active volume request");
+        MSG_BUG("No active volume request");
         return 0;
     }
 
@@ -414,7 +414,7 @@ internal_lookup(std::vector<std::unique_ptr<Mixer::VolumeControl>> &controls,
     if(it == controls.end())
         throw std::out_of_range("Volume control does not exist");
 
-    log_assert(*it != nullptr);
+    msg_log_assert(*it != nullptr);
 
     return *it;
 }

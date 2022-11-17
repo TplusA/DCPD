@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -78,7 +78,7 @@ static void survey_done(Connman::SiteSurveyResult result)
     std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);
 
     if(!nwwlan_survey_data.survey_in_progress)
-        BUG("Got WLAN survey done notification, but didn't start any");
+        MSG_BUG("Got WLAN survey done notification, but didn't start any");
 
     msg_info("WLAN site survey done, %s (%d)",
              (result == Connman::SiteSurveyResult::OK) ? "succeeded" : "failed",
@@ -161,7 +161,7 @@ fill_buffer_with_security_entries(std::ostream &os,
 
     for(size_t i = 0; i < sec_count; ++i)
     {
-        log_assert(iter != NULL);
+        msg_log_assert(iter != NULL);
 
         os << "<security index=\"" << i << "\">"
            << connman_security_iterator_get_security(iter) << "</security>";
@@ -258,7 +258,7 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer)
 
     do
     {
-        log_assert(service != NULL);
+        msg_log_assert(service != NULL);
 
         switch(is_wifi_service(service))
         {
@@ -314,7 +314,7 @@ static const char *survey_result_to_string(Connman::SiteSurveyResult result)
 
 bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(std::vector<uint8_t> &buffer)
 {
-    log_assert(buffer.empty());
+    msg_log_assert(buffer.empty());
 
     LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::RecMutex> lock(nwwlan_survey_data.lock);

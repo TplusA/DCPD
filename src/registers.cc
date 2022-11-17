@@ -137,7 +137,7 @@ void Regs::StrBoStatus::set_system_update_request_rejected()
 static ssize_t read_17_device_status(uint8_t *response, size_t length)
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 17 handler %p %zu", response, length);
-    log_assert(length == 2);
+    msg_log_assert(length == 2);
 
     response[0] = registers_private_data.status_byte;
     response[1] = registers_private_data.status_code;

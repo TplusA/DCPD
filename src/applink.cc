@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -87,7 +87,7 @@ Applink::InputBuffer::append_from_fd(int fd, size_t max_total_size)
 
 void Applink::InputBuffer::remove_processed_data()
 {
-    log_assert(scan_pos_ <= data_.size());
+    msg_log_assert(scan_pos_ <= data_.size());
 
     if(scan_pos_ == 0)
         return;
@@ -208,7 +208,7 @@ parse_parameters(ParserContext &ctx, Applink::Command &command,
 
     if(count > 0)
     {
-        log_assert(parameters_pos < ctx.pos);
+        msg_log_assert(parameters_pos < ctx.pos);
 
         command.parser_data_.parameters_buffer_.resize(ctx.pos - parameters_pos);
         std::copy_n(&ctx.line[parameters_pos],
@@ -325,7 +325,7 @@ Applink::InputBuffer::parse_command_or_answer(Applink::ParserResult &result)
             break;
 
           case Applink::ParserResult::NEED_MORE_DATA:
-            BUG("Unexpected applink result while parsing command");
+            MSG_BUG("Unexpected applink result while parsing command");
             break;
         }
 
@@ -345,7 +345,7 @@ Applink::InputBuffer::parse_command_or_answer(Applink::ParserResult &result)
 std::unique_ptr<Applink::Command>
 Applink::InputBuffer::get_next_command(int peer_fd, Applink::ParserResult &result)
 {
-    log_assert(peer_fd >= 0);
+    msg_log_assert(peer_fd >= 0);
 
     switch(append_from_fd(peer_fd, 4096))
     {
@@ -369,8 +369,8 @@ void Applink::Command::get_parameter(size_t n, char *buffer, size_t buffer_size)
 {
     if(n >= parser_data_.number_of_parameters_)
     {
-        BUG("Parameter %zu out of range (have %zu parameters)",
-            n, parser_data_.number_of_parameters_);
+        MSG_BUG("Parameter %zu out of range (have %zu parameters)",
+                n, parser_data_.number_of_parameters_);
         buffer[0] = '\0';
         return;
     }
@@ -379,7 +379,7 @@ void Applink::Command::get_parameter(size_t n, char *buffer, size_t buffer_size)
         &((const char *)parser_data_.parameters_buffer_.data())[parser_data_.offsets_[n]];
     const size_t token_length = parser_data_.lengths_[n];
 
-    log_assert(token_length > 0);
+    msg_log_assert(token_length > 0);
 
     size_t i;
     size_t src_offset = 0;
@@ -450,7 +450,7 @@ bool Applink::make_answer_for_name(std::ostringstream &os,
                                    const char *variable_name,
                                    std::vector<const char *> &&params)
 {
-    log_assert(variable_name != nullptr);
+    msg_log_assert(variable_name != nullptr);
 
     const auto *const variable = Applink::lookup(variable_name, 0);
 

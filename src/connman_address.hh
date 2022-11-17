@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -200,7 +200,7 @@ class Address
 
     void set(const char *address)
     {
-        log_assert(address != nullptr);
+        msg_log_assert(address != nullptr);
 
         const size_t addrlen = strlen(address);
 

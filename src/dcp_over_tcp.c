@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,7 +28,7 @@
 
 int dot_init(struct dcp_over_tcp_data *dot)
 {
-    log_assert(dot != NULL);
+    msg_log_assert(dot != NULL);
 
     /*
      * The port number is ASCII "TA", meaning T + A.
@@ -69,7 +69,7 @@ void dot_handle_outgoing(struct dcp_over_tcp_data *dot,
 {
     if(can_read_from_peer)
     {
-        log_assert(dot->peer_fd >= 0);
+        msg_log_assert(dot->peer_fd >= 0);
         msg_vinfo(MESSAGE_LEVEL_DEBUG, "DCP over TCP/IP");
     }
 
@@ -85,7 +85,7 @@ void dot_handle_outgoing(struct dcp_over_tcp_data *dot,
 
 void dot_close_peer(struct dcp_over_tcp_data *dot)
 {
-    log_assert(dot != NULL);
+    msg_log_assert(dot != NULL);
 
     network_close(&dot->peer_fd);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -159,8 +159,8 @@ class Player:
 
     bool do_push_next(MessageVerboseLevel level)
     {
-        log_assert(push_stream_fn_ != nullptr);
-        log_assert(next_stream_.is_known());
+        msg_log_assert(push_stream_fn_ != nullptr);
+        msg_log_assert(next_stream_.is_known());
 
         if(!push_stream_fn_(next_stream_.get(), next_free_stream_id_, false,
                             state_ == State::PLAYING_REQUESTED))
@@ -202,7 +202,7 @@ static const char *to_string(Player::State state)
 
 void Player::activate(const std::function<void()> &request_audio_source)
 {
-    log_assert(request_audio_source != nullptr);
+    msg_log_assert(request_audio_source != nullptr);
 
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
@@ -247,14 +247,14 @@ bool Player::is_active() const
 bool Player::start(Regs::PlayStream::StreamInfo &&stream,
                    const PushStreamFunction &push_stream)
 {
-    log_assert(push_stream != nullptr);
+    msg_log_assert(push_stream != nullptr);
 
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     switch(state_)
     {
       case State::DESELECTED:
-        BUG("Attempted to start playback without prior audio source selection");
+        MSG_BUG("Attempted to start playback without prior audio source selection");
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
@@ -295,13 +295,13 @@ bool Player::next(Regs::PlayStream::StreamInfo &&stream)
     switch(state_)
     {
       case State::DESELECTED:
-        BUG("Attempted to set next stream without prior audio source selection");
+        MSG_BUG("Attempted to set next stream without prior audio source selection");
         break;
 
       case State::STOPPED_REQUESTED:
       case State::STOPPED:
-        BUG("Attempted to set next stream while stopped%s",
-            state_ == State::STOPPED ? "" : " requested");
+        MSG_BUG("Attempted to set next stream while stopped%s",
+                state_ == State::STOPPED ? "" : " requested");
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
@@ -385,7 +385,7 @@ void Player::audio_source_selected()
       case State::PLAYING_REQUESTED:
       case State::PLAYING:
       case State::PLAYING_BUT_STOPPED:
-        BUG("Audio source selected in state %s", to_string(state_));
+        MSG_BUG("Audio source selected in state %s", to_string(state_));
         break;
     }
 }
@@ -397,7 +397,7 @@ void Player::audio_source_deselected()
     switch(state_)
     {
       case State::DESELECTED:
-        BUG("Plain URL audio source not selected");
+        MSG_BUG("Plain URL audio source not selected");
         return;
 
       case State::DESELECTED_AWAITING_SELECTION:
@@ -418,7 +418,7 @@ void Player::audio_source_deselected()
 Regs::PlayStream::PlainPlayerNotifications::StartResult
 Player::started(StreamID stream_id)
 {
-    log_assert(stream_id.get().is_valid());
+    msg_log_assert(stream_id.get().is_valid());
 
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
@@ -428,8 +428,8 @@ Player::started(StreamID stream_id)
       case State::DESELECTED_AWAITING_SELECTION:
       case State::STOPPED_REQUESTED:
       case State::STOPPED:
-        BUG("App stream %u started in unexpected state %s",
-            stream_id.get().get_raw_id(), to_string(state_));
+        MSG_BUG("App stream %u started in unexpected state %s",
+                stream_id.get().get_raw_id(), to_string(state_));
         break;
 
       case State::PLAYING_REQUESTED:
@@ -440,8 +440,8 @@ Player::started(StreamID stream_id)
 
         if(!waiting_for_stream_id_.get().is_valid())
         {
-            BUG("App stream %u started while not waiting for any stream",
-                stream_id.get().get_raw_id());
+            MSG_BUG("App stream %u started while not waiting for any stream",
+                    stream_id.get().get_raw_id());
             return StartResult::UNEXPECTED_START;
         }
 
@@ -483,8 +483,8 @@ Player::stopped(StreamID stream_id)
       case State::DESELECTED:
       case State::DESELECTED_AWAITING_SELECTION:
         if(stream_id.get().is_valid() && stream_id != expected_stopping_stream_id_)
-            BUG("App stream %u stopped in unexpected state %s",
-                stream_id.get().get_raw_id(), to_string(state_));
+            MSG_BUG("App stream %u stopped in unexpected state %s",
+                    stream_id.get().get_raw_id(), to_string(state_));
 
         return StopResult::PLAYER_NOT_SELECTED;
 
@@ -505,9 +505,9 @@ Player::stopped(StreamID stream_id)
         if(stream_id.get().is_valid() &&
            currently_playing_stream_id_.get().is_valid() &&
            stream_id != currently_playing_stream_id_)
-            BUG("App stream %u stopped, but current stream ID should be %u",
-                stream_id.get().get_raw_id(),
-                currently_playing_stream_id_.get().get_raw_id());
+            MSG_BUG("App stream %u stopped, but current stream ID should be %u",
+                    stream_id.get().get_raw_id(),
+                    currently_playing_stream_id_.get().get_raw_id());
 
         current_stream_.set_unknown();
         currently_playing_stream_id_ = StreamID::make_invalid();
@@ -549,11 +549,11 @@ Player::stopped(StreamID stream_id, const char *reason,
            waiting_for_stream_id_.get().is_valid() &&
            stream_id != waiting_for_stream_id_)
         {
-            BUG("App stream %u stopped with error, "
-                "but current stream ID is %u, waiting for ID %u",
-                stream_id.get().get_raw_id(),
-                currently_playing_stream_id_.get().get_raw_id(),
-                waiting_for_stream_id_.get().get_raw_id());
+            MSG_BUG("App stream %u stopped with error, "
+                    "but current stream ID is %u, waiting for ID %u",
+                    stream_id.get().get_raw_id(),
+                    currently_playing_stream_id_.get().get_raw_id(),
+                    waiting_for_stream_id_.get().get_raw_id());
         }
 
         msg_error(0, LOG_NOTICE, "Stream %u stopped with error: %s",

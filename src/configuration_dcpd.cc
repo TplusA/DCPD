@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -166,7 +166,7 @@ static bool is_key_ours(const char *key, const char *our_key, size_t our_key_len
 
 bool configuration_set_key(const char *origin, const char *key, GVariant *value)
 {
-    log_assert(g_variant_n_children(value) == 1);
+    msg_log_assert(g_variant_n_children(value) == 1);
 
     GVariantWrapper top_level(value);
     GVariantWrapper v(g_variant_get_child_value(GVariantWrapper::get(top_level), 0),
@@ -175,7 +175,7 @@ bool configuration_set_key(const char *origin, const char *key, GVariant *value)
     if(!is_key_ours(key, configuration_data.cm->get_database_name(),
                     strlen(configuration_data.cm->get_database_name())))
     {
-        BUG("Attempted to set foreign key %s by %s", key, origin);
+        MSG_BUG("Attempted to set foreign key %s by %s", key, origin);
         return false;
     }
 
@@ -271,7 +271,7 @@ gboolean dbusmethod_config_get_all_keys(tdbusConfigurationRead *object,
     enter_config_read_handler(invocation);
 
     auto *cm = static_cast<Configuration::ConfigManager<Configuration::ApplianceValues> *>(user_data);
-    log_assert(cm != nullptr);
+    msg_log_assert(cm != nullptr);
 
     auto keys(cm->keys());
     keys.push_back(nullptr);
@@ -290,7 +290,7 @@ gboolean dbusmethod_config_get_value(tdbusConfigurationRead *object,
     enter_config_read_handler(invocation);
 
     auto *cm = static_cast<Configuration::ConfigManager<Configuration::ApplianceValues> *>(user_data);
-    log_assert(cm != nullptr);
+    msg_log_assert(cm != nullptr);
 
     auto value = cm->lookup_boxed(key);
 
@@ -313,7 +313,7 @@ gboolean dbusmethod_config_get_all_values(tdbusConfigurationRead *object,
     enter_config_read_handler(invocation);
 
     auto *cm = static_cast<Configuration::ConfigManager<Configuration::ApplianceValues> *>(user_data);
-    log_assert(cm != nullptr);
+    msg_log_assert(cm != nullptr);
 
     GVariantDict dict;
     g_variant_dict_init(&dict, nullptr);

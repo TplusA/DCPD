@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -507,7 +507,7 @@ static void reset_xmodem_state_for_cover_art(bool is_error)
 
     if(filetransfer_data->picture_provider == nullptr)
     {
-        BUG("No picture provider configured");
+        MSG_BUG("No picture provider configured");
         return;
     }
 
@@ -609,7 +609,7 @@ static int try_start_xmodem()
     LOGGED_LOCK_CONTEXT_HINT;
     std::lock_guard<LoggedLock::Mutex> lock(filetransfer_data->xmodem_status.lock);
 
-    log_assert(filetransfer_data->xmodem_status.xm_ctx.buffer_data.tx_offset == 0);
+    msg_log_assert(filetransfer_data->xmodem_status.xm_ctx.buffer_data.tx_offset == 0);
 
     switch(filetransfer_data->xmodem_status.source)
     {
@@ -634,7 +634,7 @@ static int try_start_xmodem()
 
 int Regs::FileTransfer::hcr_send_shutdown_request(const char *reason)
 {
-    log_assert(reason != nullptr);
+    msg_log_assert(reason != nullptr);
     msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "Shutdown requested: %s", reason);
 
     GError *error = NULL;
@@ -664,7 +664,7 @@ bool Regs::FileTransfer::hcr_is_system_update_in_progress()
 
       case OS_PATH_TYPE_DIRECTORY:
       case OS_PATH_TYPE_OTHER:
-        BUG("Update script exists, but is not a file");
+        MSG_BUG("Update script exists, but is not a file");
         break;
     }
 
@@ -727,13 +727,13 @@ static int do_write_download_control(const uint8_t *data)
                 return Regs::FileTransfer::hcr_send_shutdown_request("DCP command");
         }
         else if(data[1] == HCR_COMMAND_RESTORE_FACTORY_DEFAULTS)
-            BUG("Restore to factory defaults not implemented");
+            MSG_BUG("Restore to factory defaults not implemented");
     }
     else if(data[0] == HCR_COMMAND_CATEGORY_UPDATE_FROM_INET)
     {
         if(data[1] == HCR_COMMAND_UPDATE_MAIN_SYSTEM)
         {
-            APPLIANCE_BUG("System update attempted using old interfaces");
+            MSG_APPLIANCE_BUG("System update attempted using old interfaces");
             return -1;
         }
 
@@ -886,7 +886,7 @@ ssize_t Regs::FileTransfer::DCP::read_44_xmodem_data(uint8_t *response, size_t l
             }
             else
             {
-                log_assert(response[0] == XMODEM_COMMAND_EOT);
+                msg_log_assert(response[0] == XMODEM_COMMAND_EOT);
                 msg_vinfo(MESSAGE_LEVEL_DIAG, "Send 1 byte of XMODEM data");
 
                 /* report 100% progress */
@@ -1108,7 +1108,7 @@ void Regs::FileTransfer::done_notification(uint32_t xfer_id,
           case LIST_ERROR_BUSY_3000:
           case LIST_ERROR_BUSY_5000:
           case LIST_ERROR_BUSY:
-            BUG("List broker is busy, should retry download");
+            MSG_BUG("List broker is busy, should retry download");
             filetransfer_data->download_status.result = HCR_STATUS_DOWNLOAD_NETWORK_ERROR;
             break;
         }

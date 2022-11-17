@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -92,7 +92,7 @@ find_owner_by_key(const struct ConfigProxyData *data, const char *key,
 {
     if(key[0] != '@' || key[1] == '\0' || key[1] == ':')
     {
-        BUG("Key \"%s\" is not a fully qualified key", key);
+        MSG_BUG("Key \"%s\" is not a fully qualified key", key);
         return NULL;
     }
 
@@ -205,7 +205,7 @@ static bool set_key_table(struct ConfigurationOwner *owner, char **keys)
 
 static void free_owner_struct(struct ConfigurationOwner *owner)
 {
-    log_assert(owner != NULL);
+    msg_log_assert(owner != NULL);
 
     owner->id[0] = '\0';
     owner->dbus_path[0] = '\0';
@@ -367,7 +367,7 @@ static struct ConfigurationOwner *try_allocate_owner(struct ConfigProxyData *dat
 {
     if(find_owner_by_id(data, id) != NULL)
     {
-        BUG("Configuration owner \"%s\" already registered", id);
+        MSG_BUG("Configuration owner \"%s\" already registered", id);
         *retval = true;
         return NULL;
     }
@@ -399,8 +399,8 @@ bool configproxy_register_configuration_owner(const char *id,
                                               const char *dbus_dest,
                                               const char *dbus_path)
 {
-    log_assert(id != NULL);
-    log_assert(dbus_path != NULL);
+    msg_log_assert(id != NULL);
+    msg_log_assert(dbus_path != NULL);
 
     bool retval;
     struct ConfigurationOwner *const owner =
@@ -452,8 +452,8 @@ error_exit:
 
 bool configproxy_register_local_configuration_owner(const char *id, char **keys)
 {
-    log_assert(id != NULL);
-    log_assert(keys != NULL);
+    msg_log_assert(id != NULL);
+    msg_log_assert(keys != NULL);
 
     bool retval;
     struct ConfigurationOwner *const owner =
@@ -569,8 +569,8 @@ ssize_t configproxy_get_value_as_string(const char *key,
                                         char *buffer, size_t buffer_size,
                                         PatchUint32Fn patcher)
 {
-    log_assert(buffer != NULL);
-    log_assert(buffer_size > 0);
+    msg_log_assert(buffer != NULL);
+    msg_log_assert(buffer_size > 0);
 
     GVariant *value = (GVariant *)configproxy_get_value(key);
 
@@ -595,7 +595,7 @@ ssize_t configproxy_get_value_as_string(const char *key,
         const gchar *v = g_variant_get_string(value, &len);
 
         if(v == NULL)
-            BUG("Got NULL string value for key \"%s\"", key);
+            MSG_BUG("Got NULL string value for key \"%s\"", key);
         else if(is_buffer_big_enough(buffer_size, len + 1, key))
         {
             memcpy(buffer, v, len);
@@ -607,8 +607,8 @@ ssize_t configproxy_get_value_as_string(const char *key,
         retval = write_uint32(g_variant_get_uint32(value), patcher,
                               buffer, buffer_size, key);
     else
-        BUG("Unsupported type %s for key \"%s\"",
-            g_variant_get_type_string(value), key);
+        MSG_BUG("Unsupported type %s for key \"%s\"",
+                g_variant_get_type_string(value), key);
 
     g_variant_unref(value);
 

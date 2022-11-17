@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -62,7 +62,7 @@ static bool delete_credentials(const char *service_id, bool logout_on_failure,
     else
     {
         if(dummy == nullptr || dummy[0] != '\0')
-            BUG("Expected empty default user");
+            MSG_BUG("Expected empty default user");
 
         g_free(dummy);
 
@@ -76,7 +76,7 @@ static bool delete_credentials(const char *service_id, bool logout_on_failure,
                                                         true, ACTOR_ID_LOCAL_UI,
                                                         nullptr, error.await());
     else
-        BUG("Cannot logout from %s, have no Airable D-Bus proxy", service_id);
+        MSG_BUG("Cannot logout from %s, have no Airable D-Bus proxy", service_id);
 
     const bool logout_failed = error.log_failure("D-Bus: Service logout");
     return !(logout_failed || delete_failed);
@@ -297,7 +297,7 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer,
 
 bool Regs::MediaServices::DCP::read_106_media_service_list(std::vector<uint8_t> &buffer)
 {
-    log_assert(buffer.empty());
+    msg_log_assert(buffer.empty());
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "read 106 handler");
 

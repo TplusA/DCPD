@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -77,12 +77,12 @@ void Connman::ServiceList::erase(const std::string &name)
         break;
 
       case Technology::ETHERNET:
-        log_assert(number_of_ethernet_services_ > 0);
+        msg_log_assert(number_of_ethernet_services_ > 0);
         --number_of_ethernet_services_;
         break;
 
       case Technology::WLAN:
-        log_assert(number_of_wlan_services_ > 0);
+        msg_log_assert(number_of_wlan_services_ > 0);
         --number_of_wlan_services_;
         break;
     }
@@ -120,7 +120,7 @@ bool Connman::ServiceList::insert(const char *name, ServiceData &&service_data,
 
 size_t Connman::ServiceList::number_of_services() const
 {
-    log_assert(services_.size() == number_of_ethernet_services_ + number_of_wlan_services_);
+    msg_log_assert(services_.size() == number_of_ethernet_services_ + number_of_wlan_services_);
     return services_.size();
 }
 

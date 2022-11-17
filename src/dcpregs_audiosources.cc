@@ -489,7 +489,7 @@ class SelectedSource
         selected_is_half_selected_ = false;
         pending_ = nullptr;
         is_test_mode_ = false;
-        log_assert(cancel_ == nullptr);
+        msg_log_assert(cancel_ == nullptr);
     }
 
     void set_unit_test_mode() { is_test_mode_ = true; }
@@ -539,7 +539,7 @@ class SelectedSource
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
-        log_assert(pending_request_data_ != nullptr);
+        msg_log_assert(pending_request_data_ != nullptr);
         auto result(std::move(pending_request_data_));
         return result;
     }
@@ -553,24 +553,24 @@ class SelectedSource
         switch(state_)
         {
           case SelectionState::IDLE:
-            log_assert(pending_ == nullptr);
-            log_assert(cancel_ == nullptr);
+            msg_log_assert(pending_ == nullptr);
+            msg_log_assert(cancel_ == nullptr);
             break;
 
           case SelectionState::PENDING:
-            log_assert(pending_ != nullptr);
-            log_assert(cancel_ == nullptr);
+            msg_log_assert(pending_ != nullptr);
+            msg_log_assert(cancel_ == nullptr);
             break;
 
           case SelectionState::SELECTING:
-            log_assert(pending_ != nullptr);
+            msg_log_assert(pending_ != nullptr);
             do_cancel();
             break;
 
           case SelectionState::SELECTION_REQUEST_FAILED:
           case SelectionState::SELECTION_REQUEST_DONE:
-            log_assert(pending_ != nullptr);
-            log_assert(cancel_ == nullptr);
+            msg_log_assert(pending_ != nullptr);
+            msg_log_assert(cancel_ == nullptr);
             break;
         }
 
@@ -588,9 +588,9 @@ class SelectedSource
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> l(lock_);
 
-        log_assert(state_ == SelectionState::PENDING);
-        log_assert(pending_ != nullptr);
-        log_assert(cancel_ == nullptr);
+        msg_log_assert(state_ == SelectionState::PENDING);
+        msg_log_assert(pending_ != nullptr);
+        msg_log_assert(cancel_ == nullptr);
         do_start_pending();
     }
 
@@ -631,7 +631,7 @@ class SelectedSource
   private:
     void do_start_pending()
     {
-        log_assert(pending_request_data_ != nullptr);
+        msg_log_assert(pending_request_data_ != nullptr);
 
         state_ = SelectionState::SELECTING;
         cancel_ = g_cancellable_new();
@@ -674,8 +674,8 @@ class SelectedSource
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::RecMutex> lk(sel->lock_);
 
-        log_assert(sel->state_ == SelectionState::SELECTING);
-        log_assert(sel->cancel_ != nullptr);
+        msg_log_assert(sel->state_ == SelectionState::SELECTING);
+        msg_log_assert(sel->cancel_ != nullptr);
         g_object_unref(sel->cancel_);
         sel->cancel_ = nullptr;
 
@@ -687,7 +687,7 @@ class SelectedSource
 
     void do_cancel()
     {
-        log_assert(cancel_ != nullptr);
+        msg_log_assert(cancel_ != nullptr);
         g_cancellable_cancel(cancel_);
         g_object_unref(cancel_);
         cancel_ = nullptr;
@@ -913,7 +913,7 @@ static bool try_invoke_roon(const AudioSource &src, bool summon)
 {
     if(!summon)
     {
-        BUG("Shutting down Roon is not supported yet");
+        MSG_BUG("Shutting down Roon is not supported yet");
         return false;
     }
 
@@ -1295,7 +1295,7 @@ int Regs::AudioSources::DCP::write_80_get_known_audio_sources(const uint8_t *dat
             break;
 
           case GetAudioSourcesCommand::SOURCES_CHANGED:
-            BUG("%s(%d): unreachable", __func__, __LINE__);
+            MSG_BUG("%s(%d): unreachable", __func__, __LINE__);
             break;
         }
     }
@@ -1584,8 +1584,8 @@ void Regs::AudioSources::selected_source(const char *source_id,
         {
             if(!is_half_selected)
             {
-                BUG("Audio source \"%s\" %s again",
-                    source_id, is_deferred ? "deferred" : "selected");
+                MSG_BUG("Audio source \"%s\" %s again",
+                        source_id, is_deferred ? "deferred" : "selected");
                 return;
             }
             else if(is_deferred)
@@ -1596,7 +1596,7 @@ void Regs::AudioSources::selected_source(const char *source_id,
         }
     }
 
-    log_assert(src != nullptr);
+    msg_log_assert(src != nullptr);
     audio_source_data->selected_audio_source_notification(*src, is_deferred);
 }
 

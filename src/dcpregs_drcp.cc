@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2022  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -254,7 +254,7 @@ static const std::array<std::unique_ptr<DRCCommand>, 25> drc_commands =
  */
 int Regs::DRCP::DCP::write_drcp_command(const uint8_t *data, size_t length)
 {
-    log_assert(length >= 1);
+    msg_log_assert(length >= 1);
 
     msg_vinfo(MESSAGE_LEVEL_DEBUG, "DRC: command code 0x%02x", data[0]);
 
@@ -283,7 +283,7 @@ int Regs::DRCP::DCP::write_drcp_command(const uint8_t *data, size_t length)
         if(const auto *dc = dynamic_cast<const CommandWithData *>(command))
             return dc->fn_(data + 1, length - 1);
 
-        BUG("Unknown DRCP command type");
+        MSG_BUG("Unknown DRCP command type");
         return -1;
     } (it->get());
 

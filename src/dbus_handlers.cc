@@ -60,11 +60,11 @@ static void unknown_signal(const char *iface_name, const char *signal_name,
 static void check_parameter_assertions(GVariant *parameters,
                                        guint expected_number_of_parameters)
 {
-    /* we may use #log_assert() here because the GDBus code is supposed to do
-     * any type checks before calling us---here, we just make sure we can
+    /* we may use #msg_log_assert() here because the GDBus code is supposed to
+     * do any type checks before calling us---here, we just make sure we can
      * trust those type checks */
-    log_assert(g_variant_type_is_tuple(g_variant_get_type(parameters)));
-    log_assert(g_variant_n_children(parameters) == expected_number_of_parameters);
+    msg_log_assert(g_variant_type_is_tuple(g_variant_get_type(parameters)));
+    msg_log_assert(g_variant_n_children(parameters) == expected_number_of_parameters);
 }
 
 void dbussignal_logind_manager(GDBusProxy *proxy, const gchar *sender_name,
@@ -1023,7 +1023,7 @@ void dbussignal_airable(GDBusProxy *proxy, const gchar *sender_name,
         if(actor_id != ACTOR_ID_SMARTPHONE_APP && raw_error_code == 0)
         {
             auto *data = static_cast<Applink::AppConnections *>(user_data);
-            log_assert(data != nullptr);
+            msg_log_assert(data != nullptr);
 
             if(is_login)
                 Applink::send_airable_service_logged_in(*data, service_id, info);
