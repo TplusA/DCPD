@@ -336,16 +336,23 @@ static GVariantWrapper hash_to_variant(const MD5::Hash &hash)
                                                      sizeof(hash[0])));
 }
 
+static inline void add_meta_data_item(GVariantBuilder &builder,
+                                      const char *key, const std::string &value)
+{
+    if(!value.empty())
+        g_variant_builder_add(&builder, "(ss)", key, value.c_str());
+}
+
 static GVariant *
 to_stream_meta_data(const std::string &artist, const std::string &album,
                     const std::string &title, const std::string &alttrack)
 {
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
-    g_variant_builder_add(&builder, "(ss)", "artist", artist.c_str());
-    g_variant_builder_add(&builder, "(ss)", "album", album.c_str());
-    g_variant_builder_add(&builder, "(ss)", "title", title.c_str());
-    g_variant_builder_add(&builder, "(ss)", "x-drcpd-title", alttrack.c_str());
+    add_meta_data_item(builder, "artist", artist);
+    add_meta_data_item(builder, "album", album);
+    add_meta_data_item(builder, "title", title);
+    add_meta_data_item(builder, "x-drcpd-title", alttrack);
     return g_variant_builder_end(&builder);
 }
 

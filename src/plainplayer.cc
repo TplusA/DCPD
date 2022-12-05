@@ -30,14 +30,21 @@
 #include "maybe.hh"
 #include "logged_lock.hh"
 
+static inline void add_meta_data_item(GVariantBuilder &builder,
+                                      const char *key, const std::string &value)
+{
+    if(!value.empty())
+        g_variant_builder_add(&builder, "(ss)", key, value.c_str());
+}
+
 GVariant *Regs::PlayStream::to_gvariant(const StreamInfo &si)
 {
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
-    g_variant_builder_add(&builder, "(ss)", "artist", si.artist_.c_str());
-    g_variant_builder_add(&builder, "(ss)", "album", si.album_.c_str());
-    g_variant_builder_add(&builder, "(ss)", "title", si.title_.c_str());
-    g_variant_builder_add(&builder, "(ss)", "x-drcpd-title", si.alttrack_.c_str());
+    add_meta_data_item(builder, "artist", si.artist_);
+    add_meta_data_item(builder, "album", si.album_);
+    add_meta_data_item(builder, "title", si.title_);
+    add_meta_data_item(builder, "x-drcpd-title", si.alttrack_);
     return g_variant_builder_end(&builder);
 }
 
