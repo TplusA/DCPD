@@ -1,3 +1,12 @@
+2022-12-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 7.11 released.
+
+	* Player: Don't send empty meta data values to player to reduce D-Bus
+	  traffic and avoid a GStreamer warning.
+
+	* Maintenance: Fix compilation with gcc 12.2.0.
+
 2022-09-28  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.10 released.
