@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -307,50 +307,58 @@ class TechnologyPropertiesWIFI: public TechnologyPropertiesBase
                            _GVariant *parameters) final override;
 };
 
+#ifdef DOXYGEN
+/* it's actually wrong to put the FQNS, but Doxygen doesn't understand the
+ * correct syntax */
+#define CONNMAN_NS  ::Connman::
+#else /* !DOXYGEN */
+#define CONNMAN_NS
+#endif /* DOXYGEN */
+
 template <> template <>
-struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::POWERED>
+struct CONNMAN_NS TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::POWERED>
 {
     static constexpr auto access = PropertyAccess::READ_WRITE;
     using Type = bool;
 };
 
 template <> template <>
-struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::CONNECTED>
+struct CONNMAN_NS TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::CONNECTED>
 {
     static constexpr auto access = PropertyAccess::READ_ONLY;
     using Type = bool;
 };
 
 template <> template <>
-struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::NAME>
+struct CONNMAN_NS TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::NAME>
 {
     static constexpr auto access = PropertyAccess::READ_ONLY;
     using Type = std::string;
 };
 
 template <> template <>
-struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TYPE>
+struct CONNMAN_NS TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TYPE>
 {
     static constexpr auto access = PropertyAccess::READ_ONLY;
     using Type = std::string;
 };
 
 template <> template <>
-struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TETHERING>
+struct CONNMAN_NS TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TETHERING>
 {
     static constexpr auto access = PropertyAccess::READ_WRITE;
     using Type = bool;
 };
 
 template <> template <>
-struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER>
+struct CONNMAN_NS TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TETHERING_IDENTIFIER>
 {
     static constexpr auto access = PropertyAccess::READ_WRITE;
     using Type = std::string;
 };
 
 template <> template <>
-struct TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE>
+struct CONNMAN_NS TechnologyPropertiesWIFI::CacheType::ValueTraits<TechnologyPropertiesWIFI::Property::TETHERING_PASSPHRASE>
 {
     static constexpr auto access = PropertyAccess::READ_WRITE;
     using Type = std::string;
