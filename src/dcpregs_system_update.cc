@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *

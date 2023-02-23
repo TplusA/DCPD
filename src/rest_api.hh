@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,6 +24,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wswitch-enum"
+#pragma GCC diagnostic ignored "-Wtype-limits"
 #include "json.hh"
 #pragma GCC diagnostic pop
 

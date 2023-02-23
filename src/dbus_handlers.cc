@@ -44,6 +44,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wswitch-enum"
+#pragma GCC diagnostic ignored "-Wtype-limits"
 #include "json.hh"
 #pragma GCC diagnostic pop
 
