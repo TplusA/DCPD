@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2019, 2021, 2022, 2023  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -20,7 +20,7 @@
 #
 
 project('DCPD', ['cpp', 'c'],
-    version: '7.11',
+    version: '8.0',
     default_options: ['warning_level=3', 'cpp_std=c++14', 'buildtype=plain'])
 
 PACKAGE = 'dcpd'

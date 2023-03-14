@@ -1,3 +1,10 @@
+2023-03-14  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 8.0 released.
+
+	* D-Bus: Player interface supports multiple URLs per stream now.
+	  Adapted to the various interface changes that have been made.
+
 2022-12-07  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 7.11 released.
@@ -1235,4 +1242,4 @@
 	* First release for testing.
 
 
-Copyright 2015--2022 T+A elektroakustik GmbH & Co. KG
+Copyright 2015--2023 T+A elektroakustik GmbH & Co. KG
