@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -85,7 +85,7 @@ class Fixture
     void activate_player()
     {
         player->activate([] () {});
-        player->notifications().audio_source_selected();
+        player->notifications().audio_source_selected(false);
     }
 };
 
@@ -176,7 +176,7 @@ TEST_CASE_FIXTURE(Fixture,
             "artist", "album", "title", "alttrack", "url now");
 
     player->activate([] () {});
-    player->notifications().audio_source_selected();
+    player->notifications().audio_source_selected(false);
 
     bool has_started = false;
     auto id(Regs::PlayStream::PlainPlayer::StreamID::make_invalid());
@@ -209,7 +209,7 @@ TEST_CASE_FIXTURE(Fixture,
             "artist_2", "album_2", "title_2", "alttrack_2", "url now_2");
 
     player->activate([] () {});
-    player->notifications().audio_source_selected();
+    player->notifications().audio_source_selected(false);
 
     /* start for the first time */
     bool has_started_1 = false;
@@ -288,7 +288,7 @@ TEST_CASE_FIXTURE(Fixture,
                         }));
     CHECK_FALSE(has_started);
 
-    player->notifications().audio_source_selected();
+    player->notifications().audio_source_selected(false);
     REQUIRE(has_started);
     CHECK(was_first);
     CHECK_FALSE(was_start_requested);
@@ -298,7 +298,7 @@ TEST_CASE_FIXTURE(Fixture,
                   "Start notification for same stream is treated as resume from pause")
 {
     player->activate([] () {});
-    player->notifications().audio_source_selected();
+    player->notifications().audio_source_selected(false);
 
     auto id(Regs::PlayStream::PlainPlayer::StreamID::make_invalid());
     CHECK(player->start(Regs::PlayStream::StreamInfo("a", "b", "c", "d", "e"),

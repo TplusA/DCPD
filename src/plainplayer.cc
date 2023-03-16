@@ -58,6 +58,8 @@ class Player:
     {
         DESELECTED,
         DESELECTED_AWAITING_SELECTION,
+        SELECTED_ON_HOLD,
+        SELECTED_ON_HOLD_AND_START_REQUESTED,
         STOPPED_REQUESTED,
         STOPPED,
         PLAYING_REQUESTED,
@@ -132,7 +134,7 @@ class Player:
                const PushStreamFunction &push_stream) override;
     bool next(Regs::PlayStream::StreamInfo &&stream) override;
     bool stop(const std::function<bool()> &stop_stream) override;
-    void audio_source_selected() override;
+    void audio_source_selected(bool on_hold) override;
     void audio_source_deselected() override;
     StartResult started(StreamID stream_id) override;
     StopResult stopped(StreamID stream_id) override;
@@ -184,10 +186,12 @@ class Player:
   public:
     static const char *state_to_string(Player::State state)
     {
-        static const std::array<const char *const, 7> names
+        static const std::array<const char *const, 9> names
         {
           "DESELECTED",
           "DESELECTED_AWAITING_SELECTION",
+          "SELECTED_ON_HOLD",
+          "SELECTED_ON_HOLD_AND_START_REQUESTED",
           "STOPPED_REQUESTED",
           "STOPPED",
           "PLAYING_REQUESTED",
@@ -217,6 +221,8 @@ void Player::activate(const std::function<void()> &request_audio_source)
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
       case State::STOPPED_REQUESTED:
       case State::STOPPED:
       case State::PLAYING_REQUESTED:
@@ -236,6 +242,8 @@ bool Player::is_active() const
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
       case State::STOPPED_REQUESTED:
       case State::STOPPED:
       case State::PLAYING_REQUESTED:
@@ -262,6 +270,12 @@ bool Player::start(Regs::PlayStream::StreamInfo &&stream,
 
       case State::DESELECTED_AWAITING_SELECTION:
         do_start(std::move(stream), push_stream);
+        return true;
+
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
+        do_start(std::move(stream), push_stream);
+        set_state(State::SELECTED_ON_HOLD_AND_START_REQUESTED);
         return true;
 
       case State::STOPPED_REQUESTED:
@@ -308,6 +322,8 @@ bool Player::next(Regs::PlayStream::StreamInfo &&stream)
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
       case State::PLAYING_REQUESTED:
         next_stream_ = std::move(stream);
         return true;
@@ -331,9 +347,15 @@ bool Player::stop(const std::function<bool()> &stop_stream)
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
         push_stream_fn_ = nullptr;
         next_stream_.set_unknown();
         waiting_for_stream_id_ = StreamID::make_invalid();
+
+        if(state_ == State::SELECTED_ON_HOLD_AND_START_REQUESTED)
+            set_state(State::SELECTED_ON_HOLD);
+
         return true;
 
       case State::STOPPED_REQUESTED:
@@ -356,18 +378,46 @@ bool Player::stop(const std::function<bool()> &stop_stream)
     return false;
 }
 
-void Player::audio_source_selected()
+void Player::audio_source_selected(bool on_hold)
 {
     std::lock_guard<LoggedLock::Mutex> lock(lock_);
 
     switch(state_)
     {
       case State::DESELECTED:
-        current_stream_.set_unknown();
-        set_state(State::STOPPED);
+      case State::SELECTED_ON_HOLD:
+        if(on_hold)
+        {
+            if(state_ == State::DESELECTED)
+                set_state(State::SELECTED_ON_HOLD);
+            else
+                MSG_BUG("Audio source selected on hold again");
+        }
+        else
+        {
+            current_stream_.set_unknown();
+            set_state(State::STOPPED);
+        }
+
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
+        if(on_hold)
+        {
+            if(state_ == State::DESELECTED_AWAITING_SELECTION)
+            {
+                if(current_stream_.is_known())
+                    set_state(State::SELECTED_ON_HOLD_AND_START_REQUESTED);
+                else
+                    set_state(State::SELECTED_ON_HOLD);
+            }
+            else
+                MSG_BUG("Audio source selected on hold again (start requested)");
+
+            break;
+        }
+
         if(current_stream_.is_known() &&
            push_stream_fn_(current_stream_.get(), next_free_stream_id_, true, false))
         {
@@ -400,10 +450,12 @@ void Player::audio_source_deselected()
     switch(state_)
     {
       case State::DESELECTED:
-        MSG_BUG("Plain URL audio source not selected");
+        MSG_BUG("Deselected plain URL audio source was not selected");
         return;
 
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
       case State::STOPPED_REQUESTED:
       case State::STOPPED:
       case State::PLAYING_BUT_STOPPED:
@@ -429,6 +481,8 @@ Player::started(StreamID stream_id)
     {
       case State::DESELECTED:
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
       case State::STOPPED_REQUESTED:
       case State::STOPPED:
         MSG_BUG("App stream %u started in unexpected state %s",
@@ -485,6 +539,8 @@ Player::stopped(StreamID stream_id)
     {
       case State::DESELECTED:
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
         if(stream_id.get().is_valid() && stream_id != expected_stopping_stream_id_)
             MSG_BUG("App stream %u stopped in unexpected state %s",
                     stream_id.get().get_raw_id(), to_string(state_));
@@ -538,6 +594,8 @@ Player::stopped(StreamID stream_id, const char *reason,
     {
       case State::DESELECTED:
       case State::DESELECTED_AWAITING_SELECTION:
+      case State::SELECTED_ON_HOLD:
+      case State::SELECTED_ON_HOLD_AND_START_REQUESTED:
       case State::STOPPED_REQUESTED:
       case State::STOPPED:
       case State::PLAYING_BUT_STOPPED:

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -90,6 +90,11 @@ gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
                                               const char *source_id,
                                               GVariant *request_data,
                                               gpointer user_data);
+gboolean dbusmethod_audiopath_source_selected_on_hold(tdbusaupathSource *object,
+                                                      GDBusMethodInvocation *invocation,
+                                                      const char *source_id,
+                                                      GVariant *request_data,
+                                                      gpointer user_data);
 gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
                                                 GDBusMethodInvocation *invocation,
                                                 const char *source_id,

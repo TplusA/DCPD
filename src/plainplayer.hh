@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020, 2021  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019, 2020, 2021, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -215,7 +215,7 @@ class PlainPlayerNotifications
     /*!
      * Plain URL audio source has been selected and can be used.
      */
-    virtual void audio_source_selected() = 0;
+    virtual void audio_source_selected(bool on_hold) = 0;
 
     /*!
      * Plain URL audio source has been deselected.
