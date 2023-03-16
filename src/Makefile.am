@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015--2021  T+A elektroakustik GmbH & Co. KG
+# Copyright (C) 2015--2021, 2023  T+A elektroakustik GmbH & Co. KG
 #
 # This file is part of DCPD.
 #
@@ -225,7 +225,7 @@ libaccesspoint_la_SOURCES = \
     accesspoint_manager.cc accesspoint_manager.hh
 libaccesspoint_la_CXXFLAGS = $(AM_CXXFLAGS)
 
-libplainplayer_la_SOURCES = plainplayer.cc plainplayer.hh
+libplainplayer_la_SOURCES = plainplayer.cc plainplayer.hh dump_enum_value.hh
 libplainplayer_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 nodist_libdcpd_dbus_la_SOURCES = de_tahifi_dcpd.c de_tahifi_dcpd.h

@@ -29,6 +29,7 @@
 #include "dbus_iface_deep.h"
 #include "maybe.hh"
 #include "logged_lock.hh"
+#include "dump_enum_value.hh"
 
 static inline void add_meta_data_item(GVariantBuilder &builder,
                                       const char *key, const std::string &value)
@@ -62,6 +63,7 @@ class Player:
         PLAYING_REQUESTED,
         PLAYING,
         PLAYING_BUT_STOPPED,
+        LAST_VALUE = PLAYING_BUT_STOPPED,
     };
 
   private:
@@ -182,18 +184,17 @@ class Player:
   public:
     static const char *state_to_string(Player::State state)
     {
-        switch(state)
+        static const std::array<const char *const, 7> names
         {
-          case Player::State::DESELECTED: return "DESELECTED";
-          case Player::State::DESELECTED_AWAITING_SELECTION: return "DESELECTED_AWAITING_SELECTION";
-          case Player::State::STOPPED_REQUESTED: return "STOPPED_REQUESTED";
-          case Player::State::STOPPED: return "STOPPED";
-          case Player::State::PLAYING_REQUESTED: return "PLAYING_REQUESTED";
-          case Player::State::PLAYING: return "PLAYING";
-          case Player::State::PLAYING_BUT_STOPPED: return "PLAYING_BUT_STOPPED";
-        }
-
-        return "*** UNKNOWN ***";
+          "DESELECTED",
+          "DESELECTED_AWAITING_SELECTION",
+          "STOPPED_REQUESTED",
+          "STOPPED",
+          "PLAYING_REQUESTED",
+          "PLAYING",
+          "PLAYING_BUT_STOPPED",
+        };
+        return enum_to_string(names, state);
     }
 };
 
