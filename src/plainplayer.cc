@@ -450,7 +450,7 @@ void Player::audio_source_deselected()
     switch(state_)
     {
       case State::DESELECTED:
-        MSG_BUG("Plain URL audio source not selected");
+        MSG_BUG("Deselected plain URL audio source was not selected");
         return;
 
       case State::DESELECTED_AWAITING_SELECTION:

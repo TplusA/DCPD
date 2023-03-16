@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2020, 2021, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -814,7 +814,7 @@ void test_selection_of_unknown_source_yields_error()
 void test_spurious_deselection_of_audio_source_emits_bug_message()
 {
     mock_messages->expect_msg_error(0, LOG_CRIT,
-                                    "BUG: Plain URL audio source not selected");
+                                    "BUG: Deselected plain URL audio source was not selected");
     streaming_regs->audio_source_deselected();
 }
 
