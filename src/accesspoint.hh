@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -44,7 +44,7 @@ class AccessPoint
         ACTIVATING,
         ACTIVE,
 
-        LAST_STATUS = ACTIVE,
+        LAST_VALUE = ACTIVE,
     };
 
     enum class RequestResult
@@ -54,7 +54,7 @@ class AccessPoint
         BLOCKED_BUSY,       /*!< Another request is in progress, try again later */
         FAILED,             /*!< Request failed due to some error */
 
-        LAST_REQUEST_RESULT = FAILED,
+        LAST_VALUE = FAILED,
     };
 
     enum class Error
@@ -67,7 +67,7 @@ class AccessPoint
         ALREADY_ACTIVE,     /*!< Activation request while active */
         ALREADY_DISABLED,   /*!< Deactivation request while disabled */
 
-        LAST_ERROR = ALREADY_DISABLED,
+        LAST_VALUE = ALREADY_DISABLED,
     };
 
     using StatusFn = std::function<void(Connman::TechnologyRegistry &reg,

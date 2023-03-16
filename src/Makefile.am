@@ -135,6 +135,7 @@ libregisters_la_SOURCES = \
     dcpregs_datetime.cc dcpregs_datetime.hh \
     dcpregs_system_update.cc dcpregs_system_update.hh dcpregs_system_update_json.hh \
     dcpregs_status.hh \
+    dump_enum_value.hh \
     volume_control.cc volume_control.hh dcpregs_volume.hh fixpoint.hh \
     dbus_handlers_connman_manager.hh networkprefs.h \
     connman_service.hh connman_service_list.hh connman_address.hh maybe.hh\
@@ -209,6 +210,7 @@ libdbus_handlers_la_SOURCES = \
     networkprefs.h \
     net_connman.h \
     actor_id.h \
+    dump_enum_value.hh \
     dcpregs_networkconfig.hh \
     dcpregs_upnpname.hh \
     dcpregs_wlansurvey.hh \
@@ -222,7 +224,8 @@ libdbus_handlers_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libaccesspoint_la_SOURCES = \
     accesspoint.cc accesspoint.hh \
-    accesspoint_manager.cc accesspoint_manager.hh
+    accesspoint_manager.cc accesspoint_manager.hh \
+    dump_enum_value.hh
 libaccesspoint_la_CXXFLAGS = $(AM_CXXFLAGS)
 
 libplainplayer_la_SOURCES = plainplayer.cc plainplayer.hh dump_enum_value.hh

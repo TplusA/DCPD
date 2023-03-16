@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016--2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -34,6 +34,7 @@
 #include "mainloop.hh"
 #include "dbus_common.h"
 #include "gvariantwrapper.hh"
+#include "dump_enum_value.hh"
 
 #include <functional>
 #include <algorithm>
@@ -170,6 +171,7 @@ class WLANConnectionState
         INVALID,
         KNOWN_CREDENTIALS,
         WPS,
+        LAST_VALUE = WPS,
     };
 
     enum class State
@@ -292,7 +294,7 @@ class WLANConnectionState
         msg_log_assert(!service_name.empty());
 
         msg_info("About to connect to WLAN \"%s\" %s",
-                 service_name.c_str(), connection_method_to_string(method));
+                 service_name.c_str(), to_string(method));
 
         state_ = State::ABOUT_TO_CONNECT;
         method_ = method;
@@ -469,24 +471,18 @@ class WLANConnectionState
         msg_info("Connecting service \"%s\" %s (%s)",
                  candidate_->get_service_name().c_str(),
                  succeeded ? succeeded_string : failed_string,
-                 connection_method_to_string(method_));
+                 to_string(method_));
     }
 
-    static const char *connection_method_to_string(Method method)
+    static const char *to_string(Method method)
     {
-        switch(method)
+        static const std::array<const char *const, 3> names
         {
-          case Method::INVALID:
-            return "*INVALID*";
-
-          case Method::KNOWN_CREDENTIALS:
-            return "with credentials";
-
-          case Method::WPS:
-            return "via WPS";
-        }
-
-        return nullptr;
+            "*INVALID METHOD*",
+            "with credentials",
+            "via WPS",
+        };
+        return enum_to_string(names, method);
     }
 };
 

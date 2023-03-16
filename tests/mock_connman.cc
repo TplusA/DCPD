@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -200,7 +200,7 @@ class MockConnman::Expectation
             arg_pointer_shall_be_null_(false),
             arg_dest_size_(9876543),
             callback_invocation_(nullptr),
-            callback_result_(Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_RESULT) + 1)),
+            callback_result_(Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_VALUE) + 1)),
             service_iterator_(nullptr)
         {}
     };
@@ -420,7 +420,7 @@ void MockConnman::expect_connman_security_iterator_get_security(const char *ret,
 void MockConnman::expect_connman_start_wlan_site_survey(bool ret)
 {
     expectations_->add(Expectation(ret, nullptr,
-                                   Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_RESULT) + 1)));
+                                   Connman::SiteSurveyResult(int(Connman::SiteSurveyResult::LAST_VALUE) + 1)));
 }
 
 void MockConnman::expect_connman_start_wlan_site_survey(bool ret, SurveyCallbackInvocation callback_invocation, Connman::SiteSurveyResult callback_result)

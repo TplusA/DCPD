@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2018, 2019, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,45 +24,54 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "accesspoint_manager.hh"
+#include "dump_enum_value.hh"
 
-static const std::array<const char *const, size_t(Network::AccessPoint::Status::LAST_STATUS) + 1>
-status_to_string
+static const char *to_string(Network::AccessPoint::Status status)
 {
-    "UNKNOWN",
-    "PROBING_STATUS",
-    "DISABLED",
-    "ACTIVATING",
-    "ACTIVE",
-};
+    static const std::array<const char *const, 5> names
+    {
+        "UNKNOWN",
+        "PROBING_STATUS",
+        "DISABLED",
+        "ACTIVATING",
+        "ACTIVE",
+    };
+    return enum_to_string(names, status);
+}
 
-static const std::array<const char *const, size_t(Network::AccessPoint::RequestResult::LAST_REQUEST_RESULT) + 1>
-result_to_string
+static const char *to_string(Network::AccessPoint::RequestResult rr)
 {
-    "OK",
-    "BLOCKED_BY_POLICY",
-    "BLOCKED_BUSY",
-    "FAILED",
-};
+    static const std::array<const char *const, 4> names
+    {
+        "OK",
+        "BLOCKED_BY_POLICY",
+        "BLOCKED_BUSY",
+        "FAILED",
+    };
+    return enum_to_string(names, rr);
+}
 
-static const std::array<const char *const, size_t(Network::AccessPoint::Error::LAST_ERROR) + 1>
-error_to_string
+static const char *to_string(Network::AccessPoint::Error err)
 {
-    "OK",
-    "UNKNOWN",
-    "DBUS_FAILURE",
-    "BUSY",
-    "ALREADY_ACTIVATING",
-    "ALREADY_ACTIVE",
-    "ALREADY_DISABLED",
-};
+    static const std::array<const char *const, 7> names
+    {
+        "OK",
+        "UNKNOWN",
+        "DBUS_FAILURE",
+        "BUSY",
+        "ALREADY_ACTIVATING",
+        "ALREADY_ACTIVE",
+        "ALREADY_DISABLED",
+    };
+    return enum_to_string(names, err);
+}
 
 void Network::AccessPointManager::status_watcher(Connman::TechnologyRegistry &reg,
                                                  Network::AccessPoint::Status old_status,
                                                  Network::AccessPoint::Status new_status)
 {
     msg_info("Access point status %s -> %s",
-             status_to_string[size_t(old_status)],
-             status_to_string[size_t(new_status)]);
+             to_string(old_status), to_string(new_status));
 
     if(old_status == new_status)
         return;
@@ -163,15 +172,11 @@ bool Network::AccessPointManager::activate(std::string &&ssid, std::string &&pas
             if(error == Network::AccessPoint::Error::OK)
                 msg_vinfo(MESSAGE_LEVEL_DEBUG,
                           "Access point spawn request result: %s (%s) -> %s",
-                          result_to_string[size_t(result)],
-                          error_to_string[size_t(error)],
-                          status_to_string[size_t(status)]);
+                          to_string(result), to_string(error), to_string(status));
             else
                 msg_error(0, LOG_NOTICE,
                           "Access point spawn request error: %s (%s) -> %s",
-                          result_to_string[size_t(result)],
-                          error_to_string[size_t(error)],
-                          status_to_string[size_t(status)]);
+                          to_string(result), to_string(error), to_string(status));
         });
 }
 
@@ -185,15 +190,11 @@ bool Network::AccessPointManager::deactivate(AccessPoint::DoneFn &&done)
             if(error == Network::AccessPoint::Error::OK)
                 msg_vinfo(MESSAGE_LEVEL_DEBUG,
                           "Access point shutdown request result: %s (%s) -> %s",
-                          result_to_string[size_t(result)],
-                          error_to_string[size_t(error)],
-                          status_to_string[size_t(status)]);
+                          to_string(result), to_string(error), to_string(status));
             else
                 msg_error(0, LOG_NOTICE,
                           "Access point shutdown request error: %s (%s) -> %s",
-                          result_to_string[size_t(result)],
-                          error_to_string[size_t(error)],
-                          status_to_string[size_t(status)]);
+                          to_string(result), to_string(error), to_string(status));
 
             if(done != nullptr)
                 done(result, error, status);

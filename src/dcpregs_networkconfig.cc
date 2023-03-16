@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2021, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -35,6 +35,7 @@
 #include "ethernet_connection_workaround.hh"
 #include "string_trim.hh"
 #include "shutdown_guard.h"
+#include "dump_enum_value.hh"
 
 #include <arpa/inet.h>
 
@@ -1806,59 +1807,33 @@ int Regs::NetworkConfig::DCP::write_54_selected_ip_profile(const uint8_t *data, 
     return nwconfig_write_data.enter_edit_mode(tech) ? 0 : -1;
 }
 
-static const char *dhcp_method_to_string(Connman::DHCPV4Method method)
+static const char *to_string(Connman::DHCPV4Method method)
 {
-    switch(method)
+    static const std::array<const char *const, 6> names
     {
-        case Connman::DHCPV4Method::NOT_AVAILABLE:
-          return "[not available]";
-
-        case Connman::DHCPV4Method::UNKNOWN_METHOD:
-          return "unknown";
-
-        case Connman::DHCPV4Method::ON:
-          return "DHCP";
-
-        case Connman::DHCPV4Method::OFF:
-          return "off (no IPv4)";
-
-        case Connman::DHCPV4Method::MANUAL:
-          return "manual";
-
-        case Connman::DHCPV4Method::FIXED:
-          return "fixed (cannot be modified)";
-    }
-
-    return "*** INVALID VALUE ***";
+          "[not available]",
+          "unknown",
+          "DHCP",
+          "off (no IPv4)",
+          "manual",
+          "fixed (cannot be modified)",
+    };
+    return enum_to_string(names, method);
 }
 
-static const char *dhcp_method_to_string(Connman::DHCPV6Method method)
+static const char *to_string(Connman::DHCPV6Method method)
 {
-    switch(method)
+    static const std::array<const char *const, 7> names
     {
-        case Connman::DHCPV6Method::NOT_AVAILABLE:
-          return "[not available]";
-
-        case Connman::DHCPV6Method::UNKNOWN_METHOD:
-          return "unknown";
-
-        case Connman::DHCPV6Method::ON:
-          return "DHCP";
-
-        case Connman::DHCPV6Method::OFF:
-          return "off (no IPv6)";
-
-        case Connman::DHCPV6Method::MANUAL:
-          return "manual";
-
-        case Connman::DHCPV6Method::SIX_TO_FOUR:
-          return "6to4 tunnel";
-
-        case Connman::DHCPV6Method::FIXED:
-          return "fixed (cannot be modified)";
-    }
-
-    return "*** INVALID VALUE ***";
+          "[not available]",
+          "unknown",
+          "DHCP",
+          "off (no IPv6)",
+          "manual",
+          "6to4 tunnel",
+          "fixed (cannot be modified)",
+    };
+    return enum_to_string(names, method);
 }
 
 static bool dump_ipv4_config(const Connman::IPSettings<Connman::AddressType::IPV4> &ipv4,
@@ -1871,7 +1846,7 @@ static bool dump_ipv4_config(const Connman::IPSettings<Connman::AddressType::IPV
     }
 
     msg_info("Network (%s): IPv4 configuration method %s",
-             which, dhcp_method_to_string(ipv4.get_dhcp_method()));
+             which, to_string(ipv4.get_dhcp_method()));
     msg_info("Network (%s): IPv4 address %s",
              which, ipv4.get_address().get_string().c_str());
     msg_info("Network (%s): IPv4 netmask %s",
@@ -1891,7 +1866,7 @@ static bool dump_ipv6_config(const Connman::IPSettings<Connman::AddressType::IPV
     }
 
     msg_info("Network (%s): IPv6 configuration method %s",
-             which, dhcp_method_to_string(ipv6.get_dhcp_method()));
+             which, to_string(ipv6.get_dhcp_method()));
     msg_info("Network (%s): IPv6 address %s",
              which, ipv6.get_address().get_string().c_str());
     msg_info("Network (%s): IPv6 netmask %s",
@@ -1901,27 +1876,17 @@ static bool dump_ipv6_config(const Connman::IPSettings<Connman::AddressType::IPV
     return true;
 }
 
-static const char *proxy_method_to_string(Connman::ProxyMethod pm)
+static const char *to_string(Connman::ProxyMethod pm)
 {
-    switch(pm)
+    static const std::array<const char *const, 5> names
     {
-      case Connman::ProxyMethod::NOT_AVAILABLE:
-        return "[not available]";
-
-      case Connman::ProxyMethod::UNKNOWN_METHOD:
-        return "unknown";
-
-      case Connman::ProxyMethod::DIRECT:
-        return "direct";
-
-      case Connman::ProxyMethod::AUTO:
-        return "auto";
-
-      case Connman::ProxyMethod::MANUAL:
-        return "manual";
-    }
-
-    return "*** INVALID VALUE ***";
+        "[not available]",
+        "unknown",
+        "direct",
+        "auto",
+        "manual",
+    };
+    return enum_to_string(names, pm);
 }
 
 static void dump_string_vector(const std::vector<std::string> &v,
@@ -1966,7 +1931,7 @@ static void dump_service_settings(const Connman::ServiceData::Settings &settings
     {
         const Connman::ProxySettings &proxy(settings.proxy_.get());
         msg_info("Network (%s): Proxy method %s",
-                 which, proxy_method_to_string(proxy.get_method()));
+                 which, to_string(proxy.get_method()));
         msg_info("Network (%s): Proxy PAC URL %s", which,
                  proxy.get_pac_url().empty() ? "*empty*" : proxy.get_pac_url().c_str());
 

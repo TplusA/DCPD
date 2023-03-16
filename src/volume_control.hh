@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019, 2020  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017--2020, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -24,6 +24,7 @@
 
 #include "maybe.hh"
 #include "logged_lock.hh"
+#include "dump_enum_value.hh"
 
 #include <memory>
 #include <vector>
@@ -82,24 +83,13 @@ enum class VolumeScale
     DECIBEL,
     RELATIVE_STEPS,
 
-    LAST_SCALE = RELATIVE_STEPS,
+    LAST_VALUE = RELATIVE_STEPS,
 };
 
-static inline const char *scale_to_string(Mixer::VolumeScale scale)
+static inline const char *to_string(Mixer::VolumeScale scale)
 {
-    switch(scale)
-    {
-      case Mixer::VolumeScale::STEPS:
-        return "steps";
-
-      case Mixer::VolumeScale::DECIBEL:
-        return "dB";
-
-      case Mixer::VolumeScale::RELATIVE_STEPS:
-        return "pm";
-    }
-
-    return "";
+    static const std::array<const char *const, 3> names { "steps", "dB", "pm", };
+    return enum_to_string(names, scale);
 }
 
 class VolumeControlProperties

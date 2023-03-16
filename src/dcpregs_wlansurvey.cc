@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2015, 2016, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015, 2016, 2018, 2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -29,6 +30,7 @@
 #include "connman_iter.h"
 #include "logged_lock.hh"
 #include "messages.h"
+#include "dump_enum_value.hh"
 
 #include <sstream>
 #include <cstring>
@@ -291,25 +293,17 @@ static bool fill_buffer_with_services(std::vector<uint8_t> &buffer)
     return retval;
 }
 
-static const char *survey_result_to_string(Connman::SiteSurveyResult result)
+static const char *to_string(Connman::SiteSurveyResult result)
 {
-    const auto idx = size_t(result);
-
-    if(idx <= size_t(Connman::SiteSurveyResult::LAST_RESULT))
+    static const std::array<const char *const, 5> names
     {
-        static const char *strings[size_t(Connman::SiteSurveyResult::LAST_RESULT) + 1] =
-        {
-            "ok",
-            "network",
-            "internal",
-            "oom",
-            "hardware",
-        };
-
-        return strings[idx];
-    }
-    else
-        return "bug";
+        "ok",
+        "network",
+        "internal",
+        "oom",
+        "hardware",
+    };
+    return enum_to_string(names, result);
 }
 
 bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(std::vector<uint8_t> &buffer)
@@ -336,7 +330,7 @@ bool Regs::WLANSurvey::DCP::read_105_wlan_site_survey_results(std::vector<uint8_
         {
             std::ostringstream os;
             os << "<bss_list count=\"-1\" error=\""
-               << survey_result_to_string(nwwlan_survey_data.last_result) << "\"/>";
+               << to_string(nwwlan_survey_data.last_result) << "\"/>";
             const auto &str(os.str());
             buffer.clear();
             std::copy(str.begin(), str.end(), std::back_inserter(buffer));

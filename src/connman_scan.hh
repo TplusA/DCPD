@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2019  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2019, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -29,9 +29,6 @@ class TechnologyRegistry;
 
 /*!
  * WLAN site survey result.
- *
- * \attention
- *     This enumeration must match the array in #survey_result_to_string().
  */
 enum class SiteSurveyResult
 {
@@ -41,7 +38,7 @@ enum class SiteSurveyResult
     OUT_OF_MEMORY,
     NO_HARDWARE,
 
-    LAST_RESULT = NO_HARDWARE,
+    LAST_VALUE = NO_HARDWARE,
 };
 
 using SiteSurveyDoneFn = void (*)(SiteSurveyResult result);

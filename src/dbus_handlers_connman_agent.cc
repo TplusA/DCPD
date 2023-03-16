@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, 2017, 2018, 2019, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2016--2019, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -28,6 +28,7 @@
 #include "networkprefs.h"
 #include "gvariantwrapper.hh"
 #include "messages.h"
+#include "dump_enum_value.hh"
 
 #include <array>
 #include <algorithm>
@@ -125,7 +126,7 @@ enum class RequestID
     PASSWORD,
 
     /*! Stable name for last ID */
-    LAST_REQUEST_ID = PASSWORD,
+    LAST_VALUE = PASSWORD,
 };
 
 enum class RequestRequirement
@@ -149,7 +150,7 @@ enum class RequestRequirement
     LAST_REQUEST_REQUIREMENT = INFORMATIONAL,
 };
 
-static const std::array<const std::string, size_t(RequestID::LAST_REQUEST_ID) + 1> request_string_ids
+static const std::array<const std::string, size_t(RequestID::LAST_VALUE) + 1> request_string_ids
 {
     "*UNKNOWN*",
     "Name",
@@ -167,9 +168,9 @@ static RequestID string_to_request_id(const char *string)
     return string_to_enum_id(request_string_ids, string, RequestID::UNKNOWN);
 }
 
-static const std::string &request_id_to_string(const RequestID id)
+static const char *to_string(const RequestID id)
 {
-    return request_string_ids[size_t(id)];
+    return enum_to_string(request_string_ids, id).c_str();
 }
 
 static RequestRequirement string_to_request_requirement(const char *string)
@@ -206,7 +207,7 @@ class Request
     {}
 };
 
-using AllRequests = std::array<Request, size_t(RequestID::LAST_REQUEST_ID) + 1>;
+using AllRequests = std::array<Request, size_t(RequestID::LAST_VALUE) + 1>;
 
 static bool send_error_if_possible(GDBusMethodInvocation *invocation,
                                    const char *error_message)
@@ -489,7 +490,7 @@ static bool insert_answer(GVariantBuilder *result_builder,
 {
     /* must match #RequestID enumeration */
     static const std::array<const char *(* const)(const struct network_prefs *),
-                            size_t(RequestID::LAST_REQUEST_ID) + 1> prefgetters
+                            size_t(RequestID::LAST_VALUE) + 1> prefgetters
     {
         nullptr,
         network_prefs_get_name,
@@ -503,7 +504,7 @@ static bool insert_answer(GVariantBuilder *result_builder,
     };
 
     /* must match #RequestID enumeration */
-    static const std::array<const char *(*const)(), size_t(RequestID::LAST_REQUEST_ID) + 1> wpsgetters
+    static const std::array<const char *(*const)(), size_t(RequestID::LAST_VALUE) + 1> wpsgetters
     {
         nullptr,
         nullptr,
@@ -522,7 +523,7 @@ static bool insert_answer(GVariantBuilder *result_builder,
        (preferences == nullptr && wpsgetters[size_t(request_id)] == nullptr))
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT, "ConnMan request %s not supported",
-                  request_id_to_string(request_id).c_str());
+                  to_string(request_id));
         return false;
     }
 
@@ -534,13 +535,12 @@ static bool insert_answer(GVariantBuilder *result_builder,
     {
         msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                   "Have no answer for ConnMan request %s",
-                  request_id_to_string(request_id).c_str());
+                  to_string(request_id));
         return false;
     }
 
     g_variant_builder_add(result_builder, "{sv}",
-                          request_id_to_string(request_id).c_str(),
-                          g_variant_new_string(value));
+                          to_string(request_id), g_variant_new_string(value));
     request.is_answered = true;
 
     return true;
@@ -553,7 +553,7 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
 {
     msg_vinfo(MESSAGE_LEVEL_TRACE,
               "FIND ALTERNATE answer for unanswered request %s",
-              request_id_to_string(related_id).c_str());
+              to_string(related_id));
 
     if(requests[size_t(related_id)].alternates != 0)
     {
@@ -568,7 +568,7 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
             if((alternates & 1U) == 0)
                 continue;
 
-            msg_log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
+            msg_log_assert(alternate_id <= RequestID::LAST_VALUE);
 
             if(insert_answer(result_builder, requests[size_t(alternate_id)],
                              alternate_id, preferences))
@@ -579,8 +579,7 @@ static bool insert_alternate_answer(GVariantBuilder *result_builder,
         }
     }
 
-    msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %s",
-              request_id_to_string(related_id).c_str());
+    msg_vinfo(MESSAGE_LEVEL_TRACE, "No alternate for %s", to_string(related_id));
 
     return false;
 }
@@ -590,7 +589,7 @@ static void wipe_out_alternates(AllRequests &requests, RequestID related_id)
     uint32_t alternates = requests[size_t(related_id)].alternates;
 
     msg_vinfo(MESSAGE_LEVEL_TRACE, "WIPE OUT alternates 0x%08x for %s",
-              alternates, request_id_to_string(related_id).c_str());
+              alternates, to_string(related_id));
 
     if(alternates == 0)
         return;
@@ -606,12 +605,11 @@ static void wipe_out_alternates(AllRequests &requests, RequestID related_id)
         if((alternates & 1U) == 0)
             continue;
 
-        msg_log_assert(alternate_id <= RequestID::LAST_REQUEST_ID);
+        msg_log_assert(alternate_id <= RequestID::LAST_VALUE);
 
         msg_vinfo(MESSAGE_LEVEL_TRACE,
                   "Wipe out alternate %s for processed %s",
-                  request_id_to_string(alternate_id).c_str(),
-                  request_id_to_string(related_id).c_str());
+                  to_string(alternate_id), to_string(related_id));
 
         requests[size_t(alternate_id)].requirement = RequestRequirement::NOT_REQUESTED;
         wipe_out_alternates(requests, alternate_id);
@@ -715,7 +713,7 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
     /* fill in the mandatory requests first, fall back to alternate requests if
      * necessary, fail if not possible */
     for(size_t i = 0;
-        error_message == nullptr && i <= size_t(RequestID::LAST_REQUEST_ID);
+        error_message == nullptr && i <= size_t(RequestID::LAST_VALUE);
         ++i)
     {
         auto &request = requests[i];
@@ -737,13 +735,13 @@ gboolean dbusmethod_connman_agent_request_input(tdbusconnmanAgent *object,
                 {
                     msg_error(0, LOG_ERR,
                               "Answer to mandatory request %s not known",
-                              request_id_to_string(request_id).c_str());
+                              to_string(request_id));
                     error_message = "Answer to mandatory request unknown";
                 }
                 else
                     msg_vinfo(MESSAGE_LEVEL_IMPORTANT,
                               "Answer to optional request %s not known",
-                              request_id_to_string(request_id).c_str());
+                              to_string(request_id));
             }
 
             if(error_message == nullptr)

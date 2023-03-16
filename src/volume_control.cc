@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, 2018, 2019, 2020, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2017--2020, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -78,7 +78,7 @@ static inline bool config_params_are_valid(
         const FixPoint &db_max_fp, const FixPoint &volume_level_fp,
         const double volume_step, const Mixer::VolumeScale scale)
 {
-    if(raw_scale_id > int(Mixer::VolumeScale::LAST_SCALE))
+    if(raw_scale_id > std::underlying_type<Mixer::VolumeScale>::type(Mixer::VolumeScale::LAST_VALUE))
         return false;
 
     if(volume_step_fp.is_nan())
@@ -464,7 +464,7 @@ Mixer::VolumeControls::replace_control_properties(uint16_t id,
             msg_vinfo(MESSAGE_LEVEL_NORMAL, "%sRange %f...%f, step width %f, "
                       "scale \"%s\", dynamic range %f...%f",
                       log_prefix, props->volume_min_, props->volume_max_,
-                      props->volume_step_, scale_to_string(props->scale_),
+                      props->volume_step_, to_string(props->scale_),
                       props->min_db_, props->max_db_);
             msg_vinfo(MESSAGE_LEVEL_NORMAL,
                       "%sInitial volume level %f, %smuted",
@@ -477,7 +477,7 @@ Mixer::VolumeControls::replace_control_properties(uint16_t id,
             tdbus_mixer_volume_emit_control_changed(dbus_mixer_get_volume_iface(),
                                                     is_first_initialization ? UINT16_MAX : id,
                                                     ctrl->id_, props->name_.c_str(),
-                                                    scale_to_string(props->scale_),
+                                                    to_string(props->scale_),
                                                     props->volume_min_, props->volume_max_,
                                                     props->volume_step_,
                                                     props->min_db_, props->max_db_,

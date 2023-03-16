@@ -770,6 +770,19 @@ gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
     return TRUE;
 }
 
+gboolean dbusmethod_audiopath_source_selected_on_hold(tdbusaupathSource *object,
+                                                      GDBusMethodInvocation *invocation,
+                                                      const char *source_id,
+                                                      GVariant *request_data,
+                                                      gpointer user_data)
+{
+    msg_info("Selected source \"%s\" (on hold)", source_id);
+    auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
+    regs.audio_source_selected();
+    tdbus_aupath_source_complete_selected_on_hold(object, invocation);
+    return TRUE;
+}
+
 gboolean dbusmethod_audiopath_source_deselected(tdbusaupathSource *object,
                                                 GDBusMethodInvocation *invocation,
                                                 const char *source_id,
@@ -803,7 +816,7 @@ gboolean dbusmethod_mixer_get_controls(tdbusmixerVolume *object,
 
             g_variant_builder_add(&builder, "(qssddddddy)",
                                   ctrl->id_, props->name_.c_str(),
-                                  scale_to_string(props->scale_),
+                                  to_string(props->scale_),
                                   props->volume_min_, props->volume_max_,
                                   props->volume_step_,
                                   props->min_db_, props->max_db_,
@@ -845,7 +858,7 @@ gboolean dbusmethod_mixer_get_master(tdbusmixerVolume *object,
 
             tdbus_mixer_volume_complete_get_master(object, invocation,
                     master->id_, props->name_.c_str(),
-                    scale_to_string(props->scale_),
+                    to_string(props->scale_),
                     props->volume_min_, props->volume_max_,
                     props->volume_step_,
                     props->min_db_, props->max_db_,
