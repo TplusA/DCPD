@@ -1,3 +1,12 @@
+2023-03-24  Robert Tiemann  <r.tiemann@ta-hifi.de>
+
+	* Version 8.1 released.
+
+	* Audio sources: Implement deferred selection for plain URL audio
+	  source.
+
+	* Maintenance: Code simplifications.
+
 2023-03-14  Robert Tiemann  <r.tiemann@ta-hifi.de>
 
 	* Version 8.0 released.
