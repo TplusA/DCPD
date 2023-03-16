@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015--2020, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2015--2020, 2022, 2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -286,6 +286,9 @@ static void bus_acquired(GDBusConnection *connection,
 
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-selected",
                          G_CALLBACK(dbusmethod_audiopath_source_selected),
+                         dcpd_iface_data.streaming_regs);
+        g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-selected-on-hold",
+                         G_CALLBACK(dbusmethod_audiopath_source_selected_on_hold),
                          dcpd_iface_data.streaming_regs);
         g_signal_connect(dcpd_iface_data.audiopath_source_iface, "handle-deselected",
                          G_CALLBACK(dbusmethod_audiopath_source_deselected),

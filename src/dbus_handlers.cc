@@ -765,7 +765,7 @@ gboolean dbusmethod_audiopath_source_selected(tdbusaupathSource *object,
 {
     msg_info("Selected source \"%s\"", source_id);
     auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
-    regs.audio_source_selected();
+    regs.audio_source_selected(false);
     tdbus_aupath_source_complete_selected(object, invocation);
     return TRUE;
 }
@@ -778,7 +778,7 @@ gboolean dbusmethod_audiopath_source_selected_on_hold(tdbusaupathSource *object,
 {
     msg_info("Selected source \"%s\" (on hold)", source_id);
     auto &regs(*static_cast<Regs::PlayStream::StreamingRegistersIface *>(user_data));
-    regs.audio_source_selected();
+    regs.audio_source_selected(true);
     tdbus_aupath_source_complete_selected_on_hold(object, invocation);
     return TRUE;
 }

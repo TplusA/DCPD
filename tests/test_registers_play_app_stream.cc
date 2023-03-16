@@ -289,7 +289,7 @@ static void set_start_title(const std::string expected_artist,
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_RESPONSE:
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_AUDIO_SOURCE_SELECTION:
         /* audio source selection immediately acknowledged */
-        streaming_regs->audio_source_selected();
+        streaming_regs->audio_source_selected(false);
         break;
 
       case SetTitleAndURLSystemAssumptions::IMMEDIATE_NOW_PLAYING_STATUS:

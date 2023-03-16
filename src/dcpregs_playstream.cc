@@ -417,11 +417,11 @@ class StreamingRegisters:
         apply(current_cover_art_);
     }
 
-    void audio_source_selected() final override
+    void audio_source_selected(bool on_hold) final override
     {
         LOGGED_LOCK_CONTEXT_HINT;
         std::lock_guard<LoggedLock::Mutex> lock(lock_);
-        player_->notifications().audio_source_selected();
+        player_->notifications().audio_source_selected(on_hold);
     }
 
     void audio_source_deselected() final override
