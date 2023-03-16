@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020, 2021, 2022  T+A elektroakustik GmbH & Co. KG
+ * Copyright (C) 2019--2023  T+A elektroakustik GmbH & Co. KG
  *
  * This file is part of DCPD.
  *
@@ -122,6 +122,8 @@ class Player:
 
     virtual ~Player() = default;
 
+    void set_state(State new_state) { state_ = new_state; }
+
     void activate(const std::function<void()> &request_audio_source) override;
     bool is_active() const override;
     bool start(Regs::PlayStream::StreamInfo &&stream,
@@ -210,7 +212,7 @@ void Player::activate(const std::function<void()> &request_audio_source)
     {
       case State::DESELECTED:
         request_audio_source();
-        state_ = State::DESELECTED_AWAITING_SELECTION;
+        set_state(State::DESELECTED_AWAITING_SELECTION);
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
@@ -274,7 +276,7 @@ bool Player::start(Regs::PlayStream::StreamInfo &&stream,
 
         waiting_for_stream_id_ = next_free_stream_id_;
         ++next_free_stream_id_;
-        state_ = State::PLAYING_REQUESTED;
+        set_state(State::PLAYING_REQUESTED);
         return true;
     }
 
@@ -342,11 +344,11 @@ bool Player::stop(const std::function<bool()> &stop_stream)
         if(!stop_stream())
             break;
 
-        state_ = State::STOPPED_REQUESTED;
+        set_state(State::STOPPED_REQUESTED);
         return true;
 
       case State::PLAYING_BUT_STOPPED:
-        state_ = State::STOPPED;
+        set_state(State::STOPPED);
         return true;
     }
 
@@ -361,7 +363,7 @@ void Player::audio_source_selected()
     {
       case State::DESELECTED:
         current_stream_.set_unknown();
-        state_ = State::STOPPED;
+        set_state(State::STOPPED);
         break;
 
       case State::DESELECTED_AWAITING_SELECTION:
@@ -370,12 +372,12 @@ void Player::audio_source_selected()
         {
             waiting_for_stream_id_ = next_free_stream_id_;
             ++next_free_stream_id_;
-            state_ = State::PLAYING_REQUESTED;
+            set_state(State::PLAYING_REQUESTED);
         }
         else
         {
             current_stream_.set_unknown();
-            state_ = State::STOPPED;
+            set_state(State::STOPPED);
         }
 
         break;
@@ -412,7 +414,7 @@ void Player::audio_source_deselected()
         break;
     }
 
-    state_ = State::DESELECTED;
+    set_state(State::DESELECTED);
 }
 
 Regs::PlayStream::PlainPlayerNotifications::StartResult
@@ -464,7 +466,7 @@ Player::started(StreamID stream_id)
             return StartResult::PLAYING_ON;
         }
 
-        state_ = State::PLAYING;
+        set_state(State::PLAYING);
 
         if(next_stream_.is_known())
             do_push_next(MESSAGE_LEVEL_DIAG);
@@ -493,7 +495,7 @@ Player::stopped(StreamID stream_id)
         return StopResult::ALREADY_STOPPED;
 
       case State::STOPPED_REQUESTED:
-        state_ = State::STOPPED;
+        set_state(State::STOPPED);
         push_stream_fn_ = nullptr;
         next_stream_.set_unknown();
         waiting_for_stream_id_ = StreamID::make_invalid();
@@ -520,7 +522,7 @@ Player::stopped(StreamID stream_id)
         if(state_ == State::STOPPED)
             return StopResult::STOPPED_AS_REQUESTED;
 
-        state_ = State::PLAYING_BUT_STOPPED;
+        set_state(State::PLAYING_BUT_STOPPED);
         return StopResult::STOPPED_EXTERNALLY;
     }
 
@@ -570,7 +572,7 @@ Player::stopped(StreamID stream_id, const char *reason,
         if(state_ == State::STOPPED)
             return StopResult::STOPPED_AS_REQUESTED;
 
-        state_ = State::PLAYING_BUT_STOPPED;
+        set_state(State::PLAYING_BUT_STOPPED);
         return StopResult::STOPPED_BY_FAILURE;
     }
 
